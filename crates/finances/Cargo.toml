@@ -1,0 +1,18 @@
+[package]
+publish = false
+name = "memcp-finances"
+description = "A person's bank statements in a memory space: import, balances, movements, monthly statement"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+calamine = { version = "0.38.0", default-features = false }
+memcp-core = { path = "../core" }
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde_json = "1.0.154"
+
+[lints]
+workspace = true

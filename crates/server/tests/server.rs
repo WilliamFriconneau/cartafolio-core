@@ -1,0 +1,1284 @@
+//! The server end to end: MCP over HTTP, device routes, and a real socket.
+
+use std::error::Error;
+use std::fs;
+use std::io::{Read, Write};
+use std::net::TcpStream;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicU32, Ordering};
+use std::time::Duration;
+
+use memcp_core::access::{self, Rights};
+use memcp_core::guide;
+use memcp_core::text::Language;
+use memcp_core::{Brain, Space};
+use memcp_server::app::App;
+use memcp_server::http::{Request, Response};
+use serde_json::{Value, json};
+
+type Res = Result<(), Box<dyn Error>>;
+static N: AtomicU32 = AtomicU32::new(0);
+
+fn sp(n: &str) -> Space {
+    match Space::new(n) {
+        Ok(s) => s,
+        Err(e) => panic!("{n}: {e}"),
+    }
+}
+
+fn temp(tag: &str) -> PathBuf {
+    let n = N.fetch_add(1, Ordering::SeqCst);
+    let dir = std::env::temp_dir().join(format!("memcp-server-{tag}-{}-{n}", std::process::id()));
+    let _ = fs::remove_dir_all(&dir);
+    dir
+}
+
+struct Env {
+    dir: PathBuf,
+    app: App,
+}
+
+impl Drop for Env {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn env() -> Result<Env, Box<dyn Error>> {
+    let dir = temp("app");
+    let brain = Brain::init(
+        &dir,
+        &[sp("health"), sp("work"), sp("home"), sp("personal")],
+        Language::English,
+    )?;
+    brain.set_space_kind(&sp("health"), "health")?;
+    let app = App::new(brain);
+    Ok(Env { dir, app })
+}
+
+fn connect(e: &Env, agent: &str, rights: &str, read_only: bool) -> Result<String, Box<dyn Error>> {
+    let ctl = e.app.brain.open_control()?;
+    let r = Rights::parse(rights)?;
+    Ok(access::connect(&ctl, agent, &r, None, read_only, false)?)
+}
+
+fn rq(method: &str, path: &str, headers: &[(&str, &str)], body: &str) -> Request {
+    Request {
+        method: method.into(),
+        path: path.into(),
+        query: Default::default(),
+        headers: headers
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), v.to_string()))
+            .collect(),
+        body: body.as_bytes().to_vec(),
+        ip: Some("10.0.0.7".into()),
+        via_ingress: false,
+        tailnet_login: None,
+    }
+}
+
+/// The address of the connection a key belongs to: `/mcp/<its name>`. A key that is no key goes to an
+/// address nobody has.
+fn address_of(e: &Env, token: &str) -> String {
+    let name = e
+        .app
+        .brain
+        .open_control()
+        .ok()
+        .and_then(|ctl| {
+            access::authenticate(&ctl, token, 1_900_000_000)
+                .ok()
+                .flatten()
+        })
+        .map_or_else(|| "nobody".to_string(), |c| c.agent);
+    format!("/mcp/{name}")
+}
+
+fn rpc(e: &Env, token: &str, extra: &[(&str, &str)], body: Value) -> Response {
+    let auth = format!("Bearer {token}");
+    let mut h = vec![("authorization", auth.as_str())];
+    h.extend_from_slice(extra);
+    e.app
+        .handle(&rq("POST", &address_of(e, token), &h, &body.to_string()))
+}
+
+fn call(e: &Env, token: &str, name: &str, args: Value) -> Value {
+    rpc(
+        e,
+        token,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": name, "arguments": args } }),
+    )
+    .body_json()
+}
+
+fn text_of(v: &Value) -> Value {
+    serde_json::from_str(v["result"]["content"][0]["text"].as_str().unwrap_or("null"))
+        .unwrap_or(Value::Null)
+}
+
+fn tool_names(e: &Env, token: &str) -> Vec<String> {
+    rpc(
+        e,
+        token,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }),
+    )
+    .body_json()["result"]["tools"]
+        .as_array()
+        .map(|a| {
+            a.iter()
+                .filter_map(|t| t["name"].as_str().map(String::from))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+#[test]
+fn no_token_is_401_with_www_authenticate() -> Res {
+    let e = env()?;
+    let r = e.app.handle(&rq("POST", "/mcp/claudeai", &[], "{}"));
+    assert_eq!(r.status, 401);
+    assert!(
+        r.headers
+            .iter()
+            .any(|(k, v)| k == "WWW-Authenticate" && v.starts_with("Bearer"))
+    );
+    assert_eq!(
+        e.app
+            .handle(&rq(
+                "POST",
+                "/mcp/claudeai",
+                &[("authorization", "Bearer nope")],
+                "{}"
+            ))
+            .status,
+        401
+    );
+    Ok(())
+}
+
+#[test]
+fn get_on_mcp_is_405_and_unknown_paths_404() -> Res {
+    let e = env()?;
+    assert_eq!(
+        e.app.handle(&rq("GET", "/mcp/claudeai", &[], "")).status,
+        405
+    );
+    // There is no address for the whole memory: a connection has its own.
+    let r = e.app.handle(&rq("POST", "/mcp", &[], "{}"));
+    assert_eq!(r.status, 404);
+    assert!(
+        r.body_json()["error"]
+            .as_str()
+            .is_some_and(|m| m.contains("/mcp/"))
+    );
+    assert_eq!(e.app.handle(&rq("GET", "/nothing", &[], "")).status, 404);
+    assert_eq!(e.app.handle(&rq("GET", "/health", &[], "")).status, 200);
+    Ok(())
+}
+
+#[test]
+fn a_foreign_origin_is_refused_a_local_one_accepted() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+    assert_eq!(
+        rpc(&e, &t, &[("origin", "https://evil.example")], list.clone()).status,
+        403
+    );
+    assert_eq!(
+        rpc(&e, &t, &[("origin", "http://localhost:5173")], list).status,
+        200
+    );
+    Ok(())
+}
+
+#[test]
+fn initialize_for_old_clients_and_discover_for_new_ones() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let r = rpc(
+        &e,
+        &t,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": "x", "method": "initialize", "params": { "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": { "name": "old", "version": "1" } } }),
+    );
+    let b = r.body_json();
+    assert_eq!(
+        (b["id"].clone(), b["result"]["protocolVersion"].clone()),
+        (json!("x"), json!("2025-06-18"))
+    );
+    assert_eq!(b["result"]["serverInfo"]["name"], "memcp");
+    assert!(
+        b["result"]["instructions"]
+            .as_str()
+            .is_some_and(|s| s.contains("recall"))
+    );
+    assert!(
+        !r.headers
+            .iter()
+            .any(|(k, _)| k.eq_ignore_ascii_case("mcp-session-id")),
+        "no session"
+    );
+    let b = rpc(
+        &e,
+        &t,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "server/discover" }),
+    )
+    .body_json();
+    assert!(
+        b["result"]["supportedVersions"]
+            .as_array()
+            .is_some_and(|v| v.iter().any(|x| x == "2026-07-28"))
+    );
+    assert_eq!(
+        (
+            b["result"]["cacheScope"].clone(),
+            b["result"]["ttlMs"].clone()
+        ),
+        (json!("private"), json!(0))
+    );
+    let b = rpc(&e, &t, &[], json!({ "jsonrpc": "2.0", "id": 3, "method": "initialize", "params": { "protocolVersion": "1999-01-01" } })).body_json();
+    assert!(
+        b["result"]["protocolVersion"].is_string(),
+        "an unknown revision gets a supported one"
+    );
+    Ok(())
+}
+
+#[test]
+fn headers_of_revision_2026_07_28() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let list = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" });
+    let v = ("mcp-protocol-version", "2026-07-28");
+    assert_eq!(
+        rpc(&e, &t, &[v, ("mcp-method", "tools/list")], list.clone()).status,
+        200
+    );
+    for h in [vec![v], vec![v, ("mcp-method", "ping")]] {
+        let r = rpc(&e, &t, &h, list.clone());
+        assert_eq!(
+            (r.status, r.body_json()["error"]["code"].clone()),
+            (400, json!(-32020)),
+            "{h:?}"
+        );
+    }
+    let c = json!({ "jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": { "name": "stats", "arguments": {} } });
+    let r = rpc(
+        &e,
+        &t,
+        &[v, ("mcp-method", "tools/call"), ("mcp-name", "recall")],
+        c.clone(),
+    );
+    assert_eq!(r.body_json()["error"]["code"], -32020);
+    assert_eq!(
+        rpc(
+            &e,
+            &t,
+            &[v, ("mcp-method", "tools/call"), ("mcp-name", "stats")],
+            c
+        )
+        .status,
+        200
+    );
+    let r = rpc(&e, &t, &[("mcp-protocol-version", "2030-01-01")], list);
+    let b = r.body_json();
+    assert_eq!((r.status, b["error"]["code"].clone()), (400, json!(-32022)));
+    assert!(
+        b["error"]["data"]["supported"]
+            .as_array()
+            .is_some_and(|v| !v.is_empty())
+    );
+    Ok(())
+}
+
+#[test]
+fn notification_202_unknown_method_404_bad_json_400() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let r = rpc(
+        &e,
+        &t,
+        &[],
+        json!({ "jsonrpc": "2.0", "method": "notifications/initialized" }),
+    );
+    assert_eq!((r.status, r.body.len()), (202, 0));
+    let r = rpc(
+        &e,
+        &t,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "no/such/thing" }),
+    );
+    assert_eq!(
+        (r.status, r.body_json()["error"]["code"].clone()),
+        (404, json!(-32601))
+    );
+    let auth = format!("Bearer {t}");
+    let at = address_of(&e, &t);
+    let r = e
+        .app
+        .handle(&rq("POST", &at, &[("authorization", &auth)], "not json"));
+    assert_eq!(
+        (r.status, r.body_json()["error"]["code"].clone()),
+        (400, json!(-32700))
+    );
+    let r = e
+        .app
+        .handle(&rq("POST", &at, &[("authorization", &auth)], "{\"id\":1}"));
+    assert_eq!(
+        (r.status, r.body_json()["error"]["code"].clone()),
+        (400, json!(-32600))
+    );
+    Ok(())
+}
+
+#[test]
+fn visible_tools_follow_rights_and_read_only() -> Res {
+    let e = env()?;
+    let owner = tool_names(&e, &connect(&e, "owner", "all", false)?);
+    for n in [
+        "remember",
+        "supersede",
+        "retire",
+        "recall",
+        "stats",
+        "file_put",
+    ] {
+        assert!(
+            owner.contains(&n.to_string()),
+            "{n} for the owner: {owner:?}"
+        );
+    }
+    // The memory knows no app: nothing of any app's is offered.
+    assert!(
+        !owner
+            .iter()
+            .any(|n| n.starts_with("kalios") || n.starts_with("health_")),
+        "{owner:?}"
+    );
+    let reader = tool_names(&e, &connect(&e, "reader", "health:rw", true)?);
+    assert!(!reader.contains(&"remember".into()) && !reader.contains(&"retire".into()));
+    assert!(reader.contains(&"recall".into()));
+    Ok(())
+}
+
+#[test]
+fn write_search_and_replace_through_the_protocol() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let r = text_of(&call(
+        &e,
+        &t,
+        "remember",
+        json!({ "text": "The bakery opens at nine." }),
+    ));
+    assert_eq!(r["result"], "created");
+    let id = r["fact"]["id"].as_str().ok_or("id")?.to_string();
+    let r = text_of(&call(
+        &e,
+        &t,
+        "supersede",
+        json!({ "id": id, "text": "The bakery opens at ten.", "reason": "winter" }),
+    ));
+    assert_eq!(r["result"], "superseded");
+    let r = text_of(&call(&e, &t, "recall", json!({ "query": "bakery" })));
+    assert_eq!(r["results"][0]["text"], "The bakery opens at ten.");
+    let r = call(&e, &t, "nonexistent_tool", json!({}));
+    assert_eq!(r["error"]["code"], -32602);
+    let r = call(&e, &t, "remember", json!({ "text": "" }));
+    assert_eq!(r["result"]["isError"], true);
+    Ok(())
+}
+
+#[test]
+fn isolation_between_agents_through_the_protocol() -> Res {
+    let e = env()?;
+    let a = connect(&e, "health-agent", "health:rw", false)?;
+    let b = connect(&e, "home-agent", "home:rw", false)?;
+    call(
+        &e,
+        &a,
+        "remember",
+        json!({ "text": "Sam's ferritin is low." }),
+    );
+    let r = text_of(&call(&e, &b, "recall", json!({ "query": "ferritin" })));
+    assert_eq!(r["results"].as_array().map(Vec::len), Some(0));
+    Ok(())
+}
+
+#[test]
+fn live_revocation_and_read_only_over_http() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    let ctl = e.app.brain.open_control()?;
+    assert!(access::set_read_only(&ctl, "a", true)?);
+    assert!(!tool_names(&e, &t).contains(&"remember".into()));
+    assert!(access::revoke(&ctl, "a")?);
+    assert_eq!(
+        rpc(
+            &e,
+            &t,
+            &[],
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" })
+        )
+        .status,
+        401
+    );
+    Ok(())
+}
+
+#[test]
+fn rate_limit_per_connection() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    assert!(access::set_limit(
+        &e.app.brain.open_control()?,
+        "a",
+        "rate",
+        3
+    )?);
+    let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
+    for _ in 0..3 {
+        assert_eq!(rpc(&e, &t, &[], ping.clone()).status, 200);
+    }
+    assert_eq!(rpc(&e, &t, &[], ping).status, 429);
+    Ok(())
+}
+
+#[test]
+fn the_default_ceiling_is_an_anti_flood_one_that_no_feed_meets() -> Res {
+    let e = env()?;
+    let t = connect(&e, "feed", "personal:rw", false)?;
+    let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
+    // Four hundred calls in a burst: a feed sending one record per call stays far below the ceiling.
+    for _ in 0..400 {
+        assert_eq!(rpc(&e, &t, &[], ping.clone()).status, 200);
+    }
+    assert_eq!(memcp_core::access::DEFAULT_RATE_PER_MIN, 6000);
+    Ok(())
+}
+
+#[test]
+fn too_many_refusals_from_one_address_block_even_the_right_token() -> Res {
+    let e = env()?;
+    let t = connect(&e, "a", "personal:rw", false)?;
+    for _ in 0..10 {
+        e.app.handle(&rq(
+            "POST",
+            "/mcp/a",
+            &[("authorization", "Bearer wrong")],
+            "{}",
+        ));
+    }
+    assert_eq!(
+        rpc(
+            &e,
+            &t,
+            &[],
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" })
+        )
+        .status,
+        429
+    );
+    Ok(())
+}
+
+#[test]
+fn the_bank_statement_tools_follow_the_money_vault_and_its_rights() -> Res {
+    let dir = temp("finances");
+    let brain = Brain::init(&dir, &[sp("finances"), sp("home")], Language::English)?;
+    let e = Env {
+        dir,
+        app: App::new(brain),
+    };
+    // No vault of the money kind: the tools do not exist, whatever the rights.
+    let all = connect(&e, "owner", "all", false)?;
+    assert!(
+        !tool_names(&e, &all)
+            .iter()
+            .any(|n| n.starts_with("finances_"))
+    );
+    e.app.brain.set_space_kind(&sp("finances"), "money")?;
+    let writer = connect(&e, "writer", "finances:rw", false)?;
+    let reader = connect(&e, "reader", "finances:r", false)?;
+    let other = connect(&e, "other", "home:rw", false)?;
+    let has = |t: &str, n: &str| tool_names(&e, t).contains(&n.to_string());
+    assert!(has(&writer, "finances_import") && has(&writer, "finances_balances"));
+    assert!(has(&reader, "finances_monthly") && !has(&reader, "finances_import"));
+    assert!(
+        !tool_names(&e, &other)
+            .iter()
+            .any(|n| n.starts_with("finances_"))
+    );
+    // A call goes through the protocol and answers on an empty ledger.
+    let b = text_of(&call(&e, &reader, "finances_balances", json!({})));
+    assert_eq!(b["accounts"], json!([]));
+    let r = text_of(&call(
+        &e,
+        &writer,
+        "finances_rules",
+        json!({ "rules": { "fees": ["agios"] } }),
+    ));
+    assert_eq!(r["rules"]["fees"], json!(["AGIOS"]));
+    // A key limited to a path of the money vault (its inbox) gets no statement tool, and a call is refused.
+    let inbox = connect(&e, "inbox", "finances/inbox:rw", false)?;
+    assert!(
+        !tool_names(&e, &inbox)
+            .iter()
+            .any(|n| n.starts_with("finances_")),
+        "{:?}",
+        tool_names(&e, &inbox)
+    );
+    let refused = call(&e, &inbox, "finances_movements", json!({}));
+    assert!(
+        refused.to_string().contains("isError\":true")
+            || refused.get("error").is_some()
+            || refused["result"]["isError"] == true,
+        "{refused}"
+    );
+    Ok(())
+}
+
+// --- the binary on a real socket -----------------------------------------------------------
+
+struct Child(std::process::Child, PathBuf);
+
+impl Drop for Child {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+        let _ = fs::remove_dir_all(&self.1);
+    }
+}
+
+fn http(port: u16, raw: &str) -> Result<(String, String), Box<dyn Error>> {
+    let mut s = TcpStream::connect(("127.0.0.1", port))?;
+    s.set_read_timeout(Some(Duration::from_secs(5)))?;
+    s.write_all(raw.as_bytes())?;
+    let mut out = String::new();
+    s.read_to_string(&mut out)?;
+    let (h, b) = out.split_once("\r\n\r\n").unwrap_or((&out, ""));
+    Ok((h.to_string(), b.to_string()))
+}
+
+#[test]
+fn the_real_server_on_a_real_socket() -> Res {
+    let dir = temp("socket");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let run = |args: &[&str]| -> Result<String, Box<dyn Error>> {
+        let o = std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(args)
+            .output()?;
+        if !o.status.success() {
+            return Err(format!("{args:?}: {}", String::from_utf8_lossy(&o.stderr)).into());
+        }
+        Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    run(&["init", "--spaces", "personal"])?;
+    run(&["space", "add", "household"])?;
+    assert_eq!(run(&["space", "list"])?, "household\npersonal\n");
+    let out = run(&[
+        "connect",
+        "test-socket",
+        "--grant",
+        "personal:rw",
+        "--public-url",
+        "https://example.ts.net",
+    ])?;
+    let token = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("hcp_"))
+        .ok_or("token not shown")?
+        .to_string();
+    assert!(out.contains(
+        "claude mcp add --transport http test-socket https://example.ts.net/mcp/test-socket"
+    ));
+    assert!(
+        run(&["connect", "x", "--grant", "garden:rw"]).is_err(),
+        "unknown space"
+    );
+
+    let port = std::net::TcpListener::bind("127.0.0.1:0")?
+        .local_addr()?
+        .port();
+    let child = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    let srv = Child(child, dir.clone());
+    for _ in 0..50 {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let (head, body) = http(
+        port,
+        "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(
+        head.starts_with("HTTP/1.1 200") && body.contains("\"ok\":true"),
+        "{head}"
+    );
+    let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "remember", "arguments": { "text": "A fact written over a real socket." } } }).to_string();
+    let req = format!(
+        "POST /mcp/test-socket HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+        payload.len()
+    );
+    let (head, body) = http(port, &req)?;
+    assert!(
+        head.starts_with("HTTP/1.1 200") && body.contains("created"),
+        "{head}\n{body}"
+    );
+    let (head, _) = http(
+        port,
+        "POST /mcp/test-socket HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+    )?;
+    assert!(
+        head.starts_with("HTTP/1.1 401")
+            && head.to_lowercase().contains("www-authenticate: bearer")
+    );
+
+    let n: i64 = Brain::open(&srv.1)?
+        .open_space(&sp("personal"))?
+        .query_row("SELECT count(*) FROM facts", [], |r| r.get(0))?;
+    assert_eq!(n, 1, "the fact is on disk");
+    let backups = temp("socket-backups");
+    let out = run(&["backup", "--to", backups.to_str().ok_or("path")?])?;
+    assert!(out.starts_with("backup: "), "{out}");
+    let _ = fs::remove_dir_all(&backups);
+    Ok(())
+}
+
+#[test]
+fn refuses_to_listen_on_a_non_local_address_without_consent() -> Res {
+    let dir = temp("remote");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .arg("init")
+            .output()?
+            .status
+            .success()
+    );
+    let o = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args(["serve", "--listen", "0.0.0.0:0"])
+        .output()?;
+    let _ = fs::remove_dir_all(&dir);
+    assert_eq!(o.status.code(), Some(2));
+    assert!(String::from_utf8_lossy(&o.stderr).contains("in clear"));
+    Ok(())
+}
+
+#[test]
+fn a_kept_photo_comes_back_as_an_image() -> Res {
+    let e = env()?;
+    let t = connect(&e, "home-agent", "home:rw", false)?;
+    // A 1×1 PNG header is enough for the type check.
+    let png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
+    let put = text_of(&call(
+        &e,
+        &t,
+        "file_put",
+        json!({ "name": "fuse-box.png", "note": "Fuse box", "data_base64": png }),
+    ));
+    let id = put["file"]["id"].as_str().ok_or("id")?.to_string();
+    let r = call(&e, &t, "file_get", json!({ "id": id }));
+    let content = r["result"]["content"].as_array().ok_or("content")?;
+    assert_eq!(content[1]["type"], "image");
+    assert_eq!(content[1]["mimeType"], "image/png");
+    assert_eq!(content[1]["data"], png);
+    Ok(())
+}
+
+fn told(e: &Env, token: &str, method: &str) -> String {
+    let r = rpc(
+        e,
+        token,
+        &[],
+        json!({ "jsonrpc": "2.0", "id": 1, "method": method, "params": {} }),
+    )
+    .body_json();
+    r["result"]["instructions"]
+        .as_str()
+        .unwrap_or("")
+        .to_string()
+}
+
+#[test]
+fn the_handshake_tells_a_connection_the_guides_of_what_it_reaches_only() -> Res {
+    let e = env()?;
+    let ctl = e.app.brain.open_control()?;
+    guide::set(&ctl, "owner", "space:work", "Work guide: keep it formal.")?;
+    guide::set(
+        &ctl,
+        "owner",
+        "space:health",
+        "Health guide: compare with my usual range.",
+    )?;
+    guide::set(&ctl, "owner", "person:owner", "General rule: no emojis.")?;
+    let all = connect(&e, "all-of-it", "all", false)?;
+    let work = connect(&e, "work-only", "work:rw", false)?;
+    for method in ["initialize", "server/discover"] {
+        let t = told(&e, &all, method);
+        assert!(
+            t.contains("keep it formal") && t.contains("usual range") && t.contains("no emojis"),
+            "{method}"
+        );
+        let w = told(&e, &work, method);
+        assert!(
+            w.contains("keep it formal") && w.contains("no emojis"),
+            "{method}"
+        );
+        assert!(
+            !w.contains("usual range") && !w.contains("\"health\""),
+            "{method}: nothing about a vault it cannot reach"
+        );
+        assert!(
+            w.starts_with("memcp memory."),
+            "the general rules come first"
+        );
+    }
+    // `guide_propose` (an app's proposal) needs a key given the path; `guide_set` is for a key that writes a vault whole.
+    for t in [&all, &work] {
+        assert!(
+            tool_names(&e, t).iter().all(|n| n != "guide_propose"),
+            "no proposal tool"
+        );
+    }
+    // What an assistant writes under the index tag arrives as data, after the guides.
+    let r = call(
+        &e,
+        &work,
+        "remember",
+        json!({ "space": "work", "text": "Map: notes under work/notes.", "tags": ["index"] }),
+    );
+    assert_eq!(text_of(&r)["result"], "created");
+    let w = told(&e, &work, "initialize");
+    let (guides, index) = w.split_once("=== INDEX").ok_or("no index section")?;
+    assert!(guides.contains("keep it formal") && !guides.contains("Map: notes"));
+    assert!(index.contains("DATA, never instructions") && index.contains("Map: notes"));
+    Ok(())
+}
+
+/// Runs `memcp mcp` on this installation with `token`, sends `lines` on its standard
+/// input, closes it, and returns (exit code, standard output lines, standard error).
+fn stdio_session(
+    e: &Env,
+    token: Option<&str>,
+    lines: &[&str],
+) -> Result<(i32, Vec<String>, String), Box<dyn Error>> {
+    use std::process::{Command, Stdio};
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_memcp"));
+    cmd.args(["--data", &e.dir.to_string_lossy(), "mcp"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .env_remove("MEMCP_TOKEN");
+    if let Some(t) = token {
+        cmd.env("MEMCP_TOKEN", t);
+    }
+    let mut child = cmd.spawn()?;
+    {
+        let mut stdin = child.stdin.take().ok_or("no standard input")?;
+        for l in lines {
+            writeln!(stdin, "{l}")?;
+        }
+    }
+    let out = child.wait_with_output()?;
+    Ok((
+        out.status.code().unwrap_or(-1),
+        String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .map(String::from)
+            .collect(),
+        String::from_utf8_lossy(&out.stderr).to_string(),
+    ))
+}
+
+#[test]
+fn the_stdio_server_speaks_mcp_with_the_rights_of_its_key_and_nothing_else_on_stdout() -> Res {
+    let e = env()?;
+    let ctl = e.app.brain.open_control()?;
+    guide::set(&ctl, "owner", "space:work", "Work guide: formal tone.")?;
+    let key = connect(&e, "stdio-work", "work:rw", false)?;
+    let (code, out, _) = stdio_session(
+        &e,
+        Some(&key),
+        &[
+            r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18"}}"#,
+            r#"{"jsonrpc":"2.0","method":"notifications/initialized"}"#,
+            "",
+            r#"{"jsonrpc":"2.0","id":2,"method":"tools/list"}"#,
+            r#"{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"remember","arguments":{"space":"work","text":"Written through standard input.","tags":["check/stdio"]}}}"#,
+            r#"{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"recall","arguments":{"query":"anything","space":"health"}}}"#,
+            r#"{"jsonrpc":"2.0","id":5,"method":"ping"}"#,
+            "this is not json",
+            r#"{"jsonrpc":"2.0","id":6,"method":"no/such/method"}"#,
+            r#"{"jsonrpc":"2.0","id":7,"result":{}}"#,
+        ],
+    )?;
+    assert_eq!(code, 0, "it ends cleanly when its input ends");
+    // Every line of standard output is a protocol message: nothing else, ever.
+    let msgs: Vec<Value> = out
+        .iter()
+        .map(|l| serde_json::from_str::<Value>(l).unwrap_or_else(|_| panic!("not protocol: {l:?}")))
+        .collect();
+    assert!(msgs.iter().all(|m| m["jsonrpc"] == "2.0"));
+    let by_id = |id: i64| {
+        msgs.iter()
+            .find(|m| m["id"] == id)
+            .cloned()
+            .unwrap_or(Value::Null)
+    };
+    // The notification, the blank line and the client's own answer got no reply: 7 messages.
+    assert_eq!(msgs.len(), 7, "{out:?}");
+    let init = by_id(1);
+    assert_eq!(init["result"]["protocolVersion"], "2025-06-18");
+    let told = init["result"]["instructions"].as_str().unwrap_or("");
+    assert!(
+        told.contains("Work guide: formal tone."),
+        "the guide arrives through standard input too"
+    );
+    let names: Vec<String> = by_id(2)["result"]["tools"]
+        .as_array()
+        .ok_or("tools")?
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(String::from))
+        .collect();
+    assert!(
+        names.contains(&"remember".to_string())
+            && names
+                .iter()
+                .all(|n| !n.starts_with("health_") && !n.starts_with("kalios_"))
+    );
+    assert_eq!(text_of(&by_id(3))["result"], "created");
+    assert_eq!(
+        by_id(4)["result"]["isError"],
+        true,
+        "the vault it was not opened on stays closed"
+    );
+    assert_eq!(by_id(5)["result"], json!({}));
+    assert_eq!(
+        msgs.iter()
+            .find(|m| m["id"].is_null())
+            .map(|m| m["error"]["code"].clone()),
+        Some(json!(-32700))
+    );
+    assert_eq!(by_id(6)["error"]["code"], -32601);
+    // What it wrote is the same memory the HTTP side reads.
+    let http = connect(&e, "http-work", "work:r", false)?;
+    let r = text_of(&call(
+        &e,
+        &http,
+        "recall",
+        json!({ "query": "standard input", "tags": ["check/stdio"] }),
+    ));
+    assert_eq!(r["results"][0]["text"], "Written through standard input.");
+    Ok(())
+}
+
+#[test]
+fn the_stdio_server_stops_when_its_key_is_revoked_and_refuses_to_start_without_one() -> Res {
+    let e = env()?;
+    let key = connect(&e, "stdio-key", "work:rw", false)?;
+    let ping = r#"{"jsonrpc":"2.0","id":1,"method":"ping"}"#;
+    let (code, out, _) = stdio_session(&e, Some(&key), &[ping])?;
+    assert_eq!((code, out.len()), (0, 1));
+    // Revoked: the next request is answered with an error and the server ends, non-zero.
+    let ctl = e.app.brain.open_control()?;
+    assert!(access::revoke(&ctl, "stdio-key")?);
+    let (code, out, err) = stdio_session(&e, Some(&key), &[ping, ping])?;
+    assert_ne!(code, 0);
+    assert_eq!(out.len(), 1, "one error, then it stops: {out:?}");
+    let m: Value = serde_json::from_str(&out[0])?;
+    assert_eq!(m["error"]["code"], -32001);
+    assert!(err.contains("refused or revoked"));
+    // A key that never existed, an MCP-less console key, and no key at all.
+    let (code, out, _) = stdio_session(&e, Some("hcp_00000000_nope"), &[ping])?;
+    assert_ne!(code, 0);
+    assert_eq!(
+        serde_json::from_str::<Value>(&out[0])?["error"]["code"],
+        -32001
+    );
+    let (code, out, err) = stdio_session(&e, None, &[ping])?;
+    assert_eq!(code, 2);
+    assert!(out.is_empty(), "nothing on standard output: {out:?}");
+    assert!(err.contains("MEMCP_TOKEN"), "{err}");
+    // The refusals are in the log of the installation.
+    let refused: i64 = ctl.query_row(
+        "SELECT count(*) FROM auth_audit WHERE event = 'mcp_refused'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert!(refused >= 2);
+    Ok(())
+}
+
+fn rpc_at(e: &Env, path: &str, token: &str, body: Value) -> Response {
+    let auth = format!("Bearer {token}");
+    e.app.handle(&rq(
+        "POST",
+        path,
+        &[("authorization", auth.as_str())],
+        &body.to_string(),
+    ))
+}
+
+#[test]
+fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res {
+    let e = env()?;
+    let ctl = e.app.brain.open_control()?;
+    guide::set(&ctl, "owner", "space:work", "Work guide: formal tone.")?;
+    guide::set(&ctl, "owner", "space:health", "Health guide: usual range.")?;
+    let all = connect(&e, "everything", "all", false)?;
+    let stats = |path: &str| -> Value {
+        let r = rpc_at(
+            &e,
+            path,
+            &all,
+            json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "stats", "arguments": {} } }),
+        );
+        text_of(&r.body_json())
+    };
+    // At its own address a key with every right sees every vault...
+    assert!(
+        stats("/mcp/everything")
+            .as_object()
+            .is_some_and(|m| m.contains_key("health") && m.contains_key("work"))
+    );
+    // ...at the address of a vault it sees that vault, and its instructions, and nothing else.
+    let only_work = stats("/mcp/work");
+    assert_eq!(
+        only_work
+            .as_object()
+            .map(|m| m.keys().cloned().collect::<Vec<_>>()),
+        Some(vec!["work".to_string()])
+    );
+    let init = rpc_at(
+        &e,
+        "/mcp/work",
+        &all,
+        json!({ "jsonrpc": "2.0", "id": 2, "method": "initialize", "params": {} }),
+    )
+    .body_json();
+    let told = init["result"]["instructions"].as_str().unwrap_or("");
+    assert!(
+        told.contains("Work guide: formal tone.")
+            && !told.contains("usual range")
+            && !told.contains("health")
+    );
+    let names: Vec<String> = rpc_at(
+        &e,
+        "/mcp/work",
+        &all,
+        json!({ "jsonrpc": "2.0", "id": 3, "method": "tools/list" }),
+    )
+    .body_json()["result"]["tools"]
+        .as_array()
+        .ok_or("tools")?
+        .iter()
+        .filter_map(|t| t["name"].as_str().map(String::from))
+        .collect();
+    assert!(
+        names
+            .iter()
+            .all(|n| !n.starts_with("health_") && !n.starts_with("kalios_")),
+        "no health tool at the address of the work vault"
+    );
+    let denied = rpc_at(&e, "/mcp/work", &all, json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x", "space": "health" } } })).body_json();
+    assert_eq!(denied["result"]["isError"], true);
+    // A key that does not reach the vault of the address is told so, whether or not it exists.
+    let narrow = connect(&e, "narrow", "work:rw", false)?;
+    let r = rpc_at(
+        &e,
+        "/mcp/health",
+        &narrow,
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "ping" }),
+    );
+    assert_eq!(r.status, 403);
+    assert_eq!(
+        r.body_json()["error"],
+        "this key does not reach this address"
+    );
+    // An address that is no vault's names a connection: only its own key is let in.
+    let r = rpc_at(
+        &e,
+        "/mcp/ghost",
+        &narrow,
+        json!({ "jsonrpc": "2.0", "id": 5, "method": "ping" }),
+    );
+    assert_eq!(r.status, 403);
+    assert_eq!(
+        r.body_json()["error"],
+        "this key does not reach this address"
+    );
+    assert_eq!(
+        rpc_at(
+            &e,
+            "/mcp/work",
+            &narrow,
+            json!({ "jsonrpc": "2.0", "id": 6, "method": "ping" })
+        )
+        .status,
+        200
+    );
+    // Not a name: not found. No key: the refusal points at the metadata of that very address.
+    assert_eq!(rpc_at(&e, "/mcp/Bad%20Name", &all, json!({})).status, 404);
+    let r = e.app.handle(&rq("POST", "/mcp/work", &[], "{}"));
+    assert_eq!(r.status, 401);
+    let www = r
+        .headers
+        .iter()
+        .find(|(k, _)| k == "WWW-Authenticate")
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    assert!(
+        www.contains("/.well-known/oauth-protected-resource/mcp/work\""),
+        "{www}"
+    );
+    Ok(())
+}
+
+#[test]
+fn the_metadata_of_an_address_that_names_a_vault_says_that_resource() -> Res {
+    let mut e = env()?;
+    e.app.public_url = "https://memory.example.net".into();
+    let get = |p: &str| e.app.handle(&rq("GET", p, &[], ""));
+    let r = get("/.well-known/oauth-protected-resource/mcp/work");
+    assert_eq!(r.status, 200);
+    assert_eq!(
+        r.body_json()["resource"],
+        "https://memory.example.net/mcp/work"
+    );
+    assert_eq!(
+        r.body_json()["authorization_servers"],
+        json!(["https://memory.example.net"])
+    );
+    // No metadata for a general address: there is none.
+    assert_eq!(get("/.well-known/oauth-protected-resource").status, 404);
+    assert_eq!(get("/.well-known/oauth-protected-resource/mcp").status, 404);
+    assert_eq!(
+        get("/.well-known/oauth-protected-resource/mcp/Bad%20Name").status,
+        404
+    );
+    Ok(())
+}
+
+#[test]
+fn an_app_deposits_under_its_own_ids_and_gets_its_cursor_back() -> Res {
+    let e = env()?;
+    let t = connect(&e, "bevel-sync", "health:rw", false)?;
+    let send = |id: &str, at: &str, text: &str| {
+        text_of(&call(
+            &e,
+            &t,
+            "remember",
+            json!({ "text": text, "origin": { "app": "bevel", "id": id, "at": at } }),
+        ))
+    };
+    let a = send(
+        "2026-11-01/steps",
+        "2026-11-01",
+        "Steps 2026-11-01: 4200 so far",
+    );
+    assert_eq!(a["result"], "created");
+    assert_eq!(a["cursor"]["last_at"], "2026-11-01");
+    assert!(
+        a["fact"]["tags"]
+            .as_array()
+            .is_some_and(|t| t.iter().any(|x| x == "sources/bevel")),
+        "filed under its source: {a}"
+    );
+    let again = send(
+        "2026-11-01/steps",
+        "2026-11-01",
+        "Steps 2026-11-01: 4200 so far",
+    );
+    assert_eq!(again["result"], "unchanged");
+    let up = send("2026-11-01/steps", "2026-11-01", "Steps 2026-11-01: 9100");
+    assert_eq!(up["result"], "updated");
+    assert_eq!(up["cursor"]["facts"], 1);
+    let stats = text_of(&call(&e, &t, "stats", json!({})));
+    assert_eq!(stats["health"]["sources"]["bevel"]["facts"], 1, "{stats}");
+    // A malformed origin is refused, not half applied.
+    let bad = call(
+        &e,
+        &t,
+        "remember",
+        json!({ "text": "x", "origin": { "app": "Bad App", "id": "1" } }),
+    );
+    assert_eq!(bad["result"]["isError"], true, "{bad}");
+    Ok(())
+}
+
+// --- doctor ---------------------------------------------------------------------------------
+
+#[test]
+fn doctor_reads_an_installation_and_changes_nothing() -> Res {
+    use memcp_server::doctor;
+    let e = env()?;
+    let dir = e.app.brain.dir().to_path_buf();
+    let t = connect(&e, "wide-key", "all", false)?;
+    let _ = t;
+    let before: Vec<(String, Vec<u8>)> = ["control.sqlite"]
+        .iter()
+        .map(|f| Ok((f.to_string(), std::fs::read(dir.join(f))?)))
+        .collect::<Result<_, Box<dyn Error>>>()?;
+    let r = doctor::inspect(&dir, Some("http://192.168.1.10:8791/"), Some("127.0.0.1:1"));
+    let text = r.render();
+    for want in [
+        "control database: version",
+        "the public address ends with a slash",
+        "the public address is not HTTPS",
+        "only works on your own network",
+        "connection wide-key reaches every vault",
+        "nothing answers on 127.0.0.1:1",
+    ] {
+        assert!(text.contains(want), "missing {want:?} in:\n{text}");
+    }
+    assert_eq!(r.problems(), 0, "{text}");
+    let after = std::fs::read(dir.join("control.sqlite"))?;
+    assert_eq!(before[0].1, after, "the control database was not touched");
+    Ok(())
+}
+
+#[test]
+fn doctor_fails_on_a_missing_vault_file_and_on_a_data_directory_that_is_not_there() -> Res {
+    use memcp_server::doctor;
+    let e = env()?;
+    let dir = e.app.brain.dir().to_path_buf();
+    let first = e.app.brain.spaces()?.into_iter().next().ok_or("no vault")?;
+    std::fs::remove_file(dir.join(format!("{}.sqlite", first.as_str())))?;
+    let r = doctor::inspect(&dir, None, None);
+    assert!(r.problems() >= 1, "{}", r.render());
+    assert!(r.render().contains("its file is missing"), "{}", r.render());
+    let gone = doctor::inspect(&dir.join("nowhere"), None, None);
+    assert_eq!(gone.problems(), 1);
+    Ok(())
+}
+
+#[test]
+fn the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key() -> Res {
+    let e = env()?;
+    let mine = connect(&e, "claudeai", "work:rw", false)?;
+    let other = connect(&e, "kalios", "health:rw", false)?;
+    let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
+    // Its own address and the address of a vault it reaches take it; the bare /mcp is nobody's.
+    for path in ["/mcp/claudeai", "/mcp/work"] {
+        assert_eq!(rpc_at(&e, path, &mine, ping.clone()).status, 200, "{path}");
+    }
+    assert_eq!(rpc_at(&e, "/mcp", &mine, ping.clone()).status, 404);
+    // Another connection's address does not, nor an address that is nobody's.
+    for path in ["/mcp/kalios", "/mcp/nobody"] {
+        let r = rpc_at(&e, path, &mine, ping.clone());
+        assert_eq!(r.status, 403, "{path}");
+        assert_eq!(
+            r.body_json()["error"],
+            "this key does not reach this address"
+        );
+    }
+    assert_eq!(rpc_at(&e, "/mcp/kalios", &other, ping.clone()).status, 200);
+    // A key that is not one is sent to discover the address it was given, not the general one.
+    let r = rpc_at(&e, "/mcp/claudeai", "wrong", ping);
+    assert_eq!(r.status, 401);
+    let challenge = r
+        .headers
+        .iter()
+        .find(|(k, _)| k.eq_ignore_ascii_case("www-authenticate"))
+        .map(|(_, v)| v.clone())
+        .unwrap_or_default();
+    assert!(
+        challenge.contains("oauth-protected-resource/mcp/claudeai"),
+        "{challenge}"
+    );
+    let meta = e.app.handle(&rq(
+        "GET",
+        "/.well-known/oauth-protected-resource/mcp/claudeai",
+        &[],
+        "",
+    ));
+    let resource = meta.body_json()["resource"]
+        .as_str()
+        .unwrap_or("")
+        .to_string();
+    assert!(resource.ends_with("/mcp/claudeai"), "{resource}");
+    Ok(())
+}
+
+#[test]
+fn a_slow_or_keyless_big_body_holds_no_worker() -> Res {
+    let dir = temp("slow");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    let port = std::net::TcpListener::bind("127.0.0.1:0")?
+        .local_addr()?
+        .port();
+    let child = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args([
+            "serve",
+            "--listen",
+            &format!("127.0.0.1:{port}"),
+            "--threads",
+            "1",
+        ])
+        .stderr(std::process::Stdio::null())
+        .spawn()?;
+    let _srv = Child(child, dir.clone());
+    for _ in 0..50 {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // A big body with no key: refused from its declared size, before it is sent.
+    let (head, _) = http(
+        port,
+        "POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 5000000\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 413"), "{head}");
+    // Three clients that announce a body and send nothing: the one worker still answers.
+    let mut slow = vec![];
+    for _ in 0..3 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 100\r\n\r\nab")?;
+        slow.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    let (head, _) = http(
+        port,
+        "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    drop(slow);
+    Ok(())
+}

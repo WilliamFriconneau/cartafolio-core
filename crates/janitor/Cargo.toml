@@ -1,0 +1,28 @@
+[package]
+publish = false
+name = "memcp-janitor"
+description = "memcp janitor: transcribes the recordings that reach an inbox and files the notes there, without ever rewriting them (a program outside the memory, which runs no model of its own in it)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+# File::try_lock (the lock of a pass) is in Rust 1.89.
+rust-version = "1.89"
+repository.workspace = true
+
+[dependencies]
+memcp-client = { path = "../client" }
+serde_json = "1.0.154"
+# The same HTTP and TLS client as `memcp-client`, for the models (see deny.toml).
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+memcp-core = { path = "../core" }
+memcp-server = { path = "../server" }
+tiny_http = "0.12"
+
+[[bin]]
+name = "memcp-janitor"
+path = "src/main.rs"
+
+[lints]
+workspace = true

@@ -1,0 +1,61 @@
+# Supply-chain policy, checked by `cargo deny check` (CI runs it on every push).
+#
+# What it guards: no dependency with a known vulnerability or a yanked version, only licences
+# compatible with Apache-2.0, nothing fetched from anywhere but crates.io, and no second copy
+# of a crate that is easy to avoid. A new dependency is a decision: justify it in the change.
+
+[graph]
+targets = [
+  "x86_64-unknown-linux-musl",
+  "aarch64-unknown-linux-musl",
+  "x86_64-unknown-linux-gnu",
+]
+
+[advisories]
+yanked = "deny"
+# An advisory is ignored only with a reason and a date to look again, never silently.
+ignore = []
+
+[licenses]
+# Every licence a dependency may carry. Anything else fails until it is looked at.
+allow = [
+  "MIT",
+  "MIT-0",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "Unicode-3.0",
+  "Zlib",
+  "BSL-1.0",
+  # The client's TLS (ring, rustls-webpki, untrusted: ISC; its trusted roots: CDLA).
+  "ISC",
+  "CDLA-Permissive-2.0",
+  "Unlicense",
+]
+confidence-threshold = 0.9
+unused-allowed-license = "allow"
+
+[bans]
+# Two versions of one crate is a warning to look at, not a failure.
+multiple-versions = "warn"
+wildcards = "deny"
+# The crates of this workspace refer to each other by path.
+allow-wildcard-paths = true
+# Crates this project does not want, with the reason.
+deny = [
+  # A TLS stack or an HTTP client would make the server reach out; it is memory only.
+  # The one exception is `memcp-client`, which programs that reach the memory use (the bridge, the
+  # janitor): rustls may be used by its `ureq` and by nothing else.
+  { crate = "reqwest", reason = "the server fetches nothing" },
+  { crate = "hyper-util", reason = "the server fetches nothing" },
+  { crate = "openssl", reason = "no TLS stack: HTTPS is the proxy's job" },
+  { crate = "openssl-sys", reason = "no TLS stack: HTTPS is the proxy's job" },
+  { crate = "native-tls", reason = "no TLS stack: HTTPS is the proxy's job" },
+  { crate = "rustls", wrappers = ["ureq"], reason = "no TLS stack in the server: only the client (ureq) has one" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

@@ -1,0 +1,26 @@
+[package]
+publish = false
+name = "memcp-manager"
+description = "memcp manager: one memory per person, created and administered from one place"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+memcp-core = { path = "../core" }
+memcp-server = { path = "../server" }
+rusqlite = { version = "0.41", features = ["bundled"] }
+serde_json = "1.0.154"
+
+[dev-dependencies]
+base64 = "0.22"
+sha2 = "0.11.0"
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "memcp-manager"
+path = "src/main.rs"

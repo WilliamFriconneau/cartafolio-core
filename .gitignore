@@ -1,0 +1,10 @@
+target/
+*.sqlite
+*.sqlite-*
+.env
+ha-addon/memcp/bin/
+__pycache__/
+*.cdx.json
+.syncthing.*
+*.tmp
+node_modules/

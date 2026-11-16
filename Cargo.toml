@@ -1,0 +1,18 @@
+[workspace]
+resolver = "2"
+members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor"]
+
+[workspace.package]
+version = "0.23.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/WilliamFriconneau/memcp"
+rust-version = "1.89"
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+
+[workspace.lints.clippy]
+all = { level = "deny", priority = -1 }
+unwrap_used = "deny"
+expect_used = "warn"

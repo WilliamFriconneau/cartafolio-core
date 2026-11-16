@@ -1,0 +1,677 @@
+//! The manager end to end, without a network: people created by Home Assistant logins, a key
+//! that reaches only its own person, OAuth consent by tailnet login, and the conversion of an
+//! installation that held several people in one directory.
+
+use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU32, Ordering};
+
+use base64::Engine as _;
+use memcp_core::access::{self, Rights};
+use memcp_core::text::Language;
+use memcp_core::users;
+use memcp_manager::{Manager, Options};
+use memcp_server::http::{Request, Response, parse_query};
+use memcp_server::net::Handler;
+use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
+
+type Res = Result<(), Box<dyn Error>>;
+static N: AtomicU32 = AtomicU32::new(0);
+const CALLBACK: &str = "https://claude.ai/api/mcp/auth_callback";
+const VERIFIER: &str = "a-long-random-verifier-string-of-at-least-43-characters-0123456789";
+
+struct Dir(PathBuf);
+
+impl Dir {
+    fn new(tag: &str) -> Dir {
+        let n = N.fetch_add(1, Ordering::SeqCst);
+        let p =
+            std::env::temp_dir().join(format!("memcp-manager-{tag}-{}-{n}", std::process::id()));
+        let _ = fs::remove_dir_all(&p);
+        Dir(p)
+    }
+    fn path(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for Dir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
+fn options() -> Options {
+    let mut tailnet_users = HashMap::new();
+    tailnet_users.insert("alice@example.org".to_string(), "alice".to_string());
+    tailnet_users.insert("lou@example.org".to_string(), "lou".to_string());
+    Options {
+        public_url: Some("https://memory.example.net".into()),
+        login_url: Some("https://memory.example.net:8792".into()),
+        tailnet_users,
+        language: Some(Language::English),
+        ..Default::default()
+    }
+}
+
+fn rq(method: &str, path: &str, headers: &[(&str, &str)], body: &str) -> Request {
+    let (path, query) = path.split_once('?').unwrap_or((path, ""));
+    Request {
+        method: method.into(),
+        path: path.into(),
+        query: parse_query(query),
+        headers: headers
+            .iter()
+            .map(|(k, v)| (k.to_lowercase(), v.to_string()))
+            .collect(),
+        body: body.as_bytes().to_vec(),
+        ip: Some("203.0.113.9".into()),
+        ..Default::default()
+    }
+}
+
+/// A request through Home Assistant's ingress, as the trusted proxy forwards it.
+fn ingress(id: &str, name: &str, method: &str, path: &str, body: &str) -> Request {
+    let mut r = rq(
+        method,
+        path,
+        &[
+            ("x-remote-user-id", id),
+            ("x-remote-user-name", name),
+            ("x-remote-user-display-name", name),
+            ("x-requested-with", "memcp"),
+            ("content-type", "application/json"),
+        ],
+        body,
+    );
+    r.via_ingress = true;
+    r
+}
+
+fn tailnet(login: &str, method: &str, path: &str, body: &str) -> Request {
+    let mut r = rq(method, path, &[], body);
+    r.tailnet_login = Some(login.into());
+    r
+}
+
+thread_local! {
+    /// Which connection each key of this test belongs to: its address is `/mcp/<name>`.
+    static ADDRESSES: std::cell::RefCell<std::collections::HashMap<String, String>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+fn note(agent: &str, token: &str) {
+    ADDRESSES.with(|m| m.borrow_mut().insert(token.to_string(), agent.to_string()));
+}
+
+fn mcp(token: &str, tool: &str, args: Value) -> Request {
+    let agent = ADDRESSES
+        .with(|m| m.borrow().get(token).cloned())
+        .unwrap_or_else(|| "nobody".into());
+    rq(
+        "POST",
+        &format!("/mcp/{agent}"),
+        &[
+            ("authorization", &format!("Bearer {token}")),
+            ("content-type", "application/json"),
+        ],
+        &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": tool, "arguments": args } })
+            .to_string(),
+    )
+}
+
+fn tool_text(r: &Response) -> Value {
+    let v = r.body_json();
+    v["result"]["content"][0]["text"]
+        .as_str()
+        .and_then(|t| serde_json::from_str(t).ok())
+        .unwrap_or(v)
+}
+
+fn key(m: &Manager, person: &str, agent: &str, rights: &str) -> Result<String, Box<dyn Error>> {
+    let app = m.person_app(person).ok_or("no such person")?;
+    let ctl = app.brain.open_control()?;
+    let token = access::connect_for(
+        &ctl,
+        users::OWNER,
+        agent,
+        &Rights::parse(rights)?,
+        None,
+        false,
+        false,
+    )?;
+    note(agent, &token);
+    Ok(token)
+}
+
+fn two_people(d: &Dir) -> Result<Manager, Box<dyn Error>> {
+    let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
+    let ctl = m.registry().brain.open_control()?;
+    let _ = users::from_home_assistant(&ctl, "ha-w", "alice", "Alice", &[])?;
+    m.ensure_people().map_err(|e| e.1)?;
+    m.add_person("lou", "Lou", Some("ha-l"), false)
+        .map_err(|e| e.1)?;
+    Ok(m)
+}
+
+#[test]
+fn the_first_login_becomes_the_administrator_and_gets_a_directory_of_their_own() -> Res {
+    let d = Dir::new("first");
+    let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
+    let r = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let s = r.body_json();
+    assert_eq!(s["installation"]["admin"], true, "{s}");
+    assert!(
+        s["installation"]["users"]
+            .as_array()
+            .is_some_and(|u| u.iter().any(|x| x["name"] == "alice" && x["admin"] == true)),
+        "{s}"
+    );
+    assert!(d.path().join("people/alice/control.sqlite").exists());
+    // The placeholder administrator of a fresh registry became Alice: nobody else, no stray directory.
+    assert!(!d.path().join("people/owner").exists());
+    assert_eq!(
+        s["installation"]["users"].as_array().map(Vec::len),
+        Some(1),
+        "{s}"
+    );
+    // Inside their own directory the person is a plain member: no page of another person's, no
+    // people to manage there.
+    assert_eq!(s["me"]["admin"], false, "{s}");
+    assert_eq!(s["spaces"], json!([]), "no vault until they make one");
+    Ok(())
+}
+
+#[test]
+fn a_second_login_waits_and_the_administrator_lets_it_in() -> Res {
+    let d = Dir::new("second");
+    let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
+    m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    // An unknown login waits.
+    let wait = m.handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""));
+    assert_eq!(wait.status, 403, "{}", wait.body_json());
+    assert!(
+        !d.path().join("people/lou").exists(),
+        "nothing is made for a stranger"
+    );
+    // The administrator sees it, through the same page, and approves.
+    let st = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    let reqs = st.body_json()["installation"]["requests"].clone();
+    assert!(
+        reqs.as_array()
+            .is_some_and(|r| r.iter().any(|x| x["ha_user"] == "ha-l")),
+        "{reqs}"
+    );
+    let ok = m.handle(&ingress(
+        "ha-w",
+        "alice",
+        "POST",
+        "/admin/api/requests/approve",
+        &json!({ "ha_user": "ha-l" }).to_string(),
+    ));
+    assert_eq!(ok.status, 200, "{}", ok.body_json());
+    assert!(d.path().join("people/lou/control.sqlite").exists());
+    // Lou is in, in a directory of their own, and sees nothing of the installation.
+    let lou = m.handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""));
+    assert_eq!(lou.status, 200, "{}", lou.body_json());
+    assert!(lou.body_json().get("installation").is_none());
+    let denied = m.handle(&ingress(
+        "ha-l",
+        "lou",
+        "POST",
+        "/admin/api/users",
+        &json!({ "name": "eve" }).to_string(),
+    ));
+    assert_eq!(denied.status, 403);
+    Ok(())
+}
+
+#[test]
+fn a_key_reaches_its_own_person_and_nobody_else() -> Res {
+    let d = Dir::new("keys");
+    let m = two_people(&d)?;
+    for p in ["alice", "lou"] {
+        let app = m.person_app(p).ok_or("person")?;
+        app.brain.add_vault(users::OWNER, p, "health")?;
+    }
+    let kw = key(&m, "alice", "w-claude", "all")?;
+    let kl = key(&m, "lou", "l-claude", "all")?;
+    let w = tool_text(&m.handle(&mcp(
+        &kw,
+        "remember",
+        json!({ "text": "Alice's knee clicks on stairs" }),
+    )));
+    assert_eq!(w["result"], "created", "{w}");
+    // Lou's key finds nothing of Alice's, and sees only Lou's vault.
+    let found = tool_text(&m.handle(&mcp(&kl, "recall", json!({ "query": "knee stairs" }))));
+    assert_eq!(found["results"], json!([]), "{found}");
+    let stats = tool_text(&m.handle(&mcp(&kl, "stats", json!({}))));
+    let names: Vec<&str> = stats
+        .as_object()
+        .map(|o| o.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    assert_eq!(names.len(), 1, "{stats}");
+    assert!(names[0].starts_with("lou"), "{names:?}");
+    // An unknown key is refused like anywhere.
+    let none = m.handle(&mcp("hcp_unknown_token", "stats", json!({})));
+    assert_eq!(none.status, 401);
+    Ok(())
+}
+
+fn challenge() -> String {
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(Sha256::digest(VERIFIER.as_bytes()))
+}
+
+fn authorize_path(client: &str) -> String {
+    format!(
+        "/oauth/authorize?response_type=code&client_id={client}&redirect_uri={}&code_challenge={}&code_challenge_method=S256&state=xyz",
+        "https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback",
+        challenge()
+    )
+}
+
+#[test]
+fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
+    let d = Dir::new("oauth");
+    let m = two_people(&d)?;
+    for p in ["alice", "lou"] {
+        let app = m.person_app(p).ok_or("person")?;
+        app.brain.add_vault(users::OWNER, p, "me")?;
+    }
+    // The client registers once, at the manager.
+    let reg = m.handle(&rq(
+        "POST",
+        "/oauth/register",
+        &[],
+        &json!({ "client_name": "Claude", "redirect_uris": [CALLBACK] }).to_string(),
+    ));
+    assert_eq!(reg.status, 201, "{}", reg.body_json());
+    let client = reg.body_json()["client_id"]
+        .as_str()
+        .ok_or("client")?
+        .to_string();
+    let q = authorize_path(&client);
+    // Lou, on the tailnet, gets the consent page of Lou's vaults and nobody else's.
+    let page = m.handle(&tailnet("lou@example.org", "GET", &q, ""));
+    assert_eq!(page.status, 200);
+    let html = String::from_utf8(page.body.clone())?;
+    assert!(
+        html.contains("lou-me") && !html.contains("alice-me"),
+        "{html}"
+    );
+    let nonce = html
+        .split("name=nonce value=")
+        .nth(1)
+        .and_then(|r| r.split('>').next())
+        .ok_or("nonce")?
+        .to_string();
+    let form = q
+        .split_once('?')
+        .map(|(_, b)| format!("{b}&decision=allow&nonce={nonce}&v_lou-me=1"))
+        .ok_or("form")?;
+    let done = m.handle(&tailnet(
+        "lou@example.org",
+        "POST",
+        "/oauth/authorize",
+        &form,
+    ));
+    assert_eq!(done.status, 302, "{}", String::from_utf8_lossy(&done.body));
+    let loc = done
+        .headers
+        .iter()
+        .find(|(k, _)| k == "Location")
+        .map(|(_, v)| v.clone())
+        .ok_or("location")?;
+    let code = loc
+        .split("code=")
+        .nth(1)
+        .and_then(|c| c.split('&').next())
+        .ok_or("code")?;
+    // The token request comes from the internet, with no identity: the code says whose it is.
+    let tok = m.handle(&rq(
+        "POST",
+        "/oauth/token",
+        &[("content-type", "application/x-www-form-urlencoded")],
+        &format!("grant_type=authorization_code&code={code}&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&client_id={client}&code_verifier={VERIFIER}"),
+    ));
+    assert_eq!(tok.status, 200, "{}", tok.body_json());
+    let access = tok.body_json()["access_token"]
+        .as_str()
+        .ok_or("token")?
+        .to_string();
+    for person in ["alice", "lou"] {
+        let app = m.person_app(person).ok_or("app")?;
+        let ctl = app.brain.open_control()?;
+        if let Some(who) = access::authenticate(&ctl, &access, memcp_core::util::now())? {
+            note(&who.agent, &access);
+        }
+    }
+    let stats = tool_text(&m.handle(&mcp(&access, "stats", json!({}))));
+    let names: Vec<&str> = stats
+        .as_object()
+        .map(|o| o.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    assert_eq!(names, vec!["lou-me"], "{stats}");
+    // The refresh token finds its person too.
+    let refresh = tok.body_json()["refresh_token"]
+        .as_str()
+        .ok_or("refresh")?
+        .to_string();
+    let again = m.handle(&rq(
+        "POST",
+        "/oauth/token",
+        &[("content-type", "application/x-www-form-urlencoded")],
+        &format!("grant_type=refresh_token&refresh_token={refresh}&client_id={client}"),
+    ));
+    assert_eq!(again.status, 200, "{}", again.body_json());
+    Ok(())
+}
+
+#[test]
+fn an_unknown_tailnet_login_is_given_nothing() -> Res {
+    let d = Dir::new("stranger");
+    let m = two_people(&d)?;
+    let r = m.handle(&tailnet("eve@example.org", "GET", "/admin/api/state", ""));
+    assert_eq!(r.status, 401, "{}", r.body_json());
+    Ok(())
+}
+
+#[test]
+fn a_path_limited_key_reaches_its_person_through_the_manager_and_stays_limited() -> Res {
+    let d = Dir::new("path");
+    let m = two_people(&d)?;
+    let app = m.person_app("alice").ok_or("person")?;
+    let health = app.brain.add_vault(users::OWNER, "alice", "health")?;
+    let k = key(&m, "alice", "bevel", &format!("{health}/sources/bevel:rw"))?;
+    let r = tool_text(&m.handle(&mcp(
+        &k,
+        "remember",
+        json!({ "text": "Steps 2026-11-01: 9100", "origin": { "app": "bevel", "id": "s" } }),
+    )));
+    assert_eq!(r["result"], "created", "{r}");
+    let outside = m.handle(&mcp(
+        &k,
+        "remember",
+        json!({ "text": "Outside its path", "tags": ["conditions"] }),
+    ));
+    assert_eq!(outside.body_json()["result"]["isError"], true);
+    Ok(())
+}
+
+#[test]
+fn the_administrator_sees_each_person_with_their_connections_and_can_unlink_an_account() -> Res {
+    let d = Dir::new("people");
+    let m = two_people(&d)?;
+    let app = m.person_app("lou").ok_or("lou")?;
+    app.brain.add_vault(users::OWNER, "lou", "me")?;
+    key(&m, "lou", "lou-claude", "all")?;
+    key(&m, "lou", "lou-code", "all")?;
+    let st = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    let people = st.body_json()["installation"]["users"].clone();
+    let lou = people
+        .as_array()
+        .and_then(|p| p.iter().find(|x| x["name"] == "lou"))
+        .ok_or("lou listed")?
+        .clone();
+    assert_eq!(lou["connections"], 2, "{lou}");
+    assert_eq!(lou["vaults"], 1, "{lou}");
+    assert_eq!(lou["home_assistant"], true);
+    // Unlinking cuts the account, not the memory.
+    let r = m.handle(&ingress(
+        "ha-w",
+        "alice",
+        "POST",
+        "/admin/api/users/unlink",
+        &json!({ "id": lou["id"] }).to_string(),
+    ));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let after = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    let lou = after.body_json()["installation"]["users"]
+        .as_array()
+        .and_then(|p| p.iter().find(|x| x["name"] == "lou").cloned())
+        .ok_or("lou still listed")?;
+    assert_eq!(lou["home_assistant"], false);
+    assert_eq!(lou["vaults"], 1, "the memory stays");
+    // A member cannot do it.
+    let denied = m.handle(&ingress(
+        "ha-l",
+        "lou",
+        "POST",
+        "/admin/api/users/unlink",
+        &json!({ "id": lou["id"] }).to_string(),
+    ));
+    assert_eq!(denied.status, 403);
+    Ok(())
+}
+
+#[test]
+fn an_administrator_named_in_the_options_gets_their_person_back_with_a_new_account() -> Res {
+    let d = Dir::new("relink");
+    let mut o = options();
+    o.admins = vec!["alice".into()];
+    let m = Manager::open(d.path(), o).map_err(|e| e.1)?;
+    let first = m.handle(&ingress("ha-old", "alice", "GET", "/admin/api/state", ""));
+    assert_eq!(first.status, 200, "{}", first.body_json());
+    // The account is deleted and made again: another identifier, the same login name.
+    let again = m.handle(&ingress("ha-new", "alice", "GET", "/admin/api/state", ""));
+    assert_eq!(again.status, 200, "{}", again.body_json());
+    let reg = m.registry().brain.open_control()?;
+    let all = users::list_users(&reg)?;
+    let alices: Vec<_> = all.iter().filter(|u| u.name.starts_with("alice")).collect();
+    assert_eq!(alices.len(), 1, "no second Alice: {all:?}");
+    assert_eq!(alices[0].ha_user.as_deref(), Some("ha-new"));
+    Ok(())
+}
+
+#[test]
+fn a_recovery_key_brings_a_person_back_with_a_new_account() -> Res {
+    let d = Dir::new("recovery");
+    let m = two_people(&d)?;
+    // Lou makes a key on their page; the page tells them, once.
+    let made = m.handle(&ingress(
+        "ha-l",
+        "lou",
+        "POST",
+        "/admin/api/recovery/make",
+        "{}",
+    ));
+    assert_eq!(made.status, 200, "{}", made.body_json());
+    let key = made.body_json()["key"].as_str().ok_or("key")?.to_string();
+    let st = m
+        .handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""))
+        .body_json();
+    assert_eq!(st["safety"]["has_key"], true, "{st}");
+    // Their account is deleted and made again: another identifier. It waits... and holds the key.
+    let wait = m.handle(&ingress("ha-l2", "lou", "GET", "/admin/api/state", ""));
+    assert_eq!(wait.status, 403);
+    let wrong = m.handle(&ingress(
+        "ha-l2",
+        "lou",
+        "POST",
+        "/admin/api/recover",
+        &json!({ "key": "AAAA-AAAA-AAAA-AAAA-AAAA" }).to_string(),
+    ));
+    assert_eq!(wrong.status, 400);
+    let ok = m.handle(&ingress(
+        "ha-l2",
+        "lou",
+        "POST",
+        "/admin/api/recover",
+        &json!({ "key": key }).to_string(),
+    ));
+    assert_eq!(ok.status, 200, "{}", ok.body_json());
+    let back = m.handle(&ingress("ha-l2", "lou", "GET", "/admin/api/state", ""));
+    assert_eq!(back.status, 200, "{}", back.body_json());
+    // The key is used up, and the old account no longer opens it.
+    let again = m.handle(&ingress(
+        "ha-x",
+        "x",
+        "POST",
+        "/admin/api/recover",
+        &json!({ "key": key }).to_string(),
+    ));
+    assert_eq!(again.status, 400);
+    assert_eq!(
+        m.handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""))
+            .status,
+        403
+    );
+    Ok(())
+}
+
+#[test]
+fn an_heir_attaches_a_new_account_to_a_person_who_has_been_gone_long_enough() -> Res {
+    let d = Dir::new("heir");
+    let m = two_people(&d)?;
+    let reg = m.registry().brain.open_control()?;
+    let lou = users::user_by_name(&reg, "lou")?.ok_or("lou")?;
+    let will = users::user_by_name(&reg, "alice")?.ok_or("alice")?;
+    // Alice names Lou as heir.
+    let set = m.handle(&ingress(
+        "ha-w",
+        "alice",
+        "POST",
+        "/admin/api/heir/set",
+        &json!({ "heir": lou.id }).to_string(),
+    ));
+    assert_eq!(set.status, 200, "{}", set.body_json());
+    // Alice's account is gone: a new one waits. Lou sees it, but too early.
+    m.handle(&ingress("ha-w2", "alice", "GET", "/admin/api/state", ""));
+    let st = m
+        .handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""))
+        .body_json();
+    assert_eq!(st["safety"]["heir_of"][0]["name"], "alice", "{st}");
+    assert_eq!(st["safety"]["heir_of"][0]["eligible"], false);
+    let early = m.handle(&ingress(
+        "ha-l",
+        "lou",
+        "POST",
+        "/admin/api/requests/attach",
+        &json!({ "ha_user": "ha-w2", "person": will.id }).to_string(),
+    ));
+    assert_eq!(early.status, 400, "too early");
+    // Thirty days later (Alice was last seen long ago).
+    reg.execute(
+        "UPDATE users SET last_seen = last_seen - ?1, created_at = created_at - ?1 WHERE id = ?2",
+        rusqlite::params![40 * 86_400, will.id],
+    )?;
+    let st = m
+        .handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""))
+        .body_json();
+    assert_eq!(st["safety"]["heir_of"][0]["eligible"], true, "{st}");
+    assert_eq!(st["safety"]["waiting"][0]["ha_user"], "ha-w2", "{st}");
+    // Someone who is not the heir cannot.
+    let not_heir = m.handle(&ingress(
+        "ha-w2",
+        "alice",
+        "POST",
+        "/admin/api/requests/attach",
+        &json!({ "ha_user": "ha-w2", "person": will.id }).to_string(),
+    ));
+    assert_eq!(not_heir.status, 403, "an account that waits can do nothing");
+    let ok = m.handle(&ingress(
+        "ha-l",
+        "lou",
+        "POST",
+        "/admin/api/requests/attach",
+        &json!({ "ha_user": "ha-w2", "person": will.id }).to_string(),
+    ));
+    assert_eq!(ok.status, 200, "{}", ok.body_json());
+    let back = m.handle(&ingress("ha-w2", "alice", "GET", "/admin/api/state", ""));
+    assert_eq!(back.status, 200, "{}", back.body_json());
+    Ok(())
+}
+
+#[test]
+fn by_default_every_new_home_assistant_account_gets_a_memory_of_its_own() -> Res {
+    let d = Dir::new("auto");
+    let mut o = options();
+    o.auto_create_people = true;
+    let m = Manager::open(d.path(), o).map_err(|e| e.1)?;
+    let first = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
+    assert_eq!(first.body_json()["installation"]["admin"], true);
+    // Another account opens it: no waiting, a member with a directory of their own.
+    let lou = m.handle(&ingress("ha-l", "lou", "GET", "/admin/api/state", ""));
+    assert_eq!(lou.status, 200, "{}", lou.body_json());
+    assert!(
+        lou.body_json().get("installation").is_none(),
+        "not an administrator"
+    );
+    assert!(d.path().join("people/lou/control.sqlite").exists());
+    // The administrator sees them, and nobody waits.
+    let st = m
+        .handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""))
+        .body_json();
+    let names: Vec<&str> = st["installation"]["users"]
+        .as_array()
+        .ok_or("users")?
+        .iter()
+        .filter_map(|u| u["name"].as_str())
+        .collect();
+    assert!(names.contains(&"lou"), "{names:?}");
+    assert_eq!(st["installation"]["requests"], json!([]));
+    Ok(())
+}
+
+#[test]
+fn a_bridge_pairs_with_the_code_its_person_made_and_reaches_only_their_a_trier() -> Res {
+    let d = Dir::new("pairing");
+    let m = two_people(&d)?;
+    for p in ["alice", "lou"] {
+        let app = m.person_app(p).ok_or("person")?;
+        app.brain.add_vault(users::OWNER, p, "health")?;
+    }
+    // Lou asks her page for a code: no vault to choose, everything goes to her À trier.
+    let r = m.handle(&ingress("ha-l", "lou", "POST", "/admin/api/pairing", "{}"));
+    assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+    let made = r.body_json();
+    let code = made["code"].as_str().ok_or("code")?.to_string();
+    assert_eq!(made["server"], "https://memory.example.net");
+    assert_eq!(made["triage"], "lou-a-trier");
+    // The device, with no key, exchanges it on the public listener.
+    let pair = |code: &str| {
+        m.handle(&rq(
+            "POST",
+            "/pair",
+            &[("content-type", "application/json")],
+            &json!({ "code": code, "device": "Lou's Mac" }).to_string(),
+        ))
+    };
+    let got = pair(&code.to_lowercase());
+    assert_eq!(got.status, 200, "{}", String::from_utf8_lossy(&got.body));
+    let got = got.body_json();
+    let key = got["key"].as_str().ok_or("key")?;
+    let agent = got["agent"].as_str().ok_or("agent")?;
+    assert!(agent.starts_with("bridge-lou-s-mac-"), "{agent}");
+    assert_eq!(
+        got["mcp_url"],
+        format!("https://memory.example.net/mcp/{agent}")
+    );
+    assert_eq!(got["vaults"], json!(["lou-a-trier"]));
+    // The key writes into Lou's À trier without naming it, nowhere else, and never reaches Alice.
+    let mut req = mcp(key, "remember", json!({ "text": "Une note du Mac." }));
+    req.path = format!("/mcp/{agent}");
+    let w = tool_text(&m.handle(&req));
+    assert_eq!(w["result"], "created", "{w}");
+    assert_eq!(w["fact"]["tags"], json!(["inbox"]), "{w}");
+    let mut stats = mcp(key, "stats", json!({}));
+    stats.path = format!("/mcp/{agent}");
+    let s = tool_text(&m.handle(&stats));
+    assert!(
+        s["lou-a-trier"]["kind"] == "a-trier"
+            && s.get("lou-health").is_none()
+            && s.get("alice-health").is_none(),
+        "{s}"
+    );
+    // Once only; a wrong code is refused the same way, and an address that keeps guessing is held off.
+    assert_eq!(pair(&code).status, 400);
+    for _ in 0..12 {
+        let _ = pair("ZZZZ-ZZZZ");
+    }
+    assert_eq!(pair("ZZZZ-ZZZZ").status, 429);
+    Ok(())
+}
