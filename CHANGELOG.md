@@ -1,5 +1,35 @@
 # Changelog
 
+## 20261116.0.9
+
+- Reliability: writes from many devices at the same time are no longer lost (« database is locked »); every write waits its turn.
+- An end-to-end test against real nodes: simultaneous writers, three nodes converging, refused access, a 2000-note catch-up.
+
+## 20261116.0.8
+
+- The page shows the living boards of a space (Boards tab): cards by column, moved in one click, added in a field; a target shows the signs it groups; each board says its last pass and how many notes came since.
+- Named lists in every space (`list-shopping`…), fed from notes of any space.
+- An app's structured trace is read as values in the journal and the notes; board notes stay out of the journal and the counts.
+
+## 20261116.0.7
+
+- Living boards in every space: *what's next* (now, next, later, done), *ideas* (new, kept, done), *targets* (long-term problems and risks, each grouping its signs and symptoms; open, reached) and *where things stand*. Cards are one-line notes moved between columns, each keeping its history; each board records its last pass and shows the notes filed since. MCP tools `living_get` and `living_set`.
+- Machines of different versions: the exchange between peers has a protocol number; an older machine that meets a newer protocol stops and says so.
+- Docs: the concepts with cases (CONCEPTS.md), the specification of the boards (LIVING-PAGES.md).
+
+## 20261116.0.6
+
+- Machines in step: a node serves `/sync/status`, `/sync/spaces` and `/sync/events` at the address of a peer's connection, and `memcp-sync` keeps a node in step with a peer (pull, then push, cursors that resume). Tested end to end with two real nodes.
+- `memcp merge --plan/--apply`: merging two memories without loss.
+- Libraries: a folder mounted read-only, indexed, searched (`library_search`), raised into the memory (`library_raise`); `links` gives the graph.
+- On the page, the notes of a space read as a thread, a day at a time: the person's notes on one side, what assistants and apps wrote on the other, an app's structured trace shown as its values.
+- Docs: the principles in the README, local tools on every machine (LOCAL-TOOLS.md), Claude Code on the same computer.
+
+## 20261116.0.5
+
+- MCP tools `rules_get` / `rules_set` (filing rules of a space, versioned) and `peers` (the machines holding the memory).
+- Interface specifications for every app: docs/UI-SPEC.md.
+
 ## 20261116.0.3
 
 - `triage_claim` and `triage_release`: a sorter outside the memory (an assistant on a device) reserves notes of À trier for a few minutes, so that two sorters never take the same.

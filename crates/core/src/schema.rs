@@ -3,7 +3,8 @@
 
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
-    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8,
+    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
+    SPACE_V10,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -25,6 +26,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V15,
     CONTROL_V16,
     CONTROL_V17,
+    CONTROL_V18,
 ];
 
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
@@ -440,4 +442,86 @@ const CONTROL_V17: &str = r"
 ALTER TABLE spaces ADD COLUMN label TEXT;
 ALTER TABLE spaces ADD COLUMN parent TEXT;
 ALTER TABLE spaces ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+";
+
+/// A read-only mounted folder (a library) and what the node knows of it: one row per file found, with its dates, its
+/// text for `.md` and `.txt`, and the `[[links]]` it holds. The originals are never copied or changed. `library_raised`
+/// ties a normal fact to the original it summarises.
+const SPACE_V9: &str = r"
+CREATE TABLE library_roots (
+  id INTEGER PRIMARY KEY,
+  root TEXT NOT NULL UNIQUE,
+  added_at INTEGER NOT NULL,
+  scanned_at INTEGER
+) STRICT;
+CREATE TABLE library_entries (
+  id INTEGER PRIMARY KEY,
+  root_id INTEGER NOT NULL REFERENCES library_roots(id),
+  path TEXT NOT NULL UNIQUE,
+  rel TEXT NOT NULL,
+  title TEXT NOT NULL,
+  ext TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  mtime INTEGER NOT NULL,
+  created INTEGER,
+  body TEXT NOT NULL DEFAULT '',
+  indexed_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX library_entries_root ON library_entries(root_id, rel);
+CREATE VIRTUAL TABLE library_fts USING fts5(stem, tokenize = 'unicode61 remove_diacritics 2');
+CREATE TABLE library_links (
+  entry_id INTEGER NOT NULL REFERENCES library_entries(id),
+  target TEXT NOT NULL,
+  PRIMARY KEY (entry_id, target)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE library_raised (
+  fact_id TEXT PRIMARY KEY REFERENCES facts(id),
+  root_id INTEGER NOT NULL REFERENCES library_roots(id),
+  path TEXT NOT NULL,
+  rel TEXT NOT NULL,
+  raised_at INTEGER NOT NULL,
+  author TEXT NOT NULL
+) STRICT;
+";
+
+/// The log peers exchange: one append-only row per change (a fact created, replaced or retired, a file kept
+/// or retired, a layout field changed). `eid` is a stable identifier derived from what changed, so the same
+/// change received twice is one row; `hlc` is a hybrid logical clock stamp; `via` is the peer that delivered
+/// the row (empty for a change made here), so a peer is never sent back what it sent. `sync_fields` holds the
+/// stamp of the newest value of each layout field (last writer wins), `sync_disputes` the facts two peers
+/// changed differently.
+const SPACE_V10: &str = r"
+CREATE TABLE sync_log (
+  seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+  eid     TEXT NOT NULL UNIQUE,
+  hlc     TEXT NOT NULL,
+  origin  TEXT NOT NULL,
+  via     TEXT,
+  kind    TEXT NOT NULL,
+  at      INTEGER NOT NULL,
+  payload TEXT NOT NULL
+) STRICT;
+CREATE TRIGGER sync_log_no_update BEFORE UPDATE ON sync_log BEGIN SELECT RAISE(ABORT,'append-only'); END;
+CREATE TRIGGER sync_log_no_delete BEFORE DELETE ON sync_log BEGIN SELECT RAISE(ABORT,'append-only'); END;
+CREATE TABLE sync_fields (field TEXT PRIMARY KEY, hlc TEXT NOT NULL) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_disputes (
+  fact_id TEXT NOT NULL, alt TEXT NOT NULL, at INTEGER NOT NULL,
+  PRIMARY KEY (fact_id, alt)
+) STRICT, WITHOUT ROWID;
+";
+
+/// What this node knows of each peer, per space: how far it has read the peer's log (`pulled`), how far the
+/// peer has read this one (`pushed`), and the latest transfer (direction, progress, time) for the live status.
+const CONTROL_V18: &str = r"
+CREATE TABLE sync_state (
+  peer   TEXT NOT NULL,
+  space  TEXT NOT NULL,
+  pulled INTEGER NOT NULL DEFAULT 0,
+  pushed INTEGER NOT NULL DEFAULT 0,
+  dir    TEXT NOT NULL DEFAULT 'idle' CHECK (dir IN ('sending','receiving','idle')),
+  done   INTEGER NOT NULL DEFAULT 0,
+  total  INTEGER NOT NULL DEFAULT 0,
+  at     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (peer, space)
+) STRICT, WITHOUT ROWID;
 ";

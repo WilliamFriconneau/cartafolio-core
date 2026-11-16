@@ -90,6 +90,15 @@ fn tags_of(fact: &Value) -> Vec<&str> {
         .collect()
 }
 
+/// Whether a fact belongs to a library (the tag `library`, or a path under it): what was raised from a mounted folder
+/// is the person's to keep as it is, and the janitor never sends, files, rewrites or retires it, whatever else the
+/// fact is tagged.
+fn is_library(fact: &Value) -> bool {
+    tags_of(fact)
+        .iter()
+        .any(|t| *t == "library" || t.starts_with("library/"))
+}
+
 /// The spaces of `stats` that are « À trier », and the vaults.
 fn split_triage(stats: &Value) -> (Vec<String>, Vec<String>) {
     let mut triage = vec![];
@@ -420,6 +429,7 @@ impl Janitor {
                     || note["status"] != "active"
                     || note["type"].as_str() == Some("file")
                     || tags_of(note).iter().any(|g| g.starts_with("inbox/audio"))
+                    || is_library(note)
                     || self.state.note_fails(id) >= MAX_FAILS
                 {
                     continue;
@@ -560,6 +570,7 @@ impl Janitor {
                 || note["status"] != "active"
                 || note["type"].as_str() == Some("file")
                 || tags_of(note).iter().any(|g| g.starts_with("inbox/audio"))
+                || is_library(note)
                 || self.state.note_fails(id) >= MAX_FAILS
             {
                 continue;

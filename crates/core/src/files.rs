@@ -192,6 +192,42 @@ fn link_from_another_space(brain: &Brain, space: &Space, sha: &str, path: &Path)
         .any(|from| from.exists() && fs::hard_link(&from, path).is_ok())
 }
 
+/// Writes the bytes of a file once per content, private. Already held in another
+/// space, they are a hard link there: each space keeps its own path, so
+/// retiring it in one space leaves the other intact, and nothing tells a
+/// space what another holds.
+pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) -> Result<()> {
+    let dir = blob_dir(brain, space);
+    DirBuilder::new()
+        .recursive(true)
+        .private_dir()
+        .create(&dir)?;
+    let path = dir.join(sha);
+    if !path.exists() && !link_from_another_space(brain, space, sha, &path) {
+        let tmp = dir.join(format!(".{sha}.tmp"));
+        let mut f = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .private_file()
+            .open(&tmp)?;
+        f.write_all(bytes)?;
+        f.sync_all()?;
+        fs::rename(&tmp, &path)?;
+    }
+    Ok(())
+}
+
+/// The bytes of a stored file, checked against their digest; `None` when they are not on disk.
+pub(crate) fn read_blob(brain: &Brain, space: &Space, sha: &str) -> Result<Option<Vec<u8>>> {
+    match fs::read(blob_dir(brain, space).join(sha)) {
+        Ok(b) if hex(&Sha256::digest(&b)) == sha => Ok(Some(b)),
+        Ok(_) => Err(Error::Schema(format!("file {sha} is damaged on disk"))),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e.into()),
+    }
+}
+
 fn clean_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     base.chars()
@@ -261,28 +297,8 @@ pub fn put_tagged(
             .ok_or_else(|| Error::Schema("file not found after reading".into()));
     }
 
-    // The bytes: written once per content, private. Already held in another
-    // space, they are a hard link there: each space keeps its own path, so
-    // retiring it in one space leaves the other intact, and nothing tells a
-    // space what another holds.
-    let dir = blob_dir(brain, space);
-    DirBuilder::new()
-        .recursive(true)
-        .private_dir()
-        .create(&dir)?;
-    let path = dir.join(&sha);
-    if !path.exists() && !link_from_another_space(brain, space, &sha, &path) {
-        let tmp = dir.join(format!(".{sha}.tmp"));
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .private_file()
-            .open(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        fs::rename(&tmp, &path)?;
-    }
+    // The bytes: written once per content, private.
+    store_blob(brain, space, &sha, bytes)?;
 
     // A fact that makes it findable; it stands alone, distinct from close notes.
     let text = if note.is_empty() {
@@ -325,6 +341,7 @@ pub fn put_tagged(
             params![f, json!({ "file_id": id }).to_string()],
         )?;
     }
+    crate::sync::record_file_put(&conn, &id)?;
     info(brain, space, &id)?.ok_or_else(|| Error::Schema("file not found after writing".into()))
 }
 
@@ -403,6 +420,7 @@ pub fn retire(
     if let Some(fact) = &f.fact_id {
         let _ = facts::retire(&conn, author, fact, &format!("file retired: {reason}"));
     }
+    crate::sync::record_file_retired(&conn, id, reason)?;
     info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))
 }
 
@@ -524,6 +542,7 @@ pub fn erase_at(
     if let Some(fact) = &f.fact_id {
         let _ = facts::retire(&conn, author, fact, &format!("file {reason}"));
     }
+    crate::sync::record_file_retired(&conn, id, &reason)?;
     // The bytes go with the last record that holds them.
     let others: i64 = conn.query_row(
         "SELECT count(*) FROM files WHERE sha256 = ?1 AND id <> ?2

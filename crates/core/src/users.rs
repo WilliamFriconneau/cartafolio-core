@@ -494,7 +494,7 @@ pub fn request_status(ctl: &Connection, ha_id: &str) -> Result<Option<String>> {
 /// An administrator approves a pending login: the person is created (a member, or an
 /// administrator if asked), linked to the login, and the request is removed.
 pub fn approve_request(ctl: &Connection, actor: &str, ha_id: &str, admin: bool) -> Result<User> {
-    let tx = ctl.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
     let (name, display): (String, String) = tx
         .query_row(
             "SELECT name, display FROM person_requests WHERE ha_user = ?1 AND status = 'pending'",

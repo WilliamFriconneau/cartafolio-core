@@ -480,7 +480,7 @@ pub fn connect_for(
         hex(&util::random_bytes::<4>()),
         hex(&util::random_bytes::<24>())
     );
-    let tx = ctl.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
     let existing: Option<(String, String)> = tx
         .query_row(
             "SELECT id, coalesce(user_id, 'owner') FROM connections WHERE agent = ?1",
@@ -636,7 +636,7 @@ pub fn regrant(ctl: &Connection, agent: &str, rights: &Rights) -> Result<bool> {
         return Ok(false);
     };
     check_within(ctl, &user_id, rights)?;
-    let tx = ctl.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
     tx.execute(
         "UPDATE connections SET all_spaces = ?2 WHERE id = ?1",
         params![id, i64::from(rights.all_spaces)],
@@ -686,7 +686,7 @@ pub fn console_token(ctl: &Connection, user_id: &str) -> Result<String> {
         hex(&util::random_bytes::<24>())
     );
     let now = util::now();
-    let tx = ctl.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
     let existing: Option<String> = tx
         .query_row(
             "SELECT id FROM connections WHERE agent = ?1",

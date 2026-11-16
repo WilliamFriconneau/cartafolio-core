@@ -618,7 +618,7 @@ fn by_default_every_new_home_assistant_account_gets_a_memory_of_its_own() -> Res
 }
 
 #[test]
-fn a_bridge_pairs_with_the_code_its_person_made_and_reaches_only_their_a_trier() -> Res {
+fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     let d = Dir::new("pairing");
     let m = two_people(&d)?;
     for p in ["alice", "lou"] {
@@ -646,25 +646,35 @@ fn a_bridge_pairs_with_the_code_its_person_made_and_reaches_only_their_a_trier()
     let got = got.body_json();
     let key = got["key"].as_str().ok_or("key")?;
     let agent = got["agent"].as_str().ok_or("agent")?;
-    assert!(agent.starts_with("bridge-lou-s-mac-"), "{agent}");
+    assert!(agent.starts_with("peer-lou-s-mac-"), "{agent}");
     assert_eq!(
         got["mcp_url"],
         format!("https://memory.example.net/mcp/{agent}")
     );
-    assert_eq!(got["vaults"], json!(["lou-a-trier"]));
-    // The key writes into Lou's À trier without naming it, nowhere else, and never reaches Alice.
+    let vaults = got["vaults"].as_array().ok_or("vaults")?;
+    assert!(
+        vaults
+            .iter()
+            .any(|v| v.as_str().unwrap_or("").starts_with("lou-a-trier")),
+        "{vaults:?}"
+    );
+    assert!(
+        vaults
+            .iter()
+            .all(|v| !v.as_str().unwrap_or("").starts_with("alice-")),
+        "{vaults:?}"
+    );
+    // A peer: it writes into Lou's À trier without naming it, reads Lou's spaces, and never reaches Alice.
     let mut req = mcp(key, "remember", json!({ "text": "Une note du Mac." }));
     req.path = format!("/mcp/{agent}");
     let w = tool_text(&m.handle(&req));
     assert_eq!(w["result"], "created", "{w}");
-    assert_eq!(w["fact"]["tags"], json!(["inbox"]), "{w}");
+    assert_eq!(w["fact"]["space"], "lou-a-trier", "{w}");
     let mut stats = mcp(key, "stats", json!({}));
     stats.path = format!("/mcp/{agent}");
     let s = tool_text(&m.handle(&stats));
     assert!(
-        s["lou-a-trier"]["kind"] == "a-trier"
-            && s.get("lou-health").is_none()
-            && s.get("alice-health").is_none(),
+        s["lou-a-trier"]["kind"] == "a-trier" && s.get("alice-health").is_none(),
         "{s}"
     );
     // Once only; a wrong code is refused the same way, and an address that keeps guessing is held off.

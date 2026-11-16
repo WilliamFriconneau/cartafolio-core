@@ -365,7 +365,13 @@ pub(crate) fn check_kind(kind: &str) -> Result<()> {
     }
 }
 
-fn event(conn: &Connection, fact_id: &str, actor: &str, action: &str, detail: Value) -> Result<()> {
+pub(crate) fn event(
+    conn: &Connection,
+    fact_id: &str,
+    actor: &str,
+    action: &str,
+    detail: Value,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO fact_events (fact_id, at, actor, action, detail) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![fact_id, util::now(), actor, action, detail.to_string()],
@@ -373,8 +379,22 @@ fn event(conn: &Connection, fact_id: &str, actor: &str, action: &str, detail: Va
     Ok(())
 }
 
-/// Inserts a fact and its index entry, in the caller's transaction.
+/// Inserts a fact and its index entry, in the caller's transaction, and logs it for the peers.
 pub(crate) fn insert(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
+    new: &NewFact,
+    text: &str,
+    replaces: Option<&str>,
+) -> Result<Fact> {
+    let fact = insert_unlogged(conn, space, author, new, text, replaces)?;
+    crate::sync::record_fact_created(conn, &fact.id)?;
+    Ok(fact)
+}
+
+/// [`insert`] without the entry in the peers' log: the caller logs it once the fact is complete.
+fn insert_unlogged(
     conn: &Connection,
     space: &Space,
     author: &str,
@@ -515,7 +535,7 @@ pub fn remember(
     {
         return Err(Error::Invalid("valid_to is before valid_from".into()));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     if let Some(existing) = active_by_hash(&tx, &text::text_hash(&t))? {
         return Ok(Remembered::Duplicate(existing));
     }
@@ -641,7 +661,7 @@ pub(crate) fn supersede_as(
     check_kind(&new.kind)?;
     let t = check_text(&new.text)?;
     let given_tags = normalize_tags(&new.tags)?;
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let old = read_fact(&tx, old_id)?.ok_or_else(|| Error::UnknownFact(old_id.into()))?;
     if old.status != "active" {
         return Err(Error::Invalid(format!(
@@ -696,7 +716,7 @@ pub(crate) fn supersede_as(
             "fact {old_id} was just replaced or retired by another call"
         )));
     }
-    let fact = insert(&tx, space, author, &staged, &t, Some(old_id))?;
+    let fact = insert_unlogged(&tx, space, author, &staged, &t, Some(old_id))?;
     tx.execute(
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![old_id, fact.id],
@@ -707,6 +727,8 @@ pub(crate) fn supersede_as(
             params![fact.id, r],
         )?;
     }
+    crate::sync::record_fact_created(&tx, &fact.id)?;
+    crate::sync::record_fact_superseded(&tx, old_id, &fact.id, author, reason)?;
     event(
         &tx,
         old_id,
@@ -734,7 +756,7 @@ pub(crate) fn retire_as(
     if reason.trim().is_empty() {
         return Err(Error::Invalid("retiring needs a reason".into()));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let f = read_fact(&tx, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
     if f.status != "active" && f.status != "proposed" {
         return Err(Error::Invalid(format!(
@@ -747,6 +769,7 @@ pub(crate) fn retire_as(
         params![id, util::now(), author, reason],
     )?;
     event(&tx, id, author, action, json!({ "reason": reason }))?;
+    crate::sync::record_fact_retired(&tx, id, author, reason)?;
     tx.commit()?;
     read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))
 }
@@ -960,7 +983,7 @@ pub(crate) fn create_passage(
     valid_from: Option<i64>,
 ) -> Result<Option<Fact>> {
     let t = check_text(text_raw)?;
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     if active_by_hash(&tx, &text::text_hash(&t))?.is_some() {
         return Ok(None);
     }
@@ -989,7 +1012,7 @@ pub(crate) fn repoint(conn: &Connection, actor: &str, id: &str, source: &Source)
     else {
         return Err(Error::Invalid("repoint: a note source is expected".into()));
     };
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let old = read_fact(&tx, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
     tx.execute(
         "UPDATE facts SET source_path = ?2, source_hash = ?3, source_range = ?4, source_ref = ?5 WHERE id = ?1",

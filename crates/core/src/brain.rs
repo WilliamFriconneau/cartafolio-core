@@ -287,7 +287,8 @@ impl Brain {
         write_meta(&conn, &[("space", space.as_str())])?;
         drop(conn);
         let ctl = self.open_control()?;
-        let tx = ctl.unchecked_transaction()?;
+        let tx =
+            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
         tx.execute(
             "INSERT INTO spaces (name, created_at) VALUES (?1, ?2)",
             (space.as_str(), now()),
@@ -308,6 +309,7 @@ impl Brain {
         }
         let conn = self.open_existing(&space.file_name())?;
         migrate(&conn, SPACE_MIGRATIONS)?;
+        crate::sync::ensure_log(&conn)?;
         let declared = meta(&conn, "space")?;
         if declared.as_deref() != Some(space.as_str()) {
             return Err(Error::Schema(format!(
@@ -517,6 +519,10 @@ fn remove_db_files(path: &Path) {
 
 /// Opens an existing SQLite file with the project settings: WAL,
 /// `secure_delete`, foreign keys, small cache, no `mmap`.
+/// Every write transaction of the core is opened IMMEDIATE (`Transaction::new_unchecked(.., Immediate)`): it takes the
+/// write lock at once and waits its turn under the busy timeout. A deferred one that reads first and writes after cannot
+/// wait: SQLite refuses its upgrade at once (« database is locked ») when another writer committed in between, which
+/// lost notes when many devices wrote at the same time (see crates/client/tests/e2e.rs).
 pub(crate) fn open_db(path: &Path) -> Result<Connection> {
     let conn = Connection::open_with_flags(
         path,
@@ -544,7 +550,8 @@ pub(crate) fn migrate(conn: &Connection, migrations: &[&str]) -> Result<()> {
         )));
     }
     for (i, sql) in migrations.iter().enumerate().skip(current as usize) {
-        let tx = conn.unchecked_transaction()?;
+        let tx =
+            rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
         tx.execute_batch(sql)?;
         if sql.contains("writable_schema") {
             // A table's text edited in place: a new schema version makes every connection read it again.
@@ -560,7 +567,7 @@ pub(crate) fn migrate(conn: &Connection, migrations: &[&str]) -> Result<()> {
 
 fn write_meta(conn: &Connection, pairs: &[(&str, &str)]) -> Result<()> {
     let version: u32 = conn.query_row("PRAGMA user_version", [], |r| r.get(0))?;
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     for (k, v) in pairs {
         tx.execute("INSERT INTO meta (k, v) VALUES (?1, ?2)", (k, v))?;
     }

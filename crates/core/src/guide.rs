@@ -117,7 +117,7 @@ pub fn set(ctl: &Connection, author: &str, scope: &str, body: &str) -> Result<Gu
         return Err(Error::Invalid("this is already the guide".into()));
     }
     let now = util::now();
-    let tx = ctl.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
     tx.execute(
         "UPDATE guides SET current = 0, ended_at = ?2 WHERE scope = ?1 AND current = 1",
         params![scope, now],

@@ -173,7 +173,7 @@ fn stored_dashboard(conn: &Connection) -> Option<Value> {
     let mut st = conn
         .prepare(
             "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
-             (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard') ORDER BY f.created_at DESC LIMIT 5",
+             (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%') ORDER BY f.created_at DESC LIMIT 5",
         )
         .ok()?;
     let ids: Vec<String> = st.query_map([], |r| r.get(0)).ok()?.flatten().collect();
@@ -274,7 +274,7 @@ fn mentions(conn: &Connection, now: i64, days: i64, terms: &[String], top_n: usi
     let mut counts: Vec<(String, i64)> = terms.iter().map(|t| (t.clone(), 0)).collect();
     if let Ok(mut st) = conn.prepare(
         "SELECT text FROM facts WHERE status = 'active' AND created_at >= ?1
-         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')
+         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
          ORDER BY created_at DESC LIMIT 5000",
     ) && let Ok(rows) = st.query_map([since], |r| r.get::<_, String>(0))
     {
@@ -311,7 +311,7 @@ fn child_tags(conn: &Connection, now: i64, days: i64, base: &str, top_n: usize) 
     if let Ok(mut st) = conn.prepare(
         "SELECT t.tag, t.fact_id FROM fact_tags t JOIN facts f ON f.id = t.fact_id
          WHERE f.status = 'active' AND f.created_at >= ?1 AND substr(t.tag, 1, 1) <> '@'
-         AND t.fact_id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')",
+         AND t.fact_id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')",
     ) && let Ok(rows) = st.query_map([since], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
     }) {
@@ -345,7 +345,7 @@ fn per_day(conn: &Connection, now: i64, days: i64) -> Value {
     if let Ok(mut st) = conn.prepare(
         "SELECT date(created_at, 'unixepoch'), count(*) FROM facts
          WHERE status = 'active' AND created_at >= ?1
-         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')
+         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
          GROUP BY 1 ORDER BY 1",
     ) && let Ok(rows) = st.query_map([since], |r| {
         Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
@@ -460,7 +460,7 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
         let like = format!("{tag}/%");
         let sql = if tag.is_empty() {
             "SELECT id FROM facts WHERE status = 'active'
-             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules'))
+             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
              ORDER BY created_at DESC LIMIT ?1"
                 .to_string()
         } else {

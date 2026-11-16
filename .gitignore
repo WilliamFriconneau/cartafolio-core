@@ -8,3 +8,4 @@ __pycache__/
 .syncthing.*
 *.tmp
 node_modules/
+.claude/worktrees/

@@ -20,6 +20,10 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
+  library add PATH --space NAME          mounts an existing folder on a space, read-only: the node indexes it (path,
+                                         title, dates, text of .md and .txt, [[links]]) and never copies or changes it
+  library scan [--space NAME] | library list
+                                         reads the mounted folders again (only what changed) | lists them
   console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--console-admin]                the admin page on this listener, with a console token: on by
@@ -41,6 +45,11 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
   adopt DIR [--user PERSON] [--prefix P] takes the vaults of an export into this installation
+  merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
+                                         reads another memory (an export) and writes a plan: for each of its spaces,
+                                         the space it joins, copy or skip, and a preview; writes nothing here
+  merge --apply PLAN [--backup-to DIR]   backs up, applies the plan in one go (all or nothing, nothing is deleted,
+                                         twice changes nothing), verifies the counts
   connections                            lists the connections
   doctor [--public-url URL] [--listen ADDR]
                                          reads the installation and says what is fine and what deserves a look:
@@ -57,7 +66,12 @@ const USAGE: &str = "usage: memcp --data DIR <command>
 
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
-const VALUE_FLAGS: [&str; 28] = [
+const VALUE_FLAGS: [&str; 33] = [
+    "--plan",
+    "--apply",
+    "--out",
+    "--backup-to",
+    "--policy",
     "--data",
     "--node-name",
     "--spaces",
@@ -197,6 +211,11 @@ fn run(args: &[String]) -> Result<(), Failure> {
             cli::space_kind(&data, arg(2, "the space")?, arg(3, "the kind")?)
         }
         ("vault", Some("add")) => cli::vault_add(&data, arg(2, "the kind")?, flag("--user")),
+        ("library", Some("add")) => {
+            cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
+        }
+        ("library", Some("scan")) => cli::library_scan(&data, flag("--space")),
+        ("library", Some("list")) => cli::library_list(&data),
         ("catalogue", _) => cli::catalogue_list(&data),
         ("serve", _) => serve(&data, &a, flag("--listen").unwrap_or("127.0.0.1:8791")),
         ("connect", _) => cli::connect(
@@ -226,6 +245,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
             Path::new(arg(1, "the export directory")?),
             flag("--user"),
             flag("--prefix"),
+        ),
+        ("merge", _) => cli::merge(
+            &data,
+            flag("--plan").map(Path::new),
+            flag("--apply").map(Path::new),
+            flag("--user"),
+            flag("--out").map(Path::new),
+            flag("--backup-to").map(Path::new),
+            flag("--policy"),
         ),
         ("connections", _) => cli::connections(&data),
         ("doctor", _) => memcp_server::doctor::run(&data, flag("--public-url"), flag("--listen")),

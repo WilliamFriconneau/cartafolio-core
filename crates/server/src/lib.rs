@@ -12,4 +12,5 @@ pub mod net;
 pub mod oauth;
 pub mod pair;
 pub mod stdio;
+pub mod sync_http;
 pub mod tar;
