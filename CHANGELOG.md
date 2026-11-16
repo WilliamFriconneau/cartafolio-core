@@ -1,8 +1,8 @@
 # Changelog
 
-## 202611162216
+## 20261116.0.1
 
-Versions are now the date and time of the release (YYYYMMDDHHMM), for every app. The crates carry it as `202611162216.0.0` because Cargo wants three numbers.
+Versions are now the day of the release, then a counter: `AAAAMMJJ.0.N`, for every app.
 
 - The `spaces` MCP tool: the tree of the spaces a connection can read, with label, parent, kind, rights and counts.
 - The add-on has an icon and a logo.
