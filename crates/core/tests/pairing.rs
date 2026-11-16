@@ -28,7 +28,7 @@ fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -
     assert!(pairing::holds(&ctl, &typed, NOW + 1));
     let paired = pairing::redeem(&ctl, &typed, "Laptop de Sam", NOW + 5)?;
     assert!(
-        paired.agent.starts_with("bridge-laptop-de-sam-"),
+        paired.agent.starts_with("peer-laptop-de-sam-"),
         "{}",
         paired.agent
     );
@@ -66,20 +66,18 @@ fn a_code_expires_and_cannot_reach_beyond_the_person() -> Res {
 }
 
 #[test]
-fn a_bridge_writes_only_to_a_trier_which_is_no_vault() -> Res {
+fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     let t = Temp::new("pairing-triage");
     let brain = brain(&t)?;
     let (code, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
     assert_eq!(triage, "owner-a-trier");
     let ctl = brain.open_control()?;
     let p = pairing::redeem(&ctl, &code, "phone", NOW + 1)?;
-    assert_eq!(p.vaults, std::slice::from_ref(&triage));
+    assert!(p.agent.starts_with("peer-phone-"), "{}", p.agent);
     let c = access::authenticate(&ctl, &p.token, NOW + 2)?.ok_or("key")?;
     let box_ = memcp_core::Space::new(&triage)?;
-    assert!(c.may_write_tags(&box_, &["inbox".to_string()]));
-    assert_eq!(c.writable(), std::slice::from_ref(&box_), "no vault");
-    let later = brain.add_vault(users::OWNER, "owner", "work")?;
-    assert!(!c.can_write(&later), "nor the vaults made later");
+    assert!(c.can_write(&box_));
+    assert!(c.readable().contains(&box_));
     // A second device gets the same box, never a second one.
     let (_, again) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW + 3)?;
     assert_eq!(again, triage);

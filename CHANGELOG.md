@@ -1,6 +1,6 @@
 # Changelog
 
-## 20261116.0.4
+## 20261116.0.5
 
 - MCP tools `rules_get` / `rules_set` (filing rules of a space, versioned) and `peers` (the machines holding the memory).
 - Interface specifications for every app: docs/UI-SPEC.md.
