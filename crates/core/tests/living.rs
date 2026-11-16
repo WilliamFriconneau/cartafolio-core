@@ -87,3 +87,44 @@ fn a_board_follows_its_delta_and_keeps_every_card_apart() -> Res {
     assert_eq!(ideas["behind"], 3, "{ideas}");
     Ok(())
 }
+
+#[test]
+fn a_named_list_holds_what_to_buy_from_notes_of_any_space() -> Res {
+    let t = Temp::new("living-list");
+    let b = brain(&t)?;
+    let space = triage::ensure(&b, OWNER, "owner")?;
+    let ctl = b.open_control()?;
+    let rights = Rights::parse(&format!("{}:rw", space.as_str()))?;
+    let tok = access::connect_for(&ctl, OWNER, "assistant", &rights, None, false, false)?;
+    let c = access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?;
+    let s = space.as_str();
+    tools::call(
+        &b,
+        &c,
+        "living_set",
+        &json!({ "space": s, "page": "list-shopping",
+        "add": [ "Batteries for the smoke detector (f_a1)", { "text": "Bread (f_b2)", "column": "open" } ] }),
+    )?;
+    let list = tools::call(
+        &b,
+        &c,
+        "living_get",
+        &json!({ "space": s, "page": "list-shopping" }),
+    )?;
+    assert_eq!(list["columns"], json!(["open", "done"]));
+    assert_eq!(
+        list["board"]["open"].as_array().map(Vec::len),
+        Some(2),
+        "{list}"
+    );
+    assert!(
+        tools::call(
+            &b,
+            &c,
+            "living_get",
+            &json!({ "space": s, "page": "list-Bad Name" })
+        )
+        .is_err()
+    );
+    Ok(())
+}

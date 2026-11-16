@@ -1,4 +1,4 @@
-# Living boards
+# Living boards (tableaux vivants)
 
 The specification of the four boards every space has: what's next, ideas, targets, where things stand. The concepts and
 cases are in [CONCEPTS.md](CONCEPTS.md#living-boards-whats-next-ideas-targets-where-things-stand).
@@ -15,6 +15,7 @@ symptom it groups. A board's last pass is a note `living-meta/<board>` (`{"cover
 | `ideas` | new, kept, done |
 | `targets` | open, reached |
 | `index` | current |
+| `list-<name>` | open, done |
 
 ## Tools
 

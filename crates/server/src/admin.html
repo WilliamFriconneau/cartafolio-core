@@ -152,12 +152,17 @@ details.fold[open]>summary{margin-bottom:8px}
 .bars .b.zero{background:var(--outline-var);height:3px;opacity:.6}
 .sign{display:grid;grid-template-columns:minmax(90px,170px) 1fr 3ch;gap:10px;align-items:center;margin:5px 0;font-size:14px}
 .sign .bar{height:12px;border-radius:6px;background:var(--primary);opacity:.8}
+.boardbox{margin:8px 0 22px}.board-head{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}.board-head h3{margin:0}
+.board{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px;margin:8px 0}
+.col{background:var(--sc);border-radius:14px;padding:8px;min-height:60px}.col-title{font-size:12px;color:var(--mute);margin:2px 4px 6px}
+.card{background:var(--card);border-radius:10px;padding:8px 10px;margin:6px 0;font-size:13.5px}.card .moves{margin-top:4px;opacity:.8}
+.chip.warn{background:color-mix(in srgb,var(--bad) 22%,transparent)}
 .thread{display:flex;flex-direction:column;gap:6px;padding:4px 0}
 .thread .day{align-self:center;font-size:12px;color:var(--mute);margin:14px 0 4px;text-transform:capitalize}
 .bubble{max-width:min(78%,720px);padding:8px 12px;border-radius:18px;cursor:pointer;overflow-wrap:anywhere}
 .bubble.mine{align-self:flex-end;background:color-mix(in srgb,var(--primary) 22%,transparent);border-bottom-right-radius:6px}
 .bubble.other{align-self:flex-start;background:var(--sc);border-bottom-left-radius:6px}
-.bubble .who{font-size:11.5px;color:var(--mute);margin-bottom:2px}.bubble .kv,.bubble .tags{margin-top:4px}
+.kv-line{font-size:13px;margin-top:3px}.bubble .who{font-size:11.5px;color:var(--mute);margin-bottom:2px}.bubble .kv,.bubble .tags{margin-top:4px}
 .note{display:flex;gap:12px;padding:10px 12px;border-radius:16px;cursor:pointer;align-items:flex-start}
 .note:hover{background:var(--sc)}.note .tx{flex:1;min-width:0;overflow-wrap:anywhere}.note .meta{font-size:12px;opacity:.7;white-space:nowrap}
 .editor{background:var(--sc);border-radius:20px;padding:16px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
@@ -608,10 +613,11 @@ function renderSpace() {
   $("#space-title").textContent = ov.label || ov.space;
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
   $("#space-sub").textContent = (kl ? kl.label : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString("en") + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + ov.parent : "");
-  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
+  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["boards", "Boards"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
     el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
   const body = $("#space-body");
   if (SP.tab === "journal") journalView(body);
+  else if (SP.tab === "boards") boardsView(body);
   else if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
   else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
   else notesView(body);
@@ -671,6 +677,7 @@ async function journalView(body) {
       const hm = new Date(f.created_at * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
       rows.push(el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = f.id; renderSpace(); } },
         el("div", { class: "meta" }, hm),
+        isTrace(f.text) ? el("div", { class: "tx" }, ...traceBody(f.text)) :
         el("div", { class: "tx" }, ...withHashtags(f.file ? (f.extract || "") : f.text, h => { SP.hash = h; journalView(body); }), f.file ? attachmentLine(f.file) : null)));
     }
   }
@@ -755,15 +762,39 @@ async function notesView(body) {
 // ---- The notes as a thread: a day at a time, the person's own notes on one side, what assistants and apps wrote on the
 // other, a structured trace (« [App] kind date: {json} ») shown as its values rather than raw JSON. ----
 const isMachine = f => /^agent[:-]|janitor|claude|assistant|^mcp-/i.test(f.author || "") || /^\[[^\]]+\]/.test(f.extract || "");
+// An app's structured trace, « [App] kind date: {json} », read as values: numbers rounded, a min/max beside its value left
+// out, a nested group (night, morning…) on a line of its own, a list of events by their titles. The raw text stays in
+// the note (open it to see it whole).
+const isTrace = t => /^\[[^\]]+\]\s*[^:{]*:\s*[\[{]/.test(t || "");
+const fmtVal = v => typeof v === "number" ? (Number.isInteger(v) ? String(v) : String(Math.round(v * 10) / 10))
+  : typeof v === "boolean" ? (v ? "yes" : "no") : String(v);
+const label = k => k.replace(/_/g, " ");
 function traceBody(text) {
-  const m = /^\[([^\]]+)\]\s*([^:{]*?):\s*(\{.*)$/s.exec(text || "");
-  if (!m) return [el("div", { class: "tx" }, text)];
+  const m = /^\[([^\]]+)\]\s*([^:{]*?):\s*([\[{].*)$/s.exec(text || "");
+  if (!m) return [el("div", {}, text)];
   let data = null;
-  try { data = JSON.parse(m[3]); } catch (e) { /* cut by the extract: shown as text */ }
-  if (!data || typeof data !== "object") return [el("div", { class: "tx" }, el("b", {}, m[2].trim() || m[1]), " ", m[3])];
-  const show = v => Array.isArray(v) ? v.length + " items" : (v && typeof v === "object") ? Object.keys(v).length + " fields" : String(v);
-  return [el("div", { class: "tx" }, el("b", {}, m[2].trim() || m[1])),
-    el("div", { class: "kv" }, ...Object.entries(data).slice(0, 12).map(([k, v]) => el("span", { class: "chip" }, k + " " + show(v))))];
+  try { data = JSON.parse(m[3]); } catch (e) { /* cut by an extract: shown as text */ }
+  const head = el("div", {}, el("b", {}, (m[2].trim() || m[1])), " ", el("span", { class: "mute small" }, m[1]));
+  if (!data || typeof data !== "object") return [head, el("div", { class: "mute small" }, m[3].slice(0, 300))];
+  const keys = Object.keys(data);
+  const scalars = [], groups = [];
+  for (const k of keys) {
+    const v = data[k];
+    if (/_(min|max)$/.test(k) && keys.includes(k.replace(/_(min|max)$/, ""))) continue;
+    if (k === "date") continue;
+    if (v === null || v === "") continue;
+    if (Array.isArray(v)) {
+      if (!v.length) continue;
+      const titles = v.map(x => x && typeof x === "object" ? (x.title || x.name || x.code || x.label || null) : fmtVal(x)).filter(Boolean);
+      groups.push(el("div", { class: "kv-line" }, el("b", {}, label(k) + " "), titles.length ? titles.slice(0, 12).join(" · ") : v.length + " items"));
+    } else if (typeof v === "object") {
+      const inner = Object.entries(v).filter(([, x]) => x !== null && typeof x !== "object").map(([a, x]) => label(a) + " " + fmtVal(x));
+      if (inner.length) groups.push(el("div", { class: "kv-line" }, el("b", {}, label(k) + " "), inner.join(" · ")));
+    } else {
+      scalars.push(el("span", { class: "chip" }, label(k) + " " + fmtVal(v)));
+    }
+  }
+  return [head, ...groups, scalars.length ? el("div", { class: "kv" }, ...scalars.slice(0, 40)) : null];
 }
 function thread(facts, open) {
   const box = el("div", { class: "thread" });
@@ -786,6 +817,39 @@ function thread(facts, open) {
   }
   setTimeout(() => box.lastElementChild && box.lastElementChild.scrollIntoView({ block: "nearest" }), 0);
   return box;
+}
+
+// ---- Living boards: what's next, ideas, targets. Cards in columns, moved with one click; a target shows the signs it
+// groups. The same tools an assistant uses (living_get, living_set), with the person's own rights. ----
+const BOARDS = [["next", "What's next"], ["ideas", "Ideas"], ["targets", "Targets"]];
+const COLUMN = { now: "Now", next: "Next", later: "Later", done: "Done", new: "New", kept: "Kept", open: "Open", reached: "Reached" };
+async function boardsView(body) {
+  body.replaceChildren(el("p", { class: "mute" }, "…"));
+  const parts = [];
+  for (const [page, title] of BOARDS) {
+    let b;
+    try { b = await api("living?space=" + q(SP.name) + "&page=" + page); } catch (x) { parts.push(el("p", { class: "mute" }, title + ": " + x.message)); continue; }
+    const when = b.last_pass && b.last_pass.at ? "last pass " + ago(b.last_pass.at) + (b.last_pass.by ? " by " + b.last_pass.by : "") : "no pass yet";
+    const head = el("div", { class: "board-head" }, el("h3", {}, title), el("span", { class: "mute small" }, when),
+      b.behind ? el("span", { class: "chip warn", title: "Notes filed since the last pass" }, b.behind + " new") : null);
+    const cols = el("div", { class: "board" }, ...b.columns.map(col => el("div", { class: "col" },
+      el("div", { class: "col-title" }, (COLUMN[col] || col) + " · " + (b.board[col] || []).length),
+      ...(b.board[col] || []).map(card => el("div", { class: "card" },
+        el("div", {}, card.text),
+        ...((card.signs || []).length ? [el("div", {}, ...card.signs.map(s => el("span", { class: "chip" }, s)))] : []),
+        el("div", { class: "moves" }, ...b.columns.filter(c => c !== col).map(c =>
+          el("button", { type: "button", class: "mini link", onclick: async () => {
+            try { await api("living", { space: SP.name, page, move: [{ id: card.id, column: c }] }); boardsView(body); } catch (x) { fail(x); }
+          } }, "→ " + (COLUMN[c] || c)))))))));
+    const input = el("input", { placeholder: page === "targets" ? "A long-term problem or risk" : page === "ideas" ? "An idea" : "Something to do", size: 40 });
+    const add = async () => {
+      const text = input.value.trim(); if (!text) return;
+      try { await api("living", { space: SP.name, page, add: [{ text, column: b.columns[0] }] }); boardsView(body); } catch (x) { fail(x); }
+    };
+    input.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+    parts.push(el("section", { class: "boardbox" }, head, cols, el("div", { class: "row" }, input, el("button", { type: "button", onclick: add }, "Add"))));
+  }
+  body.replaceChildren(...parts);
 }
 
 // ---- Attachments and voice notes ----

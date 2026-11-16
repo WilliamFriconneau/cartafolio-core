@@ -2,6 +2,13 @@
 
 **The external hard drive for your AIs.**
 
+Apple sold *personal context* as the heart of its new Siri; in Europe we do not have it. We have intelligence anyway: MemCP builds your personal context and your memory on your own machines, as a network of nodes, and lets the model of your choice use it (Claude, a local model, any MCP client).
+
+- In the car, a new idea: you say it, it is filed in the right space and lands in that space's idea box.
+- After a meeting you no longer know what you have to do: the actions are already on the space's board, each with the note it came from.
+- « What do I need to buy? »: the shopping list of your home space answers, fed by every note that mentioned a purchase, wherever it was said.
+- The boiler shows the same error for the third time: it is a target of the home space, with its signs counted day after day.
+
 AI assistants forget. Each one keeps its own scraps, in its own cloud, and none of them knows the whole person. MemCP is a drive you host yourself: plug any assistant into it through [MCP](https://modelcontextprotocol.io) and they all read and write the same place. It stays yours: you decide who sees what, nothing is deleted behind your back, and nothing leaves your machines unless you connect it.
 
 Keeping it simple is the point: a drive, folders, a page to look inside. Add-ons come on top. The one closest to a nurse's heart is **health through Apple Health**, and it is the only part of the app with a paid option (3 € a month); everything else is free.

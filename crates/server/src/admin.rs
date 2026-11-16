@@ -206,6 +206,16 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/state" => state(app, &ctl, &me),
             "/space" => crate::explore::overview(app, &ctl, &me, req, now),
             "/facts" => crate::explore::list(app, &ctl, &me, req, now),
+            "/living" => {
+                let args = serde_json::json!({
+                    "space": req.query.get("space").cloned().unwrap_or_default(),
+                    "page": req.query.get("page").cloned().unwrap_or_default(),
+                });
+                match living(app, &ctl, &me, "living_get", &args) {
+                    Ok(v) => Response::json(200, &v),
+                    Err(r) => r,
+                }
+            }
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
@@ -234,6 +244,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         crate::explore::space_write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/layout/") {
         crate::explore::layout_write(app, &me, path, &body)
+    } else if path == "/living" {
+        living(app, &ctl, &me, "living_set", &body)
     } else {
         action(app, &ctl, &me, path, &body)
     };
@@ -260,6 +272,32 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
             Ok(t)
         }
     }
+}
+
+/// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
+/// the person acts with their own rights (the spaces they own), as the connection `page`.
+fn living(
+    app: &App,
+    ctl: &Connection,
+    me: &User,
+    tool: &str,
+    args: &Value,
+) -> Result<Value, Response> {
+    let grants = memcp_core::users::access_of(ctl, &me.id).map_err(|e| err(500, &e.to_string()))?;
+    let caller = memcp_core::access::Caller {
+        id: "page".into(),
+        agent: "page".into(),
+        user_id: me.id.clone(),
+        all_spaces: false,
+        known: grants.keys().cloned().collect(),
+        grants,
+        paths: Default::default(),
+        read_only_forced: false,
+        no_person_guide: true,
+        rate_per_min: memcp_core::access::DEFAULT_RATE_PER_MIN,
+        max_text: memcp_core::access::DEFAULT_MAX_TEXT,
+    };
+    memcp_core::tools::call(&app.brain, &caller, tool, args).map_err(|e| err(400, &e.to_string()))
 }
 
 fn admin_only(me: &User) -> Result<(), Response> {

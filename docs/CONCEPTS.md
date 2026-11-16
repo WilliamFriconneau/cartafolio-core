@@ -12,6 +12,10 @@ the old one.
 **Why many forms.** Real life does not arrive in one format. A nurse's handover, a boiler's error code and a heart-rate
 series are all traces; what they share is *when*, *who* and *where it belongs*, not their shape.
 
+**Context of a trace.** A trace can carry where it was taken (a place, when the person allows it) and the context of
+the day (its appointments, read from the calendar at the moment of the note, kept with it). « Le rendez-vous s'est mal
+passé » then knows which appointment it was.
+
 **Cases.**
 - In the car: « idée pour le projet Atlas : un export PDF des devis » → a voice trace, transcribed, filed in Work, and a
   card in Work's idea box.
@@ -52,7 +56,7 @@ proposes keywords (a model on the machine may help), then runs the router again.
 **Case.** Twelve notes about *pain*, *lait*, *courses* stayed unsorted; the person filed four in Home → the janitor
 proposes *courses* and *pain* as Home's words → the eight others follow.
 
-## Living boards: what's next, ideas, targets, where things stand
+## Living boards (*tableaux vivants*): what's next, ideas, targets, where things stand, and lists
 
 **What.** Four boards per space, made with it. Each card is a one-line note in a column:
 
@@ -62,6 +66,11 @@ proposes *courses* and *pain* as Home's words → the eight others follow.
 | Ideas | new, kept, done | ideas not yet actions |
 | Targets | open, reached | **long-term problems and risks, each grouping the signs and symptoms that show it** |
 | Where things stand | current | a few lines on the state of the space |
+
+Besides the four boards, a space keeps **named lists** (`list-shopping`, `list-books`…, open then done). A list is fed
+from notes of any space and from what an assistant was told: « il manque des piles dans le détecteur de fumée » (home),
+« acheter du paracétamol » (health), « on n'a plus de café » said to an assistant → three cards on the home shopping list,
+each with its source. « Je dois penser à acheter quoi ? » is answered by reading that list.
 
 Each board remembers its **last pass** (when, by whom, how far it read) and shows its **delta**: the notes filed since.
 An assistant updates a board from its delta only, card by card, each card citing its note. The person ticks, moves or
@@ -102,3 +111,22 @@ events after its cursor, applies them, sends its own: the same memory everywhere
 
 Each machine sorts, transcribes and summarises with its own tools (Apple Intelligence on Apple devices, a local model on a
 PC). A remote service is a choice, never a default. See [LOCAL-TOOLS.md](LOCAL-TOOLS.md).
+
+## From a note to the calendar
+
+A note that says something dated (« dentiste jeudi à 14 h », « Zelda sort le 4 novembre ») is not pushed into a calendar
+by the memory. An assistant connected to the person's calendar proposes the event; on an iPhone, the app can prepare it
+with Apple Intelligence as a calendar file (.ics) the person adds with one tap. The person decides.
+
+## Examples by space
+
+| Space | Said or written | What happens |
+|---|---|---|
+| Home | « Je dois aller à la déchetterie » | a card in *what's next* |
+| Home | « Il manque des piles dans le détecteur de fumée » | a card on the shopping list, one in *what's next* |
+| Home | « La chaudière affiche F28 » (third time) | a sign of the target *the boiler keeps failing* |
+| Work | « J'ai une idée pour le projet Atlas » | a card in Work › Atlas idea box |
+| Work | the recording of a meeting | its transcript, a summary, the actions as cards |
+| Hobbies | « Zelda sort le 4 novembre » | a dated note; an assistant proposes the calendar event |
+| Health | « Douleur lombaire 4 sur 10 ce matin » | a sign of the target *chronic low back pain*, counted on the dashboard |
+| Health | « J'ai dormi 2 h » (no watch that night) | a measure added by hand where Apple Health has none |

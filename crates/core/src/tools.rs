@@ -132,8 +132,8 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "living_get",
-            description: "A living board of a space: `next` (what's next: now, next, later, done), `ideas` (the idea box: new, kept, done), `targets` (long-term problems and risks, each grouping signs and symptoms: open, reached), `index` (where things stand: current). Its cards by column (one note each), its last pass (when, by whom) and its delta: the notes filed since that pass, oldest first, with `behind` their count. Keep it from the delta only, then `living_set`.".into(),
-            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "enum": ["next", "ideas", "targets", "index"] }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["space", "page"] }),
+            description: "A living board of a space: `next` (what's next: now, next, later, done), `ideas` (the idea box: new, kept, done), `targets` (long-term problems and risks, each grouping signs and symptoms: open, reached), `index` (where things stand: current), or a named list `list-<name>` (open, done), such as the shopping list of a home space, fed from notes of any space. Its cards by column (one note each), its last pass (when, by whom) and its delta: the notes filed since that pass, oldest first, with `behind` their count. Keep it from the delta only, then `living_set`.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["space", "page"] }),
         });
         out.push(ToolDef {
             name: "rules_get",
@@ -180,7 +180,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         out.push(ToolDef {
             name: "living_set",
             description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
-            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "enum": ["next", "ideas", "targets", "index"] }, "add": { "type": "array" }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array" }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
         });
         out.push(ToolDef {
             name: "rules_set",
@@ -500,6 +500,19 @@ fn scope_tags(
                 .unwrap_or_default()
         ))),
     }
+}
+
+/// A sign or symptom as a tag segment: lowercase, words joined by dashes (« pas d'eau chaude » → `pas-d-eau-chaude`).
+fn sign_slug(name: &str) -> String {
+    let mut out = String::new();
+    for c in name.trim().to_lowercase().chars() {
+        if c.is_alphanumeric() {
+            out.push(c);
+        } else if !out.ends_with('-') && !out.is_empty() {
+            out.push('-');
+        }
+    }
+    out.trim_end_matches('-').to_string()
 }
 
 /// `YYYY-MM-DDTHH:MM:SS` with `Z` or `±HH:MM` (as the node writes it), or Unix seconds, to UTC Unix seconds.
@@ -1103,9 +1116,19 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 "ideas" => &["new", "kept", "done"],
                 "targets" => &["open", "reached"],
                 "index" => &["current"],
+                // A named list of the space (`list-shopping`, `list-books`…): open, then done.
+                p if p.strip_prefix("list-").is_some_and(|n| {
+                    !n.is_empty()
+                        && n.len() <= 40
+                        && n.chars()
+                            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+                }) =>
+                {
+                    &["open", "done"]
+                }
                 _ => {
                     return Err(ToolError::Invalid(
-                        "page: next, ideas, targets or index".into(),
+                        "page: next, ideas, targets, index, or a list `list-<name>`".into(),
                     ));
                 }
             };
@@ -1155,7 +1178,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                              (SELECT fact_id FROM fact_tags WHERE tag = ?1) ORDER BY f.created_at ASC LIMIT 300",
                         )
                         .map_err(|e| ToolError::Invalid(e.to_string()))?;
-                    let cards: Vec<Value> = st
+                    let mut cards: Vec<Value> = st
                         .query_map([format!("living/{page}/{col}")], |r| {
                             Ok(json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
                                        "created": crate::util::iso(r.get::<_, i64>(2)?), "author": r.get::<_, String>(3)? }))
@@ -1163,6 +1186,21 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                         .map_err(|e| ToolError::Invalid(e.to_string()))?
                         .flatten()
                         .collect();
+                    // A target's signs and symptoms: its `sign/<name>` tags.
+                    for card in &mut cards {
+                        let id = card["id"].as_str().unwrap_or("").to_string();
+                        let signs: Vec<String> = facts::read_fact(&conn, &id)
+                            .ok()
+                            .flatten()
+                            .map(|f| {
+                                f.tags
+                                    .iter()
+                                    .filter_map(|t| t.strip_prefix("sign/").map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default();
+                        card["signs"] = json!(signs);
+                    }
                     board.insert((*col).to_string(), Value::Array(cards));
                 }
                 let limit = args
@@ -1198,53 +1236,50 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     "behind": behind, "delta": delta,
                 }));
             }
-            let write_card = |text: &str,
-                              col: &str,
-                              replacing: Option<&str>,
-                              signs: &[String]|
-             -> Result<String, ToolError> {
-                let mut new = NewFact::agent(text, &caller.agent);
-                new.tags = vec![format!("living/{page}/{col}")];
-                // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
-                new.tags.extend(
-                    signs
-                        .iter()
-                        .filter_map(|s| facts::normalize_tag(&format!("sign/{s}")).ok()),
-                );
-                if let Some(old) = replacing {
-                    return Ok(facts::supersede(
-                        &conn,
-                        &space,
-                        &caller.agent,
-                        old,
-                        new,
-                        Some(&format!("moved to {col}")),
-                    )?
-                    .id);
-                }
-                // A card is its own note, even next to a similar one.
-                match facts::remember(&conn, &space, &caller.agent, new, &[])? {
-                    facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
-                    facts::Remembered::NeedsDecision(c) => {
-                        let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
-                        let mut again = NewFact::agent(text, &caller.agent);
-                        again.tags = vec![format!("living/{page}/{col}")];
-                        again.tags.extend(
-                            signs
-                                .iter()
-                                .filter_map(|s| facts::normalize_tag(&format!("sign/{s}")).ok()),
-                        );
-                        match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
-                            facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => {
-                                Ok(f.id)
-                            }
-                            facts::Remembered::NeedsDecision(_) => {
-                                Err(ToolError::Invalid("the card could not be written".into()))
+            let write_card =
+                |text: &str,
+                 col: &str,
+                 replacing: Option<&str>,
+                 signs: &[String]|
+                 -> Result<String, ToolError> {
+                    let mut new = NewFact::agent(text, &caller.agent);
+                    new.tags = vec![format!("living/{page}/{col}")];
+                    // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
+                    new.tags.extend(signs.iter().filter_map(|s| {
+                        facts::normalize_tag(&format!("sign/{}", sign_slug(s))).ok()
+                    }));
+                    if let Some(old) = replacing {
+                        return Ok(facts::supersede(
+                            &conn,
+                            &space,
+                            &caller.agent,
+                            old,
+                            new,
+                            Some(&format!("moved to {col}")),
+                        )?
+                        .id);
+                    }
+                    // A card is its own note, even next to a similar one.
+                    match facts::remember(&conn, &space, &caller.agent, new, &[])? {
+                        facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
+                        facts::Remembered::NeedsDecision(c) => {
+                            let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                            let mut again = NewFact::agent(text, &caller.agent);
+                            again.tags = vec![format!("living/{page}/{col}")];
+                            again.tags.extend(signs.iter().filter_map(|s| {
+                                facts::normalize_tag(&format!("sign/{}", sign_slug(s))).ok()
+                            }));
+                            match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
+                                facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => {
+                                    Ok(f.id)
+                                }
+                                facts::Remembered::NeedsDecision(_) => {
+                                    Err(ToolError::Invalid("the card could not be written".into()))
+                                }
                             }
                         }
                     }
-                }
-            };
+                };
             let valid = |col: &str| -> Result<(), ToolError> {
                 if columns.contains(&col) {
                     Ok(())
