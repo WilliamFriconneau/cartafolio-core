@@ -471,3 +471,54 @@ pub fn backup(data: &Path, to: &Path, keep: usize) -> Result<(), Failure> {
     println!("backup: {} ({keep} kept)", dest.display());
     Ok(())
 }
+
+/// `library add PATH --space NAME`: mounts an existing folder on a space, read-only, and indexes it. Nothing in the
+/// folder is copied, changed or moved.
+pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    if !brain.has_space(&space).map_err(fail)? {
+        return Err(bad(&format!("unknown space {space}")));
+    }
+    let conn = brain.open_space(&space).map_err(fail)?;
+    let id = memcp_core::library::add_root(&conn, folder, now()).map_err(fail)?;
+    let report = memcp_core::library::rescan(&conn, id, now()).map_err(fail)?;
+    println!(
+        "mounted on {space}: {} added, {} unchanged",
+        report.added, report.unchanged
+    );
+    Ok(())
+}
+
+/// `library scan [--space NAME]`: reads the mounted folders again; only what changed is read.
+pub fn library_scan(data: &Path, space: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let spaces = match space {
+        Some(s) => vec![Space::new(s).map_err(fail)?],
+        None => brain.spaces().map_err(fail)?,
+    };
+    for s in spaces {
+        let conn = brain.open_space(&s).map_err(fail)?;
+        if memcp_core::library::roots(&conn).map_err(fail)?.is_empty() {
+            continue;
+        }
+        let r = memcp_core::library::rescan_all(&conn, now()).map_err(fail)?;
+        println!(
+            "{s}: {} added, {} updated, {} unchanged, {} removed",
+            r.added, r.updated, r.unchanged, r.removed
+        );
+    }
+    Ok(())
+}
+
+/// `library list`: the mounted folders, by space.
+pub fn library_list(data: &Path) -> Result<(), Failure> {
+    let brain = open(data)?;
+    for s in brain.spaces().map_err(fail)? {
+        let conn = brain.open_space(&s).map_err(fail)?;
+        for r in memcp_core::library::roots(&conn).map_err(fail)? {
+            println!("{s}\t{}\t{} files", r.root, r.entries);
+        }
+    }
+    Ok(())
+}

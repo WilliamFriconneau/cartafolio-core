@@ -3,7 +3,7 @@
 
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
-    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8,
+    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -440,4 +440,44 @@ const CONTROL_V17: &str = r"
 ALTER TABLE spaces ADD COLUMN label TEXT;
 ALTER TABLE spaces ADD COLUMN parent TEXT;
 ALTER TABLE spaces ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+";
+
+/// A read-only mounted folder (a library) and what the node knows of it: one row per file found, with its dates, its
+/// text for `.md` and `.txt`, and the `[[links]]` it holds. The originals are never copied or changed. `library_raised`
+/// ties a normal fact to the original it summarises.
+const SPACE_V9: &str = r"
+CREATE TABLE library_roots (
+  id INTEGER PRIMARY KEY,
+  root TEXT NOT NULL UNIQUE,
+  added_at INTEGER NOT NULL,
+  scanned_at INTEGER
+) STRICT;
+CREATE TABLE library_entries (
+  id INTEGER PRIMARY KEY,
+  root_id INTEGER NOT NULL REFERENCES library_roots(id),
+  path TEXT NOT NULL UNIQUE,
+  rel TEXT NOT NULL,
+  title TEXT NOT NULL,
+  ext TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  mtime INTEGER NOT NULL,
+  created INTEGER,
+  body TEXT NOT NULL DEFAULT '',
+  indexed_at INTEGER NOT NULL
+) STRICT;
+CREATE INDEX library_entries_root ON library_entries(root_id, rel);
+CREATE VIRTUAL TABLE library_fts USING fts5(stem, tokenize = 'unicode61 remove_diacritics 2');
+CREATE TABLE library_links (
+  entry_id INTEGER NOT NULL REFERENCES library_entries(id),
+  target TEXT NOT NULL,
+  PRIMARY KEY (entry_id, target)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE library_raised (
+  fact_id TEXT PRIMARY KEY REFERENCES facts(id),
+  root_id INTEGER NOT NULL REFERENCES library_roots(id),
+  path TEXT NOT NULL,
+  rel TEXT NOT NULL,
+  raised_at INTEGER NOT NULL,
+  author TEXT NOT NULL
+) STRICT;
 ";
