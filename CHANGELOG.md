@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261116.0.8
+
+- The page shows the living boards of a space (Boards tab): cards by column, moved in one click, added in a field; a target shows the signs it groups; each board says its last pass and how many notes came since.
+- Named lists in every space (`list-shopping`…), fed from notes of any space.
+- An app's structured trace is read as values in the journal and the notes; board notes stay out of the journal and the counts.
+
 ## 20261116.0.7
 
 - Living boards in every space: *what's next* (now, next, later, done), *ideas* (new, kept, done), *targets* (long-term problems and risks, each grouping its signs and symptoms; open, reached) and *where things stand*. Cards are one-line notes moved between columns, each keeping its history; each board records its last pass and shows the notes filed since. MCP tools `living_get` and `living_set`.
