@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.1
+
+- The janitor files by keywords, without a model: a word that belongs to one space sends a note there at once, ordinary words score, a tie or nothing leaves it in À trier; each space's keywords live in its `rules` note, versioned. A model may only propose keywords.
+
 ## 20261116.0.9
 
 - Reliability: writes from many devices at the same time are no longer lost (« database is locked »); every write waits its turn.
