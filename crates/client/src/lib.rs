@@ -14,6 +14,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use serde_json::{Value, json};
 
+#[cfg(feature = "sync")]
 pub mod peer_sync;
 mod sse;
 mod url;

@@ -1,3 +1,4 @@
+#![cfg(feature = "sync")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! Two real nodes kept in step over HTTP: a first full copy, writes on both sides, a pass that brings both to the same
 //! memory, a second pass that changes nothing, a wrong key refused, and the live status at 100 %.
