@@ -615,3 +615,25 @@ fn a_word_that_comes_back_often_in_one_space_becomes_its_keyword_at_night() {
     assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
+
+#[test]
+fn a_note_said_as_a_command_names_its_board() {
+    use memcp_janitor::command_board;
+    assert_eq!(
+        command_board("J'ai une idée pour le projet Atlas"),
+        Some(("ideas", false))
+    );
+    assert_eq!(
+        command_board("Il faut aller à la déchetterie"),
+        Some(("next", false))
+    );
+    assert_eq!(
+        command_board("Il manque des piles dans le détecteur de fumée"),
+        Some(("list-shopping", true))
+    );
+    assert_eq!(
+        command_board("Problème : la chaudière affiche F28"),
+        Some(("targets", false))
+    );
+    assert_eq!(command_board("La réunion s'est bien passée"), None);
+}

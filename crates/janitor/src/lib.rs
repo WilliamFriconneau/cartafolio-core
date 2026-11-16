@@ -711,7 +711,41 @@ impl Janitor {
             "retire",
             json!({ "id": id, "reason": format!("sent from {triage} by the janitor ({by}) to the inbox of {to} as {new}") }),
         )?;
+        self.voice_command(text, to, &new);
         Ok(())
+    }
+
+    /// A note said as a command also becomes a card of a living board, its source the note just filed: « j'ai une idée… »
+    /// → the space's ideas, « il faut… » / « je dois… » → what's next, « problème… » / « risque… » → targets, « acheter… » /
+    /// « il manque… » → the shopping list of the home space, wherever it was said. Best effort: a card that cannot be
+    /// written leaves the note filed as it is.
+    fn voice_command(&mut self, text: &str, space: &str, source: &str) {
+        let Some((page, home_list)) = command_board(text) else {
+            return;
+        };
+        let target = if home_list {
+            let Ok(listed) = self.client.call("spaces", json!({})) else {
+                return;
+            };
+            let home = listed["spaces"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .find(|s| s["kind"] == "home")
+                .and_then(|s| s["name"].as_str())
+                .map(String::from);
+            match home {
+                Some(h) => h,
+                None => return,
+            }
+        } else {
+            space.to_string()
+        };
+        let line: String = text.trim().chars().take(140).collect();
+        let _ = self.client.call(
+            "living_set",
+            json!({ "space": target, "page": page, "add": [ format!("{line} ({source})") ] }),
+        );
     }
 
     /// Draws the facts out of one absorbed piece and writes them in its own vault; then the piece leaves the inbox.
@@ -853,6 +887,54 @@ impl Janitor {
         )?;
         Ok(new)
     }
+}
+
+/// The board a note said as a command goes to, and whether it is the home space's shopping list. The words are the
+/// person's own way of speaking, in French and English; a note that starts otherwise is no command.
+pub fn command_board(text: &str) -> Option<(&'static str, bool)> {
+    let t = text.trim().to_lowercase().replace('’', "'");
+    let starts = |words: &[&str]| words.iter().any(|w| t.starts_with(w));
+    if starts(&[
+        "acheter",
+        "il manque",
+        "on n'a plus",
+        "plus de ",
+        "buy ",
+        "we need to buy",
+        "out of ",
+    ]) {
+        return Some(("list-shopping", true));
+    }
+    if starts(&[
+        "j'ai une idée",
+        "j'ai une idee",
+        "idée",
+        "idee",
+        "une idée",
+        "i have an idea",
+        "idea",
+    ]) {
+        return Some(("ideas", false));
+    }
+    if starts(&["problème", "probleme", "risque", "souci", "problem", "risk"]) {
+        return Some(("targets", false));
+    }
+    if starts(&[
+        "il faut",
+        "je dois",
+        "à faire",
+        "a faire",
+        "penser à",
+        "penser a",
+        "rappeler",
+        "todo",
+        "i must",
+        "i have to",
+        "remember to",
+    ]) {
+        return Some(("next", false));
+    }
+    None
 }
 
 #[cfg(test)]
