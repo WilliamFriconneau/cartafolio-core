@@ -1,0 +1,33 @@
+[package]
+publish = false
+name = "memcp-bridge"
+description = "memcp bridge: what is captured on a computer is kept until the memory has it; the memory's tools for an assistant that runs a command, with that buffer in front"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+# The memory is another repository, checked out next to this one (see the README).
+memcp-client = { path = "../client" }
+serde_json = "1.0.154"
+base64 = "0.22"
+tiny_http = "0.12"
+# Whisper inside the program, for the Mac app (sandboxed: no whisper-cli). Off for the command line.
+whisper-rs = { version = "0.16", optional = true }
+
+[features]
+local-whisper = ["dep:whisper-rs"]
+metal = ["local-whisper", "whisper-rs/metal"]
+
+[dev-dependencies]
+memcp-core = { path = "../core" }
+memcp-server = { path = "../server" }
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "memcp-bridge"
+path = "src/main.rs"

@@ -1,0 +1,29 @@
+[package]
+publish = false
+name = "memcp-bridge-ffi"
+description = "The Swift interface (UniFFI) of the memcp bridge, for the Mac app: a thin shell, no logic of its own"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["lib", "staticlib", "cdylib"]
+name = "memcp_bridge_ffi"
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+
+[dependencies]
+memcp-bridge = { path = "../bridge" }
+memcp-client = { path = "../client" }
+uniffi = { version = "0.32", features = ["cli"] }
+
+# Whisper inside the app, on the GPU: the Mac only.
+[target.'cfg(target_os = "macos")'.dependencies]
+memcp-bridge = { path = "../bridge", features = ["metal"] }
+
+[lints]
+workspace = true

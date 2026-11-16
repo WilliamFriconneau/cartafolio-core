@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- The desktop bridge (`memcp-bridge`, and its Swift interface `memcp-bridge-ffi`) joins this repository: one repository for the server and the desktop bridges.
+- `counts` sections can count the terms cited in the notes and the notes under each child of a tag, in any space.
+
 ## 0.23.1
 
 - The page opens each space: a dashboard (notes day by day; for a health space, the signs and symptoms counted from the journal and the targets), the tree of tags, and the notes, which can be searched, added, corrected and removed with their history kept.
