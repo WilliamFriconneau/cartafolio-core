@@ -43,7 +43,8 @@ const USAGE: &str = "usage: memcp-bridge [gateway|send|text|flush|status|retry|f
                          memory's address nor its key (it needs no other option)
 
 options:
-  --config FILE          the settings, one `key = value` a line (mode 600, refused otherwise): url, key (or key_file),
+  --config FILE          the settings, one `key = value` a line (mode 600, refused otherwise): url, key (or key_file;
+                         on macOS, without either, the Keychain),
                          outbox, capture_dir (repeat). With it, no address or key is taken from the options or
                          the environment, and none appears in a process list
   --socket PATH          gateway on a Unix socket at PATH (mode 600; in a folder only its owner writes)
@@ -236,16 +237,23 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
             file.display()
         ));
     }
+    let url = url.ok_or(format!("{}: url is needed", file.display()))?;
+    // Without key or key_file, on macOS, the Keychain (service memcp-bridge, account the address), as with the options.
+    let key = key
+        .map(|k| k.trim().to_string())
+        .filter(|k| !k.is_empty())
+        .or_else(|| keychain(&url))
+        .ok_or(format!(
+            "{}: key or key_file is needed (or, on macOS, the key in the Keychain)",
+            file.display()
+        ))?;
     Ok(FileConfig {
         absorb,
         deliver,
         transcribe,
         voice,
-        url: url.ok_or(format!("{}: url is needed", file.display()))?,
-        key: key
-            .map(|k| k.trim().to_string())
-            .filter(|k| !k.is_empty())
-            .ok_or(format!("{}: key or key_file is needed", file.display()))?,
+        url,
+        key,
         outbox,
         capture_dirs: dirs,
     })

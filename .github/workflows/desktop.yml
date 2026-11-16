@@ -1,0 +1,91 @@
+# The desktop node, installed for real on a Mac and on Windows: the installers of packaging/ run with the programs of
+# this commit, the node and the bridge start as tasks of the user, a note and a file reach « À trier » through the bridge,
+# an assistant's request goes through `memcp-bridge connect`, then everything is removed.
+name: desktop
+
+on:
+  push:
+    branches: [main]
+    paths: ["packaging/**", "crates/bridge/**", "crates/server/**", "crates/core/**", ".github/workflows/desktop.yml"]
+  pull_request:
+    paths: ["packaging/**", "crates/bridge/**", "crates/server/**", "crates/core/**", ".github/workflows/desktop.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release --locked -p memcp-server -p memcp-bridge -p memcp-janitor
+      - name: Install
+        run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791 --bridge-port 18792
+      - name: A note, a file and an assistant's request through the bridge
+        run: |
+          B="$HOME/Library/Application Support/MemCP/bin/memcp-bridge"
+          CONF="$HOME/Library/Application Support/MemCP/bridge/bridge.conf"
+          launchctl list | grep org.memcp
+          "$B" text "a note from the desktop test" --config "$CONF"
+          printf 'a file\n' > file.txt
+          "$B" send file.txt --note "a file from the desktop test" --config "$CONF"
+          printf '%s\n' \
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | "$B" connect 127.0.0.1:18792 | tee answers.txt
+          grep -q '"tools"' answers.txt
+          "$HOME/Library/Application Support/MemCP/bin/memcp" --data "$HOME/Library/Application Support/MemCP/data" space list | tee spaces.txt
+          grep -q 'owner-a-trier' spaces.txt
+      - name: Logs
+        if: always()
+        run: tail -n 50 "$HOME/Library/Logs/MemCP/"*.log || true
+      - name: Uninstall
+        run: |
+          sh packaging/macos/install-mac.sh --uninstall --purge --yes --port 18791
+          ! launchctl list | grep org.memcp
+          ! ls "$HOME/Library/LaunchAgents/" | grep org.memcp
+          ! test -e "$HOME/Library/Application Support/MemCP"
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build
+        run: cargo build --release --locked -p memcp-server -p memcp-bridge -p memcp-janitor
+      - name: Install
+        shell: pwsh
+        run: ./packaging/windows/install.ps1 -Yes -From target\release -Port 18791 -BridgePort 18792
+      - name: A note, a file and an assistant's request through the bridge
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $root = Join-Path $env:LOCALAPPDATA 'MemCP'
+          $b = Join-Path $root 'bin\memcp-bridge.exe'
+          $conf = Join-Path $root 'bridge\bridge.conf'
+          Get-ScheduledTask -TaskPath '\MemCP\' | Format-Table TaskName, State
+          & $b text "a note from the desktop test" --config $conf
+          if ($LASTEXITCODE -ne 0) { throw "text: $LASTEXITCODE" }
+          Set-Content -Path file.txt -Value 'a file'
+          & $b send file.txt --note "a file from the desktop test" --config $conf
+          if ($LASTEXITCODE -ne 0) { throw "send: $LASTEXITCODE" }
+          $requests = @(
+            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}',
+            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          ) -join "`n"
+          $answers = $requests | & $b connect 127.0.0.1:18792
+          $answers
+          if (-not ($answers -match '"tools"')) { throw 'no tools through the bridge' }
+          $spaces = & (Join-Path $root 'bin\memcp.exe') --data (Join-Path $root 'data') space list
+          $spaces
+          if (-not ($spaces -match 'owner-a-trier')) { throw 'no À trier' }
+      - name: Logs
+        if: always()
+        shell: pwsh
+        run: Get-ChildItem (Join-Path $env:LOCALAPPDATA 'MemCP\logs') -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
+      - name: Uninstall
+        shell: pwsh
+        run: |
+          ./packaging/windows/install.ps1 -Uninstall -Purge -Yes
+          if (Get-ScheduledTask -TaskPath '\MemCP\' -ErrorAction SilentlyContinue) { throw 'tasks left' }
+          if (Test-Path (Join-Path $env:LOCALAPPDATA 'MemCP')) { throw 'files left' }
