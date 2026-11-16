@@ -1208,13 +1208,19 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     .and_then(Value::as_i64)
                     .unwrap_or(50)
                     .clamp(1, 200);
+                // A board's first pass (no pass yet), or `order: "newest"`: the newest notes, so a memory that starts with
+                // a large import is not read from its archive first. Otherwise the oldest after the pass, so nothing is
+                // skipped. Either way the delta comes out oldest first.
+                let newest =
+                    since == 0 || args.get("order").and_then(Value::as_str) == Some("newest");
+                let order = if newest { "DESC" } else { "ASC" };
                 let mut st = conn
                     .prepare(&format!(
                         "SELECT f.id, f.text, f.created_at FROM facts f WHERE f.status = 'active' AND f.created_at > ?1
-                         AND f.id NOT IN ({OUTSIDE}) ORDER BY f.created_at ASC, f.id ASC LIMIT ?2"
+                         AND f.id NOT IN ({OUTSIDE}) ORDER BY f.created_at {order}, f.id {order} LIMIT ?2"
                     ))
                     .map_err(|e| ToolError::Invalid(e.to_string()))?;
-                let delta: Vec<Value> = st
+                let mut delta: Vec<Value> = st
                     .query_map(rusqlite::params![since, limit], |r| {
                         Ok(json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
                                    "created": crate::util::iso(r.get::<_, i64>(2)?), "at": r.get::<_, i64>(2)? }))
@@ -1222,6 +1228,9 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     .map_err(|e| ToolError::Invalid(e.to_string()))?
                     .flatten()
                     .collect();
+                if newest {
+                    delta.reverse();
+                }
                 let behind: i64 = conn
                     .query_row(
                         &format!("SELECT COUNT(*) FROM facts f WHERE f.status = 'active' AND f.created_at > ?1 AND f.id NOT IN ({OUTSIDE})"),
