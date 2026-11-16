@@ -16,7 +16,7 @@ fn the_default_vaults_have_clear_tags_and_health_and_money_are_sensitive() {
     assert_eq!(
         ids,
         [
-            "a-trier", "moi", "sante", "proches", "maison", "argent", "travail", "loisirs"
+            "notes", "moi", "sante", "proches", "maison", "argent", "travail", "loisirs"
         ]
     );
     assert!(t.get("sante").unwrap().sensitive && t.get("argent").unwrap().sensitive);
