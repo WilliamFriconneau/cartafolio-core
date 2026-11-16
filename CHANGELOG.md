@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.23.1
+
+- The page opens each space: a dashboard (notes day by day; for a health space, the signs and symptoms counted from the journal and the targets), the tree of tags, and the notes, which can be searched, added, corrected and removed with their history kept.
+- The layout of spaces on the page: rename, nest, reorder, add a space of one's own.
+- The page says *space* where it said *vault*.
+- The add-on image keeps `curl` (the options of the app are read with it).
+
 ## 0.23.0
 
 First public release, under the name MemCP (the project was developed privately as HemCP up to 0.22.7).

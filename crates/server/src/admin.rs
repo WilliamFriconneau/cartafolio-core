@@ -4,7 +4,8 @@
 //! listener only, where the `X-Remote-User-*` headers come from the Supervisor),
 //! or a console token (`Authorization: Bearer hcpc_…`). MCP tokens never open
 //! this page. Administrators manage everyone; a member manages their own
-//! spaces and tokens. Nobody reads memory content here.
+//! spaces and tokens. A person reads and edits the notes of their own spaces here (`explore`), and
+//! nobody else's: an administrator manages access, not content.
 //!
 //! Every write needs the `X-Requested-With: memcp` header: a page from
 //! another site cannot set it without a CORS preflight, which is never allowed.
@@ -178,6 +179,10 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     if req.method == "GET" {
         return match path {
             "/state" => state(app, &ctl, &me),
+            "/space" => crate::explore::overview(app, &ctl, &me, req, now),
+            "/facts" => crate::explore::list(app, &ctl, &me, req, now),
+            "/fact" => crate::explore::one(app, &ctl, &me, req),
+            "/layout" => crate::explore::layout_get(app, &me),
             "/timeline" => timeline(app, &ctl, &me, req, now),
             "/file" => file_bytes(app, &ctl, &me, req),
             "/guide" => guide_get(&ctl, &me, req),
@@ -194,7 +199,14 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
         return err(400, "invalid JSON");
     };
-    match action(app, &ctl, &me, path, &body) {
+    let done = if path.starts_with("/fact/") {
+        crate::explore::write(app, &ctl, &me, path, &body)
+    } else if path.starts_with("/layout/") {
+        crate::explore::layout_write(app, &me, path, &body)
+    } else {
+        action(app, &ctl, &me, path, &body)
+    };
+    match done {
         Ok(v) => Response::json(200, &v),
         Err(r) => r,
     }

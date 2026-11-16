@@ -10,7 +10,7 @@ A **view** is how a space is read by a person (not by an assistant: assistants h
   - The read model is computed by the shared Rust core from the facts of the space. It is plain data (days, series, targets, counts), the same on every node.
   - Each platform draws that read model with its own native controls (SwiftUI on Apple systems, a native toolkit on Windows and Linux), and the server draws it as a web page. Same rule as the settings screens ([CONFIG-UI.md](CONFIG-UI.md)): a description in the core, one native renderer per platform, and a test that fails when a renderer drops a section.
 - The kind of a space says which view opens when the person touches the space. A space may override it, and any space can fall back to the **generic view**: the tree of tags, the latest facts, search.
-- Views are read-only on the web at first: entries are made where capture is native (the phone, the watch, the desktop app). A view never edits a fact in place; it shows what is there and the history of what changed.
+- A person explores their memory the way an assistant does through its tools, and on the same facts: the web page opens each space on its dashboard, its tree of tags and its notes, and the person may correct or remove a note there. A correction is a `supersede` and a removal a `retire` with its reason, so the history keeps every earlier text: nothing is overwritten. Capture stays native (the phone, the watch, the desktop app).
 - A locked space shows "locked" and nothing else; a view of a sensitive space is shown only to its owner, signed in (Home Assistant sign-in, tailnet identity, or a console key), never on the public MCP address.
 
 ## The health view

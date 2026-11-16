@@ -143,6 +143,22 @@ details.fold[open]>summary{margin-bottom:8px}
 @keyframes enter{from{opacity:0;transform:translateY(10px) scale(.992)}to{opacity:1;transform:none}}
 #view-memory:not([hidden]),#view-triage:not([hidden]),#view-people:not([hidden]){animation:enter .45s ease both}
 [hidden]{display:none!important}
+
+/* Exploring a space: its dashboard, its tree, its notes */
+.tabs{display:flex;gap:6px;flex-wrap:wrap;margin:10px 0 16px}
+.tabs button{border-radius:14px;padding:6px 16px}.tabs button.on{background:var(--primary-c);color:var(--on-primary-c);border-color:transparent}
+.bars{display:flex;align-items:flex-end;gap:3px;height:110px;padding:6px 0}
+.bars .b{flex:1;min-width:4px;background:var(--primary);border-radius:4px 4px 0 0;opacity:.85}
+.bars .b.zero{background:var(--outline-var);height:3px;opacity:.6}
+.sign{display:grid;grid-template-columns:minmax(90px,170px) 1fr 3ch;gap:10px;align-items:center;margin:5px 0;font-size:14px}
+.sign .bar{height:12px;border-radius:6px;background:var(--primary);opacity:.8}
+.note{display:flex;gap:12px;padding:10px 12px;border-radius:16px;cursor:pointer;align-items:flex-start}
+.note:hover{background:var(--sc)}.note .tx{flex:1;min-width:0;overflow-wrap:anywhere}.note .meta{font-size:12px;opacity:.7;white-space:nowrap}
+.editor{background:var(--sc);border-radius:20px;padding:16px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
+.editor textarea{min-height:9em;width:100%;box-sizing:border-box}
+.tree ul{list-style:none;margin:0;padding-left:18px}.tree>ul{padding-left:0}
+.tree li{margin:3px 0}.tree .n{opacity:.65;font-size:12.5px;margin-left:6px}
+.lay td{padding:4px 6px;vertical-align:middle}.lay input{width:100%;box-sizing:border-box}
 </style>
 </head>
 <body>
@@ -165,7 +181,7 @@ details.fold[open]>summary{margin-bottom:8px}
   <div id="app" hidden>
     <header>
       <h1>MemCP <button type="button" class="link" id="back-people" hidden>← My memory</button></h1>
-      <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this installation, who is waiting to be let in">Administration</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every vault you own, with a readable version. No key, connection or right in it.">export my data</button></div>
+      <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this installation, who is waiting to be let in">Administration</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every space you own, with a readable version. No key, connection or right in it.">export my data</button></div>
     </header>
     <p class="err" id="err" role="alert"></p>
     <div id="toast" role="status" aria-live="polite" hidden></div>
@@ -197,7 +213,7 @@ details.fold[open]>summary{margin-bottom:8px}
     <div class="bento" id="actions" style="margin-bottom:16px">
       <div class="tile t1">
         <h3>Connect an assistant</h3>
-        <p class="mute small" style="margin:0">Claude, ChatGPT, OpenCode… Each one gets an address of its own and only the vaults you tick. Change that later without redoing anything.</p>
+        <p class="mute small" style="margin:0">Claude, ChatGPT, OpenCode… Each one gets an address of its own and only the spaces you tick. Change that later without redoing anything.</p>
         <div class="acts"><button type="button" class="primary" id="open-wizard">Connect an assistant</button></div>
       </div>
       <div class="tile t2">
@@ -213,14 +229,25 @@ details.fold[open]>summary{margin-bottom:8px}
     </div>
 
     <section>
-      <h2>Vaults</h2>
+      <h2>Spaces</h2>
       <p class="mute small">What you keep, one tile per vault. Open one to an assistant on its own, or write its instructions.</p>
       <div id="spaces" class="bento"></div>
     </section>
 
+    <section id="layout-section">
+      <h2>Spaces</h2>
+      <p class="mute small">Rename them, put one inside another, change the order. Only the layout changes: no note moves and no right changes.</p>
+      <div class="scroll"><table class="lay" id="layout-table"></table></div>
+      <form id="layout-add" class="row" style="margin-top:10px">
+        <input name="label" placeholder="a new space, in any words" size="26" required>
+        <select name="parent" id="layout-parent"></select>
+        <button class="primary">Add a space</button>
+      </form>
+    </section>
+
     <section id="timeline-section">
       <h2>Timeline</h2>
-      <p class="mute small">What each vault received, over the last hours. Counts only, never content.</p>
+      <p class="mute small">What each space received, over the last hours. Counts only, never content.</p>
       <div class="bar"><label class="inline">Scale <select id="tl-scale">
         <option value="1">last hour</option><option value="3">3 hours</option><option value="6">6 hours</option>
         <option value="12">12 hours</option><option value="24" selected>24 hours</option>
@@ -243,7 +270,7 @@ details.fold[open]>summary{margin-bottom:8px}
 
     <section id="app-guides-section" hidden>
       <h2>Instructions apps proposed</h2>
-      <p class="mute small">An app that may propose its own instructions wrote these. They are only text until you read them and approve: then the assistants that reach that vault are told them, as coming from that app and approved by you, and only as the form of what that app keeps: how to read its records and how to write for it. If the app changes its text, it waits for you again. Nothing here is approved for you, whatever an assistant says.</p>
+      <p class="mute small">An app that may propose its own instructions wrote these. They are only text until you read them and approve: then the assistants that reach that space are told them, as coming from that app and approved by you, and only as the form of what that app keeps: how to read its records and how to write for it. If the app changes its text, it waits for you again. Nothing here is approved for you, whatever an assistant says.</p>
       <div id="app-guides"></div>
     </section>
 
@@ -278,7 +305,7 @@ details.fold[open]>summary{margin-bottom:8px}
 
     <details class="fold">
       <summary>Files</summary>
-      <p class="mute small">Photos and documents kept in a vault (4 MB at most). Assistants find them by their note.</p>
+      <p class="mute small">Photos and documents kept in a space (4 MB at most). Assistants find them by their note.</p>
       <div class="scroll"><table id="files"></table></div>
       <form id="upload">
         <span class="lbl">Keep</span><input type="file" id="upload-file" accept="image/*,audio/*,.m4a,.caf,application/pdf,text/plain,text/markdown,.xlsx" required>
@@ -291,10 +318,10 @@ details.fold[open]>summary{margin-bottom:8px}
     <details class="fold" id="advanced">
       <summary>Advanced</summary>
 
-      <h3 class="sub">New vault</h3>
+      <h3 class="sub">New space</h3>
       <form data-act="spaces">
         <select name="kind" data-kinds required></select>
-        <button class="primary">Create vault</button>
+        <button class="primary">Create space</button>
       </form>
       <p class="mute small" id="kind-hint"></p>
 
@@ -302,17 +329,26 @@ details.fold[open]>summary{margin-bottom:8px}
       <p class="mute small">For an assistant the guided steps above do not cover. Prefer “Connect an assistant”.</p>
       <form data-act="connections">
         <input name="agent" placeholder="name, e.g. claude-mac" required pattern="[a-z0-9][a-z0-9\-]{0,39}">
-        <span class="lbl">rights</span><input name="rights" placeholder="all, vault:rw, or vault/path:rw" value="all" size="16">
+        <span class="lbl">rights</span><input name="rights" placeholder="all, vault:rw, or space/path:rw" value="all" size="16">
         <label class="inline"><input type="checkbox" name="read_only"> read-only</label>
         <button class="primary">Create key</button>
       </form>
     </details>
     </div>
 
+    <div id="view-space" hidden>
+      <section>
+        <h2 id="space-title"></h2>
+        <p class="mute small" id="space-sub"></p>
+        <div class="tabs" id="space-tabs"></div>
+        <div id="space-body"></div>
+      </section>
+    </div>
+
     <div id="view-triage" hidden>
     <section>
       <h2>À trier</h2>
-      <p class="mute small">What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the vault, send: each capture lands in that vault's inbox as it is, and the janitor files it there.</p>
+      <p class="mute small">What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the vault, send: each capture lands in that space's inbox as it is, and the janitor files it there.</p>
       <div class="bar" id="triage-bar">
         <label class="inline"><input type="checkbox" id="tr-all"> <span id="tr-all-lbl">Select all</span></label>
         <input id="tr-filter" type="search" placeholder="Filter…" size="18">
@@ -480,19 +516,189 @@ async function load() {
   loadTimeline();
 }
 
+
+// ---- Exploring a space: dashboard, notes, tree ----
+let SP = null;
+const q = encodeURIComponent;
+function fail(x) { $("#err").textContent = x.message || String(x); setTimeout(() => { $("#err").textContent = ""; }, 8000); }
+async function loadSpace(name) {
+  const keep = SP && SP.name === name ? SP : null;
+  SP = { name, tab: keep ? keep.tab : "dashboard", tag: keep ? keep.tag : "", q: keep ? keep.q : "", open: null };
+  try { SP.ov = await api("space?space=" + q(name)); } catch (x) { return fail(x); }
+  renderSpace();
+}
+function renderSpace() {
+  const ov = SP.ov;
+  $("#space-title").textContent = ov.label || ov.space;
+  const kl = (S.catalogue || []).find(x => x.key === ov.kind);
+  $("#space-sub").textContent = (kl ? kl.label : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString("en") + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + ov.parent : "");
+  $("#space-tabs").replaceChildren(...[["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
+    el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
+  const body = $("#space-body");
+  if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
+  else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
+  else notesView(body);
+}
+function dashboardView(d) {
+  const out = [];
+  const days = d.facts_per_day || [];
+  const byDay = new Map(days.map(x => [x.day, x.count]));
+  const cells = [];
+  for (let i = d.window_days - 1; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    cells.push([day, byDay.get(day) || 0]);
+  }
+  const max = Math.max(1, ...cells.map(c => c[1]));
+  out.push(el("h3", {}, "Notes written, day by day"));
+  out.push(el("p", { class: "mute small" }, "The last " + d.window_days + " days."));
+  out.push(el("div", { class: "bars" }, ...cells.map(([day, n]) =>
+    el("div", { class: "b" + (n ? "" : " zero"), title: day + ": " + n, style: n ? "height:" + Math.round(100 * n / max) + "%" : "" }))));
+  if (d.signs) {
+    out.push(el("h3", {}, "Signs and symptoms"));
+    out.push(el("p", { class: "mute small" }, "Counted from your journal over the last " + d.window_days + " days: " + d.signs.days_with_entries + " days with entries. Nothing is interpreted."));
+    const top = d.signs.top || [], m = Math.max(1, ...top.map(t => t.count));
+    out.push(...(top.length ? top.map(t => el("div", { class: "sign" }, el("span", {}, t.code.replace(/_/g, " ")),
+      el("span", {}, el("div", { class: "bar", style: "width:" + Math.round(100 * t.count / m) + "%" })), el("span", { class: "mute" }, t.count))) : [el("p", { class: "mute" }, "None in this window.")]));
+  }
+  if (d.targets) {
+    out.push(el("h3", {}, "Targets"));
+    out.push(...(d.targets.length ? d.targets.map(t => el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = t.id; renderSpace(); } },
+      el("div", { class: "tx" }, t.extract), el("div", { class: "meta" }, (t.tags || []).join(", ")))) : [el("p", { class: "mute" }, "No target yet.")]));
+  }
+  return out;
+}
+function treeView(tags) {
+  const root = {};
+  for (const t of tags) { let n = root; for (const part of t.tag.split("/")) n = (n[part] = n[part] || {}); }
+  const count = new Map(tags.map(t => [t.tag, t.count]));
+  const build = (node, prefix) => {
+    const keys = Object.keys(node).sort();
+    if (!keys.length) return null;
+    return el("ul", {}, ...keys.map(k => {
+      const path = prefix ? prefix + "/" + k : k;
+      return el("li", {}, el("button", { type: "button", class: "link", onclick: () => { SP.tab = "notes"; SP.tag = path; SP.q = ""; renderSpace(); } }, k),
+        el("span", { class: "n" }, count.get(path) || ""), build(node[k], path));
+    }));
+  };
+  return el("div", { class: "tree" }, build(root, "") || el("p", { class: "mute" }, "No tag yet: the notes are not filed under any path."));
+}
+async function notesView(body) {
+  const search = el("input", { placeholder: "search the notes", value: SP.q, size: 30 });
+  const go = () => { SP.q = search.value.trim(); notesView(body); };
+  search.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  const bar = el("div", { class: "row" }, search, el("button", { type: "button", onclick: go }, "Search"),
+    SP.tag ? el("button", { type: "button", class: "link", onclick: () => { SP.tag = ""; notesView(body); } }, "path: " + SP.tag + " ✕") : null,
+    el("button", { type: "button", class: "primary", onclick: () => newNote(body) }, "New note"));
+  const list = el("div", {}, el("p", { class: "mute" }, "…"));
+  const editor = el("div", {});
+  body.replaceChildren(bar, editor, list);
+  try {
+    const r = await api("facts?space=" + q(SP.name) + (SP.tag ? "&tag=" + q(SP.tag) : "") + (SP.q ? "&q=" + q(SP.q) : ""));
+    list.replaceChildren(...(r.facts.length ? r.facts.map(f => el("div", { class: "note", onclick: () => openNote(body, f.id) },
+      el("div", { class: "tx" }, f.extract, el("div", {}, ...(f.tags || []).map(t => el("span", { class: "chip" }, t)))),
+      el("div", { class: "meta" }, (f.created || "").slice(0, 10) + " · " + f.author))) : [el("p", { class: "mute" }, "No note here.")]));
+  } catch (x) { fail(x); }
+  if (SP.open) { const id = SP.open; SP.open = null; openNote(body, id); }
+}
+function noteForm(opts) {
+  const text = el("textarea", { placeholder: "the note" }, opts.text || "");
+  const tags = el("input", { placeholder: "tags, separated by commas (work/planning)", value: (opts.tags || []).join(", "), size: 40 });
+  const tagList = () => tags.value.split(",").map(t => t.trim()).filter(Boolean);
+  return { text, tags, tagList };
+}
+function newNote(body) {
+  const f = noteForm({});
+  const msg = el("div", { class: "mute small" });
+  const save = async (distinct) => {
+    try {
+      await api("fact/add", { space: SP.name, text: f.text.value, tags: f.tagList(), distinct_from: distinct || [] });
+      await loadSpace(SP.name); SP.tab = "notes"; renderSpace();
+    } catch (x) {
+      if (/close notes exist/.test(x.message)) {
+        const r = await fetch(base + "admin/api/fact/add", { method: "POST", headers: { "X-Requested-With": "memcp", "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, credentials: "same-origin", body: JSON.stringify({ space: SP.name, text: f.text.value, tags: f.tagList() }) });
+        const j = await r.json().catch(() => ({}));
+        const c = j.candidates || [];
+        msg.replaceChildren(el("p", {}, "Close notes already exist. Correct one of them, or add this one anyway."),
+          ...c.map(x => el("div", { class: "note", onclick: () => openNote(body, x.id) }, el("div", { class: "tx" }, x.extract))),
+          el("button", { type: "button", onclick: () => save(c.map(x => x.id)) }, "Add anyway"));
+      } else fail(x);
+    }
+  };
+  $$(".editor", body).forEach(e => e.remove());
+  body.insertBefore(el("div", { class: "editor" }, el("strong", {}, "New note"), f.text, f.tags, msg,
+    el("div", { class: "row" }, el("button", { type: "button", class: "primary", onclick: () => save() }, "Add"),
+      el("button", { type: "button", class: "link", onclick: () => notesView(body) }, "Cancel"))), body.children[1]);
+}
+async function openNote(body, id) {
+  let r;
+  try { r = await api("fact?space=" + q(SP.name) + "&id=" + q(id)); } catch (x) { return fail(x); }
+  const f = noteForm({ text: r.fact.text, tags: r.fact.tags });
+  const reason = el("input", { placeholder: "why (kept in the history)", size: 30 });
+  const active = r.fact.status === "active";
+  const hist = (r.history || []).filter(h => h.id !== r.fact.id);
+  $$(".editor", body).forEach(e => e.remove());
+  body.insertBefore(el("div", { class: "editor" },
+    el("div", { class: "mute small" }, r.fact.author + " · " + (r.fact.created || "") + " · " + r.fact.status),
+    f.text, f.tags, active ? reason : null,
+    el("div", { class: "row" },
+      active ? el("button", { type: "button", class: "primary", onclick: async () => {
+        try { await api("fact/supersede", { space: SP.name, id, text: f.text.value, tags: f.tagList(), reason: reason.value || undefined }); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Save the correction") : null,
+      active ? el("button", { type: "button", class: "link danger", onclick: async () => {
+        if (!reason.value.trim()) { reason.focus(); return fail(new Error("Say why you remove it: a note is never erased, but the reason stays.")); }
+        try { await api("fact/retire", { space: SP.name, id, reason: reason.value }); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Remove") : null,
+      el("button", { type: "button", class: "link", onclick: () => notesView(body) }, "Close")),
+    hist.length ? el("details", {}, el("summary", {}, "History (" + hist.length + ")"),
+      ...hist.map(h => el("div", { class: "note" }, el("div", { class: "tx" }, h.extract), el("div", { class: "meta" }, (h.created || "").slice(0, 10) + " · " + h.status)))) : null), body.children[1]);
+}
+
+// ---- The layout of spaces ----
+async function renderLayout() {
+  let l;
+  try { l = (await api("layout")).spaces; } catch (x) { return; }
+  const by = new Map(l.map(x => [x.space, x]));
+  const depth = s => { let d = 0, p = s.parent; while (p && by.has(p) && d < 9) { d++; p = by.get(p).parent; } return d; };
+  const options = (sel, self) => [el("option", { value: "" }, "— top level —"), ...l.filter(x => x.space !== self).map(x => el("option", { value: x.space, ...(x.space === sel ? { selected: true } : {}) }, x.label))];
+  const siblings = p => l.filter(x => (x.parent || "") === (p || ""));
+  const reorder = async (s, dir) => {
+    const sib = siblings(s.parent), i = sib.findIndex(x => x.space === s.space), j = i + dir;
+    if (j < 0 || j >= sib.length) return;
+    [sib[i], sib[j]] = [sib[j], sib[i]];
+    try { for (let k = 0; k < sib.length; k++) await api("layout/set", { space: sib[k].space, position: k + 1 }); renderLayout(); } catch (x) { fail(x); }
+  };
+  const rows = l.filter(x => x.kind !== "a-trier").map(s => {
+    const name = el("input", { value: s.label, style: "margin-left:" + depth(s) * 18 + "px;width:calc(100% - " + depth(s) * 18 + "px)" });
+    name.addEventListener("change", async () => { try { await api("layout/set", { space: s.space, label: name.value }); renderLayout(); } catch (x) { fail(x); renderLayout(); } });
+    const par = el("select", {}, ...options(s.parent, s.space));
+    par.addEventListener("change", async () => { try { await api("layout/set", { space: s.space, parent: par.value || null }); renderLayout(); } catch (x) { fail(x); renderLayout(); } });
+    return el("tr", {}, el("td", {}, name), el("td", {}, par),
+      el("td", {}, el("button", { type: "button", class: "link", title: "up", onclick: () => reorder(s, -1) }, "↑"), el("button", { type: "button", class: "link", title: "down", onclick: () => reorder(s, 1) }, "↓")),
+      el("td", {}, el("button", { type: "button", class: "link", onclick: () => { location.hash = "#space/" + s.space; } }, "Open")));
+  });
+  $("#layout-table").replaceChildren(el("tr", {}, el("th", {}, "Space"), el("th", {}, "Inside"), el("th", {}, "Order"), el("th", {})), ...rows);
+  $("#layout-parent").replaceChildren(...options("", ""));
+}
+$("#layout-add").addEventListener("submit", async e => {
+  e.preventDefault();
+  const f = e.target;
+  try { await api("layout/add", { label: f.label.value, parent: f.parent.value || null }); f.reset(); await load(); } catch (x) { fail(x); }
+});
+
 // An administrator starts on the people; everyone else, and the administrator once they pick their
 // own line, on their memory.
 function route() {
   // Everyone lands in their own memory. The other people (an administrator only) are on a page of their own.
   const admin = !!(S && S.installation && S.installation.admin);
-  const page = location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
+  const inSpace = location.hash.match(/^#space\/([a-z][a-z0-9-]*)$/);
+  const page = inSpace ? "space" : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
+  $("#view-space").hidden = page !== "space";
+  if (inSpace) loadSpace(inSpace[1]);
   $("#view-people").hidden = page !== "admin";
   $("#view-memory").hidden = page !== "memory";
   $("#view-triage").hidden = page !== "triage";
   $("#back-people").hidden = page === "memory";
   $("#nav-admin").hidden = !(admin && page === "memory");
   $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
-  document.title = page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
+  document.title = page === "space" ? "MemCP · " + inSpace[1] : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
 }
 $("#back-people").addEventListener("click", () => { location.hash = ""; });
 $("#nav-admin").addEventListener("click", () => { location.hash = "#admin"; });
@@ -639,7 +845,7 @@ function renderHero() {
     el("div", { class: "avatar" }, name.slice(0, 1).toUpperCase()),
     el("div", {}, el("h2", {}, hello + ", " + name),
       el("p", { class: "lead" }, el("span", { class: "lock" }), "Your memory. Nobody else on this server reads it.")),
-    el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "vault" : "vaults"), stat(facts, facts === 1 ? "fact" : "facts"),
+    el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "space" : "spaces"), stat(facts, facts === 1 ? "fact" : "facts"),
       stat(S.connections.filter(c => !c.revoked).length, "connections"), last ? el("div", {}, el("b", { style: "font-size:15px;padding-top:9px" }, ago(last)), el("span", {}, "last write")) : null));
 }
 
@@ -658,19 +864,21 @@ function render() {
     const biggest = S.spaces.reduce((m, x) => Math.max(m, x.stats ? x.stats.facts : 0), 0);
     const large = nFacts > 0 && nFacts === biggest;
     return el("div", { class: "tile " + tone + (large ? " wide tall" : "") + (s.stats && !nFacts && !nFiles ? " empty" : "") },
-      el("h3", {}, s.name),
-      el("div", { class: "kind" }, s.kind && s.kind !== "custom" ? kindLabel(s.kind) : "Custom vault"),
+      el("h3", { style: "cursor:pointer", onclick: () => { location.hash = "#space/" + s.name; } }, s.name),
+      el("div", { class: "kind" }, s.kind && s.kind !== "custom" ? kindLabel(s.kind) : "Custom space"),
       el("div", { class: "big" }, !s.stats ? "—" : num(nFacts)),
       el("div", { class: "reach mute" }, (n => n === 0 ? "No assistant reaches it" : n === 1 ? "1 connection reaches it" : n + " connections reach it")(
         S.connections.filter(c => !c.revoked && (c.rights === "all" || c.rights.split(",").some(r => r.split(":")[0].split("/")[0] === s.name))).length)),
       el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "fact" : "facts") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : "") + (s.stats.last_write ? " · last write " + ago(s.stats.last_write) : "")),
       el("div", { class: "acts" },
-        el("button", { class: "primary", onclick: () => openWizard({ vault: s.name }) }, "Connect"),
+        el("button", { class: "primary", onclick: () => { location.hash = "#space/" + s.name; } }, "Open"),
+        el("button", { class: "link", onclick: () => openWizard({ vault: s.name }) }, "Connect"),
         el("button", { class: "link", onclick: () => openWizard({ vault: s.name, readOnly: true }) }, "Read-only"),
-        el("button", { class: "link", onclick: () => openGuide("space:" + s.name, "Instructions for the vault " + s.name) }, s.guide ? "Instructions ✓" : "Instructions")));
+        el("button", { class: "link", onclick: () => openGuide("space:" + s.name, "Instructions for the space " + s.name) }, s.guide ? "Instructions ✓" : "Instructions")));
   });
-  $("#spaces").replaceChildren(...(cards.length ? cards : [el("p", { class: "mute", style: "grid-column:1/-1" }, "No vault yet. Open “Advanced” below and make one under “New vault”: for instance “me”, for who you are and what you value, then “health”, “work”, “home”.")]));
+  $("#spaces").replaceChildren(...(cards.length ? cards : [el("p", { class: "mute", style: "grid-column:1/-1" }, "No space yet. Open “Advanced” below and make one under “New space”: for instance “me”, for who you are and what you value, then “health”, “work”, “home”.")]));
   renderTriage();
+  renderLayout();
   const kindSel = $("select[data-kinds]");
   const hint = () => { const k = (S.catalogue || []).find(x => x.key === kindSel.value); $("#kind-hint").textContent = k ? k.description + (k.feature ? " · carries the " + k.feature + " tools" : "") : ""; };
   kindSel.onchange = hint; hint();
@@ -700,7 +908,7 @@ function render() {
           el("div", { class: "kind" }, u.name + " · " + (u.home_assistant ? "linked to Home Assistant" : "not linked")))),
       el("div", {}, el("span", { class: "badge" + (u.admin ? " admin" : "") }, u.admin ? "administrator" : "member"),
         u.disabled ? el("span", { class: "badge off", style: "margin-left:4px" }, "disabled") : null),
-      el("div", { class: "nums mute" }, (u.vaults === undefined ? "—" : u.vaults) + " vaults · " + (u.connections === undefined ? "—" : u.connections) + " connections"),
+      el("div", { class: "nums mute" }, (u.vaults === undefined ? "—" : u.vaults) + " spaces · " + (u.connections === undefined ? "—" : u.connections) + " connections"),
       names.length ? el("div", { class: "minis" }, ...names.map(n => el("span", { class: "mini" }, n))) : null,
       el("div", { class: "acts" },
         mine ? el("button", { class: "primary", onclick: () => { location.hash = ""; } }, "Open my memory") : null,
@@ -726,7 +934,7 @@ function render() {
   const standingWord = { waiting: "waiting for you", approved: "approved", changed: "changed since you approved it: waiting for you" };
   $("#app-guides-section").hidden = proposed.length === 0;
   $("#app-guides").replaceChildren(...proposed.map(g => el("div", { class: "vault guide-proposal", "data-standing": g.standing },
-    el("h3", {}, g.app, el("span", { class: "mute small" }, " · vault " + g.space + " · " + (standingWord[g.standing] || g.standing))),
+    el("h3", {}, g.app, el("span", { class: "mute small" }, " · space " + g.space + " · " + (standingWord[g.standing] || g.standing))),
     el("pre", { class: "proposal-text" }, g.text),
     el("div", { class: "acts" },
       g.standing === "approved" ? null : el("button", { class: "primary", onclick: () => act("app-guides/approve", { space: g.space, app: g.app, hash: g.hash }) }, g.standing === "changed" ? "Approve the new text" : "Approve"),
@@ -751,7 +959,7 @@ function render() {
         el("button", { class: "link danger", onclick: () => confirmThen("Retire " + f.name + "?", () => act("files/retire", { space: f.space, id: f.id, reason: "retired from the admin page" })) }, "retire")))));
 
   const reach = c => {
-    const r = c.rights === "all" ? ["all your vaults"] : c.rights.split(",").map(x => x.replace(/:rw$/, "").replace(/:r$/, " (read only)"));
+    const r = c.rights === "all" ? ["all your spaces"] : c.rights.split(",").map(x => x.replace(/:rw$/, "").replace(/:r$/, " (read only)"));
     return [...r.map(x => el("span", { class: "chip" }, x)),
       c.read_only ? el("span", { class: "chip" }, "read only") : null,
       c.person_guide === false ? el("span", { class: "chip" }, "not told your instructions") : null];
@@ -772,7 +980,7 @@ function render() {
       c.expires_at ? el("span", { class: "chip" + (new Date(c.expires_at) - Date.now() < 7 * 86400000 ? " warn" : "") }, "key expires " + fmt(c.expires_at).slice(0, 10)) : null,
       !c.last_used_at ? el("span", { class: "chip warn" }, "never used") : null),
     el("div", { class: "acts" },
-      isBridge(c) ? null : el("button", { class: "link", title: "Add or remove vaults for this assistant; its key and address stay the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
+      isBridge(c) ? null : el("button", { class: "link", title: "Add or remove spaces for this assistant; its key and address stay the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
       isBridge(c) ? null : el("button", { class: "link", title: "Your own instructions (my instructions) speak of your whole life: an assistant for work need not be told them", onclick: () => act("connections/person-guide", { agent: c.agent, told: c.person_guide === false }) }, c.person_guide === false ? "tell my instructions" : "keep my instructions from it"),
       el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")));
   const assistants = live.filter(c => !isBridge(c)), bridges = live.filter(isBridge);
@@ -799,10 +1007,10 @@ function rightsEditor(c) {
   const pick = v => el("select", { onchange: e => { if (e.target.value) g.vaults.set(v.name, e.target.value); else g.vaults.delete(v.name); } },
     ...[["", "no access"], ["r", "read"], ["rw", "read and write"]].map(([val, lbl]) => el("option", { value: val, selected: (g.vaults.get(v.name) || "") === val }, lbl)));
   return el("div", {},
-    el("label", { class: "inline" }, el("input", { type: "checkbox", checked: g.all, onchange: e => { g.all = e.target.checked; render(); } }), "all vaults"),
+    el("label", { class: "inline" }, el("input", { type: "checkbox", checked: g.all, onchange: e => { g.all = e.target.checked; render(); } }), "all spaces"),
     g.all ? null : el("div", {},
       ...S.spaces.map(v => el("label", { class: "inline" }, el("span", { style: "min-width:9em" }, v.name), pick(v))),
-      el("div", { class: "small mute" }, "paths inside a vault (for example health/journal:rw), one per line"),
+      el("div", { class: "small mute" }, "paths inside a space (for example health/journal:rw), one per line"),
       el("textarea", { rows: "2", cols: "28", onchange: e => { g.paths = e.target.value.split(/[\s,]+/).filter(Boolean); } }, g.paths.join("\n"))),
     el("div", {},
       el("button", { class: "primary", onclick: async () => {
@@ -885,14 +1093,14 @@ const PLATFORMS = [
       "Open claude.ai, then Settings, then Connectors. Menu names change from time to time: look for Connectors or MCP.",
       "Add a custom connector. Give it any name and this address:",
       { pre: addr() },
-      "Connect it. A page of this server opens in your browser: tick the vaults it may reach, then Allow.",
+      "Connect it. A page of this server opens in your browser: tick the spaces it may reach, then Allow.",
       "Come back here: this page notices the connection."] },
   { id: "claude-desktop", name: "Claude Desktop or Cowork", oauth: true,
     steps: () => [
       "In the Claude app, open Settings, then Connectors (or look for MCP).",
       "Add a custom connector, with this address:",
       { pre: addr() },
-      "Connect it, then tick the vaults it may reach on the page that opens, and Allow.",
+      "Connect it, then tick the spaces it may reach on the page that opens, and Allow.",
       "A connector added in the app follows the same rules as on the web. If your address only works on your private network and the app cannot reach it, a local bridge would be needed; there is none yet."] },
   { id: "claude-code", name: "Claude Code", token: true,
     steps: c => [
@@ -927,12 +1135,12 @@ const slugOf = v => v.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$
 const ORGANISE_PROMPT = `You are connected to my memory (MemCP, over MCP). It may be new or nearly empty. Help me set it up, then keep it tidy. Work step by step, and ask me before writing anything beyond what I approve. Answer in the language I write in.
 
 1. WHAT THIS MEMORY IS
-- One memory per person, made of vaults: me (who I am, my values, how I want assistants to work), health, people (the people around me), home, money, work, hobbies. You only reach the vaults I gave you.
+- One memory per person, made of vaults: me (who I am, my values, how I want assistants to work), health, people (the people around me), home, money, work, hobbies. You only reach the spaces I gave you.
 - A fact is one or two short sentences that stand alone, dated (4000 characters at most), written with \`remember\`. A correction is \`supersede\` (the old one stays in the history). \`retire\` is only for a clear mistake, with a reason. Nothing is ever erased.
-- \`recall\` searches (words; optionally \`space\` and \`tags\`). \`stats\` shows what each vault holds and the tags in use. \`read_fact\` and \`history\` show one fact.
-- Tags are paths in lowercase, up to 4 levels, up to 8 per fact (\`work/projects/alpha\`, \`health/allergies\`, \`people/family\`, \`home/server\`). Reuse the paths \`stats\` lists. \`@vault\` also files a fact under another vault you can read.
+- \`recall\` searches (words; optionally \`space\` and \`tags\`). \`stats\` shows what each space holds and the tags in use. \`read_fact\` and \`history\` show one fact.
+- Tags are paths in lowercase, up to 4 levels, up to 8 per fact (\`work/projects/alpha\`, \`health/allergies\`, \`people/family\`, \`home/server\`). Reuse the paths \`stats\` lists. \`@space\` also files a fact under another space you can read.
 - Layers: plain facts are the sorted memory. Tag \`inbox\` = quick notes to sort later (a plain \`recall\` leaves them out). \`sources/<app>\` = raw records an app deposited (left out of a plain \`recall\`; ask by tag). \`dossier/<app>\` = the sorted summary an app wrote. Never write into another app's paths.
-- Tag \`index\`: one fact per vault saying what is in it and where; whoever connects reads it first. Keep it current with \`supersede\`.
+- Tag \`index\`: one fact per space saying what is in it and where; whoever connects reads it first. Keep it current with \`supersede\`.
 - My instructions (the guide) are written by me alone, on the admin page. You cannot write them; you may propose text.
 
 2. WHAT EACH VAULT IS FOR
@@ -946,10 +1154,10 @@ const ORGANISE_PROMPT = `You are connected to my memory (MemCP, over MCP). It ma
 Never store passwords, keys, card or account numbers, identity numbers, or the content of private messages.
 
 3. WHAT TO DO NOW, IN ORDER
-a. Call \`stats\`. Tell me which vaults you reach, how many facts each holds, and the tags in use.
+a. Call \`stats\`. Tell me which spaces you reach, how many facts each holds, and the tags in use.
 b. For each vault, \`recall\` a few broad queries and read its \`index\` (tag \`index\`). Tell me what exists and what is missing.
-c. Propose 5 to 10 tag paths per vault and the text of its index. Wait for my OK, then write the indexes.
-d. Interview me briefly, ONE question at a time, vault by vault, starting with me. For each answer, propose the fact(s) and write them after my OK. Write what I said as I said it; mark an inference as one. If I tire of questions, save the rest as quick notes (tag \`inbox\`) to sort later.
+c. Propose 5 to 10 tag paths per space and the text of its index. Wait for my OK, then write the indexes.
+d. Interview me briefly, ONE question at a time, space by vault, starting with me. For each answer, propose the fact(s) and write them after my OK. Write what I said as I said it; mark an inference as one. If I tire of questions, save the rest as quick notes (tag \`inbox\`) to sort later.
 e. Propose the text of my instructions, for me and for each vault, short: who to be, which language, what never to do. I will paste them on the admin page myself.
 f. Finish with one paragraph: what you wrote, how many facts per vault, what is left in the inbox.
 
@@ -1023,12 +1231,12 @@ function renderWizard() {
   const acc = $("#w-access");
   if (!p) { acc.replaceChildren(el("span", { class: "mute small" }, "Pick an assistant first.")); }
   else if (p.oauth) {
-    acc.replaceChildren(el("div", { class: "small" }, "On the consent page that opens, tick “All my vaults” (the ones you make later too) or only some. With nothing ticked it gets nothing. You can cut vaults later from the list: its address and its sign-in stay the same."));
+    acc.replaceChildren(el("div", { class: "small" }, "On the consent page that opens, tick “All my spaces” (the ones you make later too) or only some. With nothing ticked it gets nothing. You can cut spaces later from the list: its address and its sign-in stay the same."));
   } else if (p.rights && !W.created) {
     const r = p.rights();
     acc.replaceChildren(
       r ? el("div", { class: "small" }, "Preselected, nothing to tick. This key reaches only these paths of your " + healthVault().name + " vault:")
-        : el("div", { class: "small warn" }, "You have no health vault yet: make one first (Your whole memory, then the vaults)."),
+        : el("div", { class: "small warn" }, "You have no health space yet: make one first (Your whole memory, then the vaults)."),
       el("div", { style: "display:flex;flex-direction:column;gap:2px;margin:6px 0" }, ...(r ? r.split(",").map(x => el("span", { class: "chip" }, x.replace(/:rw$/, " (read and write)"))) : [])),
       el("div", { style: "margin-top:8px" },
         el("button", { type: "button", class: "primary", id: "w-create", disabled: "", onclick: createConnection }, "Create the connection")));
@@ -1041,7 +1249,7 @@ function renderWizard() {
       " " + v.name));
     acc.replaceChildren(
       el("div", { class: "small mute" }, "Nothing is ticked beforehand. It reaches only what you tick."),
-      el("label", { class: "inline", style: "margin-top:6px" }, el("input", { type: "checkbox", id: "w-all", checked: W.all ? "" : null, onchange: e => { W.all = e.target.checked; refreshCreate(); } }), " ", el("b", {}, "All my vaults"), ", and the ones I make later"),
+      el("label", { class: "inline", style: "margin-top:6px" }, el("input", { type: "checkbox", id: "w-all", checked: W.all ? "" : null, onchange: e => { W.all = e.target.checked; refreshCreate(); } }), " ", el("b", {}, "All my spaces"), ", and the ones I make later"),
       el("div", { style: "display:flex;flex-direction:column;gap:4px;margin:6px 0" }, ...boxes),
       el("label", { class: "inline" }, el("input", { type: "checkbox", id: "w-ro", checked: W.readOnly ? "" : null, onchange: e => { W.readOnly = e.target.checked; } }), " read only"),
       el("div", { style: "margin-top:8px" },
@@ -1068,7 +1276,7 @@ function renderWizard() {
   renderPrompt();
 }
 
-// The name is the end of the address, so it is a vault's name never, and a connection's once.
+// The name is the end of the address, so it is a space's name never, and a connection's once.
 function nameProblem() {
   if (W.created || W.connected) return "";
   if (!W.slug) return "Give it a name.";
@@ -1143,7 +1351,7 @@ async function openGuide(scope, title) {
   $("#guide-title").textContent = title;
   $("#guide-lead").textContent = scope.startsWith("person")
     ? "Told to every assistant you connect, whatever it reaches. Written by you; no assistant can change it."
-    : "Told to every assistant opened on this vault, and only on it. Kept by the assistants that write this vault (tool guide_set): read here, not edited. Every earlier text stays in the history.";
+    : "Told to every assistant opened on this vault, and only on it. Kept by the assistants that write this space (tool guide_set): read here, not edited. Every earlier text stays in the history.";
   const mine = scope.startsWith("person");
   $("#guide-text").readOnly = !mine;
   $("#guide-save").hidden = $("#guide-clear").hidden = !mine;

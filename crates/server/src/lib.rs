@@ -4,6 +4,7 @@ pub mod admin;
 pub mod app;
 pub mod cli;
 pub mod doctor;
+pub mod explore;
 pub mod http;
 pub mod net;
 pub mod oauth;

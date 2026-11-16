@@ -371,7 +371,7 @@ checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
 name = "memcp-client"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "base64 0.22.1",
  "memcp-core",
@@ -383,7 +383,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-core"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.4.3",
@@ -397,7 +397,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-finances"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "calamine",
  "memcp-core",
@@ -407,7 +407,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-janitor"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "memcp-client",
  "memcp-core",
@@ -419,7 +419,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-manager"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "base64 0.22.1",
  "memcp-core",
@@ -431,7 +431,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-server"
-version = "0.23.0"
+version = "0.23.1"
 dependencies = [
  "base64 0.22.1",
  "memcp-core",
