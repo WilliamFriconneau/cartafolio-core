@@ -1,10 +1,12 @@
 # MemCP
 
-**A memory for AI, built around the human we are.**
+**The external hard drive for your AIs.**
 
-AI assistants forget. Each one keeps its own scraps, in its own cloud, and none of them knows the whole person: the body, the home, the work, the money, the people around. MemCP is one memory that you host yourself. Any assistant can read and write it through [MCP](https://modelcontextprotocol.io), and it stays yours: you decide who sees what, nothing is deleted behind your back, and nothing leaves your machines unless you connect it.
+AI assistants forget. Each one keeps its own scraps, in its own cloud, and none of them knows the whole person. MemCP is a drive you host yourself: plug any assistant into it through [MCP](https://modelcontextprotocol.io) and they all read and write the same place. It stays yours: you decide who sees what, nothing is deleted behind your back, and nothing leaves your machines unless you connect it.
 
-It is also a manager for your notes and files: your Markdown, your photos, your voice notes, wherever they already are, organised into one memory you can browse yourself and your assistants can read.
+Keeping it simple is the point: a drive, folders, a page to look inside. Add-ons come on top. The one closest to a nurse's heart is **health through Apple Health**, and it is the only part of the app with a paid option (3 € a month); everything else is free.
+
+It is also a manager for your notes and files: your Markdown, your photos, your voice notes, organised into one memory you can browse yourself and your assistants can read.
 
 ## Who made this, and how
 
