@@ -121,7 +121,10 @@ fn models() -> String {
                 // `PROPOSE:<space>:<word>` in what it reads is what it proposes.
                 let list: Vec<Value> = note
                     .split_whitespace()
-                    .filter_map(|w| w.trim_matches(|c: char| c == '.' || c == ',').strip_prefix("PROPOSE:"))
+                    .filter_map(|w| {
+                        w.trim_matches(|c: char| c == '.' || c == ',')
+                            .strip_prefix("PROPOSE:")
+                    })
                     .filter_map(|p| p.split_once(':'))
                     .map(|(s, k)| json!({"coffre": s, "mots_cles": [k], "tags": []}))
                     .collect();
@@ -453,5 +456,139 @@ fn it_learns_from_the_model_and_files_alone_what_it_is_sure_of() {
         texts(&mut all, "sam-me", &["janitor/keywords"], "zendure").is_empty(),
         "nothing of work elsewhere"
     );
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+fn rules_note(c: &mut Client, space: &str, keywords: &[&str]) {
+    c.call(
+        "remember",
+        json!({"space": space, "kind": "context",
+               "text": json!({"version": 1, "tags": [], "keywords": keywords}).to_string(),
+               "tags": ["rules"]}),
+    )
+    .expect("rules");
+}
+
+fn drop_note(r: &Rig, text: &str) {
+    let mut edge = Client::new(&format!("{}/edge", r.base), &r.edge);
+    edge.call("remember", json!({"text": text, "tags": ["inbox"]}))
+        .expect("a note into À trier");
+}
+
+fn owner(r: &Rig) -> Client {
+    Client::new(&r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key)
+}
+
+#[test]
+fn a_unique_keyword_routes_and_an_ambiguity_stays_in_a_trier() {
+    let r = rig("route");
+    let mut o = owner(&r);
+    rules_note(&mut o, "sam-work", &["zephyr", "devis"]);
+    rules_note(&mut o, "sam-health", &["glycémie"]);
+    drop_note(&r, "Point sur Zephyr demain matin.");
+    drop_note(&r, "Glycémie 5,4 et le devis du plombier.");
+    drop_note(&r, "Rien de connu ici.");
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!((report.sent, report.unsure), (1, 2), "{report:?}");
+    assert_eq!(texts(&mut o, "sam-work", &["janitor"], "zephyr").len(), 1);
+    let stays = texts(&mut o, "sam-a-trier", &["inbox"], "");
+    assert_eq!(
+        stays.len(),
+        2,
+        "two unique keywords of two spaces: left alone"
+    );
+    assert!(texts(&mut o, "sam-health", &["inbox"], "glycémie").is_empty());
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
+fn the_model_proposes_keywords_written_as_a_new_rules_version_and_the_router_runs_again() {
+    let r = rig("propose");
+    let mut o = owner(&r);
+    rules_note(&mut o, "sam-work", &["zephyr"]);
+    drop_note(&r, "Le chantier orion avance. PROPOSE:sam-work:orion");
+    let mut j = janitor_with(
+        &r,
+        &r.base.replace("/mcp", "/mcp/janitor"),
+        &r.janitor_key,
+        "keywords_every_minutes = 0\n",
+    );
+    let report = j.run_once();
+    assert_eq!(report.keywords_added, 1, "{report:?}");
+    // The rerun placed the note, in the same pass.
+    assert_eq!((report.sent, report.unsure), (1, 0), "{report:?}");
+    assert!(texts(&mut o, "sam-a-trier", &["inbox"], "").is_empty());
+    assert!(texts(&mut o, "sam-a-trier", &["janitor/waiting"], "").is_empty());
+    let rules = texts(&mut o, "sam-work", &["rules"], "");
+    assert_eq!(rules.len(), 1, "one active version: {rules:?}");
+    assert!(
+        rules[0].contains("orion") && rules[0].contains("zephyr"),
+        "{rules:?}"
+    );
+    // The history keeps the first version.
+    let found = o
+        .call(
+            "recall",
+            json!({"space": "sam-work", "query": "", "tags": ["rules"], "limit": 5}),
+        )
+        .expect("recall");
+    let id = found["results"][0]["id"].as_str().expect("id").to_string();
+    let chain = o.call("history", json!({"id": id})).expect("history");
+    let versions = chain["chain"].as_array().expect("chain");
+    assert_eq!(versions.len(), 2, "{chain}");
+    assert!(!versions[0]["text"].as_str().unwrap_or("").contains("orion"));
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
+fn a_word_that_comes_back_often_in_one_space_becomes_its_keyword_at_night() {
+    let r = rig("frequency");
+    let mut o = owner(&r);
+    // Distinct sentences (a near duplicate would not be kept), all with the same two words.
+    let work = [
+        "Migration kestrel: the database cutover is planned for Tuesday, tension with the vendor.",
+        "Kestrel retrospective notes: monitoring gaps found, tension over the budget again.",
+        "Call with the integrator about kestrel licences and a tension on delivery dates.",
+        "Kestrel onboarding checklist written for the new colleagues, tension about ownership.",
+    ];
+    let health = [
+        "Evening reading, tension stable at twelve over eight, slept well afterwards.",
+        "Cardiology appointment moved, the tension diary goes along with the blood tests.",
+        "Walked an hour, tension fine, knees a bit sore on the stairs.",
+        "Headache after lunch, tension checked twice, nothing unusual in the numbers.",
+    ];
+    for (w, h) in work.iter().zip(health) {
+        o.call(
+            "remember",
+            json!({"space": "sam-work", "text": w, "tags": ["projets/kestrel"]}),
+        )
+        .expect("filed note");
+        o.call(
+            "remember",
+            json!({"space": "sam-health", "text": h, "tags": ["sante/tension"]}),
+        )
+        .expect("filed note");
+    }
+    drop_note(&r, "Kestrel : revoir le déploiement vendredi.");
+    drop_note(&r, "Une note sans rapport avec rien de connu.");
+    let mut j = janitor_with(
+        &r,
+        &r.base.replace("/mcp", "/mcp/janitor"),
+        &r.janitor_key,
+        "keyword_min_notes = 4\n",
+    );
+    let report = j.run_night();
+    assert!(report.keywords_added >= 1, "{report:?}");
+    let rules = texts(&mut o, "sam-work", &["rules"], "");
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    assert!(rules[0].contains("kestrel"), "{rules:?}");
+    assert!(
+        !rules[0].contains("tension"),
+        "a word of both spaces is no keyword: {rules:?}"
+    );
+    // The note that holds the new keyword was placed by it; the other one waits.
+    assert_eq!((report.sent, report.unsure), (1, 1), "{report:?}");
+    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }

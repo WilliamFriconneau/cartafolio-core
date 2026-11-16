@@ -73,7 +73,9 @@ impl State {
 
     /// The note the janitor keeps for `kind` and `space` (`waiting` in « À trier »), if one was written.
     pub fn note_id(&self, kind: &str, space: &str) -> Option<String> {
-        self.data["note_ids"][kind][space].as_str().map(String::from)
+        self.data["note_ids"][kind][space]
+            .as_str()
+            .map(String::from)
     }
 
     /// Remembers the note of `kind` and `space`, or forgets it with `None`.

@@ -1,8 +1,10 @@
 //! The janitor: the optional part of the memory that keeps its inboxes in order (it runs next to the memory, in the
 //! same Home Assistant app, when the person turns it on). It reads them like any other client, with a key of its own:
 //!
-//! 0. **What the devices put in « À trier » is sent to the inbox of a vault**, as it is: « À trier » belongs to no vault, and
-//!    no vault is a default. What it is unsure of stays there, for the person to decide on their page.
+//! 0. **What the devices put in « À trier » is sent to the inbox of a vault**, as it is, by a deterministic router that reads
+//!    the keywords of each space (`router`): no model is asked for a note. « À trier » belongs to no vault, and no vault is
+//!    a default. What the router cannot place stays there, for the person (who is told by a note). A model only proposes
+//!    keywords for the spaces (`keywords`), and the router runs again when they changed.
 //! 1. **Every note of an inbox is filed, in the vault of that inbox**: a model picks tags and a title, and the note's text
 //!    is written there **as it is**. If no model answers, the note stays.
 //! 2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
@@ -18,12 +20,12 @@ use serde_json::{Value, json};
 
 mod config;
 mod health_rule;
+mod keywords;
 mod learn;
 mod models;
+mod router;
 mod state;
 mod time;
-mod keywords;
-mod router;
 mod work_rule;
 
 pub use config::Config;
@@ -385,7 +387,7 @@ impl Janitor {
             }
         }
         self.leave_waiting_notes(&waiting, report);
-        let inboxes =if self.config.inbox_vaults.is_empty() {
+        let inboxes = if self.config.inbox_vaults.is_empty() {
             vaults.to_vec()
         } else {
             self.config.inbox_vaults.clone()
@@ -573,10 +575,7 @@ impl Janitor {
             let (to, by) = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(text, &self.config.work_words)
             {
-                (
-                    Some(work_rule::WORK.to_string()),
-                    "the person's work rule",
-                )
+                (Some(work_rule::WORK.to_string()), "the person's work rule")
             } else {
                 (
                     router::route(text, &tags_of(note), &self.rules)

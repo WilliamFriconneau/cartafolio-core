@@ -4,12 +4,14 @@ The optional part of the memory that keeps its inboxes in order. It runs in the 
 the person turns it on (see the app's documentation, « The janitor »), or anywhere as `memcp-janitor`. It reads the memory
 like any other client, with a connection of its own, and does three jobs:
 
-0. **What comes in goes to the inbox of a vault.** Every capturing device writes to one box, **À trier** (the space of kind
-   `a-trier`, `<person>-a-trier`, made at the first pairing), which belongs to no vault: a device never chooses a vault,
-   and no vault is a default. The janitor asks a model (or what it learned) which vault each note of À trier is about,
-   writes it there **as it is**, still in the inbox, and retires it from À trier once the write is certain. When the model
-   is unsure, or names a vault it may not, the note stays in À trier: the person decides on their page, where every note
-   and file waiting there has a « Send » to the vault they choose. Files are never sent by the janitor.
+0. **What comes in goes to the inbox of a vault, by keywords.** Every capturing device writes to one box, **À trier** (the
+   space of kind `a-trier`, `<person>-a-trier`, made at the first pairing), which belongs to no vault: a device never
+   chooses a vault, and no vault is a default. A deterministic router (no model) reads each note waiting there, and in the
+   inboxes, and compares it with the keywords and tags of every space (see Keywords). A note that clearly belongs to a space
+   is written there **as it is**, still in the inbox, and retired from À trier once the write is certain. A note the router
+   cannot place stays in À trier: the person decides on their page, where every note and file waiting there has a « Send »
+   to the vault they choose. When anything is left, the janitor leaves one note there (tag `janitor/waiting`, replaced as the
+   count changes, retired when nothing waits). Files are never sent by the janitor.
 1. **Every note of an inbox is filed, inside the vault whose inbox holds it.** Each vault has its own inbox. A note found in
    the inbox of the work vault stays in the work vault: the model only picks tags and a title. The note's text is written
    **as it is**, after the title, tagged `janitor`, and replaces the raw note (`supersede`). The model's answer is checked:
@@ -23,9 +25,43 @@ like any other client, with a connection of its own, and does three jobs:
 **Recordings are not its business.** The bridge, where the speech model is, transcribes them, puts their text in the inbox,
 and erases them a week after the text was filed (`memcp-bridge transcribe`).
 
+## Keywords
+
+Each space keeps its filing rules in one note tagged `rules`: `{"version":1,"tags":[…],"keywords":[…]}`, the note the
+person's page writes (`POST /space/rules`). The janitor reads it with `recall` (tag `rules`) and writes it with
+`supersede` (or `remember` for the first one), so every change is a new version and the history keeps the old ones. Nothing
+is erased.
+
+The router, for one note:
+
+- A **unique** keyword (listed by a single space: a project, a colleague, a device) sends the note there at once. Unique
+  keywords of two spaces in one note are an ambiguity: the note stays where it is.
+- **Ordinary** keywords (listed by several spaces) and tags (a note tag under a rule tag) each score one point per space.
+  With no unique keyword, the best score wins; a tie, or no match, leaves the note where it is.
+- Keywords match whole words, in any case; a keyword of several words matches word for word.
+- The health rule (`#santé`) and the work rule (`work_words`, meeting recordings) still come first, as before.
+
+A note found in the inbox of a vault goes to another vault only when the router names that vault; otherwise it is filed in its
+own vault as before (see 1).
+
+The model is used only to **propose keywords**, never to place a note. When notes are left in À trier (and at night), the
+janitor sends one request with a sample of the notes filed in each space, the current keywords, and the notes the router
+could not place; the model proposes keywords and tags per space. Its answer is checked (plain words of one to three words,
+plain tags, only known spaces; a keyword two spaces ask for, or one another space already owns, is dropped) and the janitor
+writes the accepted ones into the `rules` note of the space. A model is a proposer: it calls no tool and writes nothing.
+The request is made at most once every `keywords_every_minutes` (default 360); the night pass ignores that delay.
+
+The **frequency rule** needs no model: a word found in at least `keyword_min_notes` notes of one space (default 10) and at
+least three times less common in any other space is added to that space's keywords. At most ten per space per pass.
+
+After the keywords changed, the router runs again on À trier and on the inboxes in the same pass (the rerun), so what a new
+keyword places leaves À trier at once.
+
 ## Models
 
-The janitor sends a note to a model only to learn where it goes. **Nothing leaves the owner's machines by default**: the model is
+The model is asked for two things only: the tags and title of a note already in its vault's inbox (1), the facts of an
+absorbed piece (2), and keyword proposals (see Keywords). It is never asked where a note of À trier goes.
+**Nothing leaves the owner's machines by default**: the model is
 `local`, Ollama (`qwen3:8b`, held to a JSON answer by its schema), asked at its address (`ollama_url`), on this machine or
 another of the network; the janitor never starts it.
 A service of the owner's choosing that speaks the OpenAI chat format can be added with `models = api,local` and `api_url`,
@@ -37,7 +73,7 @@ choice when he says it, a risk with a third party's document: keep the janitor's
 
 ## Examples from the memory itself
 
-Before the model chooses, the janitor looks for a few facts already filed that share the note's words, in the vaults the note
+Before the model chooses tags in an inbox, the janitor looks for a few facts already filed that share the note's words, in the vaults the note
 may go to, and shows them after the note with their vault and tags (as examples, never as orders). A small model files much
 closer to how the memory is already kept when it sees real filings. It is told to reuse a tag only when it names the note's
 subject.
@@ -78,7 +114,7 @@ models         = api,local                             # `local`, `api`, or both
 ```
 
 Others: `api_url`, `api_model`, `api_key_file`, `ollama_url`, `ollama_model`, `state_dir` (what it already did, never the
-memory's), `max_notes` (30 per pass), `utc_offset_minutes`. The key goes only over HTTPS, or in clear to this machine and the
+memory's), `max_notes` (30 per pass), `utc_offset_minutes`, `work_words`, `keyword_min_notes` (frequency rule, 10), `keywords_every_minutes` (6 hours). The key goes only over HTTPS, or in clear to this machine and the
 own network.
 
 ## The connection

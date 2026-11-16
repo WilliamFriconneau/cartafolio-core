@@ -12,7 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
 use memcp_client::Error as ClientError;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::models::{self, Models};
 use crate::router::Rules;
@@ -24,8 +24,9 @@ pub struct Unplaced {
     pub text: String,
 }
 
-/// Notes read per space for the frequency rule.
+/// Notes read per main tag of a space, and tags read, for the frequency rule.
 const SAMPLE_READ: usize = 100;
+const SAMPLE_TAGS: usize = 8;
 /// Notes of a space, and notes without a space, shown to the model.
 const SHOWN_FILED: usize = 6;
 const SHOWN_UNPLACED: usize = 10;
@@ -120,7 +121,11 @@ impl Janitor {
                 .filter(|f| f["status"] == "active" && f["space"].as_str().is_none_or(|s| s == v))
                 .filter_map(|f| {
                     let rules = Rules::parse(f["text"].as_str()?)?;
-                    Some((f["created_at"].as_i64().unwrap_or(0), f["id"].as_str()?, rules))
+                    Some((
+                        f["created_at"].as_i64().unwrap_or(0),
+                        f["id"].as_str()?,
+                        rules,
+                    ))
                 })
                 .max_by_key(|(at, _, _)| *at);
             if let Some((_, id, rules)) = newest {
@@ -166,26 +171,45 @@ impl Janitor {
         Ok(())
     }
 
-    /// Notes already filed in a space (not its settings, nor the janitor's own notes), newest first.
-    fn filed_sample(&mut self, space: &str) -> Result<Vec<String>, ClientError> {
-        let found = self.client.call(
-            "recall",
-            json!({ "space": space, "query": "", "limit": SAMPLE_READ }),
-        )?;
-        Ok(found["results"]
-            .as_array()
+    /// Notes already filed in a space (not its settings, nor the janitor's own notes). A listing needs a tag, so it reads
+    /// the space's main tags (from `stats`, the busiest first) one after the other.
+    fn filed_sample(&mut self, space: &str, stats: &Value) -> Result<Vec<String>, ClientError> {
+        let mut main: Vec<(&str, u64)> = stats[space]["tags"]
+            .as_object()
             .into_iter()
             .flatten()
-            .filter(|f| {
-                f["status"] == "active"
+            .filter(|(t, _)| {
+                !t.contains('/')
+                    && !NOT_CONTENT.contains(&t.as_str())
+                    && *t != "inbox"
+                    && *t != "janitor"
+            })
+            .map(|(t, n)| (t.as_str(), n.as_u64().unwrap_or(0)))
+            .collect();
+        main.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(b.0)));
+        let mut seen = BTreeSet::new();
+        let mut out = vec![];
+        for (tag, _) in main.into_iter().take(SAMPLE_TAGS) {
+            let found = self.client.call(
+                "recall",
+                json!({ "space": space, "query": "", "tags": [tag], "limit": SAMPLE_READ }),
+            )?;
+            for f in found["results"].as_array().into_iter().flatten() {
+                let content = f["status"] == "active"
                     && f["type"].as_str() != Some("file")
                     && f["space"].as_str().is_none_or(|s| s == space)
-                    && !tags_of(f)
-                        .iter()
-                        .any(|t| NOT_CONTENT.contains(t) || *t == "inbox" || t.starts_with("inbox/"))
-            })
-            .filter_map(|f| f["text"].as_str().map(String::from))
-            .collect())
+                    && !tags_of(f).iter().any(|t| {
+                        NOT_CONTENT.contains(t) || *t == "inbox" || t.starts_with("inbox/")
+                    });
+                if let (true, Some(id), Some(text)) =
+                    (content, f["id"].as_str(), f["text"].as_str())
+                    && seen.insert(id.to_string())
+                {
+                    out.push(text.to_string());
+                }
+            }
+        }
+        Ok(out)
     }
 
     /// Adds keywords to the spaces: those the frequency rule finds, and those the model proposes when notes wait (or at
@@ -199,8 +223,12 @@ impl Janitor {
     ) -> (u32, Vec<String>) {
         let mut problems = vec![];
         let mut samples: BTreeMap<String, Vec<String>> = BTreeMap::new();
+        let stats = match self.client.call("stats", json!({})) {
+            Ok(s) => s,
+            Err(e) => return (0, vec![format!("the memory cannot be read: {e}")]),
+        };
         for v in vaults {
-            match self.filed_sample(v) {
+            match self.filed_sample(v, &stats) {
                 Ok(s) => {
                     samples.insert(v.clone(), s);
                 }
@@ -213,7 +241,9 @@ impl Janitor {
         }
         let unplaced: Vec<&Unplaced> = waiting.values().flatten().collect();
         let due = night
-            || now().unsigned_abs().saturating_sub(self.state.stamp("proposed"))
+            || now()
+                .unsigned_abs()
+                .saturating_sub(self.state.stamp("proposed"))
                 >= self.config.keywords_every_minutes * 60;
         if (!unplaced.is_empty() || night) && due && !samples.is_empty() {
             self.state.set_stamp("proposed", now().unsigned_abs());
@@ -339,9 +369,9 @@ impl Janitor {
                         self.state.set_stamp(&key, digest);
                     }
                 }
-                Err(e) => report
-                    .problems
-                    .push(format!("the note of what waits in {space} cannot be written: {e}")),
+                Err(e) => report.problems.push(format!(
+                    "the note of what waits in {space} cannot be written: {e}"
+                )),
             }
         }
     }
@@ -371,7 +401,11 @@ mod tests {
             ),
             (
                 "health".to_string(),
-                notes(&["Morning tension reading", "Evening tension reading", "tension"]),
+                notes(&[
+                    "Morning tension reading",
+                    "Evening tension reading",
+                    "tension",
+                ]),
             ),
         ]);
         let found = frequent(&samples, &BTreeMap::new(), 3);
