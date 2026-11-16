@@ -1081,7 +1081,10 @@ fn run(
         .collect::<Result<_>>()?;
     let txs: Vec<rusqlite::Transaction<'_>> = conns
         .iter()
-        .map(|c| c.unchecked_transaction().map_err(Error::from))
+        .map(|c| {
+            rusqlite::Transaction::new_unchecked(c, rusqlite::TransactionBehavior::Immediate)
+                .map_err(Error::from)
+        })
         .collect::<Result<_>>()?;
     let before: Vec<(i64, i64)> = txs
         .iter()

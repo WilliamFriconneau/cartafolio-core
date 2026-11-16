@@ -535,7 +535,7 @@ pub fn remember(
     {
         return Err(Error::Invalid("valid_to is before valid_from".into()));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     if let Some(existing) = active_by_hash(&tx, &text::text_hash(&t))? {
         return Ok(Remembered::Duplicate(existing));
     }
@@ -661,7 +661,7 @@ pub(crate) fn supersede_as(
     check_kind(&new.kind)?;
     let t = check_text(&new.text)?;
     let given_tags = normalize_tags(&new.tags)?;
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let old = read_fact(&tx, old_id)?.ok_or_else(|| Error::UnknownFact(old_id.into()))?;
     if old.status != "active" {
         return Err(Error::Invalid(format!(
@@ -756,7 +756,7 @@ pub(crate) fn retire_as(
     if reason.trim().is_empty() {
         return Err(Error::Invalid("retiring needs a reason".into()));
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let f = read_fact(&tx, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
     if f.status != "active" && f.status != "proposed" {
         return Err(Error::Invalid(format!(
@@ -983,7 +983,7 @@ pub(crate) fn create_passage(
     valid_from: Option<i64>,
 ) -> Result<Option<Fact>> {
     let t = check_text(text_raw)?;
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     if active_by_hash(&tx, &text::text_hash(&t))?.is_some() {
         return Ok(None);
     }
@@ -1012,7 +1012,7 @@ pub(crate) fn repoint(conn: &Connection, actor: &str, id: &str, source: &Source)
     else {
         return Err(Error::Invalid("repoint: a note source is expected".into()));
     };
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let old = read_fact(&tx, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
     tx.execute(
         "UPDATE facts SET source_path = ?2, source_hash = ?3, source_range = ?4, source_ref = ?5 WHERE id = ?1",

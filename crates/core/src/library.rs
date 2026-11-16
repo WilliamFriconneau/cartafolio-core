@@ -296,7 +296,7 @@ pub fn rescan(conn: &Connection, root_id: i64, now: i64) -> Result<ScanReport> {
             known.insert(p, v);
         }
     }
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let mut report = ScanReport::default();
     let mut seen: BTreeSet<String> = BTreeSet::new();
     for f in &found {

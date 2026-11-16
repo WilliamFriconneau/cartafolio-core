@@ -355,7 +355,7 @@ pub fn deposit(
         });
     }
     // A feed sends many alike facts (one per day, one per measure): no "close facts" question.
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     if let Some(same) = facts::active_by_hash(&tx, &crate::text::text_hash(&text))? {
         return Ok(Deposit::SameTextHeld(same));
     }

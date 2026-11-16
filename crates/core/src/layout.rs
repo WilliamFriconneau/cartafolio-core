@@ -199,7 +199,8 @@ impl Brain {
                 )));
             }
         }
-        let tx = ctl.unchecked_transaction()?;
+        let tx =
+            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
         if let Some(l) = &label {
             tx.execute(
                 "UPDATE spaces SET label = ?2 WHERE name = ?1",

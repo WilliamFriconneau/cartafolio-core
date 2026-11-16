@@ -1106,7 +1106,7 @@ fn apply_one(brain: &Brain, space: &Space, conn: &Connection, ev: &Event, via: &
 pub fn apply(brain: &Brain, space: &Space, events: &[Event], via: &str) -> Result<Applied> {
     let conn = brain.open_space(space)?;
     let mut out = Applied::default();
-    let tx = conn.unchecked_transaction()?;
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
     for ev in events {
         if tx
             .query_row("SELECT 1 FROM sync_log WHERE eid = ?1", [&ev.eid], |_| {
