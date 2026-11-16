@@ -112,37 +112,232 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
     )
 }
 
-/// The dashboard of a space, with no model: what is counted from the facts themselves. Every space
-/// shows how many facts it received, day by day; a health space also counts the signs and symptoms
-/// of its journal and lists its targets.
-fn dashboard(conn: &Connection, kind: &str, now: i64) -> Value {
-    let since = now - WINDOW_DAYS * DAY;
-    let mut per_day: Vec<Value> = Vec::new();
-    if let Ok(mut st) = conn.prepare(
-        "SELECT date(created_at, 'unixepoch'), count(*) FROM facts
-         WHERE status = 'active' AND created_at >= ?1 GROUP BY 1 ORDER BY 1",
-    ) && let Ok(rows) = st.query_map([since], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-    }) {
-        for (d, n) in rows.flatten() {
-            per_day.push(json!({ "day": d, "count": n }));
+/// The dashboard of a space, with no model: a JSON document (DASHBOARDS.md) kept in the space as an
+/// active fact tagged `dashboard`, or, when there is none, the plain default (the notes day by day).
+/// Each section is computed here from the facts of the space; a section the catalogue does not know
+/// is shown as an error and nothing else, and a document is never run, only read.
+fn dashboard(conn: &Connection, _kind: &str, now: i64) -> Value {
+    let (doc, source) = match stored_dashboard(conn) {
+        Some(d) => (d, "stored"),
+        None => (
+            json!({ "version": 1, "sections": [
+                { "type": "daily", "title": "Notes day by day", "window_days": WINDOW_DAYS }
+            ]}),
+            "default",
+        ),
+    };
+    let title = doc
+        .get("title")
+        .and_then(Value::as_str)
+        .map(|t| extract(t, 80));
+    let sections: Vec<Value> = doc
+        .get("sections")
+        .and_then(Value::as_array)
+        .map(|a| {
+            a.iter()
+                .take(MAX_SECTIONS)
+                .map(|s| section(conn, s, now))
+                .collect()
+        })
+        .unwrap_or_default();
+    json!({ "source": source, "title": title, "sections": sections })
+}
+
+const MAX_SECTIONS: usize = 20;
+
+/// The newest active fact tagged `dashboard` that reads as a version 1 document.
+fn stored_dashboard(conn: &Connection) -> Option<Value> {
+    let mut st = conn
+        .prepare(
+            "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+             (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard') ORDER BY f.created_at DESC LIMIT 5",
+        )
+        .ok()?;
+    let ids: Vec<String> = st.query_map([], |r| r.get(0)).ok()?.flatten().collect();
+    ids.iter().find_map(|id| {
+        let f = facts::read_fact(conn, id).ok().flatten()?;
+        let doc: Value = serde_json::from_str(f.text.trim()).ok()?;
+        (doc.get("version").and_then(Value::as_i64) == Some(1)).then_some(doc)
+    })
+}
+
+fn days_of(s: &Value, default: i64) -> i64 {
+    s.get("window_days")
+        .and_then(Value::as_i64)
+        .unwrap_or(default)
+        .clamp(1, 365)
+}
+
+fn tag_of(s: &Value, default: &str) -> String {
+    let raw = s.get("tag").and_then(Value::as_str).unwrap_or(default);
+    facts::normalize_tag(raw).unwrap_or_else(|_| default.to_string())
+}
+
+/// One section of a dashboard, with its data.
+fn section(conn: &Connection, s: &Value, now: i64) -> Value {
+    let kind = s.get("type").and_then(Value::as_str).unwrap_or("");
+    let title = s
+        .get("title")
+        .and_then(Value::as_str)
+        .map(|t| extract(t, 80));
+    let mut out = json!({ "type": kind, "title": title });
+    match kind {
+        "daily" => {
+            let days = days_of(s, WINDOW_DAYS);
+            out["window_days"] = json!(days);
+            out["days"] = per_day(conn, now, days);
         }
-    }
-    let mut out = json!({
-        "window_days": WINDOW_DAYS,
-        "facts_per_day": per_day,
-    });
-    if kind == "health" {
-        out["signs"] = signs(conn, now);
-        out["targets"] = targets(conn);
+        "counts" => {
+            let days = days_of(s, WINDOW_DAYS);
+            let top = s
+                .get("top")
+                .and_then(Value::as_i64)
+                .unwrap_or(12)
+                .clamp(1, 50) as usize;
+            match s.get("from").and_then(Value::as_str) {
+                Some("journal-manifestations") => {
+                    out["window_days"] = json!(days);
+                    let c = signs(conn, now, days, top);
+                    out["days_with_entries"] = c["days_with_entries"].clone();
+                    out["top"] = c["top"].clone();
+                }
+                Some("keywords") => {
+                    out["window_days"] = json!(days);
+                    let terms: Vec<String> = s
+                        .get("terms")
+                        .and_then(Value::as_array)
+                        .map(|a| {
+                            a.iter()
+                                .filter_map(Value::as_str)
+                                .map(|t| t.trim().to_lowercase())
+                                .filter(|t| !t.is_empty() && t.chars().count() <= 40)
+                                .take(30)
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    out["top"] = mentions(conn, now, days, &terms, top);
+                }
+                Some("tags") => {
+                    out["window_days"] = json!(days);
+                    out["top"] = child_tags(conn, now, days, &tag_of(s, ""), top);
+                }
+                _ => out["error"] = json!("unknown source for counts"),
+            }
+        }
+        "targets" => out["items"] = by_tag(conn, &tag_of(s, "cibles"), 12),
+        "list" => {
+            let limit = s
+                .get("limit")
+                .and_then(Value::as_i64)
+                .unwrap_or(8)
+                .clamp(1, 50) as usize;
+            out["items"] = by_tag(conn, &tag_of(s, "inbox"), limit);
+        }
+        "text" => {
+            out["body"] = json!(extract(
+                s.get("body").and_then(Value::as_str).unwrap_or(""),
+                2000
+            ));
+        }
+        _ => out["error"] = json!("unknown section type"),
     }
     out
 }
 
-/// Counts the manifestations (signs and symptoms) of the journal days over the window. The app
+/// How many notes of the window cite each term (a project, a person, a sign): the keyword model of a
+/// space, used to count rather than to file. Case is ignored.
+fn mentions(conn: &Connection, now: i64, days: i64, terms: &[String], top_n: usize) -> Value {
+    let since = now - days * DAY;
+    let mut counts: Vec<(String, i64)> = terms.iter().map(|t| (t.clone(), 0)).collect();
+    if let Ok(mut st) = conn.prepare(
+        "SELECT text FROM facts WHERE status = 'active' AND created_at >= ?1
+         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')
+         ORDER BY created_at DESC LIMIT 5000",
+    ) && let Ok(rows) = st.query_map([since], |r| r.get::<_, String>(0))
+    {
+        for text in rows.flatten() {
+            let low = text.to_lowercase();
+            for (t, n) in counts.iter_mut() {
+                if low.contains(t.as_str()) {
+                    *n += 1;
+                }
+            }
+        }
+    }
+    counts.retain(|(_, n)| *n > 0);
+    counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    counts.truncate(top_n);
+    Value::Array(
+        counts
+            .into_iter()
+            .map(|(c, n)| json!({ "code": c, "count": n }))
+            .collect(),
+    )
+}
+
+/// How many notes of the window sit under each direct child of a tag (the projects under `work/projects`).
+fn child_tags(conn: &Connection, now: i64, days: i64, base: &str, top_n: usize) -> Value {
+    let since = now - days * DAY;
+    let prefix = if base.is_empty() {
+        String::new()
+    } else {
+        format!("{base}/")
+    };
+    let mut counts: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
+        Default::default();
+    if let Ok(mut st) = conn.prepare(
+        "SELECT t.tag, t.fact_id FROM fact_tags t JOIN facts f ON f.id = t.fact_id
+         WHERE f.status = 'active' AND f.created_at >= ?1 AND substr(t.tag, 1, 1) <> '@'
+         AND t.fact_id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')",
+    ) && let Ok(rows) = st.query_map([since], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
+    }) {
+        for (tag, id) in rows.flatten() {
+            let Some(rest) = tag.strip_prefix(prefix.as_str()) else {
+                continue;
+            };
+            let child = rest.split('/').next().unwrap_or("");
+            if !child.is_empty() {
+                counts.entry(child.to_string()).or_default().insert(id);
+            }
+        }
+    }
+    let mut top: Vec<(String, i64)> = counts
+        .into_iter()
+        .map(|(c, ids)| (c, ids.len() as i64))
+        .collect();
+    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+    top.truncate(top_n);
+    Value::Array(
+        top.into_iter()
+            .map(|(c, n)| json!({ "code": c, "count": n }))
+            .collect(),
+    )
+}
+
+/// Notes written per day over a window, as `[{day, count}]`.
+fn per_day(conn: &Connection, now: i64, days: i64) -> Value {
+    let since = now - days * DAY;
+    let mut out: Vec<Value> = Vec::new();
+    if let Ok(mut st) = conn.prepare(
+        "SELECT date(created_at, 'unixepoch'), count(*) FROM facts
+         WHERE status = 'active' AND created_at >= ?1
+         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')
+         GROUP BY 1 ORDER BY 1",
+    ) && let Ok(rows) = st.query_map([since], |r| {
+        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
+    }) {
+        for (d, n) in rows.flatten() {
+            out.push(json!({ "day": d, "count": n }));
+        }
+    }
+    Value::Array(out)
+}
+
+/// Counts the manifestations (signs and symptoms) of the journal days over a window. The health app
 /// deposits one fact per day, `[app] day YYYY-MM-DD: {json}`, under a `dossier/…` path.
-fn signs(conn: &Connection, now: i64) -> Value {
-    let from_day = iso(now - WINDOW_DAYS * DAY);
+fn signs(conn: &Connection, now: i64, days_window: i64, top_n: usize) -> Value {
+    let from_day = iso(now - days_window * DAY);
     let from_day = from_day.get(..10).unwrap_or("").to_string();
     let mut counts: std::collections::BTreeMap<String, i64> = Default::default();
     let mut days = 0i64;
@@ -152,10 +347,10 @@ fn signs(conn: &Connection, now: i64) -> Value {
            (SELECT fact_id FROM fact_tags WHERE tag = 'dossier' OR tag LIKE 'dossier/%')
          ORDER BY f.created_at DESC LIMIT 2000",
     ) else {
-        return Value::Null;
+        return json!({ "days_with_entries": 0, "top": [] });
     };
     let Ok(rows) = st.query_map([], |r| r.get::<_, String>(0)) else {
-        return Value::Null;
+        return json!({ "days_with_entries": 0, "top": [] });
     };
     for text in rows.flatten() {
         let Some(at) = text.find("] day ") else {
@@ -192,25 +387,25 @@ fn signs(conn: &Connection, now: i64) -> Value {
     }
     let mut top: Vec<(String, i64)> = counts.into_iter().collect();
     top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    top.truncate(20);
+    top.truncate(top_n);
     json!({
         "days_with_entries": days,
         "top": top.into_iter().map(|(c, n)| json!({ "code": c, "count": n })).collect::<Vec<_>>(),
     })
 }
 
-/// The targets the person follows: the active facts filed under `cibles`.
-fn targets(conn: &Connection) -> Value {
+/// The active facts filed under a tag path, newest first.
+fn by_tag(conn: &Connection, tag: &str, limit: usize) -> Value {
+    let like = format!("{tag}/%");
     let Ok(mut st) = conn.prepare(
-        "SELECT f.id FROM facts f
-         WHERE f.status = 'active' AND f.id IN
-           (SELECT fact_id FROM fact_tags WHERE tag = 'cibles' OR tag LIKE 'cibles/%')
-         ORDER BY f.created_at DESC LIMIT 12",
+        "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+           (SELECT fact_id FROM fact_tags WHERE tag = ?2 OR tag LIKE ?3)
+         ORDER BY f.created_at DESC LIMIT ?1",
     ) else {
         return json!([]);
     };
     let ids: Vec<String> = st
-        .query_map([], |r| r.get(0))
+        .query_map(rusqlite::params![limit as i64, tag, like], |r| r.get(0))
         .map(|rows| rows.flatten().collect())
         .unwrap_or_default();
     Value::Array(

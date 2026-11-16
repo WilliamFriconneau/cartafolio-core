@@ -541,30 +541,35 @@ function renderSpace() {
 }
 function dashboardView(d) {
   const out = [];
-  const days = d.facts_per_day || [];
-  const byDay = new Map(days.map(x => [x.day, x.count]));
-  const cells = [];
-  for (let i = d.window_days - 1; i >= 0; i--) {
-    const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
-    cells.push([day, byDay.get(day) || 0]);
+  if (d.title) out.push(el("h3", {}, d.title));
+  for (const sec of d.sections || []) {
+    if (sec.title) out.push(el("h3", {}, sec.title));
+    if (sec.error) { out.push(el("p", { class: "mute small" }, "Not shown: " + sec.error + ".")); continue; }
+    if (sec.type === "daily") {
+      const byDay = new Map((sec.days || []).map(x => [x.day, x.count]));
+      const cells = [];
+      for (let i = sec.window_days - 1; i >= 0; i--) {
+        const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+        cells.push([day, byDay.get(day) || 0]);
+      }
+      const max = Math.max(1, ...cells.map(c => c[1]));
+      out.push(el("p", { class: "mute small" }, "The last " + sec.window_days + " days."));
+      out.push(el("div", { class: "bars" }, ...cells.map(([day, n]) =>
+        el("div", { class: "b" + (n ? "" : " zero"), title: day + ": " + n, style: n ? "height:" + Math.round(100 * n / max) + "%" : "" }))));
+    } else if (sec.type === "counts") {
+      out.push(el("p", { class: "mute small" }, "Counted from your journal over the last " + sec.window_days + " days: " + sec.days_with_entries + " days with entries. Nothing is interpreted."));
+      const top = sec.top || [], m = Math.max(1, ...top.map(t => t.count));
+      out.push(...(top.length ? top.map(t => el("div", { class: "sign" }, el("span", {}, t.code.replace(/_/g, " ")),
+        el("span", {}, el("div", { class: "bar", style: "width:" + Math.round(100 * t.count / m) + "%" })), el("span", { class: "mute" }, t.count))) : [el("p", { class: "mute" }, "None in this window.")]));
+    } else if (sec.type === "targets" || sec.type === "list") {
+      const items = sec.items || [];
+      out.push(...(items.length ? items.map(t => el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = t.id; renderSpace(); } },
+        el("div", { class: "tx" }, t.extract), el("div", { class: "meta" }, (t.tags || []).join(", ")))) : [el("p", { class: "mute" }, "Nothing here yet.")]));
+    } else if (sec.type === "text") {
+      out.push(el("p", {}, sec.body || ""));
+    }
   }
-  const max = Math.max(1, ...cells.map(c => c[1]));
-  out.push(el("h3", {}, "Notes written, day by day"));
-  out.push(el("p", { class: "mute small" }, "The last " + d.window_days + " days."));
-  out.push(el("div", { class: "bars" }, ...cells.map(([day, n]) =>
-    el("div", { class: "b" + (n ? "" : " zero"), title: day + ": " + n, style: n ? "height:" + Math.round(100 * n / max) + "%" : "" }))));
-  if (d.signs) {
-    out.push(el("h3", {}, "Signs and symptoms"));
-    out.push(el("p", { class: "mute small" }, "Counted from your journal over the last " + d.window_days + " days: " + d.signs.days_with_entries + " days with entries. Nothing is interpreted."));
-    const top = d.signs.top || [], m = Math.max(1, ...top.map(t => t.count));
-    out.push(...(top.length ? top.map(t => el("div", { class: "sign" }, el("span", {}, t.code.replace(/_/g, " ")),
-      el("span", {}, el("div", { class: "bar", style: "width:" + Math.round(100 * t.count / m) + "%" })), el("span", { class: "mute" }, t.count))) : [el("p", { class: "mute" }, "None in this window.")]));
-  }
-  if (d.targets) {
-    out.push(el("h3", {}, "Targets"));
-    out.push(...(d.targets.length ? d.targets.map(t => el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = t.id; renderSpace(); } },
-      el("div", { class: "tx" }, t.extract), el("div", { class: "meta" }, (t.tags || []).join(", ")))) : [el("p", { class: "mute" }, "No target yet.")]));
-  }
+  if (d.source === "default") out.push(el("p", { class: "mute small" }, "This space has no dashboard of its own yet: this is the plain one."));
   return out;
 }
 function treeView(tags) {

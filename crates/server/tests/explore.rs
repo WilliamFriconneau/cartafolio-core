@@ -139,7 +139,7 @@ fn an_owner_reads_a_space_and_nobody_else_does() -> Res {
             .is_some_and(|t| t.iter().any(|x| x["tag"] == "home")),
         "the tree of tags has its top level: {v}"
     );
-    assert_eq!(v["dashboard"]["window_days"], 30);
+    assert_eq!(v["dashboard"]["source"], "default");
     // Alex cannot see Sam's space, nor read, nor write into it.
     assert_eq!(get(&e, "space", &[("space", "notes")], ALEX).status, 404);
     assert_eq!(get(&e, "facts", &[("space", "notes")], ALEX).status, 404);
@@ -293,7 +293,17 @@ fn the_layout_is_read_changed_and_a_space_is_made_with_a_label() -> Res {
 }
 
 #[test]
-fn a_health_space_counts_its_signs_and_lists_its_targets() -> Res {
+fn a_space_shows_the_notes_day_by_day_until_it_has_a_dashboard() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let v = get(&e, "space", &[("space", "notes")], SAM).body_json();
+    assert_eq!(v["dashboard"]["source"], "default");
+    assert_eq!(v["dashboard"]["sections"][0]["type"], "daily");
+    Ok(())
+}
+
+#[test]
+fn a_stored_dashboard_counts_the_signs_and_lists_the_targets() -> Res {
     let e = env()?;
     let _ = get(&e, "state", &[], SAM);
     let ctl = e.app.brain.open_control()?;
@@ -311,27 +321,92 @@ fn a_health_space_counts_its_signs_and_lists_its_targets() -> Res {
             { "manifestations": [ { "code": "fatigue" } ] }
         ]})
     );
-    let r = post(
-        &e,
-        "fact/add",
-        SAM,
-        json!({ "space": health.as_str(), "text": entry, "tags": ["dossier/app"] }),
+    let add = |text: String, tag: &str| {
+        let r = post(
+            &e,
+            "fact/add",
+            SAM,
+            json!({ "space": health.as_str(), "text": text, "tags": [tag] }),
+        );
+        assert_eq!(r.status, 200, "{}", r.body_json());
+    };
+    add(entry, "dossier/app");
+    add(
+        "Sleep: wake at 4 am, follow for a month.".into(),
+        "cibles/sleep",
     );
-    assert_eq!(r.status, 200, "{}", r.body_json());
-    let t = post(
-        &e,
-        "fact/add",
-        SAM,
-        json!({ "space": health.as_str(), "text": "Sleep: wake at 4 am, follow for a month.",
-                "tags": ["cibles/sleep"] }),
-    );
-    assert_eq!(t.status, 200, "{}", t.body_json());
+    // Without a document, only the plain default.
     let v = get(&e, "space", &[("space", health.as_str())], SAM).body_json();
-    assert_eq!(v["kind"], "health");
-    let top = &v["dashboard"]["signs"]["top"];
-    assert_eq!(top[0]["code"], "fatigue");
-    assert_eq!(top[0]["count"], 2);
-    assert_eq!(v["dashboard"]["signs"]["days_with_entries"], 1);
-    assert_eq!(v["dashboard"]["targets"].as_array().map(Vec::len), Some(1));
+    assert_eq!(v["dashboard"]["source"], "default");
+    // With one, each section is computed from the notes; a section the catalogue does not know is an error.
+    add(
+        json!({ "version": 1, "title": "Health", "sections": [
+            { "type": "counts", "from": "journal-manifestations", "window_days": 30, "top": 5 },
+            { "type": "targets", "tag": "cibles" },
+            { "type": "text", "body": "A line for myself." },
+            { "type": "script", "body": "alert(1)" }
+        ]})
+        .to_string(),
+        "dashboard",
+    );
+    let v = get(&e, "space", &[("space", health.as_str())], SAM).body_json();
+    let d = &v["dashboard"];
+    assert_eq!(d["source"], "stored");
+    assert_eq!(d["title"], "Health");
+    assert_eq!(d["sections"][0]["top"][0]["code"], "fatigue");
+    assert_eq!(d["sections"][0]["top"][0]["count"], 2);
+    assert_eq!(d["sections"][0]["days_with_entries"], 1);
+    assert_eq!(d["sections"][1]["items"].as_array().map(Vec::len), Some(1));
+    assert_eq!(d["sections"][2]["body"], "A line for myself.");
+    assert_eq!(d["sections"][3]["error"], "unknown section type");
+    Ok(())
+}
+
+#[test]
+fn any_space_can_count_what_is_cited_in_it() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let add = |text: &str, tag: &str| {
+        let r = post(
+            &e,
+            "fact/add",
+            SAM,
+            json!({ "space": "notes", "text": text, "tags": [tag] }),
+        );
+        assert_eq!(r.status, 200, "{}", r.body_json());
+    };
+    add(
+        "Call with the Alpha team about the schedule.",
+        "work/projects/alpha",
+    );
+    add(
+        "Alpha budget approved, Beta still waiting.",
+        "work/projects/alpha",
+    );
+    add("Beta needs a review next week.", "work/projects/beta");
+    add(
+        &json!({ "version": 1, "sections": [
+            { "type": "counts", "from": "keywords", "terms": ["Alpha", "beta", "gamma"], "window_days": 30 },
+            { "type": "counts", "from": "tags", "tag": "work/projects", "window_days": 30 }
+        ]})
+        .to_string(),
+        "dashboard",
+    );
+    let v = get(&e, "space", &[("space", "notes")], SAM).body_json();
+    let by_terms = &v["dashboard"]["sections"][0]["top"];
+    assert_eq!(by_terms[0]["code"], "alpha");
+    assert_eq!(by_terms[0]["count"], 2);
+    assert_eq!(by_terms[1]["code"], "beta");
+    assert_eq!(by_terms[1]["count"], 2);
+    assert_eq!(
+        by_terms.as_array().map(Vec::len),
+        Some(2),
+        "gamma is never cited"
+    );
+    let by_tags = &v["dashboard"]["sections"][1]["top"];
+    assert_eq!(by_tags[0]["code"], "alpha");
+    assert_eq!(by_tags[0]["count"], 2);
+    assert_eq!(by_tags[1]["code"], "beta");
+    assert_eq!(by_tags[1]["count"], 1);
     Ok(())
 }
