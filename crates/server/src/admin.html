@@ -547,6 +547,7 @@ setInterval(() => { if (!document.hidden && $("#app") && !$("#app").hidden) load
 
 async function load() {
   S = await api("state");
+  S.connections = (S.connections || []).filter(c => c.agent !== "janitor");
   $("#login").hidden = true; $("#app").hidden = false;
   const me = S.me;
   $("#who").textContent = (me.display || me.name) + " · " + (isAdmin() ? "administrator" : "member");
@@ -1615,7 +1616,7 @@ function startWaiting() {
   const tick = async () => {
     try {
       const st = await api("state");
-      S.connections = st.connections;
+      S.connections = st.connections.filter(c => c.agent !== "janitor");
       const live = S.connections.filter(c => !c.revoked);
       let hit = null;
       if (p.token && W.created) hit = live.find(c => c.agent === W.created.agent && c.last_used_at);

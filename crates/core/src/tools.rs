@@ -919,7 +919,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     continue;
                 };
                 let conn = brain.open_space(&s)?;
-                let facts = facts::counts(&conn)?["active"].clone();
+                let facts = facts::counts(&conn)?["active"].as_u64().unwrap_or(0);
                 out.push(json!({
                     "name": s.as_str(),
                     "label": label.unwrap_or_else(|| s.as_str().into()),

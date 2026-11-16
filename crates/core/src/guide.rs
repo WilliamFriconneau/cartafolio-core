@@ -179,6 +179,26 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
 
     let mut spaces = caller.readable();
     spaces.sort();
+    // Notes waiting in « À trier » mean the janitor has not done its work: the first assistant to
+    // connect says so, and asks the person whether it should do the sorting.
+    for s in &spaces {
+        if crate::triage::is_triage(brain, s) {
+            let waiting = brain
+                .open_space(s)
+                .ok()
+                .and_then(|c| crate::facts::counts(&c).ok())
+                .and_then(|c| c["active"].as_u64())
+                .unwrap_or(0);
+            if waiting > 0 {
+                out.push_str(&format!(
+                    " ATTENTION: {waiting} notes wait in `{}` (nothing has sorted them). Tell the person at \
+                     once, and ask whether you should sort them now: read them, then `supersede` each into \
+                     the right space with its real tags, or `retire` it.",
+                    s.as_str()
+                ));
+            }
+        }
+    }
     // A vault reached only by paths (an app's layer, an inbox) is told nothing of what lies outside them:
     // not its guides, not its index, not its counters. The person's own guide goes only to a connection
     // that reaches at least one vault whole.
