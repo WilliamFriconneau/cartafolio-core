@@ -583,13 +583,24 @@ impl Handler for Manager {
             let Some(rest) = path.strip_prefix(base) else {
                 continue;
             };
-            if let Some((who, agent)) = rest.split_once('/')
-                && !agent.contains('/')
+            if let Some((who, after)) = rest.split_once('/')
                 && let Some(app) = self.person_app(who)
             {
-                let mut inner = req.clone();
-                inner.path = format!("{base}{agent}");
-                return app.handle(&inner);
+                // `<connection>`, or `<connection>/sync/<op>` (the synchronisation between peers).
+                let (agent, tail) = after.split_once('/').unwrap_or((after, ""));
+                if tail.is_empty()
+                    || (base == "/mcp/"
+                        && tail.starts_with("sync/")
+                        && !tail["sync/".len()..].contains('/'))
+                {
+                    let mut inner = req.clone();
+                    inner.path = if tail.is_empty() {
+                        format!("{base}{agent}")
+                    } else {
+                        format!("{base}{agent}/{tail}")
+                    };
+                    return app.handle(&inner);
+                }
             }
         }
         let reply = |app: &App| app.handle(req);

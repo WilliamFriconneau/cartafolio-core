@@ -177,6 +177,16 @@ impl App {
             ),
             // An address that names a vault: a key used there reaches that vault and no other.
             // One that names a connection: only that connection's key is let in.
+            // The synchronisation between peers, at the address of the peer's own connection.
+            (_, p) if p.starts_with("/mcp/") && p.contains("/sync/") => {
+                let rest = &p["/mcp/".len()..];
+                match rest.split_once("/sync/") {
+                    Some((agent, op)) if access::valid_agent(agent) && !op.contains('/') => {
+                        crate::sync_http::handle(self, req, now, agent, op)
+                    }
+                    _ => Response::json(404, &json!({ "error": "not found" })),
+                }
+            }
             (_, p) if p.starts_with("/mcp/") => match address_segment(&p["/mcp/".len()..]) {
                 Some(a) => self.mcp(req, now, a),
                 None => Response::json(404, &json!({ "error": "not found" })),

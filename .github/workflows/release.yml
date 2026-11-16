@@ -22,7 +22,7 @@ jobs:
       - name: Build with cross
         run: |
           cargo install cross --locked
-          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor -p memcp-bridge
+          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor -p memcp-bridge -p memcp-client --bin memcp-sync
       - name: Package
         run: |
           mkdir dist
@@ -30,6 +30,7 @@ jobs:
           cp target/${{ matrix.target }}/release/memcp-manager dist/memcp-manager-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-janitor dist/memcp-janitor-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-bridge dist/memcp-bridge-${{ github.ref_name }}-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/memcp-sync dist/memcp-sync-${{ github.ref_name }}-${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}
@@ -53,12 +54,12 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Build
-        run: cargo build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-janitor -p memcp-bridge
+        run: cargo build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-janitor -p memcp-bridge -p memcp-client --bin memcp-sync
       - name: Package
         shell: bash
         run: |
           mkdir dist
-          for b in memcp memcp-janitor memcp-bridge; do
+          for b in memcp memcp-janitor memcp-bridge memcp-sync; do
             cp "target/${{ matrix.target }}/release/${b}${{ matrix.ext }}" "dist/${b}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.ext }}"
           done
       - uses: actions/upload-artifact@v4
