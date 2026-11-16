@@ -72,6 +72,28 @@ fn fact_row(f: &facts::Fact) -> Value {
     })
 }
 
+/// A note, with the file it describes when it is the note of an attachment.
+fn row_with_file(conn: &Connection, f: &facts::Fact) -> Value {
+    let mut row = fact_row(f);
+    if f.typ.as_deref() == Some("file")
+        && let Ok(file) = conn.query_row(
+            "SELECT id, name, mime, size FROM files WHERE fact_id = ?1 AND status = 'active' LIMIT 1",
+            [&f.id],
+            |r| {
+                Ok(json!({
+                    "id": r.get::<_, String>(0)?,
+                    "name": r.get::<_, String>(1)?,
+                    "mime": r.get::<_, String>(2)?,
+                    "size": r.get::<_, i64>(3)?,
+                }))
+            },
+        )
+    {
+        row["file"] = file;
+    }
+    row
+}
+
 /// `GET /space?space=NAME`: the kind, the place in the tree, the counts, the tree of tags and the
 /// dashboard of the space.
 pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
@@ -477,7 +499,7 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
     };
     Response::json(
         200,
-        &json!({ "facts": rows.iter().map(fact_row).collect::<Vec<_>>() }),
+        &json!({ "facts": rows.iter().map(|f| row_with_file(&conn, f)).collect::<Vec<_>>() }),
     )
 }
 
@@ -497,7 +519,10 @@ pub fn one(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response {
                 .iter()
                 .map(fact_row)
                 .collect();
-            Response::json(200, &json!({ "fact": fact_row(&f), "history": history }))
+            Response::json(
+                200,
+                &json!({ "fact": row_with_file(&conn, &f), "history": history }),
+            )
         }
         Ok(None) => err(404, "unknown note"),
         Err(e) => fail(e),

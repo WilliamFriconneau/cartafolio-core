@@ -65,6 +65,31 @@ fn recover(app: &App, ctl: &Connection, req: &Request, now: i64) -> Response {
     }
 }
 
+/// A text made safe for the value of a query parameter.
+fn percent(text: &str) -> String {
+    text.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+/// A QR code, as an SVG image the page shows inline (nothing is fetched to draw it).
+fn qr_svg(text: &str) -> String {
+    use qrcode::{QrCode, render::svg};
+    QrCode::new(text.as_bytes())
+        .map(|c| {
+            c.render::<svg::Color>()
+                .min_dimensions(220, 220)
+                .quiet_zone(true)
+                .build()
+        })
+        .unwrap_or_default()
+}
+
 fn err(status: u16, msg: &str) -> Response {
     Response::json(status, &json!({ "error": msg }))
 }
@@ -379,11 +404,19 @@ fn action(
             let (code, triage) =
                 memcp_core::pairing::create_for_triage(&app.brain, &me.id, &me.name, util::now())
                     .map_err(fail)?;
+            // What a phone scans: one link, `memcp://join?server=…&code=…`, so that nothing is typed.
+            let link = format!(
+                "memcp://join?server={}&code={}",
+                percent(&app.public_url),
+                percent(&code)
+            );
             Ok(json!({
                 "code": code,
                 "server": app.public_url,
                 "expires_in": memcp_core::pairing::CODE_TTL,
                 "triage": triage,
+                "link": link,
+                "qr": qr_svg(&link),
             }))
         }
         "/triage/send" => {
@@ -530,13 +563,25 @@ fn action(
                 .decode(arg(body, "data")?.trim())
                 .map_err(|_| err(400, "data: not valid base64"))?;
             let note = body.get("note").and_then(Value::as_str).unwrap_or("");
-            let f = files::put(
+            let tags: Vec<String> = body
+                .get("tags")
+                .and_then(Value::as_array)
+                .map(|a| {
+                    a.iter()
+                        .filter_map(Value::as_str)
+                        .map(String::from)
+                        .collect()
+                })
+                .unwrap_or_default();
+            let tags = memcp_core::facts::normalize_tags(&tags).map_err(fail)?;
+            let f = files::put_tagged(
                 &app.brain,
                 &space,
                 &me.name,
                 arg(body, "name")?,
                 note,
                 &bytes,
+                &tags,
             )
             .map_err(fail)?;
             Ok(json!({ "file": f.to_json() }))

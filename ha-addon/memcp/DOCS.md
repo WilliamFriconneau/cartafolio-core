@@ -54,6 +54,20 @@ A vault has a kind (`memcp space kind NAME health`, or made from the catalogue w
 
 A vault of the money kind (`vault add money`, or `space kind finances money` for one that exists) carries the bank statement tools: `finances_import`, `finances_balances`, `finances_movements`, `finances_monthly` and `finances_rules`. Upload the bank's `.xlsx` export (a summary sheet and one sheet per account) from the Files section of the admin page, then ask an agent to import it: only the new movements are added, so an overlapping export is safe. The person's own rules (a monthly cap on a merchant, a merchant to watch, the words of an internal transfer) are set with `finances_rules` and stay in the space.
 
+## Voice notes and attachments
+
+On the page of a space, **Record** keeps a voice note, **Attach files** keeps photos, PDF, text and recordings; each is a note of the space, with its file. The microphone needs the page to be served over https (Home Assistant's own address is, in the app or through Nabu Casa or your own certificate).
+
+A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the same space and the recording is erased a week later. Without a service here, a computer that runs the desktop bridge with a local speech model reads the same recordings, and nothing leaves your network.
+
+| Option | Meaning |
+|---|---|
+| `transcribe` | on or off |
+| `transcribe_person` | whose recordings (defaults to `janitor_person`) |
+| `transcribe_spaces` | the spaces whose recordings are read, separated by commas (by default the person's À trier) |
+| `transcribe_api_url`, `transcribe_api_model`, `transcribe_api_key` | the speech service |
+| `transcribe_language` | `fr`, `en`… or empty to let the service detect it |
+
 ## The janitor (optional)
 
 Off by default. When it is on, it files the notes that wait in the inboxes of one person, never for nothing: once the writing

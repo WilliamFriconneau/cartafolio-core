@@ -337,11 +337,7 @@ fn one(
     // A private folder for its files, under the state folder.
     let base = state_dir.join("work");
     std::fs::create_dir_all(&base).map_err(|e| Error::Io(e.to_string()))?;
-    {
-        use std::os::unix::fs::PermissionsExt;
-        std::fs::set_permissions(&base, std::fs::Permissions::from_mode(0o700))
-            .map_err(|e| Error::Io(e.to_string()))?;
-    }
+    crate::private::set_private_dir(&base).map_err(|e| Error::Io(e.to_string()))?;
     let work = base.join(id.replace(['/', '.'], "_"));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir(&work).map_err(|e| Error::Io(e.to_string()))?;

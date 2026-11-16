@@ -4,7 +4,8 @@ ARG BUILD_ARCH
 # Set in build.yaml, and kept equal to `version` in config.yaml (the CI checks it).
 ARG MEMCP_VERSION
 # The static (musl) programs of the release of this version, checked against the SHA256SUMS published with it:
-# the manager, the engine (whose commands work on one person's directory) and the optional janitor.
+# the manager, the engine (whose commands work on one person's directory), the optional janitor and the bridge
+# (which reads voice notes by a speech service when that is turned on).
 # curl stays: the base image's own tools (bashio, which reads the options) need it.
 RUN apk add --no-cache tzdata curl \
  && case "${BUILD_ARCH}" in \
@@ -14,7 +15,7 @@ RUN apk add --no-cache tzdata curl \
     esac \
  && base="https://github.com/WilliamFriconneau/memcp/releases/download/v${MEMCP_VERSION}" \
  && cd /tmp && curl -fsSLO "${base}/SHA256SUMS" \
- && for b in memcp memcp-manager memcp-janitor; do \
+ && for b in memcp memcp-manager memcp-janitor memcp-bridge; do \
       f="${b}-v${MEMCP_VERSION}-${T}"; \
       curl -fsSLO "${base}/${f}"; \
       grep " ${f}\$" SHA256SUMS | sha256sum -c -; \

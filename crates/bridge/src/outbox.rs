@@ -9,10 +9,10 @@ use std::collections::hash_map::RandomState;
 use std::fs;
 use std::hash::{BuildHasher, Hasher};
 use std::io::Write;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
+use crate::private::{PrivateDir as _, PrivateFile as _};
 use serde_json::{Value, json};
 
 use crate::{Error, Item, Kind, State};
@@ -95,7 +95,7 @@ impl Outbox {
         for sub in ["queue", "sent"] {
             fs::DirBuilder::new()
                 .recursive(true)
-                .mode(0o700)
+                .private_dir()
                 .create(root.join(sub))
                 .map_err(|e| io(&e))?;
         }
@@ -123,7 +123,7 @@ impl Outbox {
             .create(true)
             .truncate(false)
             .write(true)
-            .mode(0o600)
+            .private_file()
             .open(self.root.join(".lock"))
             .map_err(|e| io(&e))?;
         if wait {
@@ -161,7 +161,7 @@ impl Outbox {
             .write(true)
             .create(true)
             .truncate(true)
-            .mode(0o600)
+            .private_file()
             .open(&tmp)
             .map_err(|e| io(&e))?;
         f.write_all(bytes).map_err(|e| io(&e))?;

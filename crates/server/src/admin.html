@@ -217,9 +217,9 @@ details.fold[open]>summary{margin-bottom:8px}
         <div class="acts"><button type="button" class="primary" id="open-wizard">Connect an assistant</button></div>
       </div>
       <div class="tile t2">
-        <h3>Connect a bridge</h3>
-        <p class="mute small" style="margin:0">The capture app on a computer or a phone. What it captures goes into À trier. You get a code to type into the app: it works once, for ten minutes.</p>
-        <form id="pair-form" style="margin:0"><div class="acts" style="padding:0"><button class="primary">Get a code</button></div></form>
+        <h3>Join a MemCP network</h3>
+        <p class="mute small" style="margin:0">A computer or a phone joins this memory as a node of its own: scan the code with the app, or type it. What it captures goes into À trier. It works once, for ten minutes.</p>
+        <form id="pair-form" style="margin:0"><div class="acts" style="padding:0"><button class="primary">Show the code</button></div></form>
       </div>
       <div class="tile t3" id="triage-tile" hidden>
         <h3>À trier <span class="badge" id="triage-count"></span></h3>
@@ -230,7 +230,7 @@ details.fold[open]>summary{margin-bottom:8px}
 
     <section>
       <h2>Spaces</h2>
-      <p class="mute small">What you keep, one tile per vault. Open one to an assistant on its own, or write its instructions.</p>
+      <p class="mute small">What you keep, one tile per space. Open one to an assistant on its own, or write its instructions.</p>
       <div id="spaces" class="bento"></div>
     </section>
 
@@ -407,8 +407,9 @@ details.fold[open]>summary{margin-bottom:8px}
 </dialog>
 
 <dialog id="pair-dlg">
-  <h2>Connect a bridge</h2>
-  <p class="mute small">In the app: type the address and the code. The code works once, for <b id="pair-left">10:00</b>.</p>
+  <h2>Join a MemCP network</h2>
+  <p class="mute small">In the app: choose “Join a MemCP network” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
+  <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
   <div class="small mute">Address of the server</div>
   <div class="pair-row"><code id="pair-server"></code><button type="button" class="link" data-copy="pair-server">copy</button></div>
   <div class="small mute">Code</div>
@@ -523,7 +524,7 @@ const q = encodeURIComponent;
 function fail(x) { $("#err").textContent = x.message || String(x); setTimeout(() => { $("#err").textContent = ""; }, 8000); }
 async function loadSpace(name) {
   const keep = SP && SP.name === name ? SP : null;
-  SP = { name, tab: keep ? keep.tab : "dashboard", tag: keep ? keep.tag : "", q: keep ? keep.q : "", open: null };
+  SP = { name, tab: keep ? keep.tab : "journal", tag: keep ? keep.tag : "", q: keep ? keep.q : "", open: null, hash: keep ? keep.hash : "", jlimit: keep ? keep.jlimit : 100 };
   try { SP.ov = await api("space?space=" + q(name)); } catch (x) { return fail(x); }
   renderSpace();
 }
@@ -532,12 +533,74 @@ function renderSpace() {
   $("#space-title").textContent = ov.label || ov.space;
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
   $("#space-sub").textContent = (kl ? kl.label : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString("en") + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + ov.parent : "");
-  $("#space-tabs").replaceChildren(...[["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
+  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
     el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
   const body = $("#space-body");
-  if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
+  if (SP.tab === "journal") journalView(body);
+  else if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
   else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
   else notesView(body);
+}
+
+// ---- The journal: every space reads as a journal, day by day ----
+const HASHTAG = /#[\p{L}\p{N}_-]+/gu;
+function withHashtags(text, onTag) {
+  const out = []; let last = 0;
+  for (const m of text.matchAll(HASHTAG)) {
+    out.push(text.slice(last, m.index));
+    out.push(el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: e => { e.stopPropagation(); onTag(m[0]); } }, m[0]));
+    last = m.index + m[0].length;
+  }
+  out.push(text.slice(last));
+  return out;
+}
+function dayTitle(d) {
+  const today = new Date(), y = new Date(Date.now() - 86400000);
+  const same = (a, b) => a.toDateString() === b.toDateString();
+  if (same(d, today)) return "Today";
+  if (same(d, y)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+async function journalView(body) {
+  const text = el("textarea", { placeholder: "Write a note. #hashtags file it where it belongs." });
+  const add = async () => {
+    if (!text.value.trim()) return;
+    try { await api("fact/add", { space: SP.name, text: text.value, tags: [] }); text.value = ""; await loadSpace(SP.name); } catch (x) {
+      if (/close notes exist/.test(x.message)) fail(new Error("A very close note exists already: open the Notes tab to correct it or to add this one anyway.")); else fail(x);
+    }
+  };
+  const attachInput = el("input", { type: "file", multiple: true, hidden: true, accept: "image/*,audio/*,.m4a,.caf,application/pdf,text/plain,text/markdown,.xlsx" });
+  attachInput.addEventListener("change", async () => {
+    try { for (const f of [...attachInput.files]) await uploadFile(f, [], ""); attachInput.value = ""; toast("Attached"); await loadSpace(SP.name); } catch (x) { fail(x); }
+  });
+  const recBtn = el("button", { type: "button", onclick: () => toggleRecord(recBtn, body) }, REC ? "■ Stop" : "● Record");
+  const compose = el("div", { class: "editor" }, attachInput, text,
+    el("div", { class: "row" }, el("button", { type: "button", class: "primary", onclick: add }, "Add to the journal"),
+      el("button", { type: "button", onclick: () => attachInput.click() }, "Attach files"), recBtn));
+  const list = el("div", {}, el("p", { class: "mute" }, "…"));
+  const filter = SP.hash ? el("p", { class: "mute small" }, "Notes with ", el("b", {}, SP.hash), " ", el("button", { type: "button", class: "link", onclick: () => { SP.hash = ""; journalView(body); } }, "✕ show all")) : null;
+  body.replaceChildren(compose, ...(filter ? [filter] : []), list);
+  let facts;
+  try { facts = (await api("facts?space=" + q(SP.name) + "&limit=" + SP.jlimit)).facts; } catch (x) { return fail(x); }
+  if (SP.hash) facts = facts.filter(f => (f.text.match(HASHTAG) || []).some(h => h.toLowerCase() === SP.hash.toLowerCase()));
+  const days = new Map();
+  for (const f of facts) {
+    const d = new Date(f.created_at * 1000), key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    if (!days.has(key)) days.set(key, { d, items: [] });
+    days.get(key).items.push(f);
+  }
+  const rows = [];
+  for (const { d, items } of days.values()) {
+    rows.push(el("h3", { style: "margin:18px 0 4px" }, dayTitle(d)));
+    for (const f of items) {
+      const hm = new Date(f.created_at * 1000).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+      rows.push(el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = f.id; renderSpace(); } },
+        el("div", { class: "meta" }, hm),
+        el("div", { class: "tx" }, ...withHashtags(f.file ? (f.extract || "") : f.text, h => { SP.hash = h; journalView(body); }), f.file ? attachmentLine(f.file) : null)));
+    }
+  }
+  if (facts.length >= SP.jlimit && !SP.hash) rows.push(el("p", {}, el("button", { type: "button", onclick: () => { SP.jlimit += 100; journalView(body); } }, "Older notes")));
+  list.replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, SP.hash ? "No note with this hashtag in the latest ones." : "Nothing yet: write the first note above.")]));
 }
 function dashboardView(d) {
   const out = [];
@@ -591,19 +654,81 @@ async function notesView(body) {
   const search = el("input", { placeholder: "search the notes", value: SP.q, size: 30 });
   const go = () => { SP.q = search.value.trim(); notesView(body); };
   search.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
-  const bar = el("div", { class: "row" }, search, el("button", { type: "button", onclick: go }, "Search"),
+  const attachInput = el("input", { type: "file", multiple: true, hidden: true, accept: "image/*,audio/*,.m4a,.caf,application/pdf,text/plain,text/markdown,.xlsx" });
+  attachInput.addEventListener("change", async () => {
+    try {
+      for (const f of [...attachInput.files]) await uploadFile(f, SP.tag ? [SP.tag] : [], "");
+      attachInput.value = ""; toast("Attached"); await loadSpace(SP.name); SP.tab = "notes"; renderSpace();
+    } catch (x) { fail(x); }
+  });
+  const recBtn = el("button", { type: "button", onclick: () => toggleRecord(recBtn, body) }, REC ? "■ Stop" : "● Record");
+  const bar = el("div", { class: "row" }, attachInput, search, el("button", { type: "button", onclick: go }, "Search"),
     SP.tag ? el("button", { type: "button", class: "link", onclick: () => { SP.tag = ""; notesView(body); } }, "path: " + SP.tag + " ✕") : null,
-    el("button", { type: "button", class: "primary", onclick: () => newNote(body) }, "New note"));
+    el("button", { type: "button", class: "primary", onclick: () => newNote(body) }, "New note"),
+    el("button", { type: "button", onclick: () => attachInput.click() }, "Attach files"),
+    recBtn);
   const list = el("div", {}, el("p", { class: "mute" }, "…"));
   const editor = el("div", {});
   body.replaceChildren(bar, editor, list);
   try {
     const r = await api("facts?space=" + q(SP.name) + (SP.tag ? "&tag=" + q(SP.tag) : "") + (SP.q ? "&q=" + q(SP.q) : ""));
     list.replaceChildren(...(r.facts.length ? r.facts.map(f => el("div", { class: "note", onclick: () => openNote(body, f.id) },
-      el("div", { class: "tx" }, f.extract, el("div", {}, ...(f.tags || []).map(t => el("span", { class: "chip" }, t)))),
+      el("div", { class: "tx" }, f.extract, f.file ? attachmentLine(f.file) : null, el("div", {}, ...(f.tags || []).map(t => el("span", { class: "chip" }, t)))),
       el("div", { class: "meta" }, (f.created || "").slice(0, 10) + " · " + f.author))) : [el("p", { class: "mute" }, "No note here.")]));
   } catch (x) { fail(x); }
   if (SP.open) { const id = SP.open; SP.open = null; openNote(body, id); }
+}
+
+// ---- Attachments and voice notes ----
+const sizeOf = n => n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " KB" : (n / 1048576).toFixed(1) + " MB";
+async function uploadFile(file, tags, note) {
+  const limit = (file.type || "").startsWith("audio/") ? 24 : 4;
+  if (file.size > limit * 1048576) throw new Error(file.name + " is over " + limit + " MB.");
+  const data = await new Promise((ok, no) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = no; r.readAsDataURL(file); });
+  return api("files", { space: SP.name, name: file.name, note: note || "", tags, data });
+}
+async function fileBlobUrl(f) {
+  const headers = token ? { Authorization: "Bearer " + token } : {};
+  const r = await fetch(base + "admin/api/file?space=" + q(SP.name) + "&id=" + q(f.id), { headers, credentials: "same-origin" });
+  if (!r.ok) throw new Error("Cannot open " + f.name);
+  return URL.createObjectURL(await r.blob());
+}
+function attachmentLine(f) {
+  const holder = el("span", { class: "mute small" });
+  const open = el("button", { type: "button", class: "link", onclick: async e => {
+    e.stopPropagation();
+    try {
+      const url = await fileBlobUrl(f);
+      if ((f.mime || "").startsWith("audio/")) holder.replaceChildren(el("audio", { controls: true, src: url, autoplay: true }));
+      else window.open(url, "_blank", "noopener");
+    } catch (x) { fail(x); }
+  } }, (f.mime || "").startsWith("audio/") ? "▶ Play" : "Open");
+  return el("div", { class: "small", style: "margin-top:4px" }, "📎 " + f.name + " · " + sizeOf(f.size) + " ", open, holder);
+}
+let REC = null, RECTIMER = null;
+async function toggleRecord(btn, body) {
+  if (REC) { REC.stop(); return; }
+  if (!navigator.mediaDevices || !window.MediaRecorder) return fail(new Error("This browser cannot record. Open the page over https in a recent browser."));
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (x) { return fail(new Error("The microphone is not allowed on this page (it needs https): " + x.message)); }
+  const mime = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4", "audio/ogg;codecs=opus"].find(m => MediaRecorder.isTypeSupported(m)) || "";
+  const mr = new MediaRecorder(stream, mime ? { mimeType: mime } : {});
+  const chunks = [], t0 = Date.now();
+  mr.ondataavailable = e => { if (e.data && e.data.size) chunks.push(e.data); };
+  mr.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop()); REC = null; clearInterval(RECTIMER); btn.textContent = "● Record";
+    const type = (mr.mimeType || mime || "audio/webm").split(";")[0];
+    const ext = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+    const d = new Date(), p2 = n => String(n).padStart(2, "0");
+    const name = "dictation-" + d.getFullYear() + "-" + p2(d.getMonth() + 1) + "-" + p2(d.getDate()) + "-" + p2(d.getHours()) + "h" + p2(d.getMinutes()) + "." + ext;
+    try {
+      await uploadFile(new File(chunks, name, { type }), ["inbox/audio"], "Voice note recorded on the page");
+      toast("Voice note kept"); await loadSpace(SP.name); SP.tab = "notes"; renderSpace();
+    } catch (x) { fail(x); }
+  };
+  mr.start(); REC = mr; btn.textContent = "■ Stop (0:00)";
+  RECTIMER = setInterval(() => { const s = Math.floor((Date.now() - t0) / 1000); btn.textContent = "■ Stop (" + Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0") + ")"; }, 500);
 }
 function noteForm(opts) {
   const text = el("textarea", { placeholder: "the note" }, opts.text || "");
@@ -644,6 +769,7 @@ async function openNote(body, id) {
   $$(".editor", body).forEach(e => e.remove());
   body.insertBefore(el("div", { class: "editor" },
     el("div", { class: "mute small" }, r.fact.author + " · " + (r.fact.created || "") + " · " + r.fact.status),
+    r.fact.file ? attachmentLine(r.fact.file) : null,
     f.text, f.tags, active ? reason : null,
     el("div", { class: "row" },
       active ? el("button", { type: "button", class: "primary", onclick: async () => {
@@ -1420,6 +1546,9 @@ $("#pair-form").addEventListener("submit", async e => {
   if (!r) return;
   $("#pair-server").textContent = r.server;
   $("#pair-code").textContent = r.code;
+  const qr = $("#pair-qr");
+  qr.replaceChildren();
+  if (r.qr) { const img = el("img", { alt: "QR code to join this memory", width: 220, height: 220, src: "data:image/svg+xml;utf8," + encodeURIComponent(r.qr) }); qr.append(img); }
   $$("#pair-dlg [data-copy]").forEach(b => { b.textContent = "copy"; });
   const end = Date.now() + (r.expires_in || 600) * 1000;
   clearInterval(pairTimer);

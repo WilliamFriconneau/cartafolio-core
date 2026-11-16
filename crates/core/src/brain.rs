@@ -1,12 +1,12 @@
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::Write;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags, OptionalExtension};
 
 use crate::error::{Error, Result};
+use crate::fsx::{PrivateDir as _, PrivateFile as _};
 use crate::schema::{CONTROL_MIGRATIONS, SPACE_MIGRATIONS};
 use crate::space::Space;
 use crate::text::Language;
@@ -344,11 +344,14 @@ impl Brain {
                 data.display()
             )));
         }
-        DirBuilder::new().recursive(true).mode(0o700).create(root)?;
+        DirBuilder::new()
+            .recursive(true)
+            .private_dir()
+            .create(root)?;
         let root = fs::canonicalize(root)?;
-        fs::set_permissions(&root, fs::Permissions::from_mode(0o700))?;
+        crate::fsx::set_private_dir(&root)?;
         let dest = root.join(format!("backup-{}", crate::util::compact(at)));
-        DirBuilder::new().mode(0o700).create(&dest)?;
+        DirBuilder::new().private_dir().create(&dest)?;
 
         let files = self
             .spaces()?
@@ -360,7 +363,7 @@ impl Brain {
             let target = dest.join(&file);
             let conn = self.open_existing(&file)?;
             conn.execute("VACUUM INTO ?1", [target.to_string_lossy()])?;
-            fs::set_permissions(&target, fs::Permissions::from_mode(0o600))?;
+            crate::fsx::set_private_file(&target)?;
             let copy = Connection::open_with_flags(&target, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
             let ok: String = copy.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
             if ok != "ok" {
@@ -371,7 +374,7 @@ impl Brain {
         let cfg = self.dir.join(CONFIG_FILE);
         if cfg.is_file() {
             fs::copy(&cfg, dest.join(CONFIG_FILE))?;
-            fs::set_permissions(dest.join(CONFIG_FILE), fs::Permissions::from_mode(0o600))?;
+            crate::fsx::set_private_file(&dest.join(CONFIG_FILE))?;
         }
 
         let mut old: Vec<PathBuf> = fs::read_dir(&root)?
@@ -405,7 +408,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
     if !from.is_dir() {
         return Ok(());
     }
-    DirBuilder::new().recursive(true).mode(0o700).create(to)?;
+    DirBuilder::new().recursive(true).private_dir().create(to)?;
     for e in fs::read_dir(from)? {
         let e = e?;
         let (src, dst) = (e.path(), to.join(e.file_name()));
@@ -414,7 +417,7 @@ fn copy_tree(from: &Path, to: &Path) -> Result<()> {
             copy_tree(&src, &dst)?;
         } else if meta.is_file() {
             fs::copy(&src, &dst)?;
-            fs::set_permissions(&dst, fs::Permissions::from_mode(0o600))?;
+            crate::fsx::set_private_file(&dst)?;
         }
     }
     Ok(())
@@ -454,8 +457,9 @@ fn prepare_dir(dir: &Path) -> Result<bool> {
                 return Err(Error::AlreadyInitialized(dir.to_path_buf()));
             }
         }
-        let mode = meta.permissions().mode() & 0o777;
-        if mode & 0o077 != 0 {
+        if let Some(mode) = crate::fsx::mode_bits(&meta).map(|m| m & 0o777)
+            && mode & 0o077 != 0
+        {
             return Err(Error::DirectoryTooOpen {
                 path: dir.to_path_buf(),
                 mode,
@@ -463,7 +467,10 @@ fn prepare_dir(dir: &Path) -> Result<bool> {
         }
         Ok(false)
     } else {
-        DirBuilder::new().recursive(true).mode(0o700).create(dir)?;
+        DirBuilder::new()
+            .recursive(true)
+            .private_dir()
+            .create(dir)?;
         Ok(true)
     }
 }
@@ -480,7 +487,7 @@ fn write_private(path: &Path, content: &str, created: &mut Vec<PathBuf>) -> Resu
     let mut f = OpenOptions::new()
         .write(true)
         .create_new(true)
-        .mode(0o600)
+        .private_file()
         .open(path)?;
     created.push(path.to_path_buf());
     f.write_all(content.as_bytes())?;
@@ -493,7 +500,7 @@ fn create_private_file(path: &Path, created: &mut Vec<PathBuf>) -> Result<()> {
     OpenOptions::new()
         .write(true)
         .create_new(true)
-        .mode(0o600)
+        .private_file()
         .open(path)?;
     created.push(path.to_path_buf());
     Ok(())

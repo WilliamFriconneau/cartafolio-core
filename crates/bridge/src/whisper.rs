@@ -15,6 +15,11 @@ pub struct VoiceSettings {
     pub whisper_lang: String,
     pub whisper_threads: u32,
     pub ffmpeg_cmd: String,
+    /// A speech service of the OpenAI kind (`…/v1/audio/transcriptions`): when set, a recording is sent there and no
+    /// speech model or `ffmpeg` is needed on this machine. The recording leaves it: say so to the person.
+    pub api_url: Option<String>,
+    pub api_key: Option<String>,
+    pub api_model: String,
     /// A table of terms and their wrong spellings (a Markdown table), to help and to correct Whisper.
     pub lexicon: Option<PathBuf>,
 }
@@ -27,6 +32,9 @@ impl Default for VoiceSettings {
             whisper_lang: "fr".into(),
             whisper_threads: 8,
             ffmpeg_cmd: "ffmpeg".into(),
+            api_url: None,
+            api_key: None,
+            api_model: "whisper-1".into(),
             lexicon: None,
         }
     }
@@ -242,6 +250,9 @@ pub struct Whisper {
     lang: String,
     threads: u32,
     ffmpeg: String,
+    api_url: Option<String>,
+    api_key: Option<String>,
+    api_model: String,
     lexicon: Lexicon,
 }
 
@@ -253,12 +264,18 @@ impl Whisper {
             lang: c.whisper_lang.clone(),
             threads: c.whisper_threads,
             ffmpeg: c.ffmpeg_cmd.clone(),
+            api_url: c.api_url.clone(),
+            api_key: c.api_key.clone(),
+            api_model: c.api_model.clone(),
             lexicon: Lexicon::load(c.lexicon.as_deref()),
         }
     }
 
     /// What `audio` says. `work` is a folder for the temporary files.
     pub fn transcribe(&self, audio: &Path, work: &Path) -> Result<Heard, String> {
+        if let Some(url) = &self.api_url {
+            return self.via_api(url, audio);
+        }
         let wav = work.join("audio.wav");
         let (made, why) = run(
             Command::new(&self.ffmpeg)
@@ -310,6 +327,92 @@ impl Whisper {
         Ok(Heard::Text {
             text: self.lexicon.correct(&text),
             seconds,
+        })
+    }
+
+    /// What `audio` says, by a speech service of the OpenAI kind: one multipart request, a JSON answer with `text`.
+    fn via_api(&self, url: &str, audio: &Path) -> Result<Heard, String> {
+        use std::time::Duration;
+        const MAX: usize = 24 * 1024 * 1024;
+        let bytes = std::fs::read(audio).map_err(|e| format!("{}: {e}", audio.display()))?;
+        if bytes.is_empty() {
+            return Ok(Heard::Nothing);
+        }
+        if bytes.len() > MAX {
+            return Err("the recording is over 24 MB: too long for a speech service".into());
+        }
+        let name = audio
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("audio")
+            .replace(['"', '\\', '\r', '\n'], "_");
+        let boundary = format!(
+            "memcp{:x}{:x}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        );
+        let mut body: Vec<u8> = Vec::with_capacity(bytes.len() + 1024);
+        let mut field = |k: &str, v: &str| {
+            body.extend_from_slice(
+                format!(
+                    "--{boundary}\r\nContent-Disposition: form-data; name=\"{k}\"\r\n\r\n{v}\r\n"
+                )
+                .as_bytes(),
+            );
+        };
+        field("model", &self.api_model);
+        field("response_format", "json");
+        if !self.lang.is_empty() {
+            field("language", &self.lang);
+        }
+        body.extend_from_slice(
+            format!(
+                "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{name}\"\r\nContent-Type: application/octet-stream\r\n\r\n"
+            )
+            .as_bytes(),
+        );
+        body.extend_from_slice(&bytes);
+        body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(Duration::from_secs(600)))
+            .http_status_as_error(false)
+            .build()
+            .into();
+        let mut req = agent.post(url).header(
+            "Content-Type",
+            &format!("multipart/form-data; boundary={boundary}"),
+        );
+        if let Some(k) = &self.api_key {
+            req = req.header("Authorization", &format!("Bearer {k}"));
+        }
+        let mut resp = req
+            .send(&body[..])
+            .map_err(|e| format!("the speech service cannot be reached: {e}"))?;
+        let status = resp.status().as_u16();
+        let text = resp
+            .body_mut()
+            .read_to_string()
+            .map_err(|e| format!("the speech service answered badly: {e}"))?;
+        if !(200..300).contains(&status) {
+            return Err(format!(
+                "the speech service refused ({status}): {}",
+                text.chars().take(200).collect::<String>()
+            ));
+        }
+        let said = serde_json::from_str::<serde_json::Value>(&text)
+            .ok()
+            .and_then(|v| v["text"].as_str().map(str::to_string))
+            .unwrap_or(text);
+        let said = clean(&said);
+        if said.is_empty() || parasite(&said) {
+            return Ok(Heard::Nothing);
+        }
+        Ok(Heard::Text {
+            text: self.lexicon.correct(&said),
+            seconds: 0,
         })
     }
 
@@ -397,5 +500,106 @@ mod tests {
         );
         assert_eq!(Lexicon::load(None).prompt(), "");
         let _ = std::fs::remove_dir_all(dir);
+    }
+}
+
+#[cfg(test)]
+mod api_tests {
+    #![allow(clippy::expect_used)]
+
+    use super::{Heard, VoiceSettings, Whisper};
+
+    /// A speech service that answers once with `status` and `body`, and hands back the request it got.
+    fn service(
+        status: u16,
+        body: &'static str,
+    ) -> (String, std::thread::JoinHandle<(String, String)>) {
+        let server = tiny_http::Server::http("127.0.0.1:0").expect("listen");
+        let url = format!("http://{}/v1/audio/transcriptions", server.server_addr());
+        let h = std::thread::spawn(move || {
+            let mut rq = server.recv().expect("request");
+            let auth = rq
+                .headers()
+                .iter()
+                .find(|h| h.field.equiv("Authorization"))
+                .map(|h| h.value.to_string())
+                .unwrap_or_default();
+            let mut raw = Vec::new();
+            rq.as_reader().read_to_end(&mut raw).expect("body");
+            let text = String::from_utf8_lossy(&raw).to_string();
+            rq.respond(tiny_http::Response::from_string(body).with_status_code(status))
+                .expect("respond");
+            (auth, text)
+        });
+        (url, h)
+    }
+
+    fn settings(url: &str) -> VoiceSettings {
+        VoiceSettings {
+            api_url: Some(url.into()),
+            api_key: Some("sk-test".into()),
+            api_model: "whisper-test".into(),
+            whisper_lang: "fr".into(),
+            ..VoiceSettings::default()
+        }
+    }
+
+    fn recording() -> std::path::PathBuf {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        static N: AtomicU32 = AtomicU32::new(0);
+        let n = N.fetch_add(1, Ordering::SeqCst);
+        let p =
+            std::env::temp_dir().join(format!("memcp-voice-api-{}-{n}.webm", std::process::id()));
+        std::fs::write(&p, [0x1A, 0x45, 0xDF, 0xA3, 1, 2, 3, 4]).expect("write");
+        p
+    }
+
+    #[test]
+    fn a_recording_is_sent_to_the_speech_service_and_its_text_comes_back() {
+        let (url, seen) = service(200, r#"{"text":" Il faut appeler le plombier vendredi. "}"#);
+        let audio = recording();
+        let heard = Whisper::new(&settings(&url))
+            .transcribe(&audio, &std::env::temp_dir())
+            .expect("transcribed");
+        assert_eq!(
+            heard,
+            Heard::Text {
+                text: "Il faut appeler le plombier vendredi.".into(),
+                seconds: 0
+            }
+        );
+        let (auth, request) = seen.join().expect("service");
+        assert_eq!(auth, "Bearer sk-test");
+        assert!(
+            request.contains("name=\"model\"\r\n\r\nwhisper-test"),
+            "{request}"
+        );
+        assert!(request.contains("name=\"language\"\r\n\r\nfr"), "{request}");
+        assert!(request.contains("filename=\"memcp-voice-api-"), "{request}");
+        let _ = std::fs::remove_file(audio);
+    }
+
+    #[test]
+    fn what_a_speech_service_makes_up_on_a_silence_is_nothing() {
+        let (url, seen) = service(200, r#"{"text":"Sous-titrage Société Radio-Canada"}"#);
+        let audio = recording();
+        let heard = Whisper::new(&settings(&url))
+            .transcribe(&audio, &std::env::temp_dir())
+            .expect("answered");
+        assert_eq!(heard, Heard::Nothing);
+        let _ = seen.join();
+        let _ = std::fs::remove_file(audio);
+    }
+
+    #[test]
+    fn a_refusal_of_the_service_is_an_error_that_says_why() {
+        let (url, seen) = service(401, r#"{"error":"bad key"}"#);
+        let audio = recording();
+        let err = Whisper::new(&settings(&url))
+            .transcribe(&audio, &std::env::temp_dir())
+            .expect_err("refused");
+        assert!(err.contains("401") && err.contains("bad key"), "{err}");
+        let _ = seen.join();
+        let _ = std::fs::remove_file(audio);
     }
 }

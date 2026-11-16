@@ -410,3 +410,76 @@ fn any_space_can_count_what_is_cited_in_it() -> Res {
     assert_eq!(by_tags[1]["count"], 1);
     Ok(())
 }
+
+#[test]
+fn an_attachment_and_a_voice_note_show_up_as_notes_with_their_file() -> Res {
+    use base64::Engine as _;
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let b64 = |b: &[u8]| base64::engine::general_purpose::STANDARD.encode(b);
+    let r = post(
+        &e,
+        "files",
+        SAM,
+        json!({ "space": "notes", "name": "minutes.txt", "note": "Minutes of the meeting",
+                "tags": ["work/meetings"], "data": b64(b"Decisions: ship on Friday.") }),
+    );
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    // What a browser records: WebM with Opus, named as a recording, filed to be transcribed.
+    let webm = [
+        0x1A, 0x45, 0xDF, 0xA3, 1, 0, 0, 0, 0, 0, 0, 0x1F, 0x42, 0x86, 0x81, 1,
+    ];
+    let v = post(
+        &e,
+        "files",
+        SAM,
+        json!({ "space": "notes", "name": "dictation-2026-11-16-18h30.webm",
+                "note": "Voice note recorded on the page", "tags": ["inbox/audio"], "data": b64(&webm) }),
+    );
+    assert_eq!(v.status, 200, "{}", v.body_json());
+    assert_eq!(v.body_json()["file"]["mime"], "audio/webm");
+    let all = get(&e, "facts", &[("space", "notes")], SAM).body_json();
+    let rows = all["facts"].as_array().ok_or("no facts")?;
+    assert_eq!(rows.len(), 2);
+    assert!(
+        rows.iter().all(|f| f["file"]["id"].is_string()),
+        "each note carries its file: {all}"
+    );
+    let audio = get(
+        &e,
+        "facts",
+        &[("space", "notes"), ("tag", "inbox/audio")],
+        SAM,
+    )
+    .body_json();
+    assert_eq!(audio["facts"][0]["file"]["mime"], "audio/webm");
+    let fid = audio["facts"][0]["file"]["id"].as_str().ok_or("no id")?;
+    let bytes = get(&e, "file", &[("space", "notes"), ("id", fid)], SAM);
+    assert_eq!(bytes.status, 200);
+    assert_eq!(bytes.body, webm.to_vec());
+    // Another person cannot read it.
+    person_with(&e, ALEX, "private")?;
+    assert_eq!(
+        get(&e, "file", &[("space", "notes"), ("id", fid)], ALEX).status,
+        404
+    );
+    Ok(())
+}
+
+#[test]
+fn joining_a_network_gives_a_link_and_a_qr_code_to_scan() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let r = post(&e, "pairing", SAM, json!({}));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let v = r.body_json();
+    let code = v["code"].as_str().ok_or("no code")?;
+    let link = v["link"].as_str().ok_or("no link")?;
+    assert!(link.starts_with("memcp://join?server="), "{link}");
+    assert!(link.ends_with(&format!("&code={code}")), "{link}");
+    assert!(
+        v["qr"].as_str().is_some_and(|s| s.contains("<svg")),
+        "an image the page draws as it is"
+    );
+    Ok(())
+}

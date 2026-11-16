@@ -22,13 +22,14 @@ jobs:
       - name: Build with cross
         run: |
           cargo install cross --locked
-          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor
+          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor -p memcp-bridge
       - name: Package
         run: |
           mkdir dist
           cp target/${{ matrix.target }}/release/memcp dist/memcp-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-manager dist/memcp-manager-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-janitor dist/memcp-janitor-${{ github.ref_name }}-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/memcp-bridge dist/memcp-bridge-${{ github.ref_name }}-${{ matrix.target }}
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}

@@ -1,6 +1,16 @@
 # Changelog
 
-## Unreleased
+## 0.24.0
+
+First release under the AGPL-3.0-or-later (with a commercial licence available); earlier versions stay Apache-2.0.
+
+- **Voice notes and attachments on the page of a node**, the same functions as on the computers: **Record** keeps a voice note from the browser (WebM, or m4a on Safari), **Attach files** keeps photos, PDF, text and recordings, each as a note of the space with its file, which can be opened or played.
+- **Voice notes read by a speech service**: the bridge can send a recording to a service of the OpenAI kind (`whisper_api_url`, `whisper_api_model`, `whisper_api_key`) instead of a local speech model, and the Home Assistant app can run that pass (`transcribe` options), so that a voice note recorded on the page becomes text there too.
+- The desktop bridge (`memcp-bridge`, `memcp-bridge-ffi`) joins this repository, and the add-on image carries it.
+- The Home Assistant app takes the page's new explorer: dashboards, tree, notes and their history, and the layout of spaces.
+- `counts` sections can count the terms cited in the notes and the notes under each child of a tag, in any space.
+- Recordings made by a browser (WebM with Opus, fragmented MP4) are accepted as audio.
+
 
 - The desktop bridge (`memcp-bridge`, and its Swift interface `memcp-bridge-ffi`) joins this repository: one repository for the server and the desktop bridges.
 - `counts` sections can count the terms cited in the notes and the notes under each child of a tag, in any space.

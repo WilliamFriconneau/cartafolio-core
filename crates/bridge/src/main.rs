@@ -182,6 +182,9 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
                     .map_err(|_| format!("{}: whisper_threads: a number", file.display()))?;
             }
             "ffmpeg_cmd" => voice.ffmpeg_cmd = v,
+            "whisper_api_url" => voice.api_url = Some(v),
+            "whisper_api_key" => voice.api_key = Some(v),
+            "whisper_api_model" => voice.api_model = v,
             "lexicon" => voice.lexicon = Some(home_path(&v)),
             "absorb_exclude" => exclude.extend(list(&v)),
             "absorb_protect" => protect.extend(list(&v)),
@@ -424,8 +427,16 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         let [path] = a.rest.as_slice() else {
             return Err("connect needs the path of the bridge's socket".into());
         };
-        memcp_bridge::connect_socket(std::path::Path::new(path)).map_err(|e| e.to_string())?;
-        return Ok(ExitCode::SUCCESS);
+        #[cfg(unix)]
+        {
+            memcp_bridge::connect_socket(std::path::Path::new(path)).map_err(|e| e.to_string())?;
+            return Ok(ExitCode::SUCCESS);
+        }
+        #[cfg(not(unix))]
+        {
+            let _ = path;
+            return Err("connect needs a Unix socket, which this system does not have".into());
+        }
     }
     let mut voice: (Vec<String>, memcp_bridge::VoiceSettings) =
         (vec![], memcp_bridge::VoiceSettings::default());
@@ -492,10 +503,18 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                 .map_err(|e| e.to_string())?
                 .with_capture_dirs(&a.capture_dirs);
             if let Some(path) = &a.socket {
-                let listener =
-                    memcp_bridge::bind_socket(path, a.socket_group).map_err(|e| e.to_string())?;
-                eprintln!("memcp-bridge: serving the socket {}", path.display());
-                memcp_bridge::serve_socket(gateway, &listener).map_err(|e| e.to_string())?;
+                #[cfg(unix)]
+                {
+                    let listener = memcp_bridge::bind_socket(path, a.socket_group)
+                        .map_err(|e| e.to_string())?;
+                    eprintln!("memcp-bridge: serving the socket {}", path.display());
+                    memcp_bridge::serve_socket(gateway, &listener).map_err(|e| e.to_string())?;
+                }
+                #[cfg(not(unix))]
+                {
+                    let _ = (path, gateway);
+                    return Err("--socket needs a Unix socket: use --listen on this system".into());
+                }
             } else if let Some(addr) = &a.listen {
                 eprintln!("memcp-bridge: serving POST /mcp on {addr}, this machine only");
                 serve_http(&mut gateway, addr).map_err(|e| e.to_string())?;

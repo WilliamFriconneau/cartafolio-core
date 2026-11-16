@@ -611,3 +611,22 @@ fn an_unrelated_old_fact_is_not_a_transcript() -> Res {
     assert!(files::get(&b, &personal, &memo.id)?.is_some());
     Ok(())
 }
+
+#[test]
+fn what_a_browser_records_is_a_recording() {
+    let webm = [0x1A, 0x45, 0xDF, 0xA3, 0x01, 0x00, 0x00, 0x00];
+    assert_eq!(
+        sniff(&webm, "dictation-2026-11-16.webm"),
+        Some("audio/webm")
+    );
+    assert_eq!(sniff(&webm, "voice note.webm"), Some("audio/webm"));
+    // A video is a WebM too: only a name that says recording makes it one.
+    assert_eq!(sniff(&webm, "holiday.webm"), None);
+    // Safari records fragmented MP4 with another brand; the name says it is a recording.
+    let mut mp4 = vec![
+        0, 0, 0, 0x18, b'f', b't', b'y', b'p', b'i', b's', b'o', b'5',
+    ];
+    mp4.extend_from_slice(&[0; 12]);
+    assert_eq!(sniff(&mp4, "dictation.m4a"), Some("audio/mp4"));
+    assert_eq!(sniff(&mp4, "movie.mp4"), None);
+}

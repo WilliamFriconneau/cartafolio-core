@@ -67,10 +67,71 @@ The person sets, per space, how far an assistant may go:
 
 Whatever the level, these always wait for the person: a **unique** keyword (one that decides alone), anything on a sensitive space, a rule that sends notes outside the node (a drive, another server), and any removal on a space that has a connector. Every change is an event in the history with the name of the assistant and the reason it gave, can be reverted in one step, and is limited in number per day. A change that makes more notes leave the inbox but also moves notes the person had filed by hand is shown as such before it applies.
 
+## A node that holds only part of the memory
+
+A phone should not carry a whole memory. A node may be set to hold only a **window**: the spaces it needs, and in each the last N days (at least the widest window of a dashboard it shows), plus what the person pins. Everything else stays on the nodes that hold it and is fetched when asked, the way a drive streams a file.
+
+- **Write first, prune later.** A note written on the phone is kept in its outbox and pushed to the other nodes or the drive connector. It leaves the phone's store only after **at least one other node has acknowledged it**: never before. A note that no node has acknowledged is never pruned.
+- **Write-only connectors.** A connector may be *write only*: the node pushes to a drive folder (or a server) and keeps nothing of what it wrote beyond the window. It is the way to archive without filling the device.
+- **Large raw data stays where it is big.** The raw records an app deposits (tens of thousands of health samples) are held by the always-on node; the phone holds the day-by-day summaries its dashboards read, and fetches raw records on demand.
+- **Offline means the window.** Without a connection, a node answers from what it holds; the page says that older notes need a connection.
+- **Sensitive spaces** are pruned the same way, and never pushed to a drive connector that is not locked (see ENCRYPTION.md).
+
 ## What this is not
 
 - Not a replacement for a file synchroniser: mounted folders can still be synchronised by Syncthing or a Drive, and MemCP only reads and writes them with the care of SPACES.md. MemCP synchronises **memory** (facts, layout, guides, files it holds), not the disk.
 - Not a shared memory between people: a person's memory stays that person's. Nodes belong to one person (or to a household that already shares spaces).
+
+## Security of the swarm
+
+A swarm holds the whole memory of a person, on several machines, so each of these is a rule and a test, not an intention.
+
+**Identity and joining**
+- Every node has a signing key pair (Ed25519), made on the node and kept in the system keystore, never in the data directory. A node is known by its public key.
+- **Joining** is an act of the person, on a node they already trust: they ask it for a join code (shown as text and as a QR code, one use, ten minutes). The new node scans or types it and the two nodes exchange their public keys over an encrypted channel. Both then show the same **short check code** (a few words derived from both keys), and the person confirms on both screens that they match: this is what defeats a node in the middle. Until then the new node holds nothing.
+- The list of nodes (the **membership**) is a document signed by the nodes that are administrators: who is in, with what role, since when. A node accepts a peer only if the membership says so, and a change of membership counts only if it is signed by an administrator. Roles: *administrator* (changes the membership), *member* (holds and syncs the spaces it is given), *blind* (stores encrypted spaces and cannot read them), *read-only* (receives, never sends).
+- **Revocation** is a signed membership change: the others stop sending to the node and refuse what it sends; the spaces it held are re-keyed for new events (ENCRYPTION.md). A node that was offline when it was revoked learns it at its next contact and is refused.
+
+**What a node accepts from another**
+- Every event is **signed by the node that made it** and carries its space, its author and its logical time. A node checks the signature, that the author node may write that space, and that the event is well formed (size, tags, kind, dates) before it keeps it. An event that fails is not kept and is counted against the sender.
+- **Per-peer limits**: a rate and a total size per hour and per space. A peer that exceeds them, or sends invalid events, is put in **quarantine**: its events are held aside, not merged, and the person is told on the page.
+- **A clock that lies** cannot reorder history: a logical time that is too far ahead of the receiver's own is refused (a bounded drift), and the order of events is by hybrid logical time, never by wall clock.
+- **Replay** is harmless: an event is identified by its id, so receiving it twice changes nothing.
+- A peer's rights are those of its connection, as for any client: it cannot receive a space it was not given, and a sensitive space only if the person turned it on for that node.
+- The **audit log** records, on every node, who joined, who was revoked, what was quarantined and what was refused, with the time, and the page shows it.
+
+**In transit and at rest**: see TAILSCALE.md and ENCRYPTION.md. A join code never carries a secret key: it carries an address and a one-time code, and the keys are exchanged after.
+
+## Managing the swarm
+
+The page of any node (the administrator's) shows, for each node: its name, its role, what it holds (spaces and window), when it last synchronised, how far behind it is, and whether it is healthy, quarantined or revoked. From it the person can **join**, **revoke**, **change a role**, **choose which spaces each node holds and how** (send, receive, both, write only, window), **pause** a node, and **restore** a node from another.
+
+- **A node gone for long** is flagged after a delay the person sets, and its administrator rights can be moved to another node without it.
+- **Backups** are nodes: a node that is only ever sent to is a backup. Restoring means joining a new node and letting it receive everything.
+- **Splits**: two groups of nodes that cannot reach each other keep working and merge when they meet. Nothing blocks writing in the meantime.
+
+## Conflicts
+
+Most differences are not conflicts: events are added, and the union of two histories is their sum. What remains are cases where two nodes changed the same thing without knowing of the other:
+
+| Case | What is kept | What the person sees |
+|---|---|---|
+| The same note corrected on two nodes | Both corrections, each on the note it came from | The note shows **in dispute** with both versions side by side: *keep this one*, *keep the other*, or *write a third*. The choice is a new correction that replaces both. |
+| A note retired on one node, corrected on another | The retirement and the correction | In dispute, the same way: *keep it retired* or *keep the correction*. |
+| The same file under the same name with different content | Both files; the second is named with its node and time | Both listed, nothing overwritten |
+| A tag or a keyword rule changed on two nodes | The newest change by logical time, per rule | The history of the rule shows both; the earlier one can be restored in one step |
+| The layout of spaces (label, parent, position) | The newest change per field | Nothing, unless a move would break the tree (two nodes moving two spaces under each other): the later one is refused and reported |
+| A dashboard document | The newest version | Both versions in its history |
+| A guide (the person's instructions) | The version signed by an administrator node, newest first | If two administrators wrote different ones, both are shown and the person picks |
+
+Rules that hold everywhere: **nothing is overwritten and nothing is erased by a merge**; a dispute never blocks reading or writing; an assistant sees a note in dispute with both versions flagged and never picks one; resolving a dispute is an act of the person and is itself an event in the history. A **dispute count** appears on the page and in the apps.
+
+## Tests that decide when this is done
+
+- Three nodes, one switched off, writes on all, every order of reconnection: the same memory on all three.
+- A hostile node (bad signature, bad size, wrong space, clock in the future, replay) changes nothing but its own quarantine.
+- Joining with a wrong check code fails; a revoked node is refused at its next contact; a join code works once and expires.
+- Every conflict in the table above ends in a state the page can show and the person can resolve, and resolving it on one node is seen on the others.
 
 ## Order and cost
 

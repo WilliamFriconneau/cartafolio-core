@@ -13,7 +13,6 @@
 
 use std::collections::BTreeMap;
 use std::fs;
-use std::os::unix::fs::{DirBuilderExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 
 use rusqlite::Connection;
@@ -22,6 +21,7 @@ use sha2::{Digest, Sha256};
 
 use crate::brain::{self, Brain};
 use crate::error::{Error, Result};
+use crate::fsx::PrivateDir as _;
 use crate::guide;
 use crate::schema::SPACE_MIGRATIONS;
 use crate::space::Space;
@@ -37,7 +37,7 @@ pub const VERSION: u32 = 1;
 fn private_dir(path: &Path) -> Result<()> {
     fs::DirBuilder::new()
         .recursive(true)
-        .mode(0o700)
+        .private_dir()
         .create(path)?;
     Ok(())
 }
@@ -47,7 +47,7 @@ fn write_private(path: &Path, bytes: &[u8]) -> Result<()> {
         private_dir(parent)?;
     }
     fs::write(path, bytes)?;
-    fs::set_permissions(path, fs::Permissions::from_mode(0o600))?;
+    crate::fsx::set_private_file(path)?;
     Ok(())
 }
 
@@ -283,7 +283,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
     let root =
         fs::canonicalize(to)?.join(format!("memcp-export-{}-{}", who.name, util::compact(at)));
     fs::DirBuilder::new()
-        .mode(0o700)
+        .private_dir()
         .create(&root)
         .map_err(|e| Error::Invalid(format!("{}: {e}", root.display())))?;
 
@@ -295,7 +295,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
         let target = root.join(&rel);
         private_dir(&root.join("vaults"))?;
         conn.execute("VACUUM INTO ?1", [target.to_string_lossy()])?;
-        fs::set_permissions(&target, fs::Permissions::from_mode(0o600))?;
+        crate::fsx::set_private_file(&target)?;
         {
             let copy =
                 Connection::open_with_flags(&target, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
@@ -516,7 +516,7 @@ pub fn adopt(
         for p in &plan {
             let tmp = brain.dir().join(format!(".adopt-{}.sqlite", p.target));
             fs::copy(dir.join(format!("vaults/{}.sqlite", p.orig)), &tmp)?;
-            fs::set_permissions(&tmp, fs::Permissions::from_mode(0o600))?;
+            crate::fsx::set_private_file(&tmp)?;
             made.push(tmp.clone());
             let (facts, files) = {
                 let conn = brain::open_db(&tmp)?;
@@ -566,7 +566,7 @@ pub fn adopt(
                     let path = entry?.path();
                     if let Some(name) = path.file_name() {
                         fs::copy(&path, to.join(name))?;
-                        fs::set_permissions(to.join(name), fs::Permissions::from_mode(0o600))?;
+                        crate::fsx::set_private_file(&to.join(name))?;
                     }
                 }
             }

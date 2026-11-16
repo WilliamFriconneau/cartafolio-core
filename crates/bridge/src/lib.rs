@@ -31,6 +31,8 @@ pub mod local;
 pub mod markdown;
 mod outbox;
 pub mod plan;
+mod private;
+#[cfg(unix)]
 mod socket;
 mod time;
 mod voice;
@@ -45,6 +47,7 @@ pub use gateway::Gateway;
 pub use http::{HttpServer, serve_http};
 pub use memcp_client::{Paired, pair, pair_allowing};
 use outbox::{Entry, Outbox};
+#[cfg(unix)]
 pub use socket::{bind as bind_socket, connect as connect_socket, serve_socket};
 pub use voice::{VoiceReport, transcribe};
 pub use whisper::VoiceSettings;

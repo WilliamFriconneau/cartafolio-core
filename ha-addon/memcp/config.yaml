@@ -1,5 +1,5 @@
 name: MemCP
-version: "0.23.1"
+version: "0.24.0"
 slug: memcp
 description: Durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/memcp
@@ -44,6 +44,13 @@ options:
   janitor_api_key: ""
   janitor_ollama_url: ""
   janitor_ollama_model: "qwen3:8b"
+  transcribe: false
+  transcribe_person: ""
+  transcribe_spaces: ""
+  transcribe_api_url: ""
+  transcribe_api_model: "whisper-1"
+  transcribe_api_key: ""
+  transcribe_language: ""
 schema:
   language: list(en|fr)
   admins:
@@ -67,3 +74,10 @@ schema:
   janitor_api_key: password?
   janitor_ollama_url: str?
   janitor_ollama_model: str?
+  transcribe: bool?
+  transcribe_person: str?
+  transcribe_spaces: str?
+  transcribe_api_url: str?
+  transcribe_api_model: str?
+  transcribe_api_key: password?
+  transcribe_language: str?

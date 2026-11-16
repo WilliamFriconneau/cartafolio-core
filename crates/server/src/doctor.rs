@@ -4,7 +4,6 @@
 
 use std::io::{Read, Write};
 use std::net::{TcpStream, ToSocketAddrs};
-use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 use std::time::Duration;
 
@@ -134,14 +133,14 @@ fn storage(r: &mut Report, data: &Path) {
         );
         return;
     };
-    if meta.permissions().mode() & 0o077 == 0 {
+    if !memcp_core::fsx::loose(&meta) {
         r.add(Level::Ok, "the data directory is private to its owner");
     } else {
         r.add(
             Level::Warn,
             format!(
                 "the data directory is readable by others (mode {:o}). Fix: chmod 700 {}",
-                meta.permissions().mode() & 0o777,
+                memcp_core::fsx::mode_bits(&meta).unwrap_or(0) & 0o777,
                 data.display()
             ),
         );
@@ -151,8 +150,7 @@ fn storage(r: &mut Report, data: &Path) {
         for e in rd.flatten() {
             let p = e.path();
             if p.extension().is_some_and(|x| x == "sqlite")
-                && e.metadata()
-                    .is_ok_and(|m| m.permissions().mode() & 0o077 != 0)
+                && e.metadata().is_ok_and(|m| memcp_core::fsx::loose(&m))
             {
                 loose.push(e.file_name().to_string_lossy().to_string());
             }

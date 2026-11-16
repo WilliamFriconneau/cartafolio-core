@@ -8,7 +8,6 @@
 
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::Write;
-use std::os::unix::fs::{DirBuilderExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 
 use rusqlite::{OptionalExtension, params};
@@ -18,6 +17,7 @@ use sha2::{Digest, Sha256};
 use crate::brain::Brain;
 use crate::error::{Error, Result};
 use crate::facts::{self, NewFact, Remembered};
+use crate::fsx::{PrivateDir as _, PrivateFile as _};
 use crate::space::Space;
 use crate::text::{self, hex};
 use crate::util::{self, iso};
@@ -101,7 +101,7 @@ pub fn sniff(bytes: &[u8], name: &str) -> Option<&'static str> {
 }
 
 /// A recording, from its first bytes: Apple's voice memos and most phones (`m4a`), `mp3`, `wav`,
-/// `ogg` (Opus and Vorbis), `flac`, Apple's `caf` and `amr`.
+/// `ogg` (Opus and Vorbis), `webm` (what a browser records), `flac`, Apple's `caf` and `amr`.
 fn sniff_audio(bytes: &[u8], name: &str) -> Option<&'static str> {
     let starts = |p: &[u8]| bytes.starts_with(p);
     let lower = name.to_lowercase();
@@ -109,7 +109,10 @@ fn sniff_audio(bytes: &[u8], name: &str) -> Option<&'static str> {
         let brand = &bytes[8..12];
         // `isom` and `mp4x` also name videos: by the name only, when it says a recording.
         if matches!(brand, b"M4A " | b"M4B ")
-            || (matches!(brand, b"isom" | b"mp41" | b"mp42") && lower.ends_with(".m4a"))
+            || (matches!(
+                brand,
+                b"isom" | b"mp41" | b"mp42" | b"iso5" | b"iso6" | b"dash"
+            ) && lower.ends_with(".m4a"))
         {
             return Some("audio/mp4");
         }
@@ -120,6 +123,15 @@ fn sniff_audio(bytes: &[u8], name: &str) -> Option<&'static str> {
     }
     if starts(b"OggS") {
         return Some("audio/ogg");
+    }
+    // What a browser records (Chrome, Edge): WebM with Opus. By the name, since a video is a WebM too.
+    if starts(&[0x1A, 0x45, 0xDF, 0xA3])
+        && lower.ends_with(".webm")
+        && ["dictation", "voice", "recording", "audio"]
+            .iter()
+            .any(|w| lower.starts_with(w))
+    {
+        return Some("audio/webm");
     }
     if starts(b"fLaC") {
         return Some("audio/flac");
@@ -222,7 +234,7 @@ pub fn put_tagged(
     }
     let mime = sniff(bytes, &name).ok_or_else(|| {
         Error::Invalid(
-            "only images (JPEG, PNG, GIF, WebP, HEIC), PDF, text, .xlsx workbooks and recordings (m4a, mp3, wav, ogg, flac, caf, amr) are kept"
+            "only images (JPEG, PNG, GIF, WebP, HEIC), PDF, text, .xlsx workbooks and recordings (m4a, mp3, wav, ogg, webm, flac, caf, amr) are kept"
                 .into(),
         )
     })?;
@@ -254,7 +266,10 @@ pub fn put_tagged(
     // retiring it in one space leaves the other intact, and nothing tells a
     // space what another holds.
     let dir = blob_dir(brain, space);
-    DirBuilder::new().recursive(true).mode(0o700).create(&dir)?;
+    DirBuilder::new()
+        .recursive(true)
+        .private_dir()
+        .create(&dir)?;
     let path = dir.join(&sha);
     if !path.exists() && !link_from_another_space(brain, space, &sha, &path) {
         let tmp = dir.join(format!(".{sha}.tmp"));
@@ -262,7 +277,7 @@ pub fn put_tagged(
             .write(true)
             .create(true)
             .truncate(true)
-            .mode(0o600)
+            .private_file()
             .open(&tmp)?;
         f.write_all(bytes)?;
         f.sync_all()?;

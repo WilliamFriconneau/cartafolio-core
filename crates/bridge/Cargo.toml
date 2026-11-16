@@ -14,6 +14,8 @@ memcp-client = { path = "../client" }
 serde_json = "1.0.154"
 base64 = "0.22"
 tiny_http = "0.12"
+# A speech service by API (OpenAI-compatible), for a machine with no speech model of its own (the Home Assistant app).
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
 # Whisper inside the program, for the Mac app (sandboxed: no whisper-cli). Off for the command line.
 whisper-rs = { version = "0.16", optional = true }
 
