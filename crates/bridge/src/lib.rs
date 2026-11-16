@@ -32,6 +32,7 @@ pub mod markdown;
 mod outbox;
 pub mod plan;
 mod private;
+pub mod relay;
 #[cfg(unix)]
 mod socket;
 mod time;

@@ -38,8 +38,9 @@ const USAGE: &str = "usage: memcp-bridge [gateway|send|text|flush|status|retry|f
                          person's À trier, `<person>-a-trier`, where the devices put them) with
                          no text (whisper_model, whisper_cmd, ffmpeg_cmd, lexicon), put their text in the same inbox, and
                          erase each recording a week after its text was filed. Run it on a timer
-  connect SOCKET         carry standard input and output to a gateway's socket: for an assistant that must know neither
-                         the memory's address nor its key (it needs no other option)
+  connect SOCKET|ADDRESS carry standard input and output to a gateway's Unix socket, or to its HTTP address on this machine
+                         (127.0.0.1:PORT, from --listen; the way on Windows): for an assistant that must know neither the
+                         memory's address nor its key (it needs no other option)
 
 options:
   --config FILE          the settings, one `key = value` a line (mode 600, refused otherwise): url, key (or key_file),
@@ -427,6 +428,12 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         let [path] = a.rest.as_slice() else {
             return Err("connect needs the path of the bridge's socket".into());
         };
+        // An address (127.0.0.1:PORT) is an HTTP gateway, on every system; a path is a Unix socket.
+        if memcp_bridge::relay::is_address(path) {
+            memcp_bridge::relay::relay(path, io::stdin().lock(), io::stdout().lock())
+                .map_err(|e| e.to_string())?;
+            return Ok(ExitCode::SUCCESS);
+        }
         #[cfg(unix)]
         {
             memcp_bridge::connect_socket(std::path::Path::new(path)).map_err(|e| e.to_string())?;
@@ -434,8 +441,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         }
         #[cfg(not(unix))]
         {
-            let _ = path;
-            return Err("connect needs a Unix socket, which this system does not have".into());
+            return Err(
+                "connect needs an address (127.0.0.1:PORT) on this system: it has no Unix sockets"
+                    .into(),
+            );
         }
     }
     let mut voice: (Vec<String>, memcp_bridge::VoiceSettings) =
