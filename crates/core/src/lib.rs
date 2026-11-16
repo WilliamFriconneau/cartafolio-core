@@ -13,6 +13,7 @@ pub mod fsx;
 pub mod guide;
 pub mod import;
 pub mod layout;
+pub mod merge;
 mod moves;
 pub mod origin;
 pub mod pairing;

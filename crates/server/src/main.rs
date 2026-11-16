@@ -41,6 +41,11 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
   adopt DIR [--user PERSON] [--prefix P] takes the vaults of an export into this installation
+  merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
+                                         reads another memory (an export) and writes a plan: for each of its spaces,
+                                         the space it joins, copy or skip, and a preview; writes nothing here
+  merge --apply PLAN [--backup-to DIR]   backs up, applies the plan in one go (all or nothing, nothing is deleted,
+                                         twice changes nothing), verifies the counts
   connections                            lists the connections
   doctor [--public-url URL] [--listen ADDR]
                                          reads the installation and says what is fine and what deserves a look:
@@ -57,7 +62,12 @@ const USAGE: &str = "usage: memcp --data DIR <command>
 
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
-const VALUE_FLAGS: [&str; 28] = [
+const VALUE_FLAGS: [&str; 33] = [
+    "--plan",
+    "--apply",
+    "--out",
+    "--backup-to",
+    "--policy",
     "--data",
     "--node-name",
     "--spaces",
@@ -226,6 +236,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
             Path::new(arg(1, "the export directory")?),
             flag("--user"),
             flag("--prefix"),
+        ),
+        ("merge", _) => cli::merge(
+            &data,
+            flag("--plan").map(Path::new),
+            flag("--apply").map(Path::new),
+            flag("--user"),
+            flag("--out").map(Path::new),
+            flag("--backup-to").map(Path::new),
+            flag("--policy"),
         ),
         ("connections", _) => cli::connections(&data),
         ("doctor", _) => memcp_server::doctor::run(&data, flag("--public-url"), flag("--listen")),

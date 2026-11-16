@@ -289,6 +289,97 @@ pub fn adopt(
     Ok(())
 }
 
+/// Plans or applies the merge of another memory (an export) into this installation.
+pub fn merge(
+    data: &Path,
+    plan_of: Option<&Path>,
+    apply_of: Option<&Path>,
+    user: Option<&str>,
+    out: Option<&Path>,
+    backup_to: Option<&Path>,
+    policy: Option<&str>,
+) -> Result<(), Failure> {
+    use memcp_core::merge::{self, Plan, Policy};
+    let brain = open(data)?;
+    match (plan_of, apply_of) {
+        (Some(export_dir), None) => {
+            let who = person(&brain, user)?;
+            let policy = Policy::parse(policy.unwrap_or("keep-both")).map_err(fail)?;
+            let plan = merge::plan(&brain, export_dir, &who, policy).map_err(fail)?;
+            for l in &plan.lines {
+                let p = &l.preview;
+                eprintln!(
+                    "{:<24} {:<5} -> {:<24} new {} already {} differing {} files {} ({})",
+                    l.source,
+                    l.action.word(),
+                    l.destination(),
+                    p.new,
+                    p.already,
+                    p.differing,
+                    p.files_new,
+                    l.note
+                );
+            }
+            match out {
+                Some(path) => {
+                    std::fs::write(path, plan.to_text()).map_err(fail)?;
+                    eprintln!(
+                        "plan written to {}; nothing else was written.",
+                        path.display()
+                    );
+                }
+                None => print!("{}", plan.to_text()),
+            }
+            Ok(())
+        }
+        (None, Some(file)) => {
+            let text = std::fs::read_to_string(file).map_err(fail)?;
+            let plan = Plan::from_text(&text).map_err(fail)?;
+            let dest = match backup_to {
+                Some(p) => p.to_path_buf(),
+                None => {
+                    let abs = std::fs::canonicalize(data).map_err(fail)?;
+                    let mut name = abs.file_name().unwrap_or_default().to_os_string();
+                    name.push("-merge-backups");
+                    abs.with_file_name(name)
+                }
+            };
+            let opts = merge::Options {
+                backup_to: dest,
+                at: now(),
+                stop_after: None,
+            };
+            let report = merge::apply(&brain, &plan, &opts).map_err(fail)?;
+            match &report.backup {
+                Some(b) => println!("backup: {}", b.display()),
+                None => println!("nothing to change: the memories already agree on this plan."),
+            }
+            for l in &report.lines {
+                println!(
+                    "{:<24} -> {:<24}{} added {} tagged {} replaced {} left {} files {}",
+                    l.source,
+                    l.destination,
+                    if l.created { " (new)" } else { "" },
+                    l.added,
+                    l.tagged,
+                    l.replaced,
+                    l.left,
+                    l.files
+                );
+            }
+            for (space, _) in &report.guide_proposals {
+                println!(
+                    "the instructions of the other memory for {space} differ: not applied (policy replace applies them)."
+                );
+            }
+            Ok(())
+        }
+        _ => Err(bad(
+            "merge --plan EXPORT --user PERSON, or merge --apply PLAN",
+        )),
+    }
+}
+
 /// The MCP server on standard input and output, with the rights of the key in the environment
 /// variable `token_env`. Nothing but protocol goes to standard output.
 pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
