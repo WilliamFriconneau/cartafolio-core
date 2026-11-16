@@ -52,9 +52,9 @@ MemCP is also a manager of folders that other programs synchronise (Google Drive
 
 ## 3. Running on Windows (phase 4)
 
-- The engine is Rust and SQLite (bundled). Unix-only code is in four files (`files.rs`, `brain.rs`, `export.rs`, `doctor.rs`): file modes and a socket. They move behind `cfg(unix)` / `cfg(windows)`; on Windows the data directory is made private with a restricted access list instead of `0700`.
-- The server runs as a plain program or a service. The folders it mounts are any local or synchronised folder.
-- This is feasible, not free: it needs a Windows build in continuous integration and a pass over every path that assumes `/`.
+- **State.** The whole workspace (the server, the bridge, the janitor and the Swift interface) builds on Windows in CI, and the releases carry a Windows build of `memcp`, `memcp-bridge` and `memcp-janitor` next to the macOS and Linux ones. What is not done: the **test suites** do not run on Windows yet (several use Unix file modes), and the bridge's gateway over a Unix socket is Unix only (on Windows an assistant reaches the bridge with `--listen`, on the loopback).
+- **Private files.** Unix keeps a data folder at `0700` and its files at `0600`. Windows has no such bits: a folder takes the access list of the folder it is made in, so the data directory belongs **under the person's own profile** (for example `%LOCALAPPDATA%\MemCP`), never in a shared folder. The code treats these calls as no-ops there (`fsx`), and `memcp doctor` does not check modes on Windows.
+- **Running.** `memcp serve` as a plain program, or as a service of the person's own account. The folders it mounts are any local or synchronised folder; paths with spaces, drive letters and long names are the next thing to test.
 
 ## 4. Backup with the bridges (phase 5)
 
