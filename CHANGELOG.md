@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261116.0.7
+
+- Living boards in every space: *what's next* (now, next, later, done), *ideas* (new, kept, done), *targets* (long-term problems and risks, each grouping its signs and symptoms; open, reached) and *where things stand*. Cards are one-line notes moved between columns, each keeping its history; each board records its last pass and shows the notes filed since. MCP tools `living_get` and `living_set`.
+- Machines of different versions: the exchange between peers has a protocol number; an older machine that meets a newer protocol stops and says so.
+- Docs: the concepts with cases (CONCEPTS.md), the specification of the boards (LIVING-PAGES.md).
+
 ## 20261116.0.6
 
 - Machines in step: a node serves `/sync/status`, `/sync/spaces` and `/sync/events` at the address of a peer's connection, and `memcp-sync` keeps a node in step with a peer (pull, then push, cursors that resume). Tested end to end with two real nodes.

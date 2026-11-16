@@ -460,7 +460,7 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
         let like = format!("{tag}/%");
         let sql = if tag.is_empty() {
             "SELECT id FROM facts WHERE status = 'active'
-             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules'))
+             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%')
              ORDER BY created_at DESC LIMIT ?1"
                 .to_string()
         } else {

@@ -72,6 +72,13 @@ impl Peer {
     /// One pass over every space the peer's key reaches.
     pub fn sync_once(&self, brain: &Brain, now: i64) -> Result<Pass, String> {
         let listed = self.get("spaces")?;
+        let theirs = listed["protocol"].as_i64().unwrap_or(1);
+        if theirs > sync::PROTOCOL {
+            return Err(format!(
+                "the peer runs a newer exchange (protocol {theirs}, version {}): update this machine",
+                listed["version"].as_str().unwrap_or("?")
+            ));
+        }
         let mut pass = Pass::default();
         for s in listed["spaces"].as_array().cloned().unwrap_or_default() {
             let Some(name) = s["space"].as_str() else {

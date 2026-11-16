@@ -72,7 +72,12 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 let head = sync::head(brain, &s).unwrap_or(0);
                 out.push(json!({ "space": s.as_str(), "kind": kind, "head": head, "writable": caller.can_write(&s) }));
             }
-            Response::json(200, &json!({ "spaces": out }))
+            // The exchange's protocol and this node's version: machines of different versions keep in step as long as
+            // they speak the same protocol; a newer protocol is refused by an older node, which says so and waits.
+            Response::json(
+                200,
+                &json!({ "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out }),
+            )
         }
         ("GET", "events") => {
             let space = match space() {

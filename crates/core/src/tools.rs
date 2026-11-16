@@ -24,7 +24,8 @@ static LEASES: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashMap<String, (String, i64)>>,
 > = std::sync::LazyLock::new(Default::default);
 
-const WRITE_TOOLS: [&str; 9] = [
+const WRITE_TOOLS: [&str; 10] = [
+    "living_set",
     "rules_set",
     "library_raise",
     "remember",
@@ -35,7 +36,8 @@ const WRITE_TOOLS: [&str; 9] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 11] = [
+const READ_TOOLS: [&str; 12] = [
+    "living_get",
     "peers",
     "rules_get",
     "library_search",
@@ -129,6 +131,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             schema: json!({ "type": "object", "properties": {} }),
         });
         out.push(ToolDef {
+            name: "living_get",
+            description: "A living board of a space: `next` (what's next: now, next, later, done), `ideas` (the idea box: new, kept, done), `targets` (long-term problems and risks, each grouping signs and symptoms: open, reached), `index` (where things stand: current). Its cards by column (one note each), its last pass (when, by whom) and its delta: the notes filed since that pass, oldest first, with `behind` their count. Keep it from the delta only, then `living_set`.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "enum": ["next", "ideas", "targets", "index"] }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["space", "page"] }),
+        });
+        out.push(ToolDef {
             name: "rules_get",
             description: "The filing rules of a space: the tags and the keywords that send a note there (the note tagged `rules`, `{\"version\":1,\"tags\":[…],\"keywords\":[…]}`), and the id of the note that holds them.".into(),
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" } }, "required": ["space"] }),
@@ -170,6 +177,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
     }
     if caller.can_write_anywhere() && !caller.is_scoped() {
+        out.push(ToolDef {
+            name: "living_set",
+            description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "enum": ["next", "ideas", "targets", "index"] }, "add": { "type": "array" }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
+        });
         out.push(ToolDef {
             name: "rules_set",
             description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.".into(),
@@ -488,6 +500,33 @@ fn scope_tags(
                 .unwrap_or_default()
         ))),
     }
+}
+
+/// `YYYY-MM-DDTHH:MM:SS` with `Z` or `±HH:MM` (as the node writes it), or Unix seconds, to UTC Unix seconds.
+fn parse_time(text: &str) -> Option<i64> {
+    let t = text.trim();
+    if let Ok(n) = t.parse::<i64>() {
+        return Some(n);
+    }
+    let (date, rest) = t.split_once('T')?;
+    let day = parse_date(&Value::String(date.to_string())).ok()?;
+    let clock: String = rest.chars().take(8).collect();
+    let mut hms = clock.split(':').map(|x| x.parse::<i64>().ok());
+    let (h, m, sec) = (
+        hms.next()??,
+        hms.next()??,
+        hms.next().flatten().unwrap_or(0),
+    );
+    let zone = &rest[clock.len().min(rest.len())..];
+    let offset = match zone.chars().next() {
+        Some(sign @ ('+' | '-')) => {
+            let (oh, om) = zone[1..].split_once(':')?;
+            let o = oh.parse::<i64>().ok()? * 3600 + om.parse::<i64>().ok()? * 60;
+            if sign == '+' { o } else { -o }
+        }
+        _ => 0,
+    };
+    Some(day + h * 3600 + m * 60 + sec - offset)
 }
 
 /// YYYY-MM-DD (or Unix seconds) to UTC Unix seconds.
@@ -1049,6 +1088,272 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 })
                 .collect();
             Ok(json!({ "peers": list }))
+        }
+        "living_get" | "living_set" => {
+            // A living page is a board of cards, each a one-line note tagged `living/<page>/<column>`, so it is read
+            // straight from the space, synchronised like any note, and every card keeps its own history. Moving a card
+            // supersedes it into its new column. The page's last pass (when, by whom, how far it read) is a small note
+            // `living-meta/<page>`; its delta is the notes filed since. Cards are added, moved or dropped one by one:
+            // two writers never overwrite each other.
+            let writing = name == "living_set";
+            let space_name = str_arg(args, "space")?.to_string();
+            let page = str_arg(args, "page")?.to_string();
+            let columns: &[&str] = match page.as_str() {
+                "next" => &["now", "next", "later", "done"],
+                "ideas" => &["new", "kept", "done"],
+                "targets" => &["open", "reached"],
+                "index" => &["current"],
+                _ => {
+                    return Err(ToolError::Invalid(
+                        "page: next, ideas, targets or index".into(),
+                    ));
+                }
+            };
+            let space = Space::new(&space_name)?;
+            let allowed = if writing {
+                caller.can_write(&space)
+            } else {
+                caller.readable().contains(&space)
+            };
+            if !allowed || caller.read_paths(&space).is_some() {
+                return Err(ToolError::Invalid(format!("no access to {space_name}")));
+            }
+            let meta_tag = format!("living-meta/{page}");
+            let conn = brain.open_space(&space)?;
+            let meta: Option<(String, Value)> = conn
+                .query_row(
+                    "SELECT f.id, f.text FROM facts f WHERE f.status = 'active' AND f.id IN
+                     (SELECT fact_id FROM fact_tags WHERE tag = ?1) ORDER BY f.created_at DESC LIMIT 1",
+                    [&meta_tag],
+                    |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
+                )
+                .optional()
+                .map_err(|e| ToolError::Invalid(e.to_string()))?
+                .map(|(id, t)| (id, serde_json::from_str::<Value>(&t).unwrap_or(Value::Null)));
+            let since = meta
+                .as_ref()
+                .and_then(|(_, v)| v["covers"].as_i64())
+                .unwrap_or(0);
+            const OUTSIDE: &str = "SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules','index','guide') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%'";
+            let card_column = |id: &str| -> Option<(String, String)> {
+                let f = facts::read_fact(&conn, id).ok()??;
+                if f.status != "active" {
+                    return None;
+                }
+                let col = f
+                    .tags
+                    .iter()
+                    .find_map(|t| t.strip_prefix(&format!("living/{page}/")).map(String::from))?;
+                Some((f.text, col))
+            };
+            if !writing {
+                let mut board = serde_json::Map::new();
+                for col in columns {
+                    let mut st = conn
+                        .prepare(
+                            "SELECT f.id, f.text, f.created_at, f.author FROM facts f WHERE f.status = 'active' AND f.id IN
+                             (SELECT fact_id FROM fact_tags WHERE tag = ?1) ORDER BY f.created_at ASC LIMIT 300",
+                        )
+                        .map_err(|e| ToolError::Invalid(e.to_string()))?;
+                    let cards: Vec<Value> = st
+                        .query_map([format!("living/{page}/{col}")], |r| {
+                            Ok(json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
+                                       "created": crate::util::iso(r.get::<_, i64>(2)?), "author": r.get::<_, String>(3)? }))
+                        })
+                        .map_err(|e| ToolError::Invalid(e.to_string()))?
+                        .flatten()
+                        .collect();
+                    board.insert((*col).to_string(), Value::Array(cards));
+                }
+                let limit = args
+                    .get("limit")
+                    .and_then(Value::as_i64)
+                    .unwrap_or(50)
+                    .clamp(1, 200);
+                let mut st = conn
+                    .prepare(&format!(
+                        "SELECT f.id, f.text, f.created_at FROM facts f WHERE f.status = 'active' AND f.created_at > ?1
+                         AND f.id NOT IN ({OUTSIDE}) ORDER BY f.created_at ASC, f.id ASC LIMIT ?2"
+                    ))
+                    .map_err(|e| ToolError::Invalid(e.to_string()))?;
+                let delta: Vec<Value> = st
+                    .query_map(rusqlite::params![since, limit], |r| {
+                        Ok(json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
+                                   "created": crate::util::iso(r.get::<_, i64>(2)?), "at": r.get::<_, i64>(2)? }))
+                    })
+                    .map_err(|e| ToolError::Invalid(e.to_string()))?
+                    .flatten()
+                    .collect();
+                let behind: i64 = conn
+                    .query_row(
+                        &format!("SELECT COUNT(*) FROM facts f WHERE f.status = 'active' AND f.created_at > ?1 AND f.id NOT IN ({OUTSIDE})"),
+                        [since],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or(0);
+                let last = meta.as_ref().map(|(_, v)| v.clone()).unwrap_or(Value::Null);
+                return Ok(json!({
+                    "space": space_name, "page": page, "columns": columns, "board": board,
+                    "covers": since, "last_pass": { "at": last["at"], "by": last["by"] },
+                    "behind": behind, "delta": delta,
+                }));
+            }
+            let write_card = |text: &str,
+                              col: &str,
+                              replacing: Option<&str>,
+                              signs: &[String]|
+             -> Result<String, ToolError> {
+                let mut new = NewFact::agent(text, &caller.agent);
+                new.tags = vec![format!("living/{page}/{col}")];
+                // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
+                new.tags.extend(
+                    signs
+                        .iter()
+                        .filter_map(|s| facts::normalize_tag(&format!("sign/{s}")).ok()),
+                );
+                if let Some(old) = replacing {
+                    return Ok(facts::supersede(
+                        &conn,
+                        &space,
+                        &caller.agent,
+                        old,
+                        new,
+                        Some(&format!("moved to {col}")),
+                    )?
+                    .id);
+                }
+                // A card is its own note, even next to a similar one.
+                match facts::remember(&conn, &space, &caller.agent, new, &[])? {
+                    facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
+                    facts::Remembered::NeedsDecision(c) => {
+                        let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                        let mut again = NewFact::agent(text, &caller.agent);
+                        again.tags = vec![format!("living/{page}/{col}")];
+                        again.tags.extend(
+                            signs
+                                .iter()
+                                .filter_map(|s| facts::normalize_tag(&format!("sign/{s}")).ok()),
+                        );
+                        match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
+                            facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => {
+                                Ok(f.id)
+                            }
+                            facts::Remembered::NeedsDecision(_) => {
+                                Err(ToolError::Invalid("the card could not be written".into()))
+                            }
+                        }
+                    }
+                }
+            };
+            let valid = |col: &str| -> Result<(), ToolError> {
+                if columns.contains(&col) {
+                    Ok(())
+                } else {
+                    Err(ToolError::Invalid(format!(
+                        "column: one of {}",
+                        columns.join(", ")
+                    )))
+                }
+            };
+            let mut added = vec![];
+            for card in args
+                .get("add")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+            {
+                let text = card
+                    .as_str()
+                    .map(String::from)
+                    .or_else(|| card["text"].as_str().map(String::from))
+                    .unwrap_or_default();
+                if text.trim().is_empty() {
+                    continue;
+                }
+                let col = card["column"].as_str().unwrap_or(columns[0]).to_string();
+                valid(&col)?;
+                let signs: Vec<String> = card["signs"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .map(String::from)
+                    .collect();
+                added.push(write_card(&text, &col, None, &signs)?);
+            }
+            let mut moved = 0;
+            for m in args
+                .get("move")
+                .and_then(Value::as_array)
+                .cloned()
+                .unwrap_or_default()
+            {
+                let (Some(id), Some(col)) = (m["id"].as_str(), m["column"].as_str()) else {
+                    continue;
+                };
+                valid(col)?;
+                if let Some((text, now_in)) = card_column(id)
+                    && now_in != col
+                {
+                    let signs: Vec<String> = facts::read_fact(&conn, id)?
+                        .map(|f| {
+                            f.tags
+                                .iter()
+                                .filter_map(|t| t.strip_prefix("sign/").map(String::from))
+                                .collect()
+                        })
+                        .unwrap_or_default();
+                    write_card(&text, col, Some(id), &signs)?;
+                    moved += 1;
+                }
+            }
+            let mut dropped = 0;
+            for id in args
+                .get("drop")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+            {
+                if card_column(id).is_some() {
+                    facts::retire(&conn, &caller.agent, id, "dropped from the board")?;
+                    dropped += 1;
+                }
+            }
+            // The pass: when, by whom, and how far it read (only forward).
+            let covers = match args.get("covers") {
+                Some(v) => v
+                    .as_i64()
+                    .or_else(|| v.as_str().and_then(parse_time))
+                    .ok_or_else(|| {
+                        ToolError::Invalid("covers: seconds, or YYYY-MM-DDTHH:MM:SS+00:00".into())
+                    })?
+                    .max(since),
+                None => since,
+            };
+            let doc = json!({ "covers": covers, "at": crate::util::iso(crate::util::now()), "by": caller.agent }).to_string();
+            let mut new = NewFact::agent(&doc, &caller.agent);
+            new.tags = vec![meta_tag.clone()];
+            match &meta {
+                // The same pass in the same second: nothing to record.
+                Some((_, v)) if serde_json::from_str::<Value>(&doc).ok().as_ref() == Some(v) => {}
+                Some((old, _)) => {
+                    facts::supersede(&conn, &space, &caller.agent, old, new, Some("a pass"))?;
+                }
+                None => {
+                    if let facts::Remembered::NeedsDecision(c) =
+                        facts::remember(&conn, &space, &caller.agent, new, &[])?
+                    {
+                        let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                        let mut again = NewFact::agent(&doc, &caller.agent);
+                        again.tags = vec![meta_tag.clone()];
+                        facts::remember(&conn, &space, &caller.agent, again, &ids)?;
+                    }
+                }
+            }
+            Ok(
+                json!({ "space": space_name, "page": page, "added": added, "moved": moved, "dropped": dropped, "covers": covers }),
+            )
         }
         "rules_get" | "rules_set" => {
             let writing = name == "rules_set";

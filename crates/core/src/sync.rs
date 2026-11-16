@@ -38,6 +38,9 @@ pub const PAGE_BYTES: usize = 8 * 1024 * 1024;
 /// The prefix of a connection made for a peer.
 pub const PEER_PREFIX: &str = "peer-";
 
+/// The version of the exchange between peers. A node refuses a peer that speaks a newer one, and says which.
+pub const PROTOCOL: i64 = 1;
+
 /// One row of the log, as it travels.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Event {
