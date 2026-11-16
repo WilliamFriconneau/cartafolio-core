@@ -795,7 +795,13 @@ fn stdio_session(
     {
         let mut stdin = child.stdin.take().ok_or("no standard input")?;
         for l in lines {
-            writeln!(stdin, "{l}")?;
+            // A server that refuses the key ends at once: the pipe may be closed before the next line.
+            if let Err(e) = writeln!(stdin, "{l}") {
+                if e.kind() == std::io::ErrorKind::BrokenPipe {
+                    break;
+                }
+                return Err(e.into());
+            }
         }
     }
     let out = child.wait_with_output()?;
