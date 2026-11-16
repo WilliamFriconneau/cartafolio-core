@@ -38,6 +38,9 @@ const USAGE: &str = "usage: memcp-bridge [gateway|send|text|flush|status|retry|f
                          person's À trier, `<person>-a-trier`, where the devices put them) with
                          no text (whisper_model, whisper_cmd, ffmpeg_cmd, lexicon), put their text in the same inbox, and
                          erase each recording a week after its text was filed. Run it on a timer
+  discover               nodes found on this network (mDNS) and on the tailnet: name, address, version, how
+  join ADDRESS           ask a node to let this computer join: a person on the node compares a phrase and allows it;
+                         with --config FILE (not overwritten), --name NAME
   connect SOCKET|ADDRESS carry standard input and output to a gateway's Unix socket, or to its HTTP address on this machine
                          (127.0.0.1:PORT, from --listen; the way on Windows): for an assistant that must know neither the
                          memory's address nor its key (it needs no other option)
@@ -305,6 +308,10 @@ struct Args {
     config: Option<PathBuf>,
     socket: Option<PathBuf>,
     socket_group: Option<u32>,
+    /// What this device calls itself when it asks to join (`join`).
+    name: Option<String>,
+    /// How long `discover` looks.
+    seconds: u64,
     /// What came from the options or the environment and must not be mixed with `--config`.
     given: Vec<&'static str>,
 }
@@ -331,6 +338,8 @@ fn parse(args: &[String]) -> Result<Args, String> {
         config: None,
         socket: None,
         socket_group: None,
+        name: None,
+        seconds: 4,
         given: vec![],
     };
     let mut it = args.iter();
@@ -356,6 +365,12 @@ fn parse(args: &[String]) -> Result<Args, String> {
                 );
             }
             "--note" => a.note = value("--note")?,
+            "--name" => a.name = Some(value("--name")?),
+            "--seconds" => {
+                a.seconds = value("--seconds")?
+                    .parse()
+                    .map_err(|_| "--seconds: a number")?;
+            }
             "--token-env" => {
                 a.token_env = value("--token-env")?;
                 a.given.push("--token-env");
@@ -387,6 +402,8 @@ fn parse(args: &[String]) -> Result<Args, String> {
                     "connect",
                     "absorb",
                     "transcribe",
+                    "discover",
+                    "join",
                 ]
                 .contains(&s) =>
             {
@@ -460,6 +477,66 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                     .into(),
             );
         }
+    }
+    if a.mode == "discover" {
+        let nodes = memcp_bridge::discover::discover(std::time::Duration::from_secs(
+            a.seconds.clamp(1, 30),
+        ));
+        if nodes.is_empty() {
+            eprintln!("memcp-bridge: no node found on this network or on the tailnet");
+            return Ok(ExitCode::from(1));
+        }
+        for n in nodes {
+            println!("{}\t{}\t{}\t{}", n.name, n.address, n.version, n.via);
+        }
+        return Ok(ExitCode::SUCCESS);
+    }
+    if a.mode == "join" {
+        let [address] = a.rest.as_slice() else {
+            return Err("join needs the address of a node (see `discover`): join http://HOST:8791 --config FILE".into());
+        };
+        let Some(file) = a.config.clone() else {
+            return Err(
+                "join needs --config FILE: where the connection is written (mode 600)".into(),
+            );
+        };
+        if file.exists() {
+            return Err(format!(
+                "{} exists already: it is not overwritten",
+                file.display()
+            ));
+        }
+        let device = a.name.clone().unwrap_or_else(|| {
+            std::env::var("HOSTNAME")
+                .or_else(|_| std::env::var("COMPUTERNAME"))
+                .unwrap_or_else(|_| "a computer".into())
+        });
+        eprintln!("memcp-bridge: asking {address} to let `{device}` join…");
+        let joined = memcp_bridge::discover::join(address, &device, |phrase| {
+            eprintln!(
+                "memcp-bridge: on the node, check that the phrase is\n\n    {phrase}\n\nand allow it. Waiting for the answer (two minutes)…"
+            );
+        })?;
+        let text = format!("url = {}\nkey = {}\n", joined.url, joined.key);
+        {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new();
+            f.write(true).create_new(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::OpenOptionsExt;
+                f.mode(0o600);
+            }
+            f.open(&file)
+                .and_then(|mut h| h.write_all(text.as_bytes()))
+                .map_err(|e| format!("{}: {e}", file.display()))?;
+        }
+        eprintln!(
+            "memcp-bridge: joined as {}; written to {}",
+            joined.connection,
+            file.display()
+        );
+        return Ok(ExitCode::SUCCESS);
     }
     let mut voice: (Vec<String>, memcp_bridge::VoiceSettings) =
         (vec![], memcp_bridge::VoiceSettings::default());

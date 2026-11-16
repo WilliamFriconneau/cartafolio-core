@@ -24,6 +24,7 @@ use serde_json::{Value, json};
 
 mod absorb;
 pub mod browser;
+pub mod discover;
 mod gateway;
 mod http;
 #[cfg(feature = "local-whisper")]

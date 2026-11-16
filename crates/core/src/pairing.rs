@@ -102,6 +102,33 @@ fn create_with(ctl: &Connection, user_id: &str, vaults: &[String], now: i64) -> 
 }
 
 /// Whether this control database holds `code`, unused and not expired (the manager finds the person this way).
+/// Where a join code stands for the person who made it: waiting, joined (by which connection) or expired.
+#[derive(Debug, PartialEq, Eq)]
+pub enum Standing {
+    Waiting,
+    Joined(String),
+    Expired,
+    Unknown,
+}
+
+pub fn standing(ctl: &Connection, user_id: &str, code: &str, now: i64) -> Standing {
+    let row: Option<(Option<i64>, i64, Option<String>)> = ctl
+        .query_row(
+            "SELECT used_at, expires_at, agent FROM bridge_pairings WHERE hash = ?1 AND user_id = ?2",
+            params![hash(code), user_id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    match row {
+        None => Standing::Unknown,
+        Some((Some(_), _, agent)) => Standing::Joined(agent.unwrap_or_default()),
+        Some((None, expires, _)) if expires <= now => Standing::Expired,
+        Some(_) => Standing::Waiting,
+    }
+}
+
 pub fn holds(ctl: &Connection, code: &str, now: i64) -> bool {
     ctl.query_row(
         "SELECT 1 FROM bridge_pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",

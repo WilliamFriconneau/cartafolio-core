@@ -39,6 +39,8 @@ pub struct App {
     pub console_admin: bool,
     /// The public address shown in connection instructions.
     pub public_url: String,
+    /// How this node calls itself when it advertises and answers `/.well-known/memcp`.
+    pub node_name: String,
     /// Where the OAuth consent page is reached (the identity listener's address).
     pub login_url: Option<String>,
     /// Redirect addresses OAuth clients may register.
@@ -49,6 +51,8 @@ pub struct App {
     rates: Mutex<HashMap<String, VecDeque<i64>>>,
     /// One-time consent nonces: nonce → (person id, expiry).
     pub(crate) consents: Mutex<HashMap<String, (String, i64)>>,
+    /// Requests to join, waiting for the person's answer (in memory only).
+    pub(crate) joins: Mutex<HashMap<String, crate::join::Join>>,
 }
 
 fn bearer(req: &Request) -> Option<String> {
@@ -96,7 +100,9 @@ impl App {
             tailnet_users: std::collections::HashMap::new(),
             fails: Mutex::new(VecDeque::new()),
             rates: Mutex::new(HashMap::new()),
+            node_name: "MemCP".into(),
             consents: Mutex::new(HashMap::new()),
+            joins: Mutex::new(HashMap::new()),
         }
     }
 
@@ -147,6 +153,13 @@ impl App {
             ("POST", "/oauth/register") => crate::oauth::register(self, req),
             ("POST", "/oauth/token") => crate::oauth::token(self, req),
             ("POST", "/pair") => crate::pair::exchange(self, req),
+            ("GET", "/.well-known/memcp") => {
+                Response::json(200, &crate::discovery::well_known(&self.node_name))
+            }
+            ("POST", "/join") => crate::join::request(self, req),
+            ("GET", p) if p.starts_with("/join/") => {
+                crate::join::poll(self, req, &p["/join/".len()..])
+            }
             // The consent page is only served where Tailscale tells who is there.
             ("GET" | "POST", "/oauth/authorize") => crate::oauth::authorize(self, req, None),
             // The control plane is never served to a request that came through Funnel.

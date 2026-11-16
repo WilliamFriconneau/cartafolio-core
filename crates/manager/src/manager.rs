@@ -57,6 +57,7 @@ pub struct Manager {
     people_dir: PathBuf,
     opts: Options,
     apps: RwLock<BTreeMap<String, Arc<App>>>,
+    node_name: RwLock<String>,
 }
 
 pub type Failure = (u8, String);
@@ -120,6 +121,7 @@ impl Manager {
             people_dir,
             opts,
             apps: RwLock::new(BTreeMap::new()),
+            node_name: RwLock::new("MemCP".into()),
         };
         m.ensure_people()?;
         Ok(m)
@@ -152,6 +154,31 @@ impl Manager {
     /// The installation of one person.
     pub fn person_app(&self, name: &str) -> Option<Arc<App>> {
         self.apps.read().ok()?.get(name).cloned()
+    }
+
+    /// How this node calls itself when it advertises and answers `/.well-known/memcp`.
+    pub fn set_node_name(&self, name: &str) {
+        self.node_name
+            .write()
+            .map(|mut n| *n = name.to_string())
+            .ok();
+    }
+
+    /// The installation that answers a device asking to join: the first administrator's (their page shows the request
+    /// and the connection made is theirs). Another person adds their own devices with a code from their page.
+    fn joiner(&self) -> Arc<App> {
+        let admin = self
+            .registry
+            .brain
+            .open_control()
+            .ok()
+            .and_then(|ctl| users::list_users(&ctl).ok())
+            .and_then(|all| {
+                all.into_iter()
+                    .filter(|u| u.admin && !u.disabled && !is_placeholder(u))
+                    .find_map(|u| self.person_app(&u.name))
+            });
+        admin.unwrap_or_else(|| Arc::clone(&self.registry))
     }
 
     /// Every installation, the registry last.
@@ -567,6 +594,14 @@ impl Handler for Manager {
                     _ => reply(&self.registry),
                 }
             }
+            ("GET", "/.well-known/memcp") => Response::json(
+                200,
+                &memcp_server::discovery::well_known(
+                    &self.node_name.read().map(|n| n.clone()).unwrap_or_default(),
+                ),
+            ),
+            ("POST", "/join") => reply(&self.joiner()),
+            ("GET", p) if p.starts_with("/join/") => reply(&self.joiner()),
             _ => reply(&self.by_secret(req)),
         }
     }

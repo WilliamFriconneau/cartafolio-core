@@ -10,6 +10,7 @@ repository.workspace = true
 
 [dependencies]
 base64 = "0.22"
+mdns-sd = "0.21.7"
 memcp-core = { path = "../core" }
 memcp-finances = { path = "../finances" }
 qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }

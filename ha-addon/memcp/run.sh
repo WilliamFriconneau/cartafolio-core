@@ -56,6 +56,16 @@ if bashio::config.true 'janitor'; then
       umask 077
       mkdir -p "$JDIR"
       until curl -sf http://127.0.0.1:8791/health >/dev/null; do sleep 2; done
+      # A key that the memory refuses (the connection was revoked) is made again, never kept.
+      if [ -s "$JDIR/key" ]; then
+        CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $(cat "$JDIR/key")" \
+               -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' \
+               http://127.0.0.1:8791/mcp/janitor || echo 000)
+        if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then
+          bashio::log.warning "janitor: its key is refused (revoked?): making a new one"
+          rm -f "$JDIR/key"
+        fi
+      fi
       if [ ! -s "$JDIR/key" ]; then
         OUT=$(/usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all 2>&1 ||
               /usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all --rotate 2>&1 || true)
@@ -114,6 +124,12 @@ if bashio::config.true 'transcribe'; then
       umask 077
       mkdir -p "$TDIR"
       until curl -sf http://127.0.0.1:8791/health >/dev/null; do sleep 2; done
+      if [ -s "$TDIR/key" ]; then
+        CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $(cat "$TDIR/key")" \
+               -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' \
+               http://127.0.0.1:8791/mcp/haos-voice || echo 000)
+        if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then rm -f "$TDIR/key"; fi
+      fi
       if [ ! -s "$TDIR/key" ]; then
         OUT=$(/usr/bin/memcp --data "$DATA/people/$TPERSON" connect haos-voice --all 2>&1 ||
               /usr/bin/memcp --data "$DATA/people/$TPERSON" connect haos-voice --all --rotate 2>&1 || true)

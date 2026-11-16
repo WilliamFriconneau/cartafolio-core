@@ -11,7 +11,7 @@ use memcp_server::net;
 
 const USAGE: &str = "usage: memcp-manager --data DIR <command>
 
-  serve [--listen 127.0.0.1:8791] [--allow-remote] [--allow-origin URL] [--threads N]
+  serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--public-url URL] [--admins ha_name,...] [--language en|fr] [--new-people auto|ask]
         [--ingress-listen ADDR --trust-ingress IP]
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL]
@@ -32,8 +32,9 @@ struct Args {
     switches: Vec<String>,
 }
 
-const VALUE_FLAGS: [&str; 18] = [
+const VALUE_FLAGS: [&str; 19] = [
     "--data",
+    "--node-name",
     "--listen",
     "--allow-origin",
     "--threads",
@@ -226,6 +227,18 @@ fn serve(data: &Path, a: &Args) -> Result<(), Failure> {
         ));
     }
     let manager = Arc::new(Manager::open(data, options(a)?)?);
+    manager.set_node_name(flag("--node-name").unwrap_or("MemCP"));
+    // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
+    let _advertised = if a.switches.iter().any(|s| s == "--advertise") {
+        let port = listen
+            .rsplit(':')
+            .next()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(8791);
+        memcp_server::discovery::advertise(port, flag("--node-name").unwrap_or("MemCP"))
+    } else {
+        None
+    };
     let identity = match flag("--identity-listen") {
         Some(addr) => {
             let trusted: Option<std::net::IpAddr> = match flag("--identity-trust") {

@@ -208,6 +208,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/facts" => crate::explore::list(app, &ctl, &me, req, now),
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
+            "/join/pending" => crate::join::pending(app, &me),
+            "/pairing/status" => crate::explore::pairing_status(&ctl, &me, req, now),
             "/timeline" => timeline(app, &ctl, &me, req, now),
             "/file" => file_bytes(app, &ctl, &me, req),
             "/guide" => guide_get(&ctl, &me, req),
@@ -226,6 +228,10 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     };
     let done = if path.starts_with("/fact/") {
         crate::explore::write(app, &ctl, &me, path, &body)
+    } else if path.starts_with("/join/") {
+        crate::join::decide(app, &ctl, &me, path, &body)
+    } else if path.starts_with("/space/") {
+        crate::explore::space_write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/layout/") {
         crate::explore::layout_write(app, &me, path, &body)
     } else {

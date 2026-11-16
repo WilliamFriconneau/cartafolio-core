@@ -64,11 +64,31 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
         })
         .collect();
     notes.sort_by(|a, b| b["created_at"].as_str().cmp(&a["created_at"].as_str()));
-    let kept: Vec<Value> = files::list(brain, space, None, limit)?
+    // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the bridge
+    // erases it. Only what nothing has read yet, and what is not a recording, is for the person to look at.
+    let mut transcribed = 0usize;
+    let kept: Vec<Value> = files::list(brain, space, None, limit.max(1000))?
         .iter()
+        .filter(|f| {
+            let named = f.is_audio()
+                && conn
+                    .query_row(
+                        "SELECT 1 FROM facts WHERE status = 'active' AND type IS NOT 'file' AND instr(text, ?1) > 0 LIMIT 1",
+                        [&f.name],
+                        |_| Ok(()),
+                    )
+                    .is_ok();
+            if named {
+                transcribed += 1;
+            }
+            !named
+        })
+        .take(limit)
         .map(files::FileInfo::to_json)
         .collect();
-    Ok(json!({ "space": space.as_str(), "notes": notes, "files": kept }))
+    Ok(
+        json!({ "space": space.as_str(), "notes": notes, "files": kept, "transcribed": transcribed }),
+    )
 }
 
 /// Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves

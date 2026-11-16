@@ -483,3 +483,94 @@ fn joining_a_network_gives_a_link_and_a_qr_code_to_scan() -> Res {
     );
     Ok(())
 }
+
+#[test]
+fn a_tag_dragged_onto_a_sub_space_moves_its_notes_after_a_preview_and_files_there_from_now_on()
+-> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let child = post(
+        &e,
+        "layout/add",
+        SAM,
+        json!({ "label": "Cars", "parent": "notes" }),
+    )
+    .body_json()["space"]
+        .as_str()
+        .ok_or("no child")?
+        .to_string();
+    for (t, tag) in [
+        ("The ID4 charges at 11 kW.", "home/voitures/id4"),
+        ("Winter tyres in November.", "home/voitures"),
+        ("The boiler is serviced in March.", "home/chauffage"),
+    ] {
+        let r = post(
+            &e,
+            "fact/add",
+            SAM,
+            json!({ "space": "notes", "text": t, "tags": [tag] }),
+        );
+        assert_eq!(r.status, 200, "{}", r.body_json());
+    }
+    let mv = |dry: bool| {
+        post(
+            &e,
+            "space/move-tag",
+            SAM,
+            json!({ "from": "notes", "to": child, "tag": "home/voitures", "dry_run": dry }),
+        )
+    };
+    // The preview changes nothing.
+    let pre = mv(true).body_json();
+    assert_eq!(
+        (pre["matched"].as_i64(), pre["moved"].as_i64()),
+        (Some(2), Some(0)),
+        "{pre}"
+    );
+    assert_eq!(
+        get(&e, "facts", &[("space", child.as_str())], SAM).body_json()["facts"]
+            .as_array()
+            .map(Vec::len),
+        Some(0)
+    );
+    // The move does it, and the target now files that tag.
+    let done = mv(false).body_json();
+    assert_eq!(done["moved"], 2, "{done}");
+    let target = get(&e, "facts", &[("space", child.as_str())], SAM).body_json();
+    assert_eq!(
+        target["facts"].as_array().map(Vec::len),
+        Some(2),
+        "the settings note is not listed among the notes: {target}"
+    );
+    let ov = get(&e, "space", &[("space", child.as_str())], SAM).body_json();
+    assert_eq!(ov["rules"]["tags"][0], "home/voitures");
+    let left = get(&e, "facts", &[("space", "notes")], SAM).body_json();
+    assert_eq!(
+        left["facts"].as_array().map(Vec::len),
+        Some(1),
+        "the boiler stays"
+    );
+    // Keywords are set apart from tags, and cleaned.
+    let r = post(
+        &e,
+        "space/rules",
+        SAM,
+        json!({ "space": child, "keywords": ["#Voiture", " id4 ", "id4"] }),
+    );
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let ov = get(&e, "space", &[("space", child.as_str())], SAM).body_json();
+    assert_eq!(ov["rules"]["keywords"], json!(["id4", "voiture"]));
+    assert_eq!(
+        ov["rules"]["tags"][0], "home/voitures",
+        "tags are kept when only keywords change"
+    );
+    // A note cannot move to the space it is in, nor to someone else's.
+    let same = post(
+        &e,
+        "space/move-tag",
+        SAM,
+        json!({ "from": "notes", "to": "notes", "tag": "x" }),
+    );
+    assert_eq!(same.status, 400);
+    Ok(())
+}

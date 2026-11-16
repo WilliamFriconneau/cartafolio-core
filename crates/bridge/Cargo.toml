@@ -18,6 +18,7 @@ tiny_http = "0.12"
 ureq = { version = "3.5", default-features = false, features = ["rustls"] }
 # Whisper inside the program, for the Mac app (sandboxed: no whisper-cli). Off for the command line.
 whisper-rs = { version = "0.16", optional = true }
+mdns-sd = "0.21.7"
 
 [features]
 local-whisper = ["dep:whisper-rs"]

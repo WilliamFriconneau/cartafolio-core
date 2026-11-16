@@ -130,6 +130,7 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
             "counts": counts,
             "tags": tags,
             "dashboard": dashboard,
+            "rules": read_rules(&conn).1,
         }),
     )
 }
@@ -458,7 +459,9 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
     let rows: Vec<facts::Fact> = if q.is_empty() {
         let like = format!("{tag}/%");
         let sql = if tag.is_empty() {
-            "SELECT id FROM facts WHERE status = 'active' ORDER BY created_at DESC LIMIT ?1"
+            "SELECT id FROM facts WHERE status = 'active'
+             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules'))
+             ORDER BY created_at DESC LIMIT ?1"
                 .to_string()
         } else {
             "SELECT id FROM facts WHERE status = 'active' AND id IN
@@ -687,6 +690,162 @@ pub fn layout_write(app: &App, me: &User, path: &str, body: &Value) -> Result<Va
                 .add_custom_space(&me.id, &me.name, label, parent.as_ref())
                 .map_err(fail)?;
             Ok(json!({ "result": "created", "space": space.as_str() }))
+        }
+        _ => Err(err(404, "not found")),
+    }
+}
+
+/// `GET /pairing/status?code=…`: whether the code shown on the page was used, and by which connection.
+pub fn pairing_status(ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
+    use memcp_core::pairing::{self, Standing};
+    let code = req.query.get("code").map(String::as_str).unwrap_or("");
+    let body = match pairing::standing(ctl, &me.id, code, now) {
+        Standing::Waiting => json!({ "state": "waiting" }),
+        Standing::Joined(agent) => json!({ "state": "joined", "connection": agent }),
+        Standing::Expired => json!({ "state": "expired" }),
+        Standing::Unknown => json!({ "state": "unknown" }),
+    };
+    Response::json(200, &body)
+}
+
+/// The filing rules of a space: the tags and the keywords that send a note there, kept as one note of the space
+/// tagged `rules` (a JSON document, `{"version":1,"tags":[…],"keywords":[…]}`), so that they have a history.
+fn read_rules(conn: &Connection) -> (Option<String>, Value) {
+    let found = conn
+        .prepare(
+            "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+             (SELECT fact_id FROM fact_tags WHERE tag = 'rules') ORDER BY f.created_at DESC LIMIT 1",
+        )
+        .ok()
+        .and_then(|mut st| {
+            st.query_row([], |r| r.get::<_, String>(0)).ok()
+        });
+    if let Some(id) = found
+        && let Some(f) = facts::read_fact(conn, &id).ok().flatten()
+        && let Ok(doc) = serde_json::from_str::<Value>(f.text.trim())
+        && doc.get("version").and_then(Value::as_i64) == Some(1)
+    {
+        return (Some(id), doc);
+    }
+    (None, json!({ "version": 1, "tags": [], "keywords": [] }))
+}
+
+fn clean_list(v: Option<&Value>, max: usize, tags: bool) -> Vec<String> {
+    let mut out: Vec<String> = v
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|t| {
+            if tags {
+                facts::normalize_tag(t).ok()
+            } else {
+                let k = t.trim().trim_start_matches('#').to_lowercase();
+                (!k.is_empty() && k.chars().count() <= 40).then_some(k)
+            }
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out.truncate(max);
+    out
+}
+
+/// Writes the rules of a space (a new version of the note, the old one kept in the history).
+fn write_rules(
+    conn: &Connection,
+    space: &Space,
+    who: &str,
+    tags: Vec<String>,
+    keywords: Vec<String>,
+) -> Result<(), Response> {
+    let doc = json!({ "version": 1, "tags": tags, "keywords": keywords }).to_string();
+    let mut new = NewFact::agent(&doc, "web-page");
+    new.tags = vec!["rules".into()];
+    match read_rules(conn).0 {
+        Some(old) => facts::supersede(conn, space, who, &old, new, Some("rules changed"))
+            .map(|_| ())
+            .map_err(fail),
+        None => match facts::remember(conn, space, who, new, &[]).map_err(fail)? {
+            Remembered::NeedsDecision(c) => {
+                // The settings note is never a near duplicate of a note: write it past the candidates.
+                let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                let mut again = NewFact::agent(&doc, "web-page");
+                again.tags = vec!["rules".into()];
+                facts::remember(conn, space, who, again, &ids)
+                    .map(|_| ())
+                    .map_err(fail)
+            }
+            _ => Ok(()),
+        },
+    }
+}
+
+/// `POST /space/rules` {space, tags?, keywords?} and `POST /space/move-tag` {from, to, tag, dry_run?}.
+pub fn space_write(
+    app: &App,
+    ctl: &Connection,
+    me: &User,
+    path: &str,
+    body: &Value,
+) -> Result<Value, Response> {
+    let who = author(me);
+    match path {
+        "/space/rules" => {
+            let name = body
+                .get("space")
+                .and_then(Value::as_str)
+                .ok_or_else(|| err(400, "space is required"))?;
+            let (space, conn) = own(app, ctl, me, name)?;
+            let (_, old) = read_rules(&conn);
+            let tags = body
+                .get("tags")
+                .map(|v| clean_list(Some(v), 100, true))
+                .unwrap_or_else(|| clean_list(old.get("tags"), 100, true));
+            let keywords = body
+                .get("keywords")
+                .map(|v| clean_list(Some(v), 100, false))
+                .unwrap_or_else(|| clean_list(old.get("keywords"), 100, false));
+            write_rules(&conn, &space, &who, tags, keywords)?;
+            Ok(json!({ "result": "ok" }))
+        }
+        "/space/move-tag" => {
+            let get = |k: &str| {
+                body.get(k)
+                    .and_then(Value::as_str)
+                    .ok_or_else(|| err(400, &format!("{k} is required")))
+            };
+            let (from, _) = own(app, ctl, me, get("from")?)?;
+            let (to, to_conn) = own(app, ctl, me, get("to")?)?;
+            if from == to {
+                return Err(err(400, "a note cannot move to the space it is in"));
+            }
+            let tag = get("tag")?;
+            let dry = body.get("dry_run").and_then(Value::as_bool).unwrap_or(true);
+            let moved = app
+                .brain
+                .move_by_tag(&from, &to, tag, &who, dry)
+                .map_err(fail)?;
+            if !dry && moved.moved > 0 {
+                // What was moved is now the target's: a note with this tag is filed there from now on.
+                let (_, old) = read_rules(&to_conn);
+                let mut tags = clean_list(old.get("tags"), 100, true);
+                if let Ok(t) = facts::normalize_tag(tag) {
+                    tags.push(t);
+                }
+                tags.sort();
+                tags.dedup();
+                let keywords = clean_list(old.get("keywords"), 100, false);
+                write_rules(&to_conn, &to, &who, tags, keywords)?;
+            }
+            Ok(json!({
+                "dry_run": dry,
+                "matched": moved.matched,
+                "moved": moved.moved,
+                "left": moved.left,
+                "failed": moved.failed,
+                "sample": moved.sample,
+            }))
         }
         _ => Err(err(404, "not found")),
     }

@@ -159,6 +159,30 @@ details.fold[open]>summary{margin-bottom:8px}
 .tree ul{list-style:none;margin:0;padding-left:18px}.tree>ul{padding-left:0}
 .tree li{margin:3px 0}.tree .n{opacity:.65;font-size:12.5px;margin-left:6px}
 .lay td{padding:4px 6px;vertical-align:middle}.lay input{width:100%;box-sizing:border-box}
+
+/* The spaces as folders */
+.tree-wrap{display:grid;grid-template-columns:minmax(260px,1fr) minmax(220px,340px);gap:16px;align-items:start}
+@media (max-width:760px){.tree-wrap{grid-template-columns:1fr}}
+.ftree{display:flex;flex-direction:column;gap:2px;user-select:none}
+.frow{display:flex;align-items:center;gap:6px;padding:7px 10px;border-radius:12px;cursor:grab;border:2px solid transparent;position:relative}
+.frow:hover{background:var(--sc)}
+.frow.sel{background:var(--primary-c);color:var(--on-primary-c)}
+.frow.over-in{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent)}
+.frow.over-before::before,.frow.over-after::after{content:"";position:absolute;left:8px;right:8px;height:3px;border-radius:2px;background:var(--primary)}
+.frow.over-before::before{top:-2px}.frow.over-after::after{bottom:-2px}
+.frow .caret{width:20px;text-align:center;cursor:pointer;opacity:.8}
+.frow .ico{font-size:18px}
+.frow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .cnt{font-size:12px;opacity:.7}
+.frow .acts2{display:none;gap:2px}
+.frow:hover .acts2,.frow.sel .acts2{display:flex}
+.frow button.mini{padding:1px 8px;border-radius:10px;font-size:13px}
+.fside{background:var(--sc);border-radius:18px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.fside h3{margin:0;font-size:15px}
+.fchip{display:inline-flex;align-items:center;gap:4px;background:var(--secondary-c);color:var(--on-secondary-c);border-radius:8px;padding:3px 9px;margin:2px 4px 2px 0;font-size:12.5px;cursor:grab}
+.fchip .n{opacity:.65}
+.fchip.kw{background:var(--primary-c);color:var(--on-primary-c);cursor:default}
+.fchip button{border:0;padding:0 2px;background:none;color:inherit;cursor:pointer}
 </style>
 </head>
 <body>
@@ -210,6 +234,7 @@ details.fold[open]>summary{margin-bottom:8px}
 
     <div id="view-memory" hidden>
     <div class="hero" id="hero"></div>
+    <div id="join-banner" hidden></div>
     <div class="bento" id="actions" style="margin-bottom:16px">
       <div class="tile t1">
         <h3>Connect an assistant</h3>
@@ -229,15 +254,18 @@ details.fold[open]>summary{margin-bottom:8px}
     </div>
 
     <section>
-      <h2>Spaces</h2>
+      <h2>Your spaces</h2>
       <p class="mute small">What you keep, one tile per space. Open one to an assistant on its own, or write its instructions.</p>
       <div id="spaces" class="bento"></div>
     </section>
 
     <section id="layout-section">
-      <h2>Spaces</h2>
-      <p class="mute small">Rename them, put one inside another, change the order. Only the layout changes: no note moves and no right changes.</p>
-      <div class="scroll"><table class="lay" id="layout-table"></table></div>
+      <h2>Organise your spaces</h2>
+      <p class="mute small">Drag a space onto another to put it inside, or between two to reorder. Click ▸ to open one: its tags and keywords are there, and a tag can be dragged onto another space to send its notes there. Only the layout changes when you move a space: no note moves and no right changes.</p>
+      <div class="tree-wrap">
+        <div id="ftree" class="ftree"></div>
+        <aside id="fside" class="fside" hidden></aside>
+      </div>
       <form id="layout-add" class="row" style="margin-top:10px">
         <input name="label" placeholder="a new space, in any words" size="26" required>
         <select name="parent" id="layout-parent"></select>
@@ -406,15 +434,28 @@ details.fold[open]>summary{margin-bottom:8px}
   </form>
 </dialog>
 
+<dialog id="move-dlg">
+  <h2>Send these notes?</h2>
+  <div id="move-body"></div>
+  <form method="dialog" style="justify-content:flex-end"><button>Cancel</button><button type="button" class="primary" id="move-go">Move them</button></form>
+</dialog>
+
 <dialog id="pair-dlg">
-  <h2>Join a MemCP network</h2>
-  <p class="mute small">In the app: choose “Join a MemCP network” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
-  <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
-  <div class="small mute">Address of the server</div>
-  <div class="pair-row"><code id="pair-server"></code><button type="button" class="link" data-copy="pair-server">copy</button></div>
-  <div class="small mute">Code</div>
-  <div class="pair-row"><code id="pair-code" class="pair-code"></code><button type="button" class="link" data-copy="pair-code">copy</button></div>
-  <div class="small mute">Everything it captures goes to <b id="pair-into">À trier</b>.</div>
+  <h2 id="pair-title">Join a MemCP network</h2>
+  <div id="pair-waiting">
+    <p class="mute small">In the app: choose “Join a MemCP network” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
+    <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
+    <div class="small mute">Address of the server</div>
+    <div class="pair-row"><code id="pair-server"></code><button type="button" class="link" data-copy="pair-server">copy</button></div>
+    <div class="small mute">Code</div>
+    <div class="pair-row"><code id="pair-code" class="pair-code"></code><button type="button" class="link" data-copy="pair-code">copy</button></div>
+    <div class="small mute">Everything it captures goes to <b id="pair-into">À trier</b>.</div>
+  </div>
+  <div id="pair-joined" hidden style="text-align:center;padding:12px 0">
+    <div style="font-size:64px;line-height:1;color:var(--primary)">✓</div>
+    <p style="font-size:18px;margin:8px 0 2px"><b id="pair-name"></b></p>
+    <p class="mute small">has joined this memory. You can close this window.</p>
+  </div>
   <form method="dialog" style="justify-content:flex-end"><button class="primary">Done</button></form>
 </dialog>
 
@@ -517,6 +558,33 @@ async function load() {
   loadTimeline();
 }
 
+
+
+// ---- Devices asking to join: the person compares a phrase and answers ----
+const seenJoins = new Set();
+async function pollJoins() {
+  if (document.hidden || !S) return;
+  let r;
+  try { r = await api("join/pending"); } catch (_) { return; }
+  const box = $("#join-banner");
+  const list = r.requests || [];
+  box.hidden = list.length === 0;
+  box.replaceChildren(...list.map(j => el("section", { style: "border:2px solid var(--primary)" },
+    el("h2", { style: "margin:0 0 6px" }, "📱 " + j.device + " wants to join"),
+    el("p", { class: "mute small", style: "margin:0 0 8px" }, "Check that the device shows the same three words, then allow it. It reaches À trier only."),
+    el("div", { style: "font-size:30px;letter-spacing:.04em;margin:6px 0 12px" }, el("b", {}, j.check)),
+    el("div", { class: "row" },
+      el("button", { type: "button", class: "primary", onclick: async () => { try { await api("join/approve", { id: j.id }); toast("Allowed"); pollJoins(); load(); } catch (x) { fail(x); } } }, "Allow"),
+      el("button", { type: "button", class: "link danger", onclick: async () => { try { await api("join/deny", { id: j.id }); pollJoins(); } catch (x) { fail(x); } } }, "Deny"),
+      el("span", { class: "mute small" }, "expires in " + j.expires_in + " s")))));
+  for (const j of list) {
+    if (seenJoins.has(j.id)) continue;
+    seenJoins.add(j.id);
+    try { if ("Notification" in window && Notification.permission === "granted") new Notification(j.device + " wants to join MemCP", { body: "Check phrase: " + j.check }); } catch (_) {}
+  }
+}
+setInterval(pollJoins, 3000);
+try { if ("Notification" in window && Notification.permission === "default") document.addEventListener("click", () => Notification.requestPermission(), { once: true }); } catch (_) {}
 
 // ---- Exploring a space: dashboard, notes, tree ----
 let SP = null;
@@ -782,31 +850,125 @@ async function openNote(body, id) {
       ...hist.map(h => el("div", { class: "note" }, el("div", { class: "tx" }, h.extract), el("div", { class: "meta" }, (h.created || "").slice(0, 10) + " · " + h.status)))) : null), body.children[1]);
 }
 
-// ---- The layout of spaces ----
+// ---- The spaces as folders: a tree, drag and drop, tags and keywords at each level ----
+const FT = { l: [], open: new Set(), sel: null, info: null };
 async function renderLayout() {
-  let l;
-  try { l = (await api("layout")).spaces; } catch (x) { return; }
-  const by = new Map(l.map(x => [x.space, x]));
-  const depth = s => { let d = 0, p = s.parent; while (p && by.has(p) && d < 9) { d++; p = by.get(p).parent; } return d; };
-  const options = (sel, self) => [el("option", { value: "" }, "— top level —"), ...l.filter(x => x.space !== self).map(x => el("option", { value: x.space, ...(x.space === sel ? { selected: true } : {}) }, x.label))];
-  const siblings = p => l.filter(x => (x.parent || "") === (p || ""));
-  const reorder = async (s, dir) => {
-    const sib = siblings(s.parent), i = sib.findIndex(x => x.space === s.space), j = i + dir;
-    if (j < 0 || j >= sib.length) return;
-    [sib[i], sib[j]] = [sib[j], sib[i]];
-    try { for (let k = 0; k < sib.length; k++) await api("layout/set", { space: sib[k].space, position: k + 1 }); renderLayout(); } catch (x) { fail(x); }
+  try { FT.l = (await api("layout")).spaces.filter(x => x.kind !== "a-trier"); } catch (x) { return; }
+  drawTree();
+  $("#layout-parent").replaceChildren(el("option", { value: "" }, "— top level —"), ...FT.l.map(x => el("option", { value: x.space }, x.label)));
+  if (FT.sel) loadSide();
+}
+function kids(parent) {
+  return FT.l.filter(x => (x.parent || "") === (parent || "")).sort((a, b) => (a.position - b.position) || a.label.localeCompare(b.label));
+}
+function drawTree() {
+  const rows = [];
+  const walk = (parent, depth) => {
+    for (const s of kids(parent)) {
+      const children = kids(s.space), open = FT.open.has(s.space);
+      rows.push(folderRow(s, depth, children.length > 0, open));
+      if (open) walk(s.space, depth + 1);
+    }
   };
-  const rows = l.filter(x => x.kind !== "a-trier").map(s => {
-    const name = el("input", { value: s.label, style: "margin-left:" + depth(s) * 18 + "px;width:calc(100% - " + depth(s) * 18 + "px)" });
-    name.addEventListener("change", async () => { try { await api("layout/set", { space: s.space, label: name.value }); renderLayout(); } catch (x) { fail(x); renderLayout(); } });
-    const par = el("select", {}, ...options(s.parent, s.space));
-    par.addEventListener("change", async () => { try { await api("layout/set", { space: s.space, parent: par.value || null }); renderLayout(); } catch (x) { fail(x); renderLayout(); } });
-    return el("tr", {}, el("td", {}, name), el("td", {}, par),
-      el("td", {}, el("button", { type: "button", class: "link", title: "up", onclick: () => reorder(s, -1) }, "↑"), el("button", { type: "button", class: "link", title: "down", onclick: () => reorder(s, 1) }, "↓")),
-      el("td", {}, el("button", { type: "button", class: "link", onclick: () => { location.hash = "#space/" + s.space; } }, "Open")));
+  walk("", 0);
+  $("#ftree").replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, "No space yet.")]));
+}
+function folderRow(s, depth, hasKids, open) {
+  const row = el("div", { class: "frow" + (FT.sel === s.space ? " sel" : ""), draggable: "true", style: "margin-left:" + depth * 22 + "px" });
+  const caret = el("span", { class: "caret", onclick: e => { e.stopPropagation(); open ? FT.open.delete(s.space) : FT.open.add(s.space); drawTree(); } }, hasKids ? (open ? "▾" : "▸") : "·");
+  const nm = el("span", { class: "nm", title: "Double-click to rename" }, s.label);
+  nm.addEventListener("dblclick", e => { e.stopPropagation(); renameInline(s, nm); });
+  row.append(caret, el("span", { class: "ico" }, open && hasKids ? "📂" : "📁"), nm,
+    el("span", { class: "acts2" },
+      el("button", { type: "button", class: "mini link", title: "A space inside this one", onclick: e => { e.stopPropagation(); addChild(s); } }, "+"),
+      el("button", { type: "button", class: "mini link", title: "Open its notes", onclick: e => { e.stopPropagation(); location.hash = "#space/" + s.space; } }, "Open")));
+  row.addEventListener("click", () => { FT.sel = s.space; FT.open.add(s.space); drawTree(); loadSide(); });
+  // Drag a space, or drop a space or a tag on it.
+  row.addEventListener("dragstart", e => { e.dataTransfer.setData("text/space", s.space); e.dataTransfer.effectAllowed = "move"; });
+  const zone = e => { const r = row.getBoundingClientRect(), y = (e.clientY - r.top) / r.height; return y < 0.28 ? "before" : y > 0.72 ? "after" : "in"; };
+  const clear = () => row.classList.remove("over-in", "over-before", "over-after");
+  row.addEventListener("dragover", e => { e.preventDefault(); const z = zone(e); clear(); row.classList.add("over-" + z); });
+  row.addEventListener("dragleave", clear);
+  row.addEventListener("drop", async e => {
+    e.preventDefault(); const z = zone(e); clear();
+    const tag = e.dataTransfer.getData("text/tag"), moved = e.dataTransfer.getData("text/space");
+    if (tag) { const [from, t] = tag.split("|"); if (from !== s.space) moveTags(from, s.space, t); return; }
+    if (!moved || moved === s.space) return;
+    try {
+      if (z === "in") { await api("layout/set", { space: moved, parent: s.space, position: kids(s.space).length + 1 }); FT.open.add(s.space); }
+      else {
+        const parent = s.parent || "";
+        const sib = kids(parent).filter(x => x.space !== moved);
+        const at = sib.findIndex(x => x.space === s.space) + (z === "after" ? 1 : 0);
+        const me = FT.l.find(x => x.space === moved);
+        sib.splice(at, 0, me);
+        if ((me.parent || "") !== parent) await api("layout/set", { space: moved, parent: parent || null });
+        for (let k = 0; k < sib.length; k++) await api("layout/set", { space: sib[k].space, position: k + 1 });
+      }
+      renderLayout();
+    } catch (x) { fail(x); }
   });
-  $("#layout-table").replaceChildren(el("tr", {}, el("th", {}, "Space"), el("th", {}, "Inside"), el("th", {}, "Order"), el("th", {})), ...rows);
-  $("#layout-parent").replaceChildren(...options("", ""));
+  return row;
+}
+function renameInline(s, nm) {
+  const input = el("input", { value: s.label, style: "width:100%" });
+  nm.replaceChildren(input); input.focus(); input.select();
+  const done = async save => { if (save && input.value.trim() && input.value !== s.label) { try { await api("layout/set", { space: s.space, label: input.value }); } catch (x) { fail(x); } } renderLayout(); };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+  input.addEventListener("blur", () => done(true));
+}
+async function addChild(parent) {
+  const label = window.prompt ? null : null; // dialogs are not shown by the viewer: ask on the row instead
+  const row = el("div", { class: "row", style: "margin:6px 0 6px " + 28 + "px" });
+  const input = el("input", { placeholder: "name of the new space inside " + parent.label, size: 30 });
+  const go = async () => { if (!input.value.trim()) return; try { await api("layout/add", { label: input.value, parent: parent.space }); FT.open.add(parent.space); renderLayout(); } catch (x) { fail(x); } };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") go(); if (e.key === "Escape") renderLayout(); });
+  row.append(input, el("button", { type: "button", class: "primary", onclick: go }, "Add"), el("button", { type: "button", class: "link", onclick: () => renderLayout() }, "Cancel"));
+  $("#ftree").prepend(row); input.focus();
+}
+async function loadSide() {
+  const side = $("#fside"); if (!FT.sel) { side.hidden = true; return; }
+  side.hidden = false; side.replaceChildren(el("p", { class: "mute" }, "…"));
+  let ov; try { ov = await api("space?space=" + encodeURIComponent(FT.sel)); } catch (x) { return fail(x); }
+  FT.info = ov;
+  const tags = (ov.tags || []).filter(t => !["dashboard", "rules", "index", "guide"].includes(t.tag.split("/")[0])).slice(0, 60);
+  const kw = (ov.rules && ov.rules.keywords) || [], rtags = (ov.rules && ov.rules.tags) || [];
+  const saveRules = async patch => { try { await api("space/rules", { space: FT.sel, ...patch }); loadSide(); } catch (x) { fail(x); } };
+  const kwInput = el("input", { placeholder: "add a keyword (#word)", size: 18 });
+  kwInput.addEventListener("keydown", e => { if (e.key === "Enter" && kwInput.value.trim()) saveRules({ keywords: [...kw, kwInput.value.trim()] }); });
+  side.replaceChildren(
+    el("h3", {}, (ov.label || ov.space)),
+    el("div", { class: "mute small" }, Number(ov.counts.active || 0).toLocaleString("en") + " notes"),
+    el("h3", { style: "margin-top:8px" }, "Tags"),
+    el("p", { class: "mute small", style: "margin:0" }, "Drag a tag onto another space to send its notes there."),
+    el("div", {}, ...(tags.length ? tags.map(t => {
+      const chip = el("span", { class: "fchip", draggable: "true", title: "Drag onto a space" }, t.tag, el("span", { class: "n" }, t.count));
+      chip.addEventListener("dragstart", e => { e.dataTransfer.setData("text/tag", FT.sel + "|" + t.tag); e.dataTransfer.effectAllowed = "move"; });
+      return chip;
+    }) : [el("span", { class: "mute" }, "no tag yet")])),
+    el("h3", { style: "margin-top:8px" }, "Files notes here"),
+    el("p", { class: "mute small", style: "margin:0" }, "Notes with these tags or keywords are filed in this space."),
+    el("div", {}, ...rtags.map(t => el("span", { class: "fchip kw" }, "tag " + t, el("button", { type: "button", title: "remove", onclick: () => saveRules({ tags: rtags.filter(x => x !== t) }) }, "✕"))),
+      ...kw.map(k => el("span", { class: "fchip kw" }, "#" + k, el("button", { type: "button", title: "remove", onclick: () => saveRules({ keywords: kw.filter(x => x !== k) }) }, "✕")))),
+    kwInput);
+}
+// Sending the notes of a tag from one space to another: shown first, done on a click.
+async function moveTags(from, to, tag) {
+  let pre;
+  try { pre = await api("space/move-tag", { from, to, tag, dry_run: true }); } catch (x) { return fail(x); }
+  const name = s => (FT.l.find(x => x.space === s) || {}).label || s;
+  if (!pre.matched) return fail(new Error("No note carries " + tag + " in " + name(from) + "."));
+  const body = el("div", {},
+    el("p", {}, el("b", {}, pre.matched + " notes"), " tagged ", el("b", {}, tag), " in ", el("b", {}, name(from)), " will go to ", el("b", {}, name(to)), ". Nothing is erased: each note is retired in ", name(from), " with the reason “moved to ", name(to), "”, and its history stays."),
+    pre.left ? el("p", { class: "mute small" }, pre.left + " files or imported passages stay where they are.") : null,
+    el("ul", { class: "small" }, ...pre.sample.map(t => el("li", {}, t))));
+  const dlg = $("#move-dlg"); $("#move-body").replaceChildren(body);
+  $("#move-go").onclick = async () => {
+    dlg.close();
+    try { const r = await api("space/move-tag", { from, to, tag, dry_run: false }); toast(r.moved + " notes moved" + (r.failed ? ", " + r.failed + " need your decision" : "")); } catch (x) { fail(x); }
+    renderLayout(); load();
+  };
+  dlg.showModal();
 }
 $("#layout-add").addEventListener("submit", async e => {
   e.preventDefault();
@@ -1544,6 +1706,7 @@ $("#pair-form").addEventListener("submit", async e => {
   e.preventDefault();
   const r = await act("pairing", {});
   if (!r) return;
+  $("#pair-waiting").hidden = false; $("#pair-joined").hidden = true; $("#pair-title").textContent = "Join a MemCP network";
   $("#pair-server").textContent = r.server;
   $("#pair-code").textContent = r.code;
   const qr = $("#pair-qr");
@@ -1559,9 +1722,24 @@ $("#pair-form").addEventListener("submit", async e => {
   };
   tick();
   pairTimer = setInterval(tick, 1000);
+  // As soon as a node or an app uses the code, the window says who joined.
+  clearInterval(pairPoll);
+  pairPoll = setInterval(async () => {
+    try {
+      const st = await api("pairing/status?code=" + encodeURIComponent(r.code));
+      if (st.state === "joined") {
+        clearInterval(pairPoll); clearInterval(pairTimer);
+        $("#pair-waiting").hidden = true; $("#pair-joined").hidden = false;
+        $("#pair-title").textContent = "Connected";
+        $("#pair-name").textContent = st.connection || "A device";
+        load();
+      } else if (st.state === "expired") clearInterval(pairPoll);
+    } catch (_) {}
+  }, 2000);
   $("#pair-dlg").showModal();
 });
-$("#pair-dlg").addEventListener("close", () => clearInterval(pairTimer));
+let pairPoll = null;
+$("#pair-dlg").addEventListener("close", () => { clearInterval(pairTimer); clearInterval(pairPoll); });
 
 async function consoleToken(u) {
   const r = await act("users/console-token", { user: u.id });

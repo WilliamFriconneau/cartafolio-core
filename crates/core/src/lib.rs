@@ -13,6 +13,7 @@ pub mod fsx;
 pub mod guide;
 pub mod import;
 pub mod layout;
+mod moves;
 pub mod origin;
 pub mod pairing;
 mod schema;
@@ -25,5 +26,6 @@ pub mod util;
 
 pub use brain::{Brain, default_config};
 pub use error::{Error, Result};
+pub use moves::Moved;
 pub use schema::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 pub use space::Space;

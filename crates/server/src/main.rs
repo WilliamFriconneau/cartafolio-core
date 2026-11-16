@@ -20,7 +20,7 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
   console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
-  serve [--listen 127.0.0.1:8791] [--allow-remote] [--allow-origin URL] [--threads N]
+  serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--console-admin]                the admin page on this listener, with a console token: on by
                                          default on the loopback only, never through Tailscale Funnel
         [--public-url URL] [--ingress-listen ADDR --trust-ingress IP --admins ha_login,...]
@@ -56,8 +56,9 @@ const USAGE: &str = "usage: memcp --data DIR <command>
 
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
-const VALUE_FLAGS: [&str; 27] = [
+const VALUE_FLAGS: [&str; 28] = [
     "--data",
+    "--node-name",
     "--spaces",
     "--language",
     "--listen",
@@ -296,6 +297,18 @@ fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
     {
         app.public_url = u.trim_end_matches('/').to_string();
     }
+    app.node_name = flag("--node-name").unwrap_or("MemCP").to_string();
+    // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
+    let _advertised = if a.switches.iter().any(|s| s == "--advertise") {
+        let port = listen
+            .rsplit(':')
+            .next()
+            .and_then(|p| p.parse::<u16>().ok())
+            .unwrap_or(8791);
+        memcp_server::discovery::advertise(port, &app.node_name)
+    } else {
+        None
+    };
     let app = Arc::new(app);
     let identity = match flag("--identity-listen") {
         Some(addr) => {
