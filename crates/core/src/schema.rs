@@ -3,7 +3,7 @@
 
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
-    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8,
+    SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -25,6 +25,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V15,
     CONTROL_V16,
     CONTROL_V17,
+    CONTROL_V18,
 ];
 
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
@@ -440,4 +441,46 @@ const CONTROL_V17: &str = r"
 ALTER TABLE spaces ADD COLUMN label TEXT;
 ALTER TABLE spaces ADD COLUMN parent TEXT;
 ALTER TABLE spaces ADD COLUMN position INTEGER NOT NULL DEFAULT 0;
+";
+
+/// The log peers exchange: one append-only row per change (a fact created, replaced or retired, a file kept
+/// or retired, a layout field changed). `eid` is a stable identifier derived from what changed, so the same
+/// change received twice is one row; `hlc` is a hybrid logical clock stamp; `via` is the peer that delivered
+/// the row (empty for a change made here), so a peer is never sent back what it sent. `sync_fields` holds the
+/// stamp of the newest value of each layout field (last writer wins), `sync_disputes` the facts two peers
+/// changed differently.
+const SPACE_V9: &str = r"
+CREATE TABLE sync_log (
+  seq     INTEGER PRIMARY KEY AUTOINCREMENT,
+  eid     TEXT NOT NULL UNIQUE,
+  hlc     TEXT NOT NULL,
+  origin  TEXT NOT NULL,
+  via     TEXT,
+  kind    TEXT NOT NULL,
+  at      INTEGER NOT NULL,
+  payload TEXT NOT NULL
+) STRICT;
+CREATE TRIGGER sync_log_no_update BEFORE UPDATE ON sync_log BEGIN SELECT RAISE(ABORT,'append-only'); END;
+CREATE TRIGGER sync_log_no_delete BEFORE DELETE ON sync_log BEGIN SELECT RAISE(ABORT,'append-only'); END;
+CREATE TABLE sync_fields (field TEXT PRIMARY KEY, hlc TEXT NOT NULL) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_disputes (
+  fact_id TEXT NOT NULL, alt TEXT NOT NULL, at INTEGER NOT NULL,
+  PRIMARY KEY (fact_id, alt)
+) STRICT, WITHOUT ROWID;
+";
+
+/// What this node knows of each peer, per space: how far it has read the peer's log (`pulled`), how far the
+/// peer has read this one (`pushed`), and the latest transfer (direction, progress, time) for the live status.
+const CONTROL_V18: &str = r"
+CREATE TABLE sync_state (
+  peer   TEXT NOT NULL,
+  space  TEXT NOT NULL,
+  pulled INTEGER NOT NULL DEFAULT 0,
+  pushed INTEGER NOT NULL DEFAULT 0,
+  dir    TEXT NOT NULL DEFAULT 'idle' CHECK (dir IN ('sending','receiving','idle')),
+  done   INTEGER NOT NULL DEFAULT 0,
+  total  INTEGER NOT NULL DEFAULT 0,
+  at     INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (peer, space)
+) STRICT, WITHOUT ROWID;
 ";

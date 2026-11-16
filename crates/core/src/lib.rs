@@ -18,6 +18,7 @@ pub mod origin;
 pub mod pairing;
 mod schema;
 mod space;
+pub mod sync;
 pub mod text;
 pub mod tools;
 pub mod triage;

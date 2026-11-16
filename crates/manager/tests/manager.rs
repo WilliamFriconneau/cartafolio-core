@@ -646,7 +646,7 @@ fn a_bridge_pairs_with_the_code_its_person_made_and_reaches_only_their_a_trier()
     let got = got.body_json();
     let key = got["key"].as_str().ok_or("key")?;
     let agent = got["agent"].as_str().ok_or("agent")?;
-    assert!(agent.starts_with("bridge-lou-s-mac-"), "{agent}");
+    assert!(agent.starts_with("peer-lou-s-mac-"), "{agent}");
     assert_eq!(
         got["mcp_url"],
         format!("https://memory.example.net/mcp/{agent}")

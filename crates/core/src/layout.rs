@@ -41,7 +41,7 @@ pub struct Change {
     pub position: Option<i64>,
 }
 
-fn clean_label(label: &str) -> Result<String> {
+pub(crate) fn clean_label(label: &str) -> Result<String> {
     let l = label.trim();
     let n = l.chars().count();
     if n == 0 || n > MAX_LABEL || l.chars().any(char::is_control) {
@@ -219,6 +219,17 @@ impl Brain {
             )?;
         }
         tx.commit()?;
+        let log = self.open_space(space)?;
+        if let Some(l) = &label {
+            crate::sync::record_layout(&log, "label", serde_json::json!(l))?;
+        }
+        if let Some(parent) = &change.parent {
+            let v = parent.as_ref().map(Space::as_str);
+            crate::sync::record_layout(&log, "parent", serde_json::json!(v))?;
+        }
+        if let Some(pos) = change.position {
+            crate::sync::record_layout(&log, "position", serde_json::json!(pos))?;
+        }
         Ok(())
     }
 
@@ -289,6 +300,12 @@ impl Brain {
             "UPDATE spaces SET label = ?2, parent = ?3, position = ?4 WHERE name = ?1",
             params![space.as_str(), label, parent.map(Space::as_str), next],
         )?;
+        let log = self.open_space(&space)?;
+        crate::sync::record_layout(&log, "label", serde_json::json!(label))?;
+        if let Some(p) = parent {
+            crate::sync::record_layout(&log, "parent", serde_json::json!(p.as_str()))?;
+        }
+        crate::sync::record_layout(&log, "position", serde_json::json!(next))?;
         Ok(space)
     }
 }

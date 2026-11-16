@@ -308,6 +308,7 @@ impl Brain {
         }
         let conn = self.open_existing(&space.file_name())?;
         migrate(&conn, SPACE_MIGRATIONS)?;
+        crate::sync::ensure_log(&conn)?;
         let declared = meta(&conn, "space")?;
         if declared.as_deref() != Some(space.as_str()) {
             return Err(Error::Schema(format!(

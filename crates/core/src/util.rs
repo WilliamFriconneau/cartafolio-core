@@ -6,6 +6,13 @@ pub fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(i64::MAX))
 }
 
+/// Milliseconds since the Unix epoch.
+pub fn now_ms() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
 /// `N` random bytes from the OS. A generator failure is unrecoverable:
 /// we never fall back to a predictable identifier or token.
 pub fn random_bytes<const N: usize>() -> [u8; N] {

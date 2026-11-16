@@ -365,7 +365,13 @@ pub(crate) fn check_kind(kind: &str) -> Result<()> {
     }
 }
 
-fn event(conn: &Connection, fact_id: &str, actor: &str, action: &str, detail: Value) -> Result<()> {
+pub(crate) fn event(
+    conn: &Connection,
+    fact_id: &str,
+    actor: &str,
+    action: &str,
+    detail: Value,
+) -> Result<()> {
     conn.execute(
         "INSERT INTO fact_events (fact_id, at, actor, action, detail) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![fact_id, util::now(), actor, action, detail.to_string()],
@@ -373,8 +379,22 @@ fn event(conn: &Connection, fact_id: &str, actor: &str, action: &str, detail: Va
     Ok(())
 }
 
-/// Inserts a fact and its index entry, in the caller's transaction.
+/// Inserts a fact and its index entry, in the caller's transaction, and logs it for the peers.
 pub(crate) fn insert(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
+    new: &NewFact,
+    text: &str,
+    replaces: Option<&str>,
+) -> Result<Fact> {
+    let fact = insert_unlogged(conn, space, author, new, text, replaces)?;
+    crate::sync::record_fact_created(conn, &fact.id)?;
+    Ok(fact)
+}
+
+/// [`insert`] without the entry in the peers' log: the caller logs it once the fact is complete.
+fn insert_unlogged(
     conn: &Connection,
     space: &Space,
     author: &str,
@@ -696,7 +716,7 @@ pub(crate) fn supersede_as(
             "fact {old_id} was just replaced or retired by another call"
         )));
     }
-    let fact = insert(&tx, space, author, &staged, &t, Some(old_id))?;
+    let fact = insert_unlogged(&tx, space, author, &staged, &t, Some(old_id))?;
     tx.execute(
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![old_id, fact.id],
@@ -707,6 +727,8 @@ pub(crate) fn supersede_as(
             params![fact.id, r],
         )?;
     }
+    crate::sync::record_fact_created(&tx, &fact.id)?;
+    crate::sync::record_fact_superseded(&tx, old_id, &fact.id, author, reason)?;
     event(
         &tx,
         old_id,
@@ -747,6 +769,7 @@ pub(crate) fn retire_as(
         params![id, util::now(), author, reason],
     )?;
     event(&tx, id, author, action, json!({ "reason": reason }))?;
+    crate::sync::record_fact_retired(&tx, id, author, reason)?;
     tx.commit()?;
     read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))
 }
