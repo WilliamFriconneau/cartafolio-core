@@ -90,3 +90,19 @@ pub fn mode_bits(meta: &fs::Metadata) -> Option<u32> {
 pub fn loose(meta: &fs::Metadata) -> bool {
     mode_bits(meta).is_some_and(|m| m & 0o077 != 0)
 }
+
+/// `fs::canonicalize`, without the `\\?\` prefix Windows puts on a resolved path (which not every program, SQLite's
+/// `VACUUM INTO` included, takes kindly). On other systems it is `fs::canonicalize`.
+pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
+    let p = fs::canonicalize(path)?;
+    #[cfg(windows)]
+    {
+        let text = p.to_string_lossy();
+        if let Some(rest) = text.strip_prefix(r"\\?\")
+            && !rest.starts_with("UNC\\")
+        {
+            return Ok(std::path::PathBuf::from(rest));
+        }
+    }
+    Ok(p)
+}

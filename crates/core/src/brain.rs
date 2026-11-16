@@ -337,7 +337,7 @@ impl Brain {
     /// keeps only the `keep` most recent ones. `root` must be outside the data
     /// directory. Every copy is checked (`integrity_check`) before it is kept.
     pub fn backup(&self, root: &Path, keep: usize, at: i64) -> Result<PathBuf> {
-        let data = fs::canonicalize(&self.dir)?;
+        let data = crate::fsx::canonical(&self.dir)?;
         if resolves_inside(root, &data)? {
             return Err(Error::Invalid(format!(
                 "the backup must be outside the data directory ({})",
@@ -348,7 +348,7 @@ impl Brain {
             .recursive(true)
             .private_dir()
             .create(root)?;
-        let root = fs::canonicalize(root)?;
+        let root = crate::fsx::canonical(root)?;
         crate::fsx::set_private_dir(&root)?;
         let dest = root.join(format!("backup-{}", crate::util::compact(at)));
         DirBuilder::new().private_dir().create(&dest)?;
@@ -437,7 +437,7 @@ pub(crate) fn resolves_inside(p: &Path, dir: &Path) -> Result<bool> {
             _ => break,
         }
     }
-    let mut full = fs::canonicalize(&base)?;
+    let mut full = crate::fsx::canonical(&base)?;
     full.extend(rest.into_iter().rev());
     Ok(full.starts_with(dir))
 }

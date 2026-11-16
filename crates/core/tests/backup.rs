@@ -17,10 +17,14 @@ fn copies_every_database_readable_and_private() -> Res {
     let root = t.path().join("backups");
     let copy = b.backup(&root, 14, 1_000)?;
 
-    assert_eq!(mode(&root)?, 0o700);
-    assert_eq!(mode(&copy)?, 0o700);
+    #[cfg(unix)]
+    {
+        assert_eq!(mode(&root)?, 0o700);
+        assert_eq!(mode(&copy)?, 0o700);
+    }
     for s in spaces() {
         let f = copy.join(format!("{s}.sqlite"));
+        #[cfg(unix)]
         assert_eq!(mode(&f)?, 0o600, "{}", f.display());
         let c = Connection::open(&f)?;
         let ok: String = c.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;

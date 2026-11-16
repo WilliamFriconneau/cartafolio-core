@@ -264,7 +264,7 @@ fn guides_of(ctl: &Connection, who: &User, vaults: &[(Space, String)]) -> Result
 /// Writes the export of a person into `<to>/memcp-export-<person>-<time>/` and returns
 /// that directory. `to` must be outside the data directory.
 pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<PathBuf> {
-    let data = fs::canonicalize(brain.dir())?;
+    let data = crate::fsx::canonical(brain.dir())?;
     if brain::resolves_inside(to, &data)? {
         return Err(Error::Invalid(format!(
             "the export must be outside the data directory ({})",
@@ -281,7 +281,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
     }
     private_dir(to)?;
     let root =
-        fs::canonicalize(to)?.join(format!("memcp-export-{}-{}", who.name, util::compact(at)));
+        crate::fsx::canonical(to)?.join(format!("memcp-export-{}-{}", who.name, util::compact(at)));
     fs::DirBuilder::new()
         .private_dir()
         .create(&root)
@@ -386,7 +386,7 @@ fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
         if path.is_dir() {
             walk(&path, base, out)?;
         } else if let Ok(rel) = path.strip_prefix(base) {
-            out.push(rel.to_string_lossy().into_owned());
+            out.push(rel.to_string_lossy().replace('\\', "/"));
         }
     }
     Ok(())
