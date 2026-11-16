@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261117.0.2
+
+- Voice commands by keywords: a note that starts « j'ai une idée », « il faut », « je dois », « problème », « il manque », « acheter »… also becomes a card of the space's ideas, what's next or targets, or of the home shopping list, with the note as its source.
+- A board's first pass reads the newest notes, so a memory that starts with a large import is not read from its archive.
+
 ## 20261117.0.1
 
 - The janitor files by keywords, without a model: a word that belongs to one space sends a note there at once, ordinary words score, a tie or nothing leaves it in À trier; each space's keywords live in its `rules` note, versioned. A model may only propose keywords.
