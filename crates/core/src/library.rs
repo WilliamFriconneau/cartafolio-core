@@ -455,9 +455,18 @@ pub fn search(conn: &Connection, query: &str, limit: usize) -> Result<Vec<LibHit
 #[derive(Clone, Debug)]
 pub enum Raised {
     /// The fact written (or the identical one already active).
-    Fact(facts::Fact),
+    Fact(Box<facts::Fact>),
     /// Close facts exist: nothing was written; say which are different with `distinct_from`.
     NeedsDecision(Vec<Candidate>),
+}
+
+/// What a caller gives to raise an original.
+#[derive(Clone, Copy, Debug)]
+pub struct RaiseRequest<'a> {
+    pub path: &'a str,
+    pub summary: &'a str,
+    pub tags: &'a [String],
+    pub distinct_from: &'a [String],
 }
 
 /// Raises an original: writes a normal fact in `space` with the caller's `summary` and `tags`, and links it to the
@@ -468,12 +477,15 @@ pub fn raise(
     conn: &Connection,
     space: &Space,
     author: &str,
-    path: &str,
-    summary: &str,
-    tags: &[String],
-    distinct_from: &[String],
+    req: &RaiseRequest,
     now: i64,
 ) -> Result<Raised> {
+    let RaiseRequest {
+        path,
+        summary,
+        tags,
+        distinct_from,
+    } = *req;
     let summary = summary.trim();
     if summary.is_empty() {
         return Err(Error::Invalid(
@@ -520,7 +532,7 @@ pub fn raise(
          VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         params![fact.id, root_id, abs, rel, now, author],
     )?;
-    Ok(Raised::Fact(fact))
+    Ok(Raised::Fact(Box::new(fact)))
 }
 
 /// A folder of a library, as the graph sees it.

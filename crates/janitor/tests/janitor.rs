@@ -351,6 +351,29 @@ fn a_refused_key_and_an_unreachable_memory_stop_the_pass_without_harm() {
 }
 
 /// A settings value that is refused at construction: the key would travel in clear to another machine.
+#[test]
+fn a_fact_of_a_library_is_never_touched_by_a_pass() {
+    let r = rig("library");
+    let url = r.base.replace("/mcp", "/mcp/janitor");
+    let mut owner = Client::new(&url, &r.janitor_key);
+    let text = "Tension 12/8 relevée dans le carnet monté, à garder tel quel.";
+    owner
+        .call(
+            "remember",
+            json!({"space": "sam-work", "text": text, "tags": ["inbox", "library/raised"]}),
+        )
+        .expect("a raised note that still carries the inbox tag");
+    let mut j = janitor(&r, &url, &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!(
+        (report.sent, report.unsure, report.left),
+        (0, 0, 0),
+        "{report:?}"
+    );
+    let still = texts(&mut owner, "sam-work", &["inbox"], "");
+    assert_eq!(still, vec![text.to_string()]);
+}
+
 fn fake() -> Config {
     let dir = std::env::temp_dir().join(format!("memcp-janitor-fake-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");

@@ -1053,10 +1053,12 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 &conn,
                 &space,
                 author,
-                str_arg(args, "path")?,
-                str_arg(args, "summary")?,
-                &tags_arg(args)?,
-                &ids,
+                &crate::library::RaiseRequest {
+                    path: str_arg(args, "path")?,
+                    summary: str_arg(args, "summary")?,
+                    tags: &tags_arg(args)?,
+                    distinct_from: &ids,
+                },
                 util::now(),
             )? {
                 crate::library::Raised::Fact(f) => Ok(json!({

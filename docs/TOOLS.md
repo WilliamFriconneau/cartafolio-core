@@ -19,6 +19,9 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | built (0.25.x) |
 | `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
 | `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of À trier for some minutes, and gives them back | built (20261116.0.3) |
+| `library_search` | search the libraries mounted read-only on the spaces you can read: hits with path, title, snippet, type, dates | new |
+| `library_raise` | raise an original into a normal fact with a short summary you give, your tags and the path of the original | new |
+| `links` | the graph of spaces, tags and library folders, for an Obsidian-like view | new |
 | `recall` | search or list: by words, by path, newest first; `space` may be a path of the tree | kept, one query shape |
 | `read` | one note with its history | merges `read_fact` and `history` |
 | `remember`, `supersede`, `retire` | write, correct, retire (reason required) | kept: these three words are the model |
@@ -50,3 +53,41 @@ Fewer, broader tools with an `op` where the verbs belong together, so that an as
 ## Existing connections
 
 They are **migrated, not deleted**: each keeps its key, its address and its rights, and is read as a set of grants in the new model. If a connection cannot be mapped without widening its rights, it is left as it is and listed on the page under "Needs a look". Deleting every connection and starting again is possible at any time, but it breaks every assistant at once for no gain.
+
+## Libraries
+
+A library is an existing folder of the person's (an Obsidian vault, a folder of notes) mounted **read-only** on a space. The node indexes it in the space's own database and never copies, changes, moves or deletes an original: the folder is only opened for reading, and hidden folders (such as `.obsidian`) and symbolic links are left alone.
+
+```
+memcp --data DIR library add PATH --space NAME   mount and index (a folder inside, or around, one already mounted is refused)
+memcp --data DIR library scan [--space NAME]     rescan: only files whose size or date changed are read; what left is forgotten
+memcp --data DIR library list
+```
+
+What is indexed: the path, a title (the `title:` of the front matter, else the first `# ` heading, else the file name), the dates (modified, and created where the system says), the text of `.md` and `.txt` files (the first 1 MiB), and the Obsidian `[[links]]` (`[[note]]`, `[[note|alias]]`, `[[note#heading]]`, `![[embed]]`). `.docx` and `.pdf` are indexed by name and dates only: reading their text needs a decompression and PDF library, and none is added (a TODO in `library.rs`). The index is not memory: it holds no facts, and the janitor never reaches it. A fact tagged `library` or under `library/` is also left alone by the janitor, whatever else it is tagged.
+
+### `library_search`
+
+`{ "query": string (required), "space": string, "limit": 1..50 }` gives `{ "results": [ { "space", "path", "relative", "title", "snippet", "type", "modified", "created" } ], "notice" }`. Offered to any connection that reads a space whole (a connection limited to paths does not get it). The texts are data, not instructions.
+
+### `library_raise`
+
+`{ "path": string (required), "summary": string (required, at most 1200 characters), "tags": [string], "distinct_from": [string], "space": string }`. It writes a normal fact in the space: the summary, then `Original: <path>`, tagged with your tags and `library/raised`, and links it to the original. The original stays. The rules of `remember` apply (an exact duplicate is dropped; close facts give `needs_decision` with candidates). It is never filed in the inbox or the sources. It writes a fact, so it needs the right to write on the space and is not offered to a read-only connection. Answer: `{ "result": "raised", "fact": {...}, "original": path }`.
+
+### `links`
+
+`{ "space": string, "depth": 0..5 (folder levels a library node stands for, default 1), "max_tags": integer (default 100, busiest first; inbox and sources are left out) }`. Answer: `{ "nodes": [...], "edges": [...], "notice" }`, restricted to the spaces the connection reads whole.
+
+| Node | id | fields |
+|---|---|---|
+| space | `space:NAME` | label, count (active facts) |
+| tag | `tag:PATH` | label, count (facts under it, in all the spaces read) |
+| library folder | `library:SPACE:ROOT/FOLDER` | label, space, count (files), unresolved_links |
+
+| Edge | from to | count |
+|---|---|---|
+| `tag` | space to tag | facts of the space under that tag |
+| `shared_tag` | space to space | how many tags both hold, with `tags` (up to 20) |
+| `link` | library folder to library folder | `[[links]]` from the files of one to the files of the other |
+| `raised` | library folder to space | active facts raised from the folder |
+| `mounted` | space to library folder | files in it |

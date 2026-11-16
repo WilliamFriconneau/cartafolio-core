@@ -206,7 +206,7 @@ fn a_database_from_before_tags_gets_the_table_and_keeps_its_facts() -> Res {
     drop(conn);
     {
         let c = rusqlite::Connection::open(t.path().join("data").join("work.sqlite"))?;
-        c.execute_batch("DROP TABLE fact_tags; DROP TABLE fact_origin; DROP TABLE app_guides; PRAGMA user_version = 4;")?;
+        c.execute_batch("DROP TABLE library_raised; DROP TABLE library_links; DROP TABLE library_fts; DROP TABLE library_entries; DROP TABLE library_roots; DROP TABLE fact_tags; DROP TABLE fact_origin; DROP TABLE app_guides; PRAGMA user_version = 4;")?;
     }
     let conn = brain.open_space(&sp("work"))?;
     let back = facts::read_fact(&conn, &f.id)?.ok_or("fact lost")?;
