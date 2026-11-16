@@ -54,7 +54,8 @@ fn collect(dir: &Path, base: &Path, out: &mut Vec<String>) -> io::Result<()> {
         if path.is_dir() {
             collect(&path, base, out)?;
         } else if let Ok(rel) = path.strip_prefix(base) {
-            out.push(rel.to_string_lossy().into_owned());
+            // An entry of an archive is named with `/`, on every system.
+            out.push(rel.to_string_lossy().replace('\\', "/"));
         }
     }
     Ok(())

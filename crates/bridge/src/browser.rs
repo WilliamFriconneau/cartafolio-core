@@ -578,6 +578,14 @@ mod tests {
                 .starts_with("Participants : Marie")
         );
         link.stop();
-        assert!(std::net::TcpStream::connect(("127.0.0.1", port)).is_err());
+        // The listener closes as the thread ends: give it a moment, never assume it is instant.
+        let closed = (0..60).any(|_| {
+            let refused = std::net::TcpStream::connect(("127.0.0.1", port)).is_err();
+            if !refused {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            refused
+        });
+        assert!(closed, "the port is still listening after stop");
     }
 }
