@@ -1,0 +1,54 @@
+{
+  "format": "kalios.screens/1",
+  "screens": [
+    {
+      "id": "spaces",
+      "sections": [
+        { "id": "tree", "fields": [ { "id": "tree", "kind": "space_tree" } ] }
+      ]
+    },
+    {
+      "id": "space",
+      "sections": [
+        { "id": "identity", "fields": [
+          { "id": "name", "kind": "text", "required": true, "max_len": 60 },
+          { "id": "path", "kind": "path", "required": true }
+        ] },
+        { "id": "words", "fields": [
+          { "id": "unique_words", "kind": "words" },
+          { "id": "ordinary_words", "kind": "words" },
+          { "id": "tags", "kind": "words" }
+        ] },
+        { "id": "privacy", "fields": [
+          { "id": "sensitive", "kind": "switch" },
+          { "id": "shares_with", "kind": "spaces", "when": "sensitive" }
+        ] },
+        { "id": "destinations", "fields": [
+          { "id": "connectors", "kind": "connectors" }
+        ] },
+        { "id": "assistants", "fields": [
+          { "id": "assistant_level", "kind": "choice", "options": ["propose", "add", "full"] }
+        ] },
+        { "id": "apple", "fields": [
+          { "id": "sends_apple_health", "kind": "switch", "platforms": ["ios"] },
+          { "id": "sends_calendar", "kind": "switch", "platforms": ["ios", "macos"] },
+          { "id": "sends_reminders", "kind": "switch", "platforms": ["ios", "macos"] }
+        ] },
+        { "id": "advanced", "fields": [
+          { "id": "includes_children", "kind": "switch" },
+          { "id": "state_file", "kind": "switch" }
+        ] }
+      ]
+    },
+    {
+      "id": "intelligence",
+      "sections": [
+        { "id": "mode", "fields": [
+          { "id": "intelligence_mode", "kind": "choice", "options": ["off", "device", "api"] },
+          { "id": "api_address", "kind": "text", "when": "intelligence_mode=api", "max_len": 300 },
+          { "id": "api_key", "kind": "secret", "when": "intelligence_mode=api" }
+        ] }
+      ]
+    }
+  ]
+}

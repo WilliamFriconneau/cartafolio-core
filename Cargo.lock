@@ -764,6 +764,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "memcp-spaces"
+version = "0.24.3"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,0 +1,15 @@
+[package]
+name = "memcp-spaces"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish = false
+license.workspace = true
+description = "Spaces (the destinations of a note), the keyword router and the connector interface; no iOS, no health"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[lints]
+workspace = true
