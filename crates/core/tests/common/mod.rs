@@ -39,6 +39,12 @@ impl Drop for Temp {
     }
 }
 
+/// Where there are no mode bits (Windows), a stub: the tests that read modes are Unix only.
+#[cfg(not(unix))]
+pub fn mode(_p: &Path) -> Result<u32, Box<dyn Error>> {
+    Ok(0)
+}
+
 #[cfg(unix)]
 pub fn mode(p: &Path) -> Result<u32, Box<dyn Error>> {
     Ok(fs::metadata(p)?.permissions().mode() & 0o777)
