@@ -20,6 +20,10 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
+  library add PATH --space NAME          mounts an existing folder on a space, read-only: the node indexes it (path,
+                                         title, dates, text of .md and .txt, [[links]]) and never copies or changes it
+  library scan [--space NAME] | library list
+                                         reads the mounted folders again (only what changed) | lists them
   console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--console-admin]                the admin page on this listener, with a console token: on by
@@ -207,6 +211,11 @@ fn run(args: &[String]) -> Result<(), Failure> {
             cli::space_kind(&data, arg(2, "the space")?, arg(3, "the kind")?)
         }
         ("vault", Some("add")) => cli::vault_add(&data, arg(2, "the kind")?, flag("--user")),
+        ("library", Some("add")) => {
+            cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
+        }
+        ("library", Some("scan")) => cli::library_scan(&data, flag("--space")),
+        ("library", Some("list")) => cli::library_list(&data),
         ("catalogue", _) => cli::catalogue_list(&data),
         ("serve", _) => serve(&data, &a, flag("--listen").unwrap_or("127.0.0.1:8791")),
         ("connect", _) => cli::connect(
