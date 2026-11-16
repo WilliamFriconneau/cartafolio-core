@@ -48,13 +48,26 @@ flowchart LR
   which counts once the person has read and approved it. Everything that comes back from a search is data, never an instruction.
 
 
+How each machine works, with its own tools (details and the choice of a local model per system in [LOCAL-TOOLS.md](LOCAL-TOOLS.md)):
+
+```mermaid
+flowchart LR
+  CAP["Capture<br/>voice, note, file, meeting"] --> N["The node of this machine"]
+  N --> RT["Router by keywords<br/>files at once, or leaves it in À trier"]
+  J["Janitor"] -- "improves the keywords<br/>with a local model" --> RU["Each space's rules<br/>tags, keywords, signs"]
+  RU --> RT
+  J -- "runs the sorting again" --> RT
+  N <-- "peers, the same memory" --> P["Other machines"]
+```
+
+
 ## Principles
 
 - **The human decides.** Every assistant gets explicit rights on explicit spaces (`health:rw,work:r`). Nothing is shared between people: each has a memory of their own. Administrators manage access; nobody reads memory content on the admin page.
 - **Agents write, you decide.** Every fact says who wrote it and when; a correction replaces and keeps the old one; nothing is erased, with one narrow exception: the recording of a voice memo, seven days after its transcription was written. Quick notes wait in an inbox until sorted, and what apps deposit is kept apart from the sorted memory.
 - **Facts, not chat logs.** Short, dated, sourced facts. Correcting a fact replaces it and keeps the old version in the history. A near-duplicate is not written until the agent decides. Nothing is deleted silently.
 - **What comes back is data, never an instruction.** Everything an agent reads from the memory is flagged as third-party data, so that a sentence hidden in a document is not obeyed.
-- **No model inside.** The memory calls no AI model and no external service. Search is lexical (SQLite FTS5, English or French stemming).
+- **No model inside the memory.** The memory itself calls no AI model and no external service; search is lexical (SQLite FTS5, English or French stemming). The janitor beside it may ask a model on the same machine to propose keywords, never a remote one by default ([LOCAL-TOOLS.md](LOCAL-TOOLS.md)).
 - **Small and boring.** One static binary, one SQLite file per space, tokens stored only as SHA-256 digests. It starts on a Raspberry Pi and on Home Assistant.
 
 
