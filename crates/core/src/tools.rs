@@ -24,7 +24,8 @@ static LEASES: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashMap<String, (String, i64)>>,
 > = std::sync::LazyLock::new(Default::default);
 
-const WRITE_TOOLS: [&str; 7] = [
+const WRITE_TOOLS: [&str; 8] = [
+    "rules_set",
     "remember",
     "deposit",
     "supersede",
@@ -33,7 +34,9 @@ const WRITE_TOOLS: [&str; 7] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 7] = [
+const READ_TOOLS: [&str; 9] = [
+    "peers",
+    "rules_get",
     "recall",
     "read_fact",
     "history",
@@ -118,6 +121,16 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             schema: json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }),
         });
         out.push(ToolDef {
+            name: "peers",
+            description: "The machines (peers) that hold this memory with you: the connections named `peer-…` of the person, with when each was created and last used, and whether it is still allowed. Live synchronisation state comes from `GET /sync/status` when the node has it.".into(),
+            schema: json!({ "type": "object", "properties": {} }),
+        });
+        out.push(ToolDef {
+            name: "rules_get",
+            description: "The filing rules of a space: the tags and the keywords that send a note there (the note tagged `rules`, `{\"version\":1,\"tags\":[…],\"keywords\":[…]}`), and the id of the note that holds them.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" } }, "required": ["space"] }),
+        });
+        out.push(ToolDef {
             name: "spaces",
             description: "The spaces this connection can read, as a tree: for each, its name, label, parent (null at the top), position among its siblings, kind, whether it can write there, and the number of active facts. Read `stats` for the tags inside each space.".into(),
             schema: json!({ "type": "object", "properties": {} }),
@@ -129,6 +142,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
     }
     if caller.can_write_anywhere() && !caller.is_scoped() {
+        out.push(ToolDef {
+            name: "rules_set",
+            description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } }, "keywords": { "type": "array", "items": { "type": "string" } } }, "required": ["space"] }),
+        });
         out.push(ToolDef {
             name: "triage_claim",
             description: "For a sorter outside the memory (an assistant on a device): reserves up to `limit` notes waiting in « À trier » for `minutes` (default 10), so that two sorters do not take the same notes. Send each one on with `supersede` (the clean fact in its space, with its tags) or `retire` it; what is not sorted comes back to the others when the lease ends or after `triage_release`.".into(),
@@ -972,6 +990,106 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 !(*who == caller.agent && (ids.is_empty() || ids.contains(id)))
             });
             Ok(json!({ "released": before - leases.len() }))
+        }
+        "peers" => {
+            let ctl = brain.open_control()?;
+            let list: Vec<Value> = crate::access::list(&ctl)?
+                .into_iter()
+                .filter(|c| c.user_id == caller.user_id && c.agent.starts_with("peer-"))
+                .map(|c| {
+                    json!({
+                        "name": c.agent,
+                        "created_at": crate::util::iso(c.created_at),
+                        "last_used_at": c.last_used_at.map(crate::util::iso),
+                        "allowed": c.revoked_at.is_none(),
+                    })
+                })
+                .collect();
+            Ok(json!({ "peers": list }))
+        }
+        "rules_get" | "rules_set" => {
+            let writing = name == "rules_set";
+            let space_name = args
+                .get("space")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ToolError::Invalid("space: the name of a space".into()))?;
+            let space = Space::new(space_name)?;
+            let allowed = if writing {
+                caller.can_write(&space)
+            } else {
+                caller.readable().contains(&space)
+            };
+            if !allowed || caller.read_paths(&space).is_some() {
+                return Err(ToolError::Invalid(format!("no access to {space_name}")));
+            }
+            let conn = brain.open_space(&space)?;
+            let found: Option<String> = conn
+                .query_row(
+                    "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+                     (SELECT fact_id FROM fact_tags WHERE tag = 'rules') ORDER BY f.created_at DESC LIMIT 1",
+                    [],
+                    |r| r.get(0),
+                )
+                .optional()
+                .map_err(|e| ToolError::Invalid(e.to_string()))?;
+            let current = found
+                .as_deref()
+                .and_then(|id| facts::read_fact(&conn, id).ok().flatten())
+                .and_then(|f| serde_json::from_str::<Value>(f.text.trim()).ok())
+                .filter(|d| d.get("version").and_then(Value::as_i64) == Some(1))
+                .unwrap_or_else(|| json!({ "version": 1, "tags": [], "keywords": [] }));
+            if !writing {
+                return Ok(json!({ "space": space_name, "id": found, "rules": current }));
+            }
+            let clean = |key: &str, tags: bool| -> Vec<String> {
+                let src = args.get(key).unwrap_or(&current[key]);
+                let mut v: Vec<String> = src
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .filter_map(|t| {
+                        if tags {
+                            facts::normalize_tag(t).ok()
+                        } else {
+                            let k = t.trim().trim_start_matches('#').to_lowercase();
+                            (!k.is_empty() && k.chars().count() <= 40).then_some(k)
+                        }
+                    })
+                    .collect();
+                v.sort();
+                v.dedup();
+                v.truncate(100);
+                v
+            };
+            let doc = json!({ "version": 1, "tags": clean("tags", true), "keywords": clean("keywords", false) }).to_string();
+            let mut new = NewFact::agent(&doc, &caller.agent);
+            new.tags = vec!["rules".into()];
+            match found {
+                Some(old) => {
+                    facts::supersede(
+                        &conn,
+                        &space,
+                        &caller.agent,
+                        &old,
+                        new,
+                        Some("rules changed"),
+                    )?;
+                }
+                None => {
+                    if let facts::Remembered::NeedsDecision(c) =
+                        facts::remember(&conn, &space, &caller.agent, new, &[])?
+                    {
+                        let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                        let mut again = NewFact::agent(&doc, &caller.agent);
+                        again.tags = vec!["rules".into()];
+                        facts::remember(&conn, &space, &caller.agent, again, &ids)?;
+                    }
+                }
+            }
+            Ok(
+                json!({ "space": space_name, "rules": serde_json::from_str::<Value>(&doc).unwrap_or(Value::Null) }),
+            )
         }
         "spaces" => {
             let ctl = brain.open_control()?;
