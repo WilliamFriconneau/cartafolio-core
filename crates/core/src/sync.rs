@@ -179,6 +179,8 @@ fn observe(conn: &Connection, hlc: &str) -> Result<()> {
 
 // --- writing the log -----------------------------------------------------------------------------
 
+// One row of the log: each argument is one of its columns.
+#[allow(clippy::too_many_arguments)]
 fn record_raw(
     conn: &Connection,
     eid: &str,

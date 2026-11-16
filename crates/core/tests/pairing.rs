@@ -66,17 +66,18 @@ fn a_code_expires_and_cannot_reach_beyond_the_person() -> Res {
 }
 
 #[test]
-fn a_peer_reads_and_writes_every_space_of_its_person() -> Res {
+fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     let t = Temp::new("pairing-triage");
     let brain = brain(&t)?;
     let (code, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
     assert_eq!(triage, "owner-a-trier");
     let ctl = brain.open_control()?;
     let p = pairing::redeem(&ctl, &code, "phone", NOW + 1)?;
-    assert!(p.agent.starts_with("peer-phone-"));
+    assert!(p.agent.starts_with("peer-phone-"), "{}", p.agent);
     let c = access::authenticate(&ctl, &p.token, NOW + 2)?.ok_or("key")?;
     let box_ = memcp_core::Space::new(&triage)?;
-    assert!(c.can_write(&box_) && c.can_write(&memcp_core::Space::new("health")?));
+    assert!(c.can_write(&box_));
+    assert!(c.readable().contains(&box_));
     // A second device gets the same box, never a second one.
     let (_, again) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW + 3)?;
     assert_eq!(again, triage);

@@ -289,6 +289,97 @@ pub fn adopt(
     Ok(())
 }
 
+/// Plans or applies the merge of another memory (an export) into this installation.
+pub fn merge(
+    data: &Path,
+    plan_of: Option<&Path>,
+    apply_of: Option<&Path>,
+    user: Option<&str>,
+    out: Option<&Path>,
+    backup_to: Option<&Path>,
+    policy: Option<&str>,
+) -> Result<(), Failure> {
+    use memcp_core::merge::{self, Plan, Policy};
+    let brain = open(data)?;
+    match (plan_of, apply_of) {
+        (Some(export_dir), None) => {
+            let who = person(&brain, user)?;
+            let policy = Policy::parse(policy.unwrap_or("keep-both")).map_err(fail)?;
+            let plan = merge::plan(&brain, export_dir, &who, policy).map_err(fail)?;
+            for l in &plan.lines {
+                let p = &l.preview;
+                eprintln!(
+                    "{:<24} {:<5} -> {:<24} new {} already {} differing {} files {} ({})",
+                    l.source,
+                    l.action.word(),
+                    l.destination(),
+                    p.new,
+                    p.already,
+                    p.differing,
+                    p.files_new,
+                    l.note
+                );
+            }
+            match out {
+                Some(path) => {
+                    std::fs::write(path, plan.to_text()).map_err(fail)?;
+                    eprintln!(
+                        "plan written to {}; nothing else was written.",
+                        path.display()
+                    );
+                }
+                None => print!("{}", plan.to_text()),
+            }
+            Ok(())
+        }
+        (None, Some(file)) => {
+            let text = std::fs::read_to_string(file).map_err(fail)?;
+            let plan = Plan::from_text(&text).map_err(fail)?;
+            let dest = match backup_to {
+                Some(p) => p.to_path_buf(),
+                None => {
+                    let abs = std::fs::canonicalize(data).map_err(fail)?;
+                    let mut name = abs.file_name().unwrap_or_default().to_os_string();
+                    name.push("-merge-backups");
+                    abs.with_file_name(name)
+                }
+            };
+            let opts = merge::Options {
+                backup_to: dest,
+                at: now(),
+                stop_after: None,
+            };
+            let report = merge::apply(&brain, &plan, &opts).map_err(fail)?;
+            match &report.backup {
+                Some(b) => println!("backup: {}", b.display()),
+                None => println!("nothing to change: the memories already agree on this plan."),
+            }
+            for l in &report.lines {
+                println!(
+                    "{:<24} -> {:<24}{} added {} tagged {} replaced {} left {} files {}",
+                    l.source,
+                    l.destination,
+                    if l.created { " (new)" } else { "" },
+                    l.added,
+                    l.tagged,
+                    l.replaced,
+                    l.left,
+                    l.files
+                );
+            }
+            for (space, _) in &report.guide_proposals {
+                println!(
+                    "the instructions of the other memory for {space} differ: not applied (policy replace applies them)."
+                );
+            }
+            Ok(())
+        }
+        _ => Err(bad(
+            "merge --plan EXPORT --user PERSON, or merge --apply PLAN",
+        )),
+    }
+}
+
 /// The MCP server on standard input and output, with the rights of the key in the environment
 /// variable `token_env`. Nothing but protocol goes to standard output.
 pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
@@ -469,5 +560,56 @@ pub fn import(
 pub fn backup(data: &Path, to: &Path, keep: usize) -> Result<(), Failure> {
     let dest = open(data)?.backup(to, keep, now()).map_err(fail)?;
     println!("backup: {} ({keep} kept)", dest.display());
+    Ok(())
+}
+
+/// `library add PATH --space NAME`: mounts an existing folder on a space, read-only, and indexes it. Nothing in the
+/// folder is copied, changed or moved.
+pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    if !brain.has_space(&space).map_err(fail)? {
+        return Err(bad(&format!("unknown space {space}")));
+    }
+    let conn = brain.open_space(&space).map_err(fail)?;
+    let id = memcp_core::library::add_root(&conn, folder, now()).map_err(fail)?;
+    let report = memcp_core::library::rescan(&conn, id, now()).map_err(fail)?;
+    println!(
+        "mounted on {space}: {} added, {} unchanged",
+        report.added, report.unchanged
+    );
+    Ok(())
+}
+
+/// `library scan [--space NAME]`: reads the mounted folders again; only what changed is read.
+pub fn library_scan(data: &Path, space: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let spaces = match space {
+        Some(s) => vec![Space::new(s).map_err(fail)?],
+        None => brain.spaces().map_err(fail)?,
+    };
+    for s in spaces {
+        let conn = brain.open_space(&s).map_err(fail)?;
+        if memcp_core::library::roots(&conn).map_err(fail)?.is_empty() {
+            continue;
+        }
+        let r = memcp_core::library::rescan_all(&conn, now()).map_err(fail)?;
+        println!(
+            "{s}: {} added, {} updated, {} unchanged, {} removed",
+            r.added, r.updated, r.unchanged, r.removed
+        );
+    }
+    Ok(())
+}
+
+/// `library list`: the mounted folders, by space.
+pub fn library_list(data: &Path) -> Result<(), Failure> {
+    let brain = open(data)?;
+    for s in brain.spaces().map_err(fail)? {
+        let conn = brain.open_space(&s).map_err(fail)?;
+        for r in memcp_core::library::roots(&conn).map_err(fail)? {
+            println!("{s}\t{}\t{} files", r.root, r.entries);
+        }
+    }
     Ok(())
 }

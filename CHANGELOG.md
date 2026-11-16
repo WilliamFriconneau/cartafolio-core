@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261116.0.5
+
+- MCP tools `rules_get` / `rules_set` (filing rules of a space, versioned) and `peers` (the machines holding the memory).
+- Interface specifications for every app: docs/UI-SPEC.md.
+
 ## 20261116.0.3
 
 - `triage_claim` and `triage_release`: a sorter outside the memory (an assistant on a device) reserves notes of À trier for a few minutes, so that two sorters never take the same.
