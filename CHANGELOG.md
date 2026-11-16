@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261116.0.9
+
+- Reliability: writes from many devices at the same time are no longer lost (« database is locked »); every write waits its turn.
+- An end-to-end test against real nodes: simultaneous writers, three nodes converging, refused access, a 2000-note catch-up.
+
 ## 20261116.0.8
 
 - The page shows the living boards of a space (Boards tab): cards by column, moved in one click, added in a field; a target shows the signs it groups; each board says its last pass and how many notes came since.
