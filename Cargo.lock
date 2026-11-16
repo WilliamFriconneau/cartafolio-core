@@ -824,7 +824,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-spaces"
-version = "0.24.3"
+version = "0.25.0"
 dependencies = [
  "serde",
  "serde_json",
