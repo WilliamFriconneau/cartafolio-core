@@ -6,6 +6,7 @@ mod common;
 use std::collections::BTreeMap;
 use std::error::Error;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -195,6 +196,7 @@ fn an_export_made_before_the_rename_is_still_read() -> Res {
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
     let w = world()?;

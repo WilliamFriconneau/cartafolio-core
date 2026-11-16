@@ -4,6 +4,7 @@ mod common;
 
 use std::error::Error;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
@@ -297,6 +298,7 @@ fn notes_go_to_the_space_of_their_folder() -> Res {
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn protected_files_are_never_read() -> Res {
     let e = env()?;
@@ -346,6 +348,7 @@ fn protected_files_are_never_read() -> Res {
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn exclusions_instructions_symlinks_and_big_files_kept() -> Res {
     let e = env()?;

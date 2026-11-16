@@ -5,6 +5,7 @@ mod common;
 
 use std::error::Error;
 use std::fs;
+#[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use common::{Res, SPACES, Temp, brain, mode, sp, spaces};
@@ -12,6 +13,7 @@ use memcp_core::text::Language;
 use memcp_core::{Brain, SPACE_SCHEMA_VERSION};
 use rusqlite::Connection;
 
+#[cfg(unix)]
 #[test]
 fn init_creates_private_files_in_a_private_directory() -> Res {
     let t = Temp::new("found");
@@ -72,6 +74,7 @@ fn init_refuses_an_initialised_directory_and_changes_nothing() -> Res {
     Ok(())
 }
 
+#[cfg(unix)]
 #[test]
 fn init_refuses_a_directory_open_to_others() -> Res {
     let t = Temp::new("found");

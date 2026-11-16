@@ -1,5 +1,5 @@
 //! The `memcp-bridge` program, run for real against the real engine.
-
+#![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
 

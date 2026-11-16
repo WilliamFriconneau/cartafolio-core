@@ -1,6 +1,6 @@
 //! The outbox and the gateway against the real engine, with the network coming and going: a port nobody listens on
 //! first (the computer is offline), then the memory started on it.
-
+#![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
 

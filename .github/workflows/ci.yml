@@ -54,6 +54,5 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build everything
         run: cargo build --workspace --locked
-      - name: The core and the client are tested here too (on macOS; the tests of Windows come with the port)
-        if: runner.os == 'macOS'
-        run: cargo test -p memcp-core -p memcp-client --locked
+      - name: Tests
+        run: cargo test --workspace --locked --no-fail-fast

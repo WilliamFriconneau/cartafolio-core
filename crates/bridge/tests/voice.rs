@@ -1,6 +1,6 @@
 //! The voice intake against the real memory, with two small scripts standing for `ffmpeg` and `whisper-cli`: the audio of
 //! a test *is* the text it says.
-
+#![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
 

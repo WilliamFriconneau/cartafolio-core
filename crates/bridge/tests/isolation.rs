@@ -1,6 +1,6 @@
 //! An assistant that knows neither the memory's address nor its key: the settings file, the socket and `connect`; and a
 //! folder absorbed into a vault, with names replaced by posts and proposals put down as files.
-
+#![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
 
