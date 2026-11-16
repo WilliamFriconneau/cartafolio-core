@@ -580,7 +580,9 @@ impl Handler for Manager {
         // `/mcp/<person>/<connection>`: the address says whose connection it is, as the page shows it. The
         // person's own installation answers it as `/mcp/<connection>`.
         for base in ["/mcp/", "/.well-known/oauth-protected-resource/mcp/"] {
-            let Some(rest) = path.strip_prefix(base) else { continue };
+            let Some(rest) = path.strip_prefix(base) else {
+                continue;
+            };
             if let Some((who, agent)) = rest.split_once('/')
                 && !agent.contains('/')
                 && let Some(app) = self.person_app(who)

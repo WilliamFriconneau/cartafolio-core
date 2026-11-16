@@ -385,7 +385,9 @@ impl Item {
         match self {
             Item::New(_) => true,
             Item::Already { add_tags, .. } => !add_tags.is_empty(),
-            Item::Conflict { dashboard: true, .. } => policy == Policy::Replace,
+            Item::Conflict {
+                dashboard: true, ..
+            } => policy == Policy::Replace,
             Item::Conflict { .. } => policy != Policy::KeepMine,
             Item::Settled => false,
         }
@@ -408,6 +410,7 @@ fn classify(dst: Option<&Connection>, f: Fact) -> Result<Item> {
         return Ok(Item::New(f));
     };
     if let Some(m) = facts::active_by_hash(dst, &text::text_hash(&f.text))? {
+        let m = facts::read_fact(dst, &m.id)?.unwrap_or(m);
         let add_tags = f
             .tags
             .iter()
@@ -474,7 +477,11 @@ fn survey(src: &Connection, dst: Option<&Connection>, policy: Policy) -> Result<
         }
     }
     for f in their_files(src)? {
-        if dst.map(|d| file_present(d, &f)).transpose()?.unwrap_or(false) {
+        if dst
+            .map(|d| file_present(d, &f))
+            .transpose()?
+            .unwrap_or(false)
+        {
             p.files_already += 1;
         } else {
             p.files_new += 1;
@@ -837,7 +844,13 @@ fn merge_event(dst: &Connection, fact_id: &str, action: &str, detail: Value) -> 
 fn replace_note(dst: &Connection, space: &Space, mine: &str, theirs: &Fact) -> Result<()> {
     let old = facts::read_fact(dst, mine)?.ok_or_else(|| Error::UnknownFact(mine.into()))?;
     let mut tags = old.tags.clone();
-    tags.extend(theirs.tags.iter().filter(|t| !old.tags.contains(t)).cloned());
+    tags.extend(
+        theirs
+            .tags
+            .iter()
+            .filter(|t| !old.tags.contains(t))
+            .cloned(),
+    );
     dst.execute_batch("PRAGMA defer_foreign_keys = ON")?;
     let changed = dst.execute(
         "UPDATE facts SET status = 'replaced', replaced_by = ?1, status_at = ?2, status_by = 'merge',
@@ -853,7 +866,12 @@ fn replace_note(dst: &Connection, space: &Space, mine: &str, theirs: &Fact) -> R
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![mine, id],
     )?;
-    merge_event(dst, mine, "supersede", json!({ "by": id, "reason": "merge" }))?;
+    merge_event(
+        dst,
+        mine,
+        "supersede",
+        json!({ "by": id, "reason": "merge" }),
+    )?;
     dst.execute_batch("PRAGMA defer_foreign_keys = OFF")?;
     Ok(())
 }
@@ -871,15 +889,14 @@ fn add_tags(dst: &Connection, fact_id: &str, tags: &[String]) -> Result<()> {
 /// Brings a file: its bytes (kept by fingerprint), its row, and the note that describes it.
 fn copy_file(
     brain: &Brain,
-    export_dir: &Path,
-    source: &str,
+    blobs: &Path,
     src: &Connection,
     dst: &Connection,
     space: &Space,
     f: &TheirFile,
     undo: &mut Undo,
 ) -> Result<()> {
-    let from = export_dir.join("files").join(source).join(&f.sha256);
+    let from = blobs.join(&f.sha256);
     let bytes = fs::read(&from)
         .map_err(|e| Error::Invalid(format!("the bytes of {} cannot be read: {e}", f.name)))?;
     if hex(&Sha256::digest(&bytes)) != f.sha256 {
@@ -906,7 +923,12 @@ fn copy_file(
         None => None,
     };
     let (mut text, tags, author, created) = match &described {
-        Some(d) => (d.text.clone(), d.tags.clone(), d.author.clone(), d.created_at),
+        Some(d) => (
+            d.text.clone(),
+            d.tags.clone(),
+            d.author.clone(),
+            d.created_at,
+        ),
         None => (
             if f.note.is_empty() {
                 format!("File: {}", f.name)
@@ -1136,8 +1158,7 @@ fn run(
             if !file_present(dst, &f)? {
                 copy_file(
                     brain,
-                    &plan.export,
-                    &r.line.source,
+                    &plan.export.join("files").join(&r.line.source),
                     &src.conn,
                     dst,
                     &r.dest,
