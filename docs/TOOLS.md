@@ -18,6 +18,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 |---|---|---|
 | `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | built (0.25.x) |
 | `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
+| `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of À trier for some minutes, and gives them back | built (20261116.0.3) |
 | `recall` | search or list: by words, by path, newest first; `space` may be a path of the tree | kept, one query shape |
 | `read` | one note with its history | merges `read_fact` and `history` |
 | `remember`, `supersede`, `retire` | write, correct, retire (reason required) | kept: these three words are the model |

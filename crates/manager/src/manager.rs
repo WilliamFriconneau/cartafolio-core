@@ -577,6 +577,19 @@ impl Handler for Manager {
             return self.ingress(req);
         }
         let path = req.path.trim_end_matches('/');
+        // `/mcp/<person>/<connection>`: the address says whose connection it is, as the page shows it. The
+        // person's own installation answers it as `/mcp/<connection>`.
+        for base in ["/mcp/", "/.well-known/oauth-protected-resource/mcp/"] {
+            let Some(rest) = path.strip_prefix(base) else { continue };
+            if let Some((who, agent)) = rest.split_once('/')
+                && !agent.contains('/')
+                && let Some(app) = self.person_app(who)
+            {
+                let mut inner = req.clone();
+                inner.path = format!("{base}{agent}");
+                return app.handle(&inner);
+            }
+        }
         let reply = |app: &App| app.handle(req);
         match (req.method.as_str(), path) {
             ("GET", "/health") => Response::json(200, &json!({ "ok": true })),

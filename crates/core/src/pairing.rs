@@ -59,11 +59,11 @@ pub fn rights_for(vaults: &[String]) -> Result<Rights> {
 
 /// A new code for `user_id`, valid [`CODE_TTL`] seconds from `now`, for the inboxes of `vaults`.
 pub fn create(ctl: &Connection, user_id: &str, vaults: &[String], now: i64) -> Result<String> {
-    create_with(ctl, user_id, vaults, now)
+    create_with(ctl, user_id, rights_for(vaults)?, now)
 }
 
-/// A new code for the person's « À trier », the one box a device writes to (see [`crate::triage`]): the device never
-/// chooses a vault, and no vault is a default.
+/// A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as the
+/// server does. Nothing is shut in a box: a peer holds the same memory.
 pub fn create_for_triage(
     brain: &crate::Brain,
     user_id: &str,
@@ -72,12 +72,17 @@ pub fn create_for_triage(
 ) -> Result<(String, String)> {
     let triage = crate::triage::ensure(brain, user_id, person)?;
     let ctl = brain.open_control()?;
-    let code = create_with(&ctl, user_id, &[triage.as_str().to_string()], now)?;
+    let spaces: Vec<String> = brain
+        .layout(user_id)?
+        .iter()
+        .map(|p| p.space.as_str().to_string())
+        .collect();
+    let spec: Vec<String> = spaces.iter().map(|v| format!("{v}:rw")).collect();
+    let code = create_with(&ctl, user_id, Rights::parse(&spec.join(","))?, now)?;
     Ok((code, triage.as_str().to_string()))
 }
 
-fn create_with(ctl: &Connection, user_id: &str, vaults: &[String], now: i64) -> Result<String> {
-    let rights = rights_for(vaults)?;
+fn create_with(ctl: &Connection, user_id: &str, rights: Rights, now: i64) -> Result<String> {
     access::check_within(ctl, user_id, &rights)?;
     // Old codes of anyone, used or expired, go: they are worth nothing.
     ctl.execute(
@@ -141,7 +146,7 @@ pub fn holds(ctl: &Connection, code: &str, now: i64) -> bool {
     .is_some()
 }
 
-/// A connection's name from what the device calls itself: `bridge-<name>-<4 random>`.
+/// A connection's name from what the device calls itself: `peer-<name>-<4 random>`.
 fn agent_name(device: &str) -> String {
     let mut slug = String::new();
     for c in device.chars() {
@@ -158,9 +163,9 @@ fn agent_name(device: &str) -> String {
     let slug = slug.trim_matches('-');
     let tail = crate::util::random_base32(4);
     if slug.is_empty() {
-        format!("bridge-{tail}")
+        format!("peer-{tail}")
     } else {
-        format!("bridge-{slug}-{tail}")
+        format!("peer-{slug}-{tail}")
     }
 }
 

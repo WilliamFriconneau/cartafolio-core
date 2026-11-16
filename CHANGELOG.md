@@ -1,5 +1,12 @@
 # Changelog
 
+## 20261116.0.3
+
+- `triage_claim` and `triage_release`: a sorter outside the memory (an assistant on a device) reserves notes of À trier for a few minutes, so that two sorters never take the same.
+- The pairing text no longer says everything lands in À trier.
+- `/mcp/<person>/<connection>` is accepted beside `/mcp/<connection>`: the address says whose connection it is.
+- On the page, joining a network comes first and connecting an assistant second.
+
 ## 20261116.0.2
 
 - `memcp init --defaults`: the usual spaces (personal, health, home, finances, hobbies, work) in one go.
