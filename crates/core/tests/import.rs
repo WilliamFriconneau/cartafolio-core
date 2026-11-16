@@ -38,6 +38,12 @@ impl Drop for Env {
     }
 }
 
+#[cfg(not(unix))]
+fn chmod_all(_dir: &Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+#[cfg(unix)]
 fn chmod_all(dir: &Path) -> std::io::Result<()> {
     for e in fs::read_dir(dir)? {
         let p = e?.path();

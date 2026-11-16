@@ -116,6 +116,8 @@ fn list(v: &str) -> Vec<String> {
 }
 
 fn private_file(file: &std::path::Path) -> Result<(), String> {
+    #[cfg(not(unix))]
+    let _ = file;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
