@@ -1,5 +1,12 @@
 # Changelog
 
+## 20261116.0.2
+
+- `memcp init --defaults`: the usual spaces (personal, health, home, finances, hobbies, work) in one go.
+- An assistant that connects is told when notes wait in À trier, and asked to tell the person and offer to sort them.
+- The janitor's own connection no longer shows among the connected assistants; `spaces` counts 0 for an empty folder.
+- Planned in docs/MERGE.md: merging two memories.
+
 ## 20261116.0.1
 
 Versions are now the day of the release, then a counter: `AAAAMMJJ.0.N`, for every app.

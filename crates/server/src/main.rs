@@ -13,7 +13,8 @@ use memcp_core::text::{self, Language};
 
 const USAGE: &str = "usage: memcp --data DIR <command>
 
-  init [--spaces health,home,personal] [--language en|fr]
+  init [--spaces health,home,personal | --defaults] [--language en|fr]
+                                         --defaults: personal, health, home, finances, hobbies and work
                                          creates the data directory, the control database and the spaces
   catalogue                              lists the kinds of vault this installation offers
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
@@ -177,7 +178,11 @@ fn run(args: &[String]) -> Result<(), Failure> {
             let language = Language::parse(code).ok_or_else(|| cli::bad("--language: en or fr"))?;
             cli::init(
                 &data,
-                &cli::parse_spaces(flag("--spaces").unwrap_or(""))?,
+                &cli::parse_spaces(if sw("--defaults") {
+                    "personal,health,home,finances,hobbies,work"
+                } else {
+                    flag("--spaces").unwrap_or("")
+                })?,
                 language,
             )
         }
