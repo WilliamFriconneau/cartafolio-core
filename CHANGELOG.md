@@ -1,5 +1,12 @@
 # Changelog
 
+## 202611162216
+
+Versions are now the date and time of the release (YYYYMMDDHHMM), for every app. The crates carry it as `202611162216.0.0` because Cargo wants three numbers.
+
+- The `spaces` MCP tool: the tree of the spaces a connection can read, with label, parent, kind, rights and counts.
+- The add-on has an icon and a logo.
+
 ## 0.25.0
 
 - **The spaces as folders** on the page: a tree you open and close, with drag and drop to nest or reorder, a `+` to make a space inside another, rename in place. Opening one shows its **tags** and its **keywords**; drag a tag onto another space to send the notes it carries there (previewed first, never erased: each note is retired in the source with the reason "moved to …"). The tags that file notes in a space are kept in its settings, with a history.

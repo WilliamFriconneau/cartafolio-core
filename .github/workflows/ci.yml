@@ -35,7 +35,7 @@ jobs:
       - uses: actions/checkout@v4
       - name: The add-on, the build argument and the crates carry one version
         run: |
-          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          crate=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1 | sed 's/\.0\.0$//')
           addon=$(sed -n 's/^version: "\(.*\)"/\1/p' ha-addon/memcp/config.yaml)
           arg=$(sed -n 's/^  MEMCP_VERSION: "\(.*\)"/\1/p' ha-addon/memcp/build.yaml)
           echo "crates $crate, add-on $addon, build argument $arg"

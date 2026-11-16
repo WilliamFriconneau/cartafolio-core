@@ -4,6 +4,7 @@
 //! never an argument.
 
 use rusqlite::Connection;
+use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
 use crate::access::{Caller, auth_event};
@@ -26,11 +27,12 @@ const WRITE_TOOLS: [&str; 7] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 6] = [
+const READ_TOOLS: [&str; 7] = [
     "recall",
     "read_fact",
     "history",
     "stats",
+    "spaces",
     "file_list",
     "file_get",
 ];
@@ -108,6 +110,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             name: "history",
             description: "The replacement chain of a fact, from the oldest version to the newest.".into(),
             schema: json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }),
+        });
+        out.push(ToolDef {
+            name: "spaces",
+            description: "The spaces this connection can read, as a tree: for each, its name, label, parent (null at the top), position among its siblings, kind, whether it can write there, and the number of active facts. Read `stats` for the tags inside each space.".into(),
+            schema: json!({ "type": "object", "properties": {} }),
         });
         out.push(ToolDef {
             name: "stats",
@@ -895,6 +902,54 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 "vaults": vaults,
                 "message": "The janitor, if it is on, files the inboxes now. Expired facts are yours to retire or renew.",
             }))
+        }
+        "spaces" => {
+            let ctl = brain.open_control()?;
+            let mut out = Vec::new();
+            for s in caller.readable() {
+                let row: Option<(Option<String>, Option<String>, i64, String)> = ctl
+                    .query_row(
+                        "SELECT label, parent, position, kind FROM spaces WHERE name = ?1",
+                        [s.as_str()],
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+                    )
+                    .optional()
+                    .map_err(|e| ToolError::Invalid(e.to_string()))?;
+                let Some((label, parent, position, kind)) = row else {
+                    continue;
+                };
+                let conn = brain.open_space(&s)?;
+                let facts = facts::counts(&conn)?["active"].clone();
+                out.push(json!({
+                    "name": s.as_str(),
+                    "label": label.unwrap_or_else(|| s.as_str().into()),
+                    "parent": parent,
+                    "position": position,
+                    "kind": kind,
+                    "writable": caller.can_write(&s),
+                    "facts": facts,
+                }));
+            }
+            // A parent this connection cannot read is not shown: that space stands at the top.
+            let names: Vec<String> = out
+                .iter()
+                .filter_map(|v| v["name"].as_str().map(String::from))
+                .collect();
+            for v in out.iter_mut() {
+                let hidden = v["parent"]
+                    .as_str()
+                    .is_some_and(|p| !names.iter().any(|n| n == p));
+                if hidden {
+                    v["parent"] = Value::Null;
+                }
+            }
+            out.sort_by_key(|v| {
+                (
+                    v["position"].as_i64().unwrap_or(0),
+                    v["label"].as_str().unwrap_or("").to_lowercase(),
+                )
+            });
+            Ok(json!({ "spaces": out }))
         }
         "stats" => {
             let mut m = serde_json::Map::new();

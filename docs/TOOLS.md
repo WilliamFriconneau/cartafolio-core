@@ -16,8 +16,8 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 
 | Tool | Does | From today |
 |---|---|---|
-| `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | new (replaces the space list inside `stats`) |
-| `tree` | the tree of tags of a space, with counts | split out of `stats` |
+| `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | built (0.25.x) |
+| `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
 | `recall` | search or list: by words, by path, newest first; `space` may be a path of the tree | kept, one query shape |
 | `read` | one note with its history | merges `read_fact` and `history` |
 | `remember`, `supersede`, `retire` | write, correct, retire (reason required) | kept: these three words are the model |
