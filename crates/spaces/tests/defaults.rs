@@ -24,7 +24,14 @@ fn the_default_vaults_have_clear_tags_and_health_and_money_are_sensitive() {
         t.words("maison", RuleKind::Tag)
             .contains(&"domotique".to_string())
     );
-    assert!(t.words("a-trier", RuleKind::Tag).is_empty());
+    assert!(t.words("notes", RuleKind::Tag).is_empty());
+    assert_eq!(
+        (
+            t.get("notes").unwrap().name.as_str(),
+            t.get("notes").unwrap().path.as_str()
+        ),
+        ("À trier", "a-trier")
+    );
 }
 
 #[test]

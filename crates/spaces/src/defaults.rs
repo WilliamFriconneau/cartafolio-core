@@ -3,7 +3,7 @@
 //! Santé and Argent are sensitive. No person's name is shipped.
 
 use crate::rules::{Rule, RuleKind};
-use crate::space::{Space, Tree};
+use crate::space::{DEFAULT_SPACE, Space, Tree};
 
 struct Preset {
     id: &'static str,
@@ -173,10 +173,15 @@ pub fn default_tree(mut stamp: impl FnMut() -> String) -> Tree {
     let mut tree = Tree::default();
     for p in PRESETS {
         let mut s = Space::default_notes(p.name);
-        s.id = p.id.into();
+        // « À trier » is the core's default space: what nothing decided goes there.
+        let id = if p.id == "a-trier" {
+            DEFAULT_SPACE
+        } else {
+            p.id
+        };
+        s.id = id.into();
         s.path = p.id.into();
         s.sensitive = p.sensitive;
-        // The default space of the core is « notes »; here « À trier » takes that role by its id.
         if tree.save(s).is_err() {
             continue;
         }
@@ -193,7 +198,7 @@ pub fn default_tree(mut stamp: impl FnMut() -> String) -> Tree {
                 };
                 tree.put_rule(Rule {
                     id: format!("{}/{kind_name}/{n}", p.id),
-                    space: p.id.into(),
+                    space: id.into(),
                     kind,
                     value: (*v).into(),
                     by: "person".into(),
