@@ -1,5 +1,5 @@
 name: MemCP
-version: "0.24.2"
+version: "0.24.3"
 slug: memcp
 description: Durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/memcp
@@ -23,6 +23,9 @@ ports_description:
   8792/tcp: Consent and admin pages for the tailnet (answers only the address set in identity_trust)
 # The databases are copied while the add-on is stopped: a consistent backup.
 backup: cold
+# The app's own configuration folder: where the data of another installation is left to be taken in once.
+map:
+  - addon_config:rw
 hassio_api: false
 homeassistant_api: false
 options:

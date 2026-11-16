@@ -7,6 +7,19 @@ DATA=/data/manager
 MANAGER=/usr/bin/memcp-manager
 LANGUAGE=$(bashio::config 'language')
 
+# Coming from another installation (a former HemCP or MemCP app): the folders it left in this app's own configuration
+# folder (`/config/import/manager`, and `/config/import/janitor` if it had a janitor) are taken in once, when this app
+# has no data of its own yet. The import folder is then renamed, never deleted. See DOCS.md, "Moving from another app".
+IMPORT=/config/import
+if [ ! -d "$DATA/registry" ] && [ -d "$IMPORT/manager/registry" ]; then
+  bashio::log.info "importing the memory left in $IMPORT/manager"
+  mkdir -p "$DATA"
+  cp -a "$IMPORT/manager/." "$DATA/"
+  if [ -d "$IMPORT/janitor" ]; then mkdir -p /data/janitor && cp -a "$IMPORT/janitor/." /data/janitor/; fi
+  mv "$IMPORT" "/config/import.done-$(date +%Y%m%d-%H%M%S)"
+  bashio::log.info "imported; the folder was renamed import.done-… and can be deleted once everything checks out"
+fi
+
 ARGS=(--data "$DATA" --language "$LANGUAGE" serve --listen 0.0.0.0:8791 --allow-remote
       --ingress-listen 0.0.0.0:8099 --trust-ingress 172.30.32.2)
 ADMINS=$(bashio::config 'admins' | paste -sd, -)

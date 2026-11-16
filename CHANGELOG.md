@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.24.3
+
+- The Home Assistant app takes in the data left by another installation (a former HemCP app) in its own configuration folder, once, keeping every key and address (see DOCS.md, *Moving from another app*).
+
 ## 0.24.2
 
 - **Windows and macOS are first-class**: the whole test suite runs and passes on Linux, macOS and Windows in CI, and the release carries the programs of the three systems.
