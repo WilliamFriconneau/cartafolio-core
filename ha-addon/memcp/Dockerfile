@@ -13,7 +13,7 @@ RUN apk add --no-cache tzdata curl \
       aarch64) T=aarch64-unknown-linux-musl ;; \
       *) echo "unsupported architecture ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac \
- && base="https://github.com/WilliamFriconneau/memcp/releases/download/v${MEMCP_VERSION}" \
+ && base="https://github.com/WilliamFriconneau/memcp-core/releases/download/v${MEMCP_VERSION}" \
  && cd /tmp && curl -fsSLO "${base}/SHA256SUMS" \
  && for b in memcp memcp-manager memcp-janitor memcp-bridge; do \
       f="${b}-v${MEMCP_VERSION}-${T}"; \

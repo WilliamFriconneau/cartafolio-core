@@ -10,7 +10,7 @@ same code:
 
 It keeps no copy of the memory and no database. The memory stays the only master. On the server there is one other
 program, the janitor, which transcribes a recording that has no text and files what the inbox holds (see the map in the
-[memory's README](https://github.com/WilliamFriconneau/memcp)). A Mac app is a thin SwiftUI shell around the same Rust core.
+[memory's README](https://github.com/WilliamFriconneau/memcp-core)). A Mac app is a thin SwiftUI shell around the same Rust core.
 
 ## Connect it
 

@@ -6,7 +6,7 @@ members = ["crates/core", "crates/finances", "crates/server", "crates/manager", 
 version = "0.24.3"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/WilliamFriconneau/memcp"
+repository = "https://github.com/WilliamFriconneau/memcp-core"
 rust-version = "1.89"
 
 [workspace.lints.rust]

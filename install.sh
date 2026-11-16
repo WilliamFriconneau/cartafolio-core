@@ -1,7 +1,7 @@
 #!/bin/sh
 # MemCP installer: a guided install of the memory server on Linux (x86_64 or aarch64).
 #
-#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh
 #
 # It downloads the release binaries, checks them against the published SHA256SUMS, makes a data folder and a
 # first memory, and (if you want) runs the server as a service of your own user. Nothing is done as root, and
@@ -19,7 +19,7 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/memcp}"
+REPO="${MEMCP_REPO:-WilliamFriconneau/memcp-core}"
 BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
 API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
 
