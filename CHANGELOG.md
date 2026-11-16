@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.24.1
+
+- **Fix:** `memcp-bridge transcribe` refused to start with a speech service and no local model (`transcribe needs whisper_model`). It now needs a local model or `whisper_api_url`, so the Home Assistant app's voice pass works. Checked end to end: a voice note recorded on the page, read through a speech service, becomes a dictation note in the inbox.
+- `memcp-bridge connect ADDRESS` carries an assistant's standard input and output to the bridge's HTTP gateway on this machine (the way on Windows).
+- The test suites run on macOS and Windows in CI; the Unix-only tests are gated.
+
 ## 0.24.0
 
 First release under the AGPL-3.0-or-later (with a commercial licence available); earlier versions stay Apache-2.0.

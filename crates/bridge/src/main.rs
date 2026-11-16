@@ -226,9 +226,13 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
             }
         }
     }
-    if !transcribe.is_empty() && voice.whisper_model.as_os_str().is_empty() {
+    // A speech model on this machine, or a speech service by API: one of the two.
+    if !transcribe.is_empty()
+        && voice.whisper_model.as_os_str().is_empty()
+        && voice.api_url.is_none()
+    {
         return Err(format!(
-            "{}: transcribe needs whisper_model",
+            "{}: transcribe needs whisper_model, or whisper_api_url",
             file.display()
         ));
     }
@@ -630,7 +634,7 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         }
         "transcribe" => {
             if voice.0.is_empty() {
-                return Err("transcribe needs --config with `transcribe = VAULT, VAULT` and `whisper_model`".into());
+                return Err("transcribe needs --config with `transcribe = VAULT, VAULT` and `whisper_model` (or `whisper_api_url`)".into());
             }
             let mut client = memcp_bridge::client_for(&config.url, &config.key);
             let r = memcp_bridge::transcribe(
