@@ -22,9 +22,12 @@ mod learn;
 mod models;
 mod state;
 mod time;
+mod keywords;
+mod router;
 mod work_rule;
 
 pub use config::Config;
+use keywords::Unplaced;
 use models::{Choice, system_prompt};
 
 /// The kind the memory gives « À trier » in `stats`.
@@ -45,12 +48,17 @@ pub struct Report {
     pub problems: Vec<String>,
     /// The key is refused or revoked: nothing more is done until there is a new one.
     pub key_refused: bool,
+    /// Keywords and tags added to the rules of the spaces in this pass.
+    pub keywords_added: u32,
 }
 
 pub struct Janitor {
     config: Config,
     client: Client,
     state: state::State,
+    /// The rules of each vault (its `rules` note), and the id of that note.
+    rules: BTreeMap<String, router::Rules>,
+    rule_ids: BTreeMap<String, String>,
 }
 
 fn now() -> i64 {
@@ -113,6 +121,8 @@ impl Janitor {
         };
         Ok(Janitor {
             state: state::State::open(&config.state_dir)?,
+            rules: BTreeMap::new(),
+            rule_ids: BTreeMap::new(),
             client,
             config,
         })
@@ -245,6 +255,15 @@ impl Janitor {
     /// One pass over the inboxes. Only one pass runs on a state folder at a time: another one
     /// started meanwhile (by hand, say) does nothing.
     pub fn run_once(&mut self) -> Report {
+        self.run(false)
+    }
+
+    /// The night pass: the same, and the keywords are looked at even when nothing waits.
+    pub fn run_night(&mut self) -> Report {
+        self.run(true)
+    }
+
+    fn run(&mut self, night: bool) -> Report {
         let mut report = Report::default();
         let lock = std::fs::OpenOptions::new()
             .create(true)
@@ -302,7 +321,7 @@ impl Janitor {
                 ));
             }
         }
-        self.file_notes(&triage, &vaults, &tags, &mut report);
+        self.file_notes(&triage, &vaults, &tags, night, &mut report);
         if let Some(e) = self.state.write_error.take() {
             report
                 .problems
@@ -318,12 +337,16 @@ impl Janitor {
         report.problems.push(format!("{what}: {e}"));
     }
 
-    /// Every note of the inboxes: filed by a model, or left.
+    /// Every note of « À trier » and of the inboxes. The keyword router places what it can; what it cannot place stays in
+    /// « À trier », and then the model is asked, once, to propose keywords (not to place a note): they are written in the
+    /// rules of the spaces and the router runs again. The inboxes are then filed. `night`: the keywords are looked at
+    /// even if nothing waits.
     fn file_notes(
         &mut self,
         triage: &[String],
         vaults: &[String],
         tags: &BTreeMap<String, Vec<String>>,
+        night: bool,
         report: &mut Report,
     ) {
         let (y, m, d, _, _) = time::civil(now(), self.config.utc_offset_minutes);
@@ -331,14 +354,38 @@ impl Janitor {
         let mut budget = self.config.max_notes;
         let config = self.config.clone();
         let models = models::Models::new(&config);
+        let problems = self.load_rules(vaults);
+        report.problems.extend(problems);
         // « À trier » first: what it sends on is filed in its vault in the same pass.
+        let before = budget;
+        let mut waiting = BTreeMap::new();
         for t in triage {
-            self.sort_triage(t, vaults, tags, &models, &today, &mut budget, report);
+            let left = self.sort_triage(t, vaults, &mut budget, report);
+            waiting.insert(t.clone(), left);
             if report.key_refused {
                 return;
             }
         }
-        let inboxes = if self.config.inbox_vaults.is_empty() {
+        if waiting.values().any(|l| !l.is_empty()) || night {
+            let (added, problems) = self.improve_keywords(&models, &waiting, vaults, night);
+            report.keywords_added += added;
+            report.problems.extend(problems);
+            if added > 0 {
+                // The keywords changed: the router runs again on what was left.
+                report.unsure = 0;
+                budget = before.saturating_sub(report.sent as usize);
+                waiting.clear();
+                for t in triage {
+                    let left = self.sort_triage(t, vaults, &mut budget, report);
+                    waiting.insert(t.clone(), left);
+                    if report.key_refused {
+                        return;
+                    }
+                }
+            }
+        }
+        self.leave_waiting_notes(&waiting, report);
+        let inboxes =if self.config.inbox_vaults.is_empty() {
             vaults.to_vec()
         } else {
             self.config.inbox_vaults.clone()
@@ -387,6 +434,22 @@ impl Janitor {
                 }
                 // The person's rule first: a note marked #santé goes to the journal of health, whatever a model says.
                 if self.health_note(note, id, text, &vault, vaults, report) {
+                    if report.key_refused {
+                        return;
+                    }
+                    continue;
+                }
+                // The keywords: a note that clearly belongs to another vault goes to the inbox of that vault.
+                if let Some(to) = router::route(text, &tags_of(note), &self.rules)
+                    .filter(|t| *t != vault && vaults.contains(t))
+                {
+                    match self.send_one(note, id, text, &vault, &to, "the keywords") {
+                        Ok(()) => report.sent += 1,
+                        Err(e) => {
+                            self.state.note_failed(id);
+                            self.fail(report, &format!("{id} cannot be sent to {to}"), &e);
+                        }
+                    }
                     if report.key_refused {
                         return;
                     }
@@ -462,25 +525,20 @@ impl Janitor {
         }
     }
 
-    /// The notes of one « À trier »: each sent, as it is and still in the inbox, to the vault a model (or what it learned)
-    /// names; one it is unsure of stays for the person. Files and recordings are not sent: the bridge reads the recordings
-    /// and puts their text here, the person sends a file.
-    #[allow(clippy::too_many_arguments)]
+    /// The notes of one « À trier »: the health rule, the work rule, then the keyword router (see [`router`]) decide; each
+    /// note goes, as it is and still in the inbox, to the vault they name. A note they cannot place stays, for the keywords
+    /// to learn from and for the person. No model is asked here. Files and recordings are not sent.
     fn sort_triage(
         &mut self,
         triage: &str,
         vaults: &[String],
-        tags: &BTreeMap<String, Vec<String>>,
-        models: &models::Models<'_>,
-        today: &str,
         budget: &mut usize,
         report: &mut Report,
-    ) {
+    ) -> Vec<Unplaced> {
+        let mut unplaced = vec![];
         if vaults.is_empty() {
-            return;
+            return unplaced;
         }
-        // Unsure, or a vault it may not name: the note stays where it is.
-        let system = system_prompt(vaults, tags, triage, today);
         let listed = match self.client.call(
             "recall",
             json!({ "space": triage, "query": "", "tags": ["inbox"], "limit": 50 }),
@@ -488,7 +546,7 @@ impl Janitor {
             Ok(l) => l,
             Err(e) => {
                 self.fail(report, "À trier cannot be read", &e);
-                return;
+                return unplaced;
             }
         };
         for note in listed["results"].as_array().into_iter().flatten() {
@@ -507,81 +565,31 @@ impl Janitor {
             *budget -= 1;
             if self.health_note(note, id, text, triage, vaults, report) {
                 if report.key_refused {
-                    return;
+                    return unplaced;
                 }
                 continue;
             }
-            // The person's rule for work: a meeting, or a note about their work, goes to `work`, whatever a model says.
-            if vaults.iter().any(|v| v == work_rule::WORK)
+            // The person's rule for work: a meeting, or a note about their work, goes to `work`.
+            let (to, by) = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(text, &self.config.work_words)
             {
-                match self.send_one(
-                    note,
-                    id,
-                    text,
-                    triage,
-                    work_rule::WORK,
+                (
+                    Some(work_rule::WORK.to_string()),
                     "the person's work rule",
-                ) {
-                    Ok(()) => report.sent += 1,
-                    Err(e) => {
-                        self.state.note_failed(id);
-                        self.fail(report, &format!("{id} cannot be sent to work"), &e);
-                    }
-                }
-                if report.key_refused {
-                    return;
-                }
-                continue;
-            }
-            let note_words = learn::words(text);
-            let guess = if learn::is_loop(text) {
-                None
+                )
             } else {
-                self.state.learned(triage).guess(&note_words, true)
+                (
+                    router::route(text, &tags_of(note), &self.rules)
+                        .filter(|t| t != triage && vaults.contains(t)),
+                    "the keywords",
+                )
             };
-            let check = guess.is_some()
-                && self
-                    .state
-                    .count("checks", 1)
-                    .is_multiple_of(learn::CHECK_EVERY);
-            let alone = guess
-                .as_ref()
-                .filter(|_| !check)
-                .and_then(|g| g.vault.clone())
-                .filter(|v| vaults.contains(v));
-            let (to, by) = if let Some(v) = alone {
-                report.without_model += 1;
-                (v, "what it learned")
-            } else {
-                let mut log = vec![];
-                let shown = format!("{text}{}", self.similar(vaults, &note_words, id));
-                let Some((choice, by)) = models.route(&system, &shown, vaults, triage, &mut log)
-                else {
-                    report.left += 1;
-                    report
-                        .problems
-                        .extend(log.into_iter().map(|l| format!("{id}: {l}")));
-                    continue;
-                };
-                if let Some(g) = &guess
-                    && g.vault.as_ref().is_some_and(|v| *v != choice.vault)
-                {
-                    self.state.learned(triage).wrong(&g.led_by);
-                }
-                if choice.vault == triage {
-                    report.unsure += 1;
-                    continue;
-                }
-                if learn::worth_learning(text) {
-                    self.state.learned(triage).learn(
-                        &note_words,
-                        &choice.tags,
-                        Some(&choice.vault),
-                    );
-                }
-                self.state.saved();
-                (choice.vault, by)
+            let Some(to) = to else {
+                report.unsure += 1;
+                unplaced.push(Unplaced {
+                    text: text.to_string(),
+                });
+                continue;
             };
             match self.send_one(note, id, text, triage, &to, by) {
                 Ok(()) => report.sent += 1,
@@ -591,9 +599,10 @@ impl Janitor {
                 }
             }
             if report.key_refused {
-                return;
+                return unplaced;
             }
         }
+        unplaced
     }
 
     /// The person's rule for a note marked `#santé` (see [`health_rule`]): filed in `health` under `journal/<date>` and

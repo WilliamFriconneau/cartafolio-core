@@ -67,6 +67,11 @@ pub fn worth_learning(text: &str) -> bool {
     }
 }
 
+/// Whether a lowercase word says nothing of a subject.
+pub fn is_stop(word: &str) -> bool {
+    STOP.contains(&word)
+}
+
 /// The words of a note that may say its subject: lowercase, letters only, four letters or more, each once.
 pub fn words(text: &str) -> BTreeSet<String> {
     text.split(|c: char| !c.is_alphabetic())

@@ -71,6 +71,27 @@ impl State {
         self.save();
     }
 
+    /// The note the janitor keeps for `kind` and `space` (`waiting` in « À trier »), if one was written.
+    pub fn note_id(&self, kind: &str, space: &str) -> Option<String> {
+        self.data["note_ids"][kind][space].as_str().map(String::from)
+    }
+
+    /// Remembers the note of `kind` and `space`, or forgets it with `None`.
+    pub fn set_note_id(&mut self, kind: &str, space: &str, id: Option<&str>) {
+        self.data["note_ids"][kind][space] = id.map_or(Value::Null, |i| json!(i));
+        self.save();
+    }
+
+    /// When (seconds) something was last done, 0 if never.
+    pub fn stamp(&self, key: &str) -> u64 {
+        self.data["stamps"][key].as_u64().unwrap_or(0)
+    }
+
+    pub fn set_stamp(&mut self, key: &str, at: u64) {
+        self.data["stamps"][key] = json!(at);
+        self.save();
+    }
+
     /// Saves what changed.
     pub fn saved(&mut self) {
         self.save();

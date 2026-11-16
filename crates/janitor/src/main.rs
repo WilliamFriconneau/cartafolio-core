@@ -113,11 +113,15 @@ fn main() -> ExitCode {
     let mut done_for = written_at(&mark).unwrap_or(0);
     let mut night_done: Option<u64> = None;
     let pass = |janitor: &mut Janitor, why: &str| -> bool {
-        let r = janitor.run_once();
+        let r = if why == "night" {
+            janitor.run_night()
+        } else {
+            janitor.run_once()
+        };
         if r.filed > 0 || r.left > 0 || r.sent > 0 || r.unsure > 0 || !r.problems.is_empty() {
             println!(
-                "{why}: sent on from À trier {}, left there for you {}; filed {} ({} without the model), left in the inbox {}",
-                r.sent, r.unsure, r.filed, r.without_model, r.left
+                "{why}: sent on from À trier {}, left there for you {}; filed {} ({} without the model), left in the inbox {}, keywords added {}",
+                r.sent, r.unsure, r.filed, r.without_model, r.left, r.keywords_added
             );
         }
         for p in &r.problems {

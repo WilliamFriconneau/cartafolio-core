@@ -113,7 +113,20 @@ fn models() -> String {
                 .as_str()
                 .unwrap_or("")
                 .contains("tu en tires");
-            let choice = if extracting {
+            let proposing = sent["messages"][0]["content"]
+                .as_str()
+                .unwrap_or("")
+                .contains("mots-clés qui servent");
+            let choice = if proposing {
+                // `PROPOSE:<space>:<word>` in what it reads is what it proposes.
+                let list: Vec<Value> = note
+                    .split_whitespace()
+                    .filter_map(|w| w.trim_matches(|c: char| c == '.' || c == ',').strip_prefix("PROPOSE:"))
+                    .filter_map(|p| p.split_once(':'))
+                    .map(|(s, k)| json!({"coffre": s, "mots_cles": [k], "tags": []}))
+                    .collect();
+                json!({ "espaces": list })
+            } else if extracting {
                 if note.contains("RIEN") {
                     json!({"faits": []})
                 } else {
@@ -155,13 +168,17 @@ fn models() -> String {
 }
 
 fn janitor(r: &Rig, url: &str, key: &str) -> Janitor {
+    janitor_with(r, url, key, "")
+}
+
+fn janitor_with(r: &Rig, url: &str, key: &str, extra: &str) -> Janitor {
     let key_file = r.dir.join("janitor.key");
     std::fs::write(&key_file, key).expect("key");
     let air_key = r.dir.join("air.key");
     std::fs::write(&air_key, "k").expect("key");
     let text = format!(
         "url = {url}\nkey_file = {}\nutc_offset_minutes = 60\n\
-models = api,local\napi_url = {}/v1/chat/completions\napi_model = m\napi_key_file = {}\nollama_url = {}\nstate_dir = {}\n",
+models = api,local\napi_url = {}/v1/chat/completions\napi_model = m\napi_key_file = {}\nollama_url = {}\nstate_dir = {}\n{extra}",
         key_file.display(),
         r.models,
         air_key.display(),
@@ -219,6 +236,18 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             json!({"space": "sam-work", "text": "Tension dans l'équipe sur le planning de jeudi.", "tags": ["inbox"]}),
         )
         .expect("a work note");
+    // The keywords of the spaces (their `rules` notes) are what places a note from À trier: no model is asked for it.
+    for (space, words) in [
+        ("sam-health", r#"["étourdi","enfants"]"#),
+        ("sam-work", r#"["alpha"]"#),
+    ] {
+        owner
+            .call(
+                "remember",
+                json!({"space": space, "kind": "context", "text": format!(r#"{{"version":1,"tags":[],"keywords":{words}}}"#), "tags": ["rules"]}),
+            )
+            .expect("rules");
+    }
     // Pieces of a note the bridge absorbed: facts are drawn out, in their own vault, and the pieces leave.
     for t in [
         "D'après la note Projets/Alpha.md, modifiée le 2026-11-03 : Alpha — Suite : la directrice des opérations valide le budget le 2026-11-10.",
@@ -242,8 +271,8 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
     let report = j.run_once();
     assert!(!report.key_refused);
-    assert_eq!(report.left, 1, "{report:?}");
-    assert_eq!((report.sent, report.unsure), (4, 1), "{report:?}");
+    assert_eq!(report.left, 0, "{report:?}");
+    assert_eq!((report.sent, report.unsure), (4, 2), "{report:?}");
 
     let mut all = Client::new(&r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
     let health = texts(&mut all, "sam-health", &[], "tension");
@@ -258,7 +287,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
         work.iter()
             .any(|t| t.contains("réunion alpha jeudi, penser aux devis.")
                 && t.starts_with("Alpha : ")),
-        "the second model took over from the API: {work:?}"
+        "placed by its keyword, then filed by the model: {work:?}"
     );
     assert!(
         work.iter()
@@ -310,7 +339,10 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             .iter()
             .any(|t| t.contains("tension des enfants"))
     );
-    // What is left in À trier: the note nobody could place, and the one it was unsure of, for the person.
+    // What is left in À trier: the notes no keyword could place, for the person, who is told by a note there.
+    let told = texts(&mut all, "sam-a-trier", &["janitor/waiting"], "");
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(told[0].contains("2 note(s) attendent"), "{told:?}");
     let mut waiting = texts(&mut all, "sam-a-trier", &["inbox"], "");
     waiting.sort();
     assert_eq!(waiting.len(), 2, "{waiting:?}");
@@ -327,7 +359,12 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     // A second pass does nothing again: nothing filed twice.
     let again = j.run_once();
     assert_eq!((again.filed, again.sent), (0, 0), "{again:?}");
-    assert_eq!((again.left, again.unsure), (1, 1));
+    assert_eq!((again.left, again.unsure), (0, 2));
+    assert_eq!(
+        texts(&mut all, "sam-a-trier", &["janitor/waiting"], "").len(),
+        1,
+        "the note on what waits is replaced, not doubled"
+    );
     assert_eq!(texts(&mut all, "sam-work", &[], "alpha").len(), work.len());
     let _ = std::fs::remove_dir_all(&r.dir);
 }

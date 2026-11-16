@@ -27,6 +27,11 @@ pub struct Config {
     pub state_dir: PathBuf,
     /// The most notes filed in one pass.
     pub max_notes: usize,
+    /// The frequency rule: a word found in at least this many notes of one space (and far less elsewhere) becomes a
+    /// keyword of that space without asking anybody.
+    pub keyword_min_notes: usize,
+    /// The least minutes between two times the model is asked to propose keywords (a night pass ignores it).
+    pub keywords_every_minutes: u64,
 }
 
 fn home() -> PathBuf {
@@ -107,6 +112,8 @@ impl Config {
             "ollama_model",
             "state_dir",
             "max_notes",
+            "keyword_min_notes",
+            "keywords_every_minutes",
         ];
         if let Some(bad) = map.keys().find(|k| !known.contains(&k.as_str())) {
             return Err(format!("unknown setting {bad}"));
@@ -152,6 +159,10 @@ impl Config {
                 .map_or_else(|| home().join(".local/share/memcp-janitor"), |v| path(&v)),
             max_notes: usize::try_from(number("max_notes", 30)?)
                 .map_err(|_| "max_notes".to_string())?,
+            keyword_min_notes: usize::try_from(number("keyword_min_notes", 10)?)
+                .map_err(|_| "keyword_min_notes".to_string())?,
+            keywords_every_minutes: u64::try_from(number("keywords_every_minutes", 360)?)
+                .map_err(|_| "keywords_every_minutes".to_string())?,
         };
         if c.models.iter().any(|m| m == "api") && (c.api_url.is_none() || c.api_model.is_none()) {
             return Err("models names `api`: api_url and api_model are needed".into());
