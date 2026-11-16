@@ -31,3 +31,21 @@ pub(crate) fn contains(words: &[String], phrase: &str) -> bool {
     let wanted = normalize(phrase);
     !wanted.is_empty() && words.windows(wanted.len()).any(|w| w == wanted.as_slice())
 }
+
+/// The hashtags of `text` (`#santé` and `#sante` alike), lowercased, without accents.
+pub fn hashtags(text: &str) -> Vec<String> {
+    text.split(|c: char| {
+        c.is_whitespace() || matches!(c, ',' | '.' | ';' | ':' | '!' | '?' | '(' | ')')
+    })
+    .filter_map(|t| t.strip_prefix('#'))
+    .filter_map(|t| normalize(t).into_iter().next())
+    .collect()
+}
+
+/// True when `word` is said in the note: a hashtag (`#maison`) only as a hashtag, never as the plain word.
+pub(crate) fn said(words: &[String], tags: &[String], word: &str) -> bool {
+    match word.strip_prefix('#') {
+        Some(tag) => normalize(tag).first().is_some_and(|t| tags.contains(t)),
+        None => contains(words, word),
+    }
+}

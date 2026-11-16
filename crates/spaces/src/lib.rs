@@ -7,6 +7,7 @@
 
 mod config;
 mod connector;
+mod defaults;
 mod ids;
 mod markdown;
 mod normalize;
@@ -21,9 +22,10 @@ pub mod ui;
 
 pub use config::{ConfigError, SPACES_FORMAT, load_spaces, parse_spaces, save_spaces, spaces_text};
 pub use connector::{ConnectorConfig, ConnectorKind, Mode};
+pub use defaults::default_tree;
 pub use ids::{Hlc, new_id, now_ms, uuid_v7_at};
 pub use markdown::{MarkdownFile, file_name, note_file};
-pub use normalize::normalize;
+pub use normalize::{hashtags, normalize};
 pub use outbox::{Planned, plan, retry_after_seconds};
 pub use router::{Routing, route, shared_word_spaces, word_also_in};
 pub use rules::{AssistantLevel, Change, ChangeState, DAILY_CHANGES, Rule, RuleKind};

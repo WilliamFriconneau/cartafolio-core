@@ -1,6 +1,6 @@
 //! The keyword router, on the device: same note, same words, same result.
 
-use crate::normalize::{contains, normalize};
+use crate::normalize::{contains, hashtags, normalize, said};
 use crate::rules::RuleKind;
 use crate::space::Tree;
 
@@ -73,10 +73,15 @@ pub fn route(tree: &Tree, text: &str, distress: bool) -> Routing {
         return Routing::KeptLocal;
     }
     let words = normalize(text);
+    let tags = hashtags(text);
     let matching = |kind: RuleKind| -> Vec<String> {
         tree.spaces()
             .iter()
-            .filter(|n| tree.words(&n.id, kind).iter().any(|w| contains(&words, w)))
+            .filter(|n| {
+                tree.words(&n.id, kind)
+                    .iter()
+                    .any(|w| said(&words, &tags, w))
+            })
             .map(|n| n.id.clone())
             .collect()
     };
