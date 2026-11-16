@@ -152,7 +152,7 @@ It works the same without Home Assistant. The page is at `http://127.0.0.1:8791/
 This repository is a Home Assistant **app store** (what older versions call an add-on repository): `repository.yaml` is at its root and the app is in `ha-addon/memcp/`.
 
 1. In Home Assistant, open **Settings → Apps** (older versions: **Settings → Add-ons**) and then the **app store** (**Add-on Store**).
-2. Open the menu **⋮** at the top right, choose **Repositories**, paste `https://github.com/WilliamFriconneau/memcp-core` and press **Add**, then **Close**. (The wording of the menus depends on your version. A shortcut: the [My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fmemcp) link opens the same dialog.)
+2. Open the menu **⋮** at the top right, choose **Repositories**, paste `https://github.com/WilliamFriconneau/memcp-core` and press **Add**, then **Close**. (The wording of the menus depends on your version. A shortcut: the [My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fmemcp-core) link opens the same dialog.)
 3. Reload the store page, find **MemCP** under the repository's name, open it and press **Install**. The first install downloads the programs of the release and checks them against their published `SHA256SUMS`, so it needs access to GitHub and takes a minute or two.
 4. Press **Start**, turn on **Show in sidebar**, and open **Memory** from the sidebar.
 
