@@ -1,7 +1,7 @@
 # Supply-chain policy, checked by `cargo deny check` (CI runs it on every push).
 #
 # What it guards: no dependency with a known vulnerability or a yanked version, only licences
-# compatible with Apache-2.0, nothing fetched from anywhere but crates.io, and no second copy
+# compatible with the AGPL-3.0 (every permissive licence below is), nothing fetched from anywhere but crates.io, and no second copy
 # of a crate that is easy to avoid. A new dependency is a decision: justify it in the change.
 
 [graph]
@@ -9,12 +9,19 @@ targets = [
   "x86_64-unknown-linux-musl",
   "aarch64-unknown-linux-musl",
   "x86_64-unknown-linux-gnu",
+  "aarch64-apple-darwin",
+  "x86_64-apple-darwin",
 ]
 
 [advisories]
 yanked = "deny"
 # An advisory is ignored only with a reason and a date to look again, never silently.
-ignore = []
+ignore = [
+  # basic-toml is unmaintained (no vulnerability). It is reached only through askama, the template engine of
+  # UniFFI's Swift generator: a tool that runs at build time, never part of what is shipped. Look again
+  # when UniFFI moves off it, or on 2027-02-01 at the latest.
+  { id = "RUSTSEC-2026-0374", reason = "unmaintained, build-time only (UniFFI's Swift generator), no vulnerability" },
+]
 
 [licenses]
 # Every licence a dependency may carry. Anything else fails until it is looked at.
@@ -22,6 +29,8 @@ allow = [
   "MIT",
   "MIT-0",
   "Apache-2.0",
+  # This project's own licence (the workspace crates are in the graph).
+  "AGPL-3.0-or-later",
   "Apache-2.0 WITH LLVM-exception",
   "BSD-2-Clause",
   "BSD-3-Clause",
@@ -32,6 +41,18 @@ allow = [
   "ISC",
   "CDLA-Permissive-2.0",
   "Unlicense",
+]
+# MPL-2.0 is a weak, per-file copyleft: it binds only changes made to the files of those crates, which we do
+# not make. Allowed for UniFFI alone (the Swift interface of the bridge), never for the project at large.
+exceptions = [
+  { allow = ["MPL-2.0"], crate = "uniffi" },
+  { allow = ["MPL-2.0"], crate = "uniffi_bindgen" },
+  { allow = ["MPL-2.0"], crate = "uniffi_core" },
+  { allow = ["MPL-2.0"], crate = "uniffi_internal_macros" },
+  { allow = ["MPL-2.0"], crate = "uniffi_macros" },
+  { allow = ["MPL-2.0"], crate = "uniffi_meta" },
+  { allow = ["MPL-2.0"], crate = "uniffi_pipeline" },
+  { allow = ["MPL-2.0"], crate = "uniffi_udl" },
 ]
 confidence-threshold = 0.9
 unused-allowed-license = "allow"

@@ -22,6 +22,10 @@ These must pass. The add-on binaries are built with `ha-addon/build.sh` (needs `
 - **Rights stay explicit and simple.** A change that widens what an agent can read or do needs a clear reason in its description.
 - **Memory only.** The server stores and finds what it is given. It never fetches, proxies or sends anything for an assistant, and agents never decide health facts on their own.
 
+## Licence of your contribution
+
+The project is released under the AGPL-3.0-or-later and is also offered under commercial terms (see [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md)). For both to stay possible, a contribution is accepted only on these terms: **by sending it you confirm that you wrote it or have the right to send it, and you grant the author a perpetual, worldwide, royalty-free licence to use, change, sublicense and relicense it, under the AGPL or under any other terms, including commercial ones.** You keep the copyright on your contribution. Say so in the pull request ("I agree to the contribution terms of CONTRIBUTING.md"). This text is a plain-language agreement drafted for the project; it has not been reviewed by a lawyer.
+
 ## AI assistance
 
 AI helped build this project and you may use it too. If an assistant did a meaningful part of your change, say so in the pull request and add a trailer to the commit, for instance `Assisted-by: <assistant>:<model>`. You remain responsible for what you submit: read it, run it, and be able to explain it. The maintainer's own commits made with Claude Code carry `Co-Authored-By` trailers.

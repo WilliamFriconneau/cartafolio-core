@@ -276,4 +276,8 @@ Contributions are welcome whether or not an AI helped you; please say so in the 
 
 ## License
 
-Apache-2.0. See `LICENSE` and `NOTICE`.
+**AGPL-3.0-or-later**, with a commercial licence available. See `LICENSE`, `NOTICE` and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md).
+
+- You may use, study, change and share MemCP, including at work, under the AGPL. If you run a modified version for others over a network, the AGPL asks you to offer them its source.
+- If you want to build it into a product you do not want to open under the AGPL, you need a commercial licence.
+- Versions 0.23.1 and earlier were released under Apache-2.0 and stay available under it.
