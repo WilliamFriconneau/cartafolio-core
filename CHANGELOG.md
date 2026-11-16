@@ -1,5 +1,13 @@
 # Changelog
 
+## 20261116.0.6
+
+- Machines in step: a node serves `/sync/status`, `/sync/spaces` and `/sync/events` at the address of a peer's connection, and `memcp-sync` keeps a node in step with a peer (pull, then push, cursors that resume). Tested end to end with two real nodes.
+- `memcp merge --plan/--apply`: merging two memories without loss.
+- Libraries: a folder mounted read-only, indexed, searched (`library_search`), raised into the memory (`library_raise`); `links` gives the graph.
+- On the page, the notes of a space read as a thread, a day at a time: the person's notes on one side, what assistants and apps wrote on the other, an app's structured trace shown as its values.
+- Docs: the principles in the README, local tools on every machine (LOCAL-TOOLS.md), Claude Code on the same computer.
+
 ## 20261116.0.5
 
 - MCP tools `rules_get` / `rules_set` (filing rules of a space, versioned) and `peers` (the machines holding the memory).

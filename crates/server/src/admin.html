@@ -152,6 +152,12 @@ details.fold[open]>summary{margin-bottom:8px}
 .bars .b.zero{background:var(--outline-var);height:3px;opacity:.6}
 .sign{display:grid;grid-template-columns:minmax(90px,170px) 1fr 3ch;gap:10px;align-items:center;margin:5px 0;font-size:14px}
 .sign .bar{height:12px;border-radius:6px;background:var(--primary);opacity:.8}
+.thread{display:flex;flex-direction:column;gap:6px;padding:4px 0}
+.thread .day{align-self:center;font-size:12px;color:var(--mute);margin:14px 0 4px;text-transform:capitalize}
+.bubble{max-width:min(78%,720px);padding:8px 12px;border-radius:18px;cursor:pointer;overflow-wrap:anywhere}
+.bubble.mine{align-self:flex-end;background:color-mix(in srgb,var(--primary) 22%,transparent);border-bottom-right-radius:6px}
+.bubble.other{align-self:flex-start;background:var(--sc);border-bottom-left-radius:6px}
+.bubble .who{font-size:11.5px;color:var(--mute);margin-bottom:2px}.bubble .kv,.bubble .tags{margin-top:4px}
 .note{display:flex;gap:12px;padding:10px 12px;border-radius:16px;cursor:pointer;align-items:flex-start}
 .note:hover{background:var(--sc)}.note .tx{flex:1;min-width:0;overflow-wrap:anywhere}.note .meta{font-size:12px;opacity:.7;white-space:nowrap}
 .editor{background:var(--sc);border-radius:20px;padding:16px;margin:12px 0;display:flex;flex-direction:column;gap:10px}
@@ -741,11 +747,45 @@ async function notesView(body) {
   body.replaceChildren(bar, editor, list);
   try {
     const r = await api("facts?space=" + q(SP.name) + (SP.tag ? "&tag=" + q(SP.tag) : "") + (SP.q ? "&q=" + q(SP.q) : ""));
-    list.replaceChildren(...(r.facts.length ? r.facts.map(f => el("div", { class: "note", onclick: () => openNote(body, f.id) },
-      el("div", { class: "tx" }, f.extract, f.file ? attachmentLine(f.file) : null, el("div", {}, ...(f.tags || []).map(t => el("span", { class: "chip" }, t)))),
-      el("div", { class: "meta" }, (f.created || "").slice(0, 10) + " · " + f.author))) : [el("p", { class: "mute" }, "No note here.")]));
+    list.replaceChildren(r.facts.length ? thread(r.facts, f => openNote(body, f.id)) : el("p", { class: "mute" }, "No note here."));
   } catch (x) { fail(x); }
   if (SP.open) { const id = SP.open; SP.open = null; openNote(body, id); }
+}
+
+// ---- The notes as a thread: a day at a time, the person's own notes on one side, what assistants and apps wrote on the
+// other, a structured trace (« [App] kind date: {json} ») shown as its values rather than raw JSON. ----
+const isMachine = f => /^agent[:-]|janitor|claude|assistant|^mcp-/i.test(f.author || "") || /^\[[^\]]+\]/.test(f.extract || "");
+function traceBody(text) {
+  const m = /^\[([^\]]+)\]\s*([^:{]*?):\s*(\{.*)$/s.exec(text || "");
+  if (!m) return [el("div", { class: "tx" }, text)];
+  let data = null;
+  try { data = JSON.parse(m[3]); } catch (e) { /* cut by the extract: shown as text */ }
+  if (!data || typeof data !== "object") return [el("div", { class: "tx" }, el("b", {}, m[2].trim() || m[1]), " ", m[3])];
+  const show = v => Array.isArray(v) ? v.length + " items" : (v && typeof v === "object") ? Object.keys(v).length + " fields" : String(v);
+  return [el("div", { class: "tx" }, el("b", {}, m[2].trim() || m[1])),
+    el("div", { class: "kv" }, ...Object.entries(data).slice(0, 12).map(([k, v]) => el("span", { class: "chip" }, k + " " + show(v))))];
+}
+function thread(facts, open) {
+  const box = el("div", { class: "thread" });
+  let day = "";
+  const sorted = [...facts].sort((a, b) => String(a.created).localeCompare(String(b.created)));
+  for (const f of sorted) {
+    const d = (f.created || "").slice(0, 10);
+    if (d !== day) {
+      day = d;
+      const when = d ? new Date(d + "T12:00:00").toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" }) : "";
+      box.append(el("div", { class: "day" }, when));
+    }
+    const machine = isMachine(f);
+    const app = (/^\[([^\]]+)\]/.exec(f.extract || "") || [])[1];
+    box.append(el("div", { class: "bubble " + (machine ? "other" : "mine"), onclick: () => open(f) },
+      el("div", { class: "who" }, (machine ? (app || f.author) : f.author) + " · " + (f.created || "").slice(11, 16)),
+      ...(machine ? traceBody(f.extract) : [el("div", { class: "tx" }, f.extract)]),
+      f.file ? attachmentLine(f.file) : null,
+      (f.tags || []).length ? el("div", { class: "tags" }, ...f.tags.map(t => el("span", { class: "chip" }, t))) : null));
+  }
+  setTimeout(() => box.lastElementChild && box.lastElementChild.scrollIntoView({ block: "nearest" }), 0);
+  return box;
 }
 
 // ---- Attachments and voice notes ----
