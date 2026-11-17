@@ -77,7 +77,10 @@ fn every_remote_command_is_a_command_the_local_line_knows() {
 #[test]
 fn the_table_of_docs_cli_is_the_generated_one() {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/CLI.md");
-    let doc = std::fs::read_to_string(&path).expect("docs/CLI.md");
+    // A checkout on Windows may turn the line ends into CRLF: the content is what counts.
+    let doc = std::fs::read_to_string(&path)
+        .expect("docs/CLI.md")
+        .replace("\r\n", "\n");
     let (start, end) = ("<!-- table:start -->\n", "<!-- table:end -->");
     let from = doc.find(start).expect("table:start") + start.len();
     let to = doc.find(end).expect("table:end");
