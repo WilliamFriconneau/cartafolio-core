@@ -62,13 +62,13 @@ To bring in the memory of an installation that ran as another app (a former HemC
 
 On the page of a space, **Record** keeps a voice note, **Attach files** keeps photos, PDF, text and recordings; each is a note of the space, with its file. The microphone needs the page to be served over https (Home Assistant's own address is, in the app or through Nabu Casa or your own certificate).
 
-A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the same space and the recording is erased a week later. Without a service here, a computer that runs the desktop bridge with a local speech model reads the same recordings, and nothing leaves your network.
+A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the inbox of the same space, tagged `dictee`, and the recording is erased a week later. The page shows next to each voice note whether it waits, was read, or failed (with a Retry button). Without a service here, a computer that runs the desktop bridge with a local speech model reads the same recordings, and nothing leaves your network.
 
 | Option | Meaning |
 |---|---|
 | `transcribe` | on or off |
 | `transcribe_person` | whose recordings (defaults to `janitor_person`) |
-| `transcribe_spaces` | the spaces whose recordings are read, separated by commas (by default the person's À trier) |
+| `transcribe_spaces` | the spaces whose recordings are read, separated by commas (empty: every space of the person, those made later included, `all` says the same) |
 | `transcribe_api_url`, `transcribe_api_model`, `transcribe_api_key` | the speech service |
 | `transcribe_language` | `fr`, `en`… or empty to let the service detect it |
 

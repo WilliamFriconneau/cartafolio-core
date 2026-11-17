@@ -145,7 +145,8 @@ if bashio::config.true 'transcribe'; then
         exit 0
       fi
       SPACES=$(bashio::config 'transcribe_spaces' | tr -d ' ')
-      [ -z "$SPACES" ] && SPACES="${TPERSON}-a-trier"
+      # Empty means every space the key can write to, those made later included.
+      [ -z "$SPACES" ] && SPACES="all"
       CONF="$TDIR/bridge.conf"
       {
         echo "url = http://127.0.0.1:8791/mcp/haos-voice"
