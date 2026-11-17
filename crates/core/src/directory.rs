@@ -583,6 +583,8 @@ pub fn union(brain: &Brain, now: i64, locals: Vec<Local>) -> Result<Vec<Value>> 
                 "space": s.space, "done": s.done, "total": s.total, "percent": s.percent,
             })).collect::<Vec<_>>(),
             "last_activity": l.last_activity,
+            // What the latest pass with this peer could not do, when this node runs the sync with it.
+            "last_pass": crate::sync::last_pass(&ctl, &l.connection),
             "allowed": l.allowed,
             "created_at": l.created_at,
             "last_used_at": l.last_used_at,

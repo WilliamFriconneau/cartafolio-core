@@ -1440,6 +1440,34 @@ pub fn set_cursor(brain: &Brain, peer: &str, space: &Space, which: Cursor, to: i
     Ok(())
 }
 
+const PASS_KEY: &str = "sync_pass:";
+
+/// Keeps what the latest pass with `peer` could not do (one line each; none when all went well), so the page and the
+/// apps show it: a sync started in the background has no one reading its output. Effect: one row of the control `meta`.
+pub fn note_pass(brain: &Brain, peer: &str, at: i64, problems: &[String]) -> Result<()> {
+    brain.open_control()?.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        params![
+            format!("{PASS_KEY}{peer}"),
+            json!({ "at": at, "problems": problems }).to_string()
+        ],
+    )?;
+    Ok(())
+}
+
+/// The latest pass with `peer` as [`note_pass`] kept it: `{at, problems}`; `None` before the first.
+pub fn last_pass(ctl: &Connection, peer: &str) -> Option<Value> {
+    ctl.query_row(
+        "SELECT v FROM meta WHERE k = ?1",
+        [format!("{PASS_KEY}{peer}")],
+        |r| r.get::<_, String>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .and_then(|v| serde_json::from_str(&v).ok())
+}
+
 /// Notes that `peer` moved events of `space`: the direction as this node sees it (`sending`: its events
 /// leave, `receiving`: the peer's arrive), how far it got and how far there is to go.
 pub fn note_transfer(

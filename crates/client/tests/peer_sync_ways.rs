@@ -350,8 +350,12 @@ fn a_peer_with_an_older_protocol_or_none_is_still_served_as_the_first_one() {
     for protocol in [None, Some(0), Some(memcp_core::sync::PROTOCOL)] {
         let peer = Peer::new(&fake_peer(protocol), "k", "peer-old");
         let pass = peer.sync_once(&b, NOW).unwrap();
+        // The person of this node is sam (the one who owns its spaces): the only thing said is that the old peer
+        // takes no new space.
         assert!(
-            pass.problems.is_empty(),
+            pass.problems
+                .iter()
+                .all(|p| p.starts_with("the peer runs an older version")),
             "{protocol:?}: {:?}",
             pass.problems
         );
