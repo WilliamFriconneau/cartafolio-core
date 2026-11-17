@@ -5,15 +5,14 @@
 #![allow(clippy::expect_used, dead_code)]
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::{Arc, Mutex};
 
 use memcp_bridge::Config;
 use memcp_core::access::{self, Rights};
 use memcp_core::text::Language;
 use memcp_core::{Brain, users};
 use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve};
+use memcp_server::net::{Listeners, serve_on};
 use serde_json::json;
 
 pub struct Memory {
@@ -21,6 +20,9 @@ pub struct Memory {
     pub tokens: Vec<String>,
     pub port: u16,
     pub dir: PathBuf,
+    /// The reserved socket: bound (so no other program can take the port) and not listening (so a connection is
+    /// refused, as when the computer is offline), until [`Memory::up`].
+    socket: Mutex<Option<socket2::Socket>>,
 }
 
 pub fn unique(tag: &str) -> PathBuf {
@@ -51,16 +53,26 @@ pub fn memory(tag: &str, rights: &[&str]) -> Memory {
             })
             .collect()
     };
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("bind")
+    let socket = socket2::Socket::new(
+        socket2::Domain::IPV4,
+        socket2::Type::STREAM,
+        Some(socket2::Protocol::TCP),
+    )
+    .expect("socket");
+    let any: std::net::SocketAddr = ([127, 0, 0, 1], 0).into();
+    socket.bind(&any.into()).expect("bind");
+    let port = socket
         .local_addr()
         .expect("addr")
+        .as_socket()
+        .expect("inet")
         .port();
     Memory {
         app: Arc::new(App::new(brain)),
         tokens,
         port,
         dir,
+        socket: Mutex::new(Some(socket)),
     }
 }
 
@@ -69,8 +81,13 @@ impl Memory {
         format!("http://127.0.0.1:{}/mcp/key-{i}", self.port)
     }
 
-    /// The network comes back.
+    /// The network comes back: the reserved socket starts to listen, and the memory serves on it.
     pub fn up(&self) {
+        let Some(socket) = self.socket.lock().expect("lock").take() else {
+            return;
+        };
+        socket.listen(128).expect("listen");
+        let listener = std::net::TcpListener::from(socket);
         let (app, port) = (Arc::clone(&self.app), self.port);
         std::thread::spawn(move || {
             let l = Listeners {
@@ -79,14 +96,8 @@ impl Memory {
                 ingress: None,
                 threads: 2,
             };
-            let _ = serve(app, &l, "");
+            let _ = serve_on(app, listener, &l, "");
         });
-        for _ in 0..50 {
-            if std::net::TcpStream::connect(("127.0.0.1", self.port)).is_ok() {
-                return;
-            }
-            std::thread::sleep(Duration::from_millis(100));
-        }
     }
 
     pub fn config(&self, i: usize, key: Option<&str>, outbox: &Path) -> Config {

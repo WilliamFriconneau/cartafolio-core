@@ -27,6 +27,8 @@ metal = ["local-whisper", "whisper-rs/metal"]
 [dev-dependencies]
 memcp-core = { path = "../core" }
 memcp-server = { path = "../server" }
+# A socket that is bound but not yet listening: the port is held while the memory is "offline".
+socket2 = "0.6"
 
 [lints]
 workspace = true

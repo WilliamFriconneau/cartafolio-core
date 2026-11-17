@@ -165,10 +165,31 @@ fn send(rq: tiny_http::Request, resp: http::Response) {
 
 /// Listens until the process ends. `banner` is what is printed once the listeners are open.
 pub fn serve<H: Handler>(app: Arc<H>, l: &Listeners, banner: &str) -> Result<(), Failure> {
-    let server = Arc::new(
-        tiny_http::Server::http(&l.listen)
-            .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?,
-    );
+    let server = tiny_http::Server::http(&l.listen)
+        .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
+    serve_server(app, server, l, banner)
+}
+
+/// Like [`serve`], on a socket that is already open (`l.listen` is only printed). A program that needs a free port binds
+/// port 0 itself and hands the socket over, so no other program can take the port between the choice and the listening.
+pub fn serve_on<H: Handler>(
+    app: Arc<H>,
+    listener: std::net::TcpListener,
+    l: &Listeners,
+    banner: &str,
+) -> Result<(), Failure> {
+    let server = tiny_http::Server::from_listener(listener, None)
+        .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
+    serve_server(app, server, l, banner)
+}
+
+fn serve_server<H: Handler>(
+    app: Arc<H>,
+    server: tiny_http::Server,
+    l: &Listeners,
+    banner: &str,
+) -> Result<(), Failure> {
+    let server = Arc::new(server);
     let mut ingress_workers = vec![];
     // The identity listener (behind Tailscale serve only): the OAuth consent page and the
     // admin page, the visitor known by `Tailscale-User-Login`. Never put it behind Funnel.
