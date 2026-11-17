@@ -1,6 +1,7 @@
-//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off]`: keeps this node's memory in
+//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]`: keeps this node's memory in
 //! step with a peer. ADDRESS is the address of this node's connection on the peer (`https://…/mcp/<person>/<connection>`),
-//! its key read from VAR (default MEMCP_PEER_TOKEN). One pass, or one every SECONDS. Exit: 0 done, 1 the key is refused,
+//! its key read from VAR (default MEMCP_PEER_TOKEN). `--person` names the person of this node whose spaces go both ways
+//! (default: the first administrator). One pass, or one every SECONDS. Exit: 0 done, 1 the key is refused,
 //! 2 wrong use, 3 done with problems (said on standard error).
 
 use std::path::PathBuf;
@@ -10,7 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use memcp_client::peer_sync::Peer;
 use memcp_core::Brain;
 
-const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off]\n       memcp-sync --data DIR --join ADDRESS --status-file FILE [--name NAME]";
+const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS --status-file FILE [--name NAME]";
 
 /// `--join ADDRESS`: asks the node at ADDRESS to let this machine in, writes the three words to the status file for the
 /// person's page, waits for the answer, and on a yes keeps the peer (its address and key, private) in `DIR/peers/` so that
@@ -161,7 +162,20 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     }
-    let peer = Peer::new(&peer, &key, &name);
+    let mut peer = Peer::new(&peer, &key, &name);
+    if let Some(person) = value("--person") {
+        let found = brain
+            .open_control()
+            .map_err(|e| e.to_string())
+            .and_then(|c| memcp_core::users::resolve(&c, &person).map_err(|e| e.to_string()));
+        match found {
+            Ok(u) => peer = peer.with_person(&u.id),
+            Err(e) => {
+                eprintln!("memcp-sync: --person {person}: {e}");
+                return ExitCode::from(2);
+            }
+        }
+    }
     loop {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -169,8 +183,14 @@ fn main() -> ExitCode {
         let code = match peer.sync_once(&brain, now) {
             Ok(pass) => {
                 println!(
-                    "{} spaces, {} received, {} sent, {} in dispute, {} pruned",
-                    pass.spaces, pass.pulled, pass.pushed, pass.disputed, pass.pruned
+                    "{} spaces, {} received, {} sent, {} in dispute, {} pruned, {} offered, {} archived",
+                    pass.spaces,
+                    pass.pulled,
+                    pass.pushed,
+                    pass.disputed,
+                    pass.pruned,
+                    pass.offered,
+                    pass.archived
                 );
                 for p in &pass.problems {
                     eprintln!("memcp-sync: {p}");

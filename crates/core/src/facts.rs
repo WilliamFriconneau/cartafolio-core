@@ -467,7 +467,7 @@ pub(crate) fn insert(
     text: &str,
     replaces: Option<&str>,
 ) -> Result<Fact> {
-    let fact = insert_unlogged(conn, space, author, new, text, replaces)?;
+    let fact = insert_unlogged(conn, space, author, new, text, replaces, None)?;
     crate::sync::record_fact_created(conn, &fact.id)?;
     Ok(fact)
 }
@@ -480,8 +480,9 @@ fn insert_unlogged(
     new: &NewFact,
     text: &str,
     replaces: Option<&str>,
+    id: Option<&str>,
 ) -> Result<Fact> {
-    let id = util::new_fact_id();
+    let id = id.map_or_else(util::new_fact_id, str::to_string);
     let now = util::now();
     let valid_from = new.valid_from.unwrap_or(now);
     let (source_kind, path, hash, range, reference, agent) = match &new.source {
@@ -655,6 +656,33 @@ pub fn remember(
         return Ok(Remembered::NeedsDecision(cands));
     }
     let fact = insert(&tx, space, author, &new, &t, None)?;
+    tx.commit()?;
+    Ok(Remembered::Created(fact))
+}
+
+/// [`remember`] under an id the caller chose: the same note written twice under that id (here, or on another node
+/// whose copy arrives later) is one note. A fact already stored under `id` is answered as [`Remembered::Duplicate`];
+/// the closeness check is skipped (the caller files a note it already holds elsewhere).
+pub(crate) fn remember_as(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
+    mut new: NewFact,
+    id: &str,
+) -> Result<Remembered> {
+    new.tags = normalize_tags(&new.tags)?;
+    check_kind(&new.kind)?;
+    let t = check_text(&new.text)?;
+    check_size(&t)?;
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    if let Some(existing) = read_fact(&tx, id)? {
+        return Ok(Remembered::Duplicate(existing));
+    }
+    if let Some(existing) = active_by_hash(&tx, &text::text_hash(&t))? {
+        return Ok(Remembered::Duplicate(existing));
+    }
+    let fact = insert_unlogged(&tx, space, author, &new, &t, None, Some(id))?;
+    crate::sync::record_fact_created(&tx, &fact.id)?;
     tx.commit()?;
     Ok(Remembered::Created(fact))
 }
@@ -838,7 +866,7 @@ pub(crate) fn supersede_as(
             "fact {old_id} was just replaced or retired by another call"
         )));
     }
-    let fact = insert_unlogged(&tx, space, author, &staged, &t, Some(old_id))?;
+    let fact = insert_unlogged(&tx, space, author, &staged, &t, Some(old_id), None)?;
     tx.execute(
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![old_id, fact.id],

@@ -60,13 +60,8 @@ pub fn create_for_peer(
 ) -> Result<(String, String)> {
     let triage = crate::triage::ensure(brain, user_id, person)?;
     let ctl = brain.open_control()?;
-    let spaces: Vec<String> = brain
-        .layout(user_id)?
-        .iter()
-        .map(|p| p.space.as_str().to_string())
-        .collect();
-    let spec: Vec<String> = spaces.iter().map(|v| format!("{v}:rw")).collect();
-    let code = create_with(&ctl, user_id, Rights::parse(&spec.join(","))?, now)?;
+    // Every space of the person, present and future: a space made later on either node is the peer's too.
+    let code = create_with(&ctl, user_id, Rights::parse("all")?, now)?;
     Ok((code, triage.as_str().to_string()))
 }
 
@@ -197,10 +192,16 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
             return Err(e);
         }
     };
-    let mut spaces: Vec<String> = spec
-        .split(',')
-        .filter_map(|g| g.split('/').next().map(str::to_string))
-        .collect();
+    let mut spaces: Vec<String> = if spec == "all" {
+        crate::users::access_of(ctl, &user_id)?
+            .into_keys()
+            .map(|s| s.as_str().to_string())
+            .collect()
+    } else {
+        spec.split(',')
+            .filter_map(|g| g.split('/').next().map(str::to_string))
+            .collect()
+    };
     spaces.dedup();
     Ok(Paired {
         agent,

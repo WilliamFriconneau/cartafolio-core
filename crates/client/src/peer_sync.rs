@@ -2,12 +2,18 @@
 //! events after this node's cursor and apply them here, then push this node's events after the peer's cursor. The
 //! cursors move only past what was dealt with, so a pass cut short resumes where it stopped; the same event twice is
 //! one row (see `memcp_core::sync`). Over HTTP to the peer's `/sync/` routes, at the address of the connection.
+//!
+//! Both ways for the spaces themselves (see `memcp_core::swarm`): a space of the person that the peer lacks is offered to
+//! it (`POST /sync/spaces`) and then exchanged like the others; the person's « À trier » here is paired with theirs
+//! there, whatever its name; an archive on either side archives the other's copy. A peer of an older version, which
+//! takes no offers, is kept in step as before, and the pass says what it could not give it.
 
 use std::time::Duration;
 
-use memcp_core::directory;
+use memcp_core::catalogue::TRIAGE;
+use memcp_core::swarm::{self, Answer};
 use memcp_core::sync::{self, Cursor, Event};
-use memcp_core::{Brain, Space};
+use memcp_core::{Brain, Space, directory, triage, users};
 use serde_json::{Value, json};
 
 const PAGE: usize = 500;
@@ -26,6 +32,10 @@ pub struct Pass {
     pub disputed: usize,
     /// Notes this replica removed to keep to its window (see `memcp_core::sync::prune_window`).
     pub pruned: usize,
+    /// Spaces of this node the peer did not have and made in this pass.
+    pub offered: usize,
+    /// Spaces archived in this pass because the other side archived them (here or there).
+    pub archived: usize,
     /// What went wrong, in words, one line each; the pass goes on past them.
     pub problems: Vec<String>,
 }
@@ -37,6 +47,8 @@ pub struct Peer {
     key: String,
     /// The name this node keeps the peer under (its cursors and its status).
     name: String,
+    /// The person of this node whose spaces are kept in step with the peer (the first administrator by default).
+    person: String,
     agent: ureq::Agent,
 }
 
@@ -54,8 +66,16 @@ impl Peer {
             address: address.trim_end_matches('/').to_string(),
             key: key.to_string(),
             name: name.to_string(),
+            person: users::OWNER.to_string(),
             agent,
         }
+    }
+
+    /// The person of this node (a user id) whose spaces are kept in step with the peer: the spaces made here from the
+    /// peer's are theirs, and theirs are the spaces offered to the peer. By default the first administrator.
+    pub fn with_person(mut self, user_id: &str) -> Peer {
+        self.person = user_id.to_string();
+        self
     }
 
     fn get(&self, path: &str) -> Result<Value, String> {
@@ -102,23 +122,15 @@ impl Peer {
             ));
         }
         let mut pass = Pass::default();
-        for s in listed["spaces"].as_array().cloned().unwrap_or_default() {
-            let Some(name) = s["space"].as_str() else {
-                continue;
-            };
-            let Ok(space) = Space::new(name) else {
-                continue;
-            };
-            sync::ensure_space(brain, &space, s["kind"].as_str().unwrap_or("custom"))
-                .map_err(|e| e.to_string())?;
+        let pairs = self.spaces(brain, &listed, now, &mut pass)?;
+        // Every space is made before any is filled: a space's parent is then here when its layout arrives.
+        for (local, remote, writable) in pairs {
             pass.spaces += 1;
-            if let Err(e) = self.pull(brain, &space, now, &mut pass) {
-                pass.problems.push(format!("{name}: pull: {e}"));
+            if let Err(e) = self.pull(brain, &local, &remote, now, &mut pass) {
+                pass.problems.push(format!("{remote}: pull: {e}"));
             }
-            if s["writable"].as_bool() == Some(true)
-                && let Err(e) = self.push(brain, &space, now, &mut pass)
-            {
-                pass.problems.push(format!("{name}: push: {e}"));
+            if writable && let Err(e) = self.push(brain, &local, &remote, now, &mut pass) {
+                pass.problems.push(format!("{remote}: push: {e}"));
             }
         }
         self.gossip(brain, now);
@@ -129,6 +141,144 @@ impl Peer {
             Err(e) => pass.problems.push(format!("window: {e}")),
         }
         Ok(pass)
+    }
+
+    /// Which spaces this pass exchanges: `(here, there, writable there)`. The peer's archives are applied here, the
+    /// peer's spaces are made here, the person's « À trier » is paired with the peer's, and the spaces of the person the
+    /// peer lacks are offered to it.
+    fn spaces(
+        &self,
+        brain: &Brain,
+        listed: &Value,
+        now: i64,
+        pass: &mut Pass,
+    ) -> Result<Vec<(Space, String, bool)>, String> {
+        let fail = |e: memcp_core::Error| e.to_string();
+        let offers_ok = listed["offers"].as_bool() == Some(true);
+        let entries = listed["spaces"].as_array().cloned().unwrap_or_default();
+        // 1. What the peer archived is archived here (an archive, never a deletion), unless the copy here is newer.
+        for a in listed["archived"].as_array().into_iter().flatten() {
+            let (Some(Ok(space)), Some(at)) = (
+                a["space"].as_str().map(Space::new),
+                a["archived_at"].as_i64(),
+            ) else {
+                continue;
+            };
+            match swarm::archive_here(brain, &self.person, &space, at) {
+                Ok(true) => pass.archived += 1,
+                Ok(false) => {}
+                Err(e) => pass.problems.push(format!("{space}: archive: {e}")),
+            }
+        }
+        // 2. The peer's spaces. Its « À trier » (the one it names as the person's, else the first) goes with the box of
+        // the person here, whatever the names; its other boxes are its own janitor's.
+        let mine = triage::of(brain, &self.person).map_err(fail)?;
+        let theirs = entries
+            .iter()
+            .find(|s| s["triage"].as_bool() == Some(true))
+            .or_else(|| entries.iter().find(|s| s["kind"].as_str() == Some(TRIAGE)))
+            .and_then(|s| s["space"].as_str())
+            .map(str::to_string);
+        let mut pairs = vec![];
+        let mut listed_names = std::collections::BTreeSet::new();
+        for s in &entries {
+            let Some(name) = s["space"].as_str() else {
+                continue;
+            };
+            listed_names.insert(name.to_string());
+            let Ok(space) = Space::new(name) else {
+                continue;
+            };
+            let kind = s["kind"].as_str().unwrap_or("custom");
+            let writable = s["writable"].as_bool() == Some(true);
+            // An older peer does not say when its copy began: it counts as made now.
+            let since = s["since"].as_i64();
+            if kind == TRIAGE {
+                if theirs.as_deref() != Some(name) {
+                    continue;
+                }
+                let here = match &mine {
+                    Some(t) => t.clone(),
+                    None => {
+                        swarm::adopt(brain, &self.person, &space, TRIAGE, since.unwrap_or(now))
+                            .map_err(fail)?;
+                        space
+                    }
+                };
+                pairs.push((here, name.to_string(), writable));
+                continue;
+            }
+            // Archived here after the peer's copy began: the peer archives it too; it is not made again here.
+            if !brain.has_space(&space).map_err(fail)?
+                && let Some((_, at)) = swarm::archived_at(brain, &space).map_err(fail)?
+                && since.unwrap_or(0) < at
+            {
+                if offers_ok {
+                    let said = self.post("spaces", &json!({ "space": name, "archived_at": at }));
+                    if let Err(e) = said {
+                        pass.problems.push(format!("{name}: archive there: {e}"));
+                    }
+                } else {
+                    pass.problems.push(format!(
+                        "{name}: archived here; the peer runs an older version and keeps it"
+                    ));
+                }
+                continue;
+            }
+            swarm::adopt(brain, &self.person, &space, kind, since.unwrap_or(now)).map_err(fail)?;
+            pairs.push((space, name.to_string(), writable));
+        }
+        // 3. The spaces of the person the peer lacks are offered to it. « À trier » only when the peer has none.
+        let offers: Vec<swarm::Offer> = swarm::offers(brain, &self.person)
+            .map_err(fail)?
+            .into_iter()
+            .filter(|o| !listed_names.contains(o.space.as_str()))
+            .filter(|o| {
+                if o.kind == TRIAGE {
+                    theirs.is_none() && mine.as_ref() == Some(&o.space)
+                } else {
+                    true
+                }
+            })
+            .collect();
+        if offers.is_empty() {
+            return Ok(pairs);
+        }
+        if !offers_ok {
+            pass.problems.push(format!(
+                "the peer runs an older version and takes no new space: {} not offered ({})",
+                offers.len(),
+                offers
+                    .iter()
+                    .map(|o| o.space.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ));
+            return Ok(pairs);
+        }
+        for o in offers {
+            let answer = self
+                .post("spaces", &o.to_json())
+                .and_then(|v| Answer::from_json(&v).map_err(|e| e.to_string()));
+            match answer {
+                Ok(Answer::Created(there)) => {
+                    pass.offered += 1;
+                    pairs.push((o.space, there.as_str().to_string(), true));
+                }
+                Ok(Answer::Held(there) | Answer::Triage(there)) => {
+                    pairs.push((o.space, there.as_str().to_string(), true));
+                }
+                Ok(Answer::Archived(at)) => {
+                    match swarm::archive_here(brain, &self.person, &o.space, at) {
+                        Ok(true) => pass.archived += 1,
+                        Ok(false) => {}
+                        Err(e) => pass.problems.push(format!("{}: archive: {e}", o.space)),
+                    }
+                }
+                Err(e) => pass.problems.push(format!("{}: offer: {e}", o.space)),
+            }
+        }
+        Ok(pairs)
     }
 
     /// The peer directories, both ways: takes the peer's (`GET /sync/peers`), then gives this node's
@@ -153,14 +303,21 @@ impl Peer {
         }
     }
 
-    fn pull(&self, brain: &Brain, space: &Space, now: i64, pass: &mut Pass) -> Result<(), String> {
+    /// The peer's events of `remote` after this node's cursor, applied to `space` here.
+    fn pull(
+        &self,
+        brain: &Brain,
+        space: &Space,
+        remote: &str,
+        now: i64,
+        pass: &mut Pass,
+    ) -> Result<(), String> {
         // A replica that holds a window leaves out what is older than it (pinned notes excepted).
         let cutoff = sync::window_cutoff(brain, now).map_err(|e| e.to_string())?;
         loop {
             let (pulled, _) = sync::cursors(brain, &self.name, space).map_err(|e| e.to_string())?;
             let page = self.get(&format!(
-                "events?space={}&after={pulled}&limit={PAGE}",
-                space.as_str()
+                "events?space={remote}&after={pulled}&limit={PAGE}"
             ))?;
             let raw = page["events"].as_array().cloned().unwrap_or_default();
             let events: Vec<Event> = raw
@@ -198,7 +355,15 @@ impl Peer {
         }
     }
 
-    fn push(&self, brain: &Brain, space: &Space, now: i64, pass: &mut Pass) -> Result<(), String> {
+    /// This node's events of `space` after the peer's cursor, given to the peer's `remote`.
+    fn push(
+        &self,
+        brain: &Brain,
+        space: &Space,
+        remote: &str,
+        now: i64,
+        pass: &mut Pass,
+    ) -> Result<(), String> {
         loop {
             let (_, pushed) = sync::cursors(brain, &self.name, space).map_err(|e| e.to_string())?;
             let page = sync::events_after(brain, space, pushed, PAGE, PAGE_BYTES, Some(&self.name))
@@ -223,7 +388,7 @@ impl Peer {
                 "next": page.next,
                 "head": page.head,
             });
-            let answer = self.post(&format!("events?space={}", space.as_str()), &body)?;
+            let answer = self.post(&format!("events?space={remote}"), &body)?;
             if let Some(e) = answer["error"].as_str() {
                 return Err(e.to_string());
             }

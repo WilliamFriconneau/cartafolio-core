@@ -429,6 +429,13 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
     }
 }
 
+/// The layout of this space is already in its log: a space made here from a peer's word takes its layout from the
+/// peer's events, and must not record it again under a stamp of its own (that later stamp would win over a rename made
+/// meanwhile at the origin).
+pub(crate) fn mark_layout_logged(conn: &Connection) -> Result<()> {
+    meta_set(conn, "sync_layout_logged", "1")
+}
+
 /// The layout the person already gave this space, as events, once.
 fn ensure_layout_log(brain: &Brain, space: &Space, conn: &Connection) -> Result<()> {
     if meta_get(conn, "sync_layout_logged")?.is_some() {

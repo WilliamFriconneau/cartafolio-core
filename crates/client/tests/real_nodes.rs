@@ -1603,3 +1603,101 @@ fn the_manager_runs_the_intake_for_the_person_the_settings_name() {
         })
     });
 }
+
+// --- (s) the swarm: what is made on one node is on every node ------------------------------------------------------
+
+/// `(label, parent)` of `space` in the tree of the node's person, read from its store.
+fn place_of(n: &Node, space: &str) -> Option<(String, Option<String>)> {
+    n.brain()
+        .layout("owner")
+        .unwrap()
+        .into_iter()
+        .find(|p| p.space.as_str() == space)
+        .map(|p| (p.label, p.parent.map(|s| s.as_str().to_string())))
+}
+
+#[test]
+fn a_sub_space_made_on_one_node_and_a_dictation_on_another_reach_all_three() {
+    let root = Root::new("s");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let mut c = Node::init(&root, "gamma", false);
+    c.serve();
+    // Each node has its own « À trier » before it joins: the page makes it the first time it is opened.
+    let box_of = |n: &mut Node| -> String {
+        let (status, v) = n.admin_get("/state");
+        assert_eq!(status, 200, "{v}");
+        v["triage"]["space"].as_str().unwrap().to_string()
+    };
+    let boxes = [box_of(&mut a), box_of(&mut b), box_of(&mut c)];
+    // B joins A, C joins B: a chain, A never hears of C directly.
+    let ab = join_by_sync(&root, &mut a, &b, "beta");
+    b.sync_ok(&ab);
+    let bc = join_by_sync(&root, &mut b, &c, "gamma");
+    c.sync_ok(&bc);
+
+    // On C, a sub-space « Pompiers » under « hobbies », made on its page.
+    let (status, made) = c.admin_post(
+        "/spaces/create",
+        &json!({ "label": "Pompiers", "parent": "hobbies" }),
+    );
+    assert_eq!(status, 200, "{made}");
+    let pompiers = made["space"]["space"].as_str().unwrap().to_string();
+    let mut cc = c.client("claude", "all");
+    remember(&mut cc, &pompiers, &words(9100, 6));
+
+    // On B, a phone paired with B's page leaves a dictation in À trier.
+    let (status, pairing) = b.admin_post("/pairing", &json!({}));
+    assert_eq!(status, 200, "{pairing}");
+    let mut r = http()
+        .post(&format!("{}/pair", b.base()))
+        .header("Content-Type", "application/json")
+        .send(
+            json!({ "code": pairing["code"], "device": "phone" })
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+    let (status, paired) = read_json(&mut r);
+    assert_eq!(status, 200, "{paired}");
+    let mut phone = Client::new(
+        paired["mcp_url"].as_str().unwrap(),
+        paired["key"].as_str().unwrap(),
+    );
+    let dictation = words(9200, 7);
+    let said = phone
+        .call("remember", json!({ "text": dictation, "tags": ["inbox"] }))
+        .unwrap();
+    assert!(said.to_string().contains("created"), "{said}");
+
+    // Passes along the chain, each node with the one it joined.
+    c.sync_ok(&bc);
+    b.sync_ok(&ab);
+    c.sync_ok(&bc);
+    for n in [&a, &b, &c] {
+        assert_eq!(
+            place_of(n, &pompiers),
+            Some(("Pompiers".to_string(), Some("hobbies".to_string()))),
+            "{}",
+            n.name
+        );
+        assert_eq!(n.count_in(&pompiers), 1, "{}", n.name);
+    }
+    for (n, own) in [&a, &b, &c].into_iter().zip(&boxes) {
+        let texts: Vec<String> = n
+            .notes()
+            .get(own)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, t)| t)
+            .collect();
+        assert!(
+            texts.iter().any(|t| t.contains(dictation.trim())),
+            "{}: {own} holds {texts:?}",
+            n.name
+        );
+    }
+}
