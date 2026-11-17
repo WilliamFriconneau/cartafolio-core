@@ -94,8 +94,45 @@ fn row_with_file(conn: &Connection, f: &facts::Fact) -> Value {
         )
     {
         row["file"] = file;
+        if let Some(v) = voice_state(conn, f) {
+            row["voice"] = v;
+        }
     }
     row
+}
+
+/// Where a voice note stands: `waiting` for its text, `transcribed`, or `failed` (with the id of the failure note, which
+/// the person retires to have it read again). Only for a recording still under `inbox/audio`.
+fn voice_state(conn: &Connection, f: &facts::Fact) -> Option<Value> {
+    if !f.tags.iter().any(|t| t == "inbox/audio") {
+        return None;
+    }
+    let file = conn
+        .query_row(
+            "SELECT id FROM files WHERE fact_id = ?1 AND status = 'active' AND mime LIKE 'audio/%' LIMIT 1",
+            [&f.id],
+            |r| r.get::<_, String>(0),
+        )
+        .ok()?;
+    let waiting = memcp_core::files::recordings_waiting(conn)
+        .unwrap_or_default()
+        .iter()
+        .any(|r| r.0 == file);
+    if !waiting {
+        return Some(json!({ "state": "transcribed" }));
+    }
+    let marker: Option<String> = conn
+        .query_row(
+            "SELECT d.id FROM facts d JOIN fact_tags x ON x.fact_id = d.id
+             WHERE d.status = 'active' AND x.tag = ?1 AND instr(d.text, ?2) > 0 LIMIT 1",
+            rusqlite::params![memcp_core::files::VOICE_FAILED_TAG, file],
+            |r| r.get(0),
+        )
+        .ok();
+    Some(match marker {
+        Some(m) => json!({ "state": "failed", "marker": m }),
+        None => json!({ "state": "waiting" }),
+    })
 }
 
 /// `GET /space?space=NAME`: the kind, the place in the tree, the counts, the tree of tags and the

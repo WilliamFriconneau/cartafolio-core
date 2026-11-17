@@ -51,7 +51,7 @@ pub use memcp_client::{Paired, pair, pair_allowing};
 use outbox::{Entry, Outbox};
 #[cfg(unix)]
 pub use socket::{bind as bind_socket, connect as connect_socket, serve_socket};
-pub use voice::{VoiceReport, transcribe};
+pub use voice::{VoiceReport, resolve_spaces, transcribe, waiting};
 pub use whisper::VoiceSettings;
 
 /// The biggest recording the memory keeps, and the biggest other file.

@@ -84,6 +84,7 @@ pub(super) fn spaces(
             facts = w["count"].as_u64().unwrap_or(0);
             failed = Some(w["failed_transcription"].as_array().map_or(0, Vec::len));
         }
+        let recordings = crate::files::recordings_waiting(&conn).unwrap_or_default();
         out.push(json!({
             "name": s.as_str(),
             "label": label.unwrap_or_else(|| s.as_str().into()),
@@ -92,6 +93,8 @@ pub(super) fn spaces(
             "kind": kind,
             "writable": caller.can_write(&s),
             "facts": facts,
+            "recordings_waiting": recordings.len(),
+            "oldest_recording_at": recordings.first().map(|r| r.2),
         }));
         if let (Some(n), Some(row)) = (failed, out.last_mut()) {
             row["failed_transcription"] = json!(n);
