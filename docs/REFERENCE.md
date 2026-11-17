@@ -149,7 +149,7 @@ nothing is exposed on the network.
 
 ### Hermes Agent
 
-For [Hermes Agent](https://github.com/NousResearch/hermes-agent), the connection can be the agent's memory rather than one more MCP server: the memory provider in [`integrations/hermes/memcp`](integrations/hermes/memcp/README.md) puts the connection's instructions in the system prompt, recalls before each turn, and offers its tools.
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) connects like any MCP client: add the connection's address and key as an MCP server in its configuration, or `memcp mcp` for a Hermes on the same computer. MemCP has no plugin of its own for it: one way in, the MCP, for every assistant.
 
 ### Claude on the web (OAuth)
 

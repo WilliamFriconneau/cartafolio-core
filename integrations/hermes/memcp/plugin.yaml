@@ -1,6 +1,0 @@
-name: memcp
-version: 1.0.0
-description: "MemCP as the agent's memory: its guides in the system prompt, a recall before each turn, its tools."
-requires_env:
-  - MEMCP_URL
-  - MEMCP_TOKEN
