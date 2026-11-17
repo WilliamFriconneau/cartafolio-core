@@ -2077,3 +2077,91 @@ fn devices_join_through_the_command_line_and_the_folder_command_is_pending() {
     assert_eq!(f.status.code(), Some(6), "{}", text_of(&f));
     assert!(text_of(&f).contains("pending"), "{}", text_of(&f));
 }
+
+#[test]
+fn a_merge_is_planned_and_applied_and_files_are_sent_through_a_node() {
+    let root = Root::new("cli-merge");
+    let mut node = Node::init(&root, "n", true);
+    node.serve();
+    let key = write_key(&root, "console.key", &node.console());
+    // A file of this machine goes into the inbox, and the answer names it as it is named here.
+    let note = root.path("idea.txt");
+    std::fs::write(&note, "An idea about the garden wall.").unwrap();
+    let sent = remote(
+        &node,
+        &key,
+        &[],
+        &["intake", "send", note.to_str().unwrap()],
+    );
+    assert!(sent.status.success(), "{}", text_of(&sent));
+    assert!(text_of(&sent).contains("idea.txt"), "{}", text_of(&sent));
+    assert!(!text_of(&sent).contains("uploads"), "{}", text_of(&sent));
+    // Another memory (an export of this one) is planned against it, the plan written here, then applied.
+    let down = root.path("down");
+    assert!(
+        remote(
+            &node,
+            &key,
+            &[],
+            &["export", "--to", down.to_str().unwrap()]
+        )
+        .status
+        .success()
+    );
+    let export_dir = std::fs::read_dir(&down)
+        .unwrap()
+        .flatten()
+        .next()
+        .unwrap()
+        .path();
+    let plan = root.path("plan.txt");
+    let planned = remote(
+        &node,
+        &key,
+        &[],
+        &[
+            "merge",
+            "--plan",
+            export_dir.to_str().unwrap(),
+            "--user",
+            "owner",
+            "--out",
+            plan.to_str().unwrap(),
+        ],
+    );
+    assert!(planned.status.success(), "{}", text_of(&planned));
+    assert!(plan.is_file());
+    let backups = root.path("backups");
+    let applied = remote(
+        &node,
+        &key,
+        &[],
+        &[
+            "merge",
+            "--apply",
+            plan.to_str().unwrap(),
+            "--backup-to",
+            backups.to_str().unwrap(),
+        ],
+    );
+    assert!(applied.status.success(), "{}", text_of(&applied));
+    assert!(
+        text_of(&applied).contains("backup:"),
+        "{}",
+        text_of(&applied)
+    );
+    // A member's key does not merge: it needs an administrator's.
+    node.cli(&["person", "new", "sam"]);
+    let sam = write_key(
+        &root,
+        "sam.key",
+        &token_in(&node.cli(&["console-token", "sam"]), "hcpc_"),
+    );
+    let refused = remote(
+        &node,
+        &sam,
+        &[],
+        &["merge", "--apply", plan.to_str().unwrap()],
+    );
+    assert_eq!(refused.status.code(), Some(4), "{}", text_of(&refused));
+}

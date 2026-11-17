@@ -325,7 +325,7 @@ pub fn dispatch(
             cli::vocabulary_remove(&data, need("--space")?, arg(2, "the name")?)
         }
         ("prepare", Some(kind)) => {
-            crate::setup::prepare(kind, &data, &settings, Path::new(need("--out")?))
+            crate::setup::prepare(kind, &data, settings, Path::new(need("--out")?))
         }
         ("catalogue", _) => cli::catalogue_list(&data),
         ("status", _) => cli::status(&data, flag("--user")),
@@ -346,14 +346,14 @@ pub fn dispatch(
                 .into(),
         )),
         ("transcribe", _) => {
-            crate::intake::cli::transcribe(&data, &settings, flag("--user"))
+            crate::intake::cli::transcribe(&data, settings, flag("--user"))
         }
         ("watch", _) => {
-            crate::intake::cli::watch_folders(&data, &settings, flag("--user"), sw("--once"))
+            crate::intake::cli::watch_folders(&data, settings, flag("--user"), sw("--once"))
         }
         ("intake", _) => crate::intake::cli::intake(
             &data,
-            &settings,
+            settings,
             flag("--user"),
             &a.pos,
             flag("--space"),
@@ -404,7 +404,7 @@ pub fn dispatch(
             flag("--listen"),
             Some(&crate::doctor::Extra {
                 settings_file: cfg_path,
-                settings: &settings,
+                settings,
             }),
         ),
         ("regrant", _) => cli::regrant(&data, arg(1, "the agent name")?, &rights()?),

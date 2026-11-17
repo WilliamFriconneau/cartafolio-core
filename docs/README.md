@@ -19,6 +19,7 @@
 **How it works inside**
 - [MODEL.md](MODEL.md), [STORAGE.md](STORAGE.md), [FEDERATION.md](FEDERATION.md) (peers and sync), [ENCRYPTION.md](ENCRYPTION.md) (planned), [LOCAL-TOOLS.md](LOCAL-TOOLS.md), [CONFIG-UI.md](CONFIG-UI.md).
 
+- [CLI.md](CLI.md): every command, on the data directory or on a running node with a key (`--node`), and the exit codes.
 - [CRUD.md](CRUD.md): what can be created, read, changed and removed (spaces, nodes, connections, people, notes).
 
 **Project**

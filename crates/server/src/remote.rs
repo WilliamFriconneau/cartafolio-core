@@ -211,7 +211,7 @@ fn call_json(t: &Target, method: &str, path: &str, body: &Value) -> Result<Value
 
 // --- sending the files a command names ---------------------------------------------------------------------------------
 
-fn files_under(dir: &Path, base: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
+fn files_under(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
     let mut entries: Vec<PathBuf> = std::fs::read_dir(dir)?
         .flatten()
         .map(|e| e.path())
@@ -219,7 +219,7 @@ fn files_under(dir: &Path, base: &Path, out: &mut Vec<PathBuf>) -> std::io::Resu
     entries.sort();
     for p in entries {
         if p.is_dir() {
-            files_under(&p, base, out)?;
+            files_under(&p, out)?;
         } else if p.is_file() {
             out.push(p);
         }
@@ -291,7 +291,7 @@ fn send_path(t: &Target, id: &str, what: &str) -> Result<String, Failure> {
     let p = Path::new(what);
     if p.is_dir() {
         let mut files = vec![];
-        files_under(p, p, &mut files).map_err(|e| bad(&format!("{what}: {e}")))?;
+        files_under(p, &mut files).map_err(|e| bad(&format!("{what}: {e}")))?;
         if files.is_empty() {
             return Err(bad(&format!("{what}: nothing in this folder")));
         }
@@ -394,7 +394,7 @@ pub fn run(t: &Target, raw: &[String], a: &Args) -> Result<(), Failure> {
             })?;
             let out = exec_words(t, &sent, a);
             // What was sent and not used (a refused command) is forgotten.
-            for w in &sent {
+            for w in sent.iter().filter(|_| !crate::cli_remote::keeps_upload(a)) {
                 if let Some(rest) = w.strip_prefix("@upload:") {
                     let id = rest.split('/').next().unwrap_or("");
                     let _ = call_json(t, "POST", "/upload/discard", &json!({ "id": id }));

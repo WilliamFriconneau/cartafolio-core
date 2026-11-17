@@ -124,6 +124,8 @@ pub fn exec(app: &App, me: &User, body: &Value, ip: Option<&str>) -> Result<Valu
         .or_insert_with(|| app.public_url.clone());
     // The files the command names were sent first: their words become the folders they were kept in.
     let mut used: Vec<PathBuf> = vec![];
+    // What the command prints about a file it was given names the node's copy: said with the file's own name instead.
+    let mut names: Vec<(String, String)> = vec![];
     let mut resolve = |word: &str| -> Result<String, Response> {
         match staged(app, me, word) {
             Some(Ok(p)) => {
@@ -132,6 +134,13 @@ pub fn exec(app: &App, me: &User, body: &Value, ip: Option<&str>) -> Result<Valu
                     .find(|x| x.parent() == Some(root(app, me).as_path()))
                 {
                     used.push(id_dir.to_path_buf());
+                    let shown = if p == id_dir {
+                        "the folder sent".to_string()
+                    } else {
+                        p.file_name()
+                            .map_or(String::new(), |n| n.to_string_lossy().to_string())
+                    };
+                    names.push((p.to_string_lossy().to_string(), shown));
                 }
                 Ok(p.to_string_lossy().to_string())
             }
@@ -172,11 +181,20 @@ pub fn exec(app: &App, me: &User, body: &Value, ip: Option<&str>) -> Result<Valu
             a.flags.insert(f.to_string(), resolve(&w)?);
         }
     }
-    let (result, stdout, mut stderr) = out::capture(|| {
+    let (result, mut stdout, mut stderr) = out::capture(|| {
         commands::dispatch(app.brain.dir(), &a, &config::Settings::default(), None)
     });
-    for dir in used {
-        let _ = std::fs::remove_dir_all(dir);
+    // A plan names the copy of the export it was made from: that copy stays (until it is old) for `merge --apply`.
+    if !keeps_upload(&a) {
+        for dir in used {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+    if !keeps_upload(&a) {
+        for (staged, shown) in &names {
+            stdout = stdout.replace(staged, shown);
+            stderr = stderr.replace(staged, shown);
+        }
     }
     let code = match result {
         Ok(()) => 0,
@@ -196,6 +214,11 @@ pub fn exec(app: &App, me: &User, body: &Value, ip: Option<&str>) -> Result<Valu
         );
     }
     Ok(json!({ "code": code, "stdout": stdout, "stderr": stderr }))
+}
+
+/// `merge --plan EXPORT`: the plan it writes names the folder of the export, so that folder is kept for `merge --apply`.
+pub fn keeps_upload(a: &commands::Args) -> bool {
+    a.pos.first().map(String::as_str) == Some("merge") && a.flags.contains_key("--plan")
 }
 
 fn size_of(dir: &Path, files: &mut usize) -> u64 {
