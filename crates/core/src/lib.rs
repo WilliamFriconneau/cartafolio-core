@@ -15,6 +15,8 @@ pub mod import;
 pub mod layout;
 pub mod library;
 pub mod merge;
+#[cfg(test)]
+mod migration_tests;
 mod moves;
 pub mod origin;
 pub mod pairing;
