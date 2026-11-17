@@ -648,7 +648,6 @@ fn readable_spaces(
     only: Option<&str>,
 ) -> Result<Vec<Space>, Response> {
     let reach = users::access_of(ctl, &me.id).map_err(fail)?;
-    let triage = memcp_core::triage::of(&app.brain, &me.id).map_err(fail)?;
     if let Some(name) = only.filter(|s| !s.is_empty()) {
         let space = Space::new(name).map_err(|_| err(400, "invalid space"))?;
         if !reach.contains_key(&space) {
@@ -661,7 +660,8 @@ fn readable_spaces(
         .spaces()
         .map_err(fail)?
         .into_iter()
-        .filter(|s| reach.contains_key(s) && Some(s) != triage.as_ref())
+        // À trier too: the journal is every note of every space (docs/UI-SPEC.md), what waits to be filed included.
+        .filter(|s| reach.contains_key(s))
         .collect())
 }
 
