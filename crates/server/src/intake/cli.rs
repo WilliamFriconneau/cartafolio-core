@@ -42,12 +42,12 @@ pub fn transcribe(data: &Path, file: &File, user: Option<&str>) -> Result<(), Fa
     let mut intake = open(data, file, user)?;
     speech_is_set(&intake)?;
     let r = intake.transcribe().map_err(|e| (1, e.to_string()))?;
-    println!(
+    sayln!(
         "recordings read: {}, nothing audible: {}, erased: {}",
         r.transcribed, r.nothing_audible, r.erased
     );
     for p in &r.problems {
-        eprintln!("  {p}");
+        esayln!("  {p}");
     }
     if r.problems.is_empty() {
         Ok(())
@@ -61,7 +61,7 @@ fn print_scans(scans: &[super::Scanned]) -> u32 {
     for s in scans {
         match &s.report {
             Ok(r) => {
-                println!(
+                sayln!(
                     "{} -> {}: {} note(s), {} file(s), {} still being written",
                     s.dir.display(),
                     s.space,
@@ -71,12 +71,12 @@ fn print_scans(scans: &[super::Scanned]) -> u32 {
                 );
                 for p in &r.problems {
                     problems += 1;
-                    eprintln!("  {p}");
+                    esayln!("  {p}");
                 }
             }
             Err(e) => {
                 problems += 1;
-                eprintln!("{}: {e}", s.dir.display());
+                esayln!("{}: {e}", s.dir.display());
             }
         }
     }
@@ -133,7 +133,7 @@ pub fn intake(
             let mut refused = 0;
             for f in files {
                 match watch::put_file(intake.memory(), &f, &space, offset) {
-                    Ok(r) => println!(
+                    Ok(r) => sayln!(
                         "{}: kept in {space} ({} note(s), {} file(s))",
                         f.display(),
                         r.notes,
@@ -141,7 +141,7 @@ pub fn intake(
                     ),
                     Err(e) => {
                         refused += 1;
-                        eprintln!("{}: {e}", f.display());
+                        esayln!("{}: {e}", f.display());
                     }
                 }
             }
@@ -172,7 +172,7 @@ pub fn intake(
                     json!({ "space": space, "tags": ["inbox"], "text": text.trim() }),
                 )
                 .map_err(|e| (3, e.to_string()))?;
-            println!("kept in {space}");
+            sayln!("kept in {space}");
             Ok(())
         }
         "absorb" => {
@@ -189,18 +189,18 @@ pub fn intake(
             for (label, result) in intake.absorb(everything) {
                 match result {
                     Ok(r) => {
-                        println!(
+                        sayln!(
                             "{label}: {} passage(s) sent, {} file(s) read, {} only noted",
                             r.sent, r.files_read, r.noted
                         );
                         for p in &r.problems {
                             problems += 1;
-                            eprintln!("  {p}");
+                            esayln!("  {p}");
                         }
                     }
                     Err(e) => {
                         problems += 1;
-                        eprintln!("{label}: {e}");
+                        esayln!("{label}: {e}");
                     }
                 }
             }
@@ -214,17 +214,17 @@ pub fn intake(
             let mut intake = open(data, file, user)?;
             let waiting = intake.waiting().map_err(|e| (1, e.to_string()))?;
             if waiting.is_empty() {
-                println!("no recording waits for a text");
+                sayln!("no recording waits for a text");
             }
             for (space, n, age) in waiting {
-                println!(
+                sayln!(
                     "{space}: {n} recording(s) waiting, the oldest for {} min{}",
                     age / 60,
                     if age > LATE { "  LATE" } else { "" }
                 );
             }
             for w in &intake.settings.watch {
-                println!(
+                sayln!(
                     "watching {} for {}",
                     w.dir.display(),
                     w.space.as_deref().unwrap_or("Inbox")
@@ -235,7 +235,7 @@ pub fn intake(
         "discover" => {
             let seconds = seconds.and_then(|s| s.parse::<u64>().ok()).unwrap_or(3);
             for f in super::discover::discover(Duration::from_secs(seconds)) {
-                println!("{}\t{}\t{}\t{}", f.name, f.address, f.version, f.via);
+                sayln!("{}\t{}\t{}\t{}", f.name, f.address, f.version, f.via);
             }
             Ok(())
         }

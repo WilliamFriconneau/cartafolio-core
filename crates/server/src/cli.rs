@@ -36,7 +36,7 @@ pub fn parse_spaces(list: &str) -> Result<Vec<Space>, Failure> {
 pub fn init(data: &Path, spaces: &[Space], language: Language) -> Result<(), Failure> {
     let brain = Brain::init(data, spaces, language).map_err(fail)?;
     let names: Vec<&str> = spaces.iter().map(Space::as_str).collect();
-    println!(
+    sayln!(
         "initialised: {} (spaces: {}; search language: {})",
         brain.dir().display(),
         if names.is_empty() {
@@ -62,7 +62,7 @@ pub fn space_add(
     if let Some(k) = kind {
         brain.set_space_kind(&space, k).map_err(fail)?;
     }
-    println!(
+    sayln!(
         "space {space} created, owned by {}{}. Share it with `space share` or a group.",
         owner.name,
         kind.map_or(String::new(), |k| format!(", kind {k}"))
@@ -77,7 +77,7 @@ pub fn vault_add(data: &Path, kind: &str, user: Option<&str>) -> Result<(), Fail
     let space = brain
         .add_vault(&owner.id, &owner.name, kind)
         .map_err(fail)?;
-    println!("space {space} created for {}, kind {kind}.", owner.name);
+    sayln!("space {space} created for {}, kind {kind}.", owner.name);
     Ok(())
 }
 
@@ -86,14 +86,14 @@ pub fn space_kind(data: &Path, name: &str, kind: &str) -> Result<(), Failure> {
     let brain = open(data)?;
     let space = Space::new(name).map_err(fail)?;
     brain.set_space_kind(&space, kind).map_err(fail)?;
-    println!("space {space} is now of kind {kind}.");
+    sayln!("space {space} is now of kind {kind}.");
     Ok(())
 }
 
 /// The kinds of vault this installation offers.
 pub fn catalogue_list(data: &Path) -> Result<(), Failure> {
     for k in open(data)?.catalogue().map_err(fail)? {
-        println!(
+        sayln!(
             "{:<12} {:<12} {}{}",
             k.key,
             k.label,
@@ -114,7 +114,7 @@ fn person(brain: &Brain, user: Option<&str>) -> Result<users::User, Failure> {
 pub fn console_token(data: &Path, user: &str) -> Result<(), Failure> {
     let ctl = open(data)?.open_control().map_err(fail)?;
     let token = access::console_token(&ctl, user).map_err(fail)?;
-    println!("Console token (shown ONCE; opens /admin, never MCP):\n  {token}");
+    sayln!("Console token (shown ONCE; opens /admin, never MCP):\n  {token}");
     Ok(())
 }
 
@@ -123,9 +123,9 @@ pub fn space_list(data: &Path, kinds: bool) -> Result<(), Failure> {
     let brain = open(data)?;
     for s in brain.spaces().map_err(fail)? {
         if kinds {
-            println!("{s}\t{}", brain.space_kind(&s).map_err(fail)?);
+            sayln!("{s}\t{}", brain.space_kind(&s).map_err(fail)?);
         } else {
-            println!("{s}");
+            sayln!("{s}");
         }
     }
     Ok(())
@@ -173,7 +173,7 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
         .into_iter()
         .find(|c| c.agent == o.agent)
         .ok_or_else(|| fail("connection not found after creation"))?;
-    println!(
+    sayln!(
         "Connection {:?} {}: rights {}{}.",
         o.agent,
         if o.rotate { "renewed" } else { "created" },
@@ -184,13 +184,13 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
             ""
         }
     );
-    println!("\nToken (shown ONCE, cannot be recovered):\n  {token}\n");
-    println!(
+    sayln!("\nToken (shown ONCE, cannot be recovered):\n  {token}\n");
+    sayln!(
         "Claude Code:\n  claude mcp add --transport http {a} {}/mcp/{a} --header \"Authorization: Bearer {token}\"\n",
         o.url,
         a = o.agent
     );
-    println!(
+    sayln!(
         "Any other MCP client: address {}/mcp/{}, header \"Authorization: Bearer <token>\".",
         o.url, o.agent
     );
@@ -212,7 +212,7 @@ pub fn open_vault(
     let ctl = brain.open_control().map_err(fail)?;
     let (agent, token) =
         access::open_space_connection(&ctl, &who.id, &space, !read_only, days).map_err(fail)?;
-    println!(
+    sayln!(
         "Space {space} opened to {agent:?}, {}.",
         if read_only {
             "read-only"
@@ -220,17 +220,17 @@ pub fn open_vault(
             "read and write"
         }
     );
-    println!(
+    sayln!(
         "\nAddress:\n  {url}/mcp/{agent}\n\nToken (shown ONCE, cannot be recovered):\n  {token}\n"
     );
-    println!(
+    sayln!(
         "Claude Code:\n  claude mcp add --transport http {agent} {url}/mcp/{agent} --header \"Authorization: Bearer {token}\"\n"
     );
-    println!(
+    sayln!(
         "Any other MCP client: address {url}/mcp/{agent}, header \"Authorization: Bearer <token>\"."
     );
     let data_abs = std::path::absolute(data).unwrap_or_else(|_| data.to_path_buf());
-    println!(
+    sayln!(
         "\nA local assistant that runs a command (no network, nothing exposed):\n  command: memcp\n  arguments: --data {} mcp\n  environment: MEMCP_TOKEN=<token>",
         data_abs.display()
     );
@@ -243,12 +243,12 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
     let who = person(&brain, user)?;
     let dir = export::export_person(&brain, &who, to, now()).map_err(fail)?;
     let manifest = export::verify_export(&dir).map_err(fail)?;
-    println!("exported the memory of {} to {}", who.name, dir.display());
+    sayln!("exported the memory of {} to {}", who.name, dir.display());
     for v in memcp_core::export::manifest_spaces(&manifest)
         .into_iter()
         .flatten()
     {
-        println!(
+        sayln!(
             "  {:<24} {:<10} facts {}  files {}",
             v["name"].as_str().unwrap_or(""),
             v["kind"].as_str().unwrap_or(""),
@@ -256,14 +256,14 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
             v["files"]
         );
     }
-    println!("checked: every file matches its fingerprint. Readable versions are in readable/.");
+    sayln!("checked: every file matches its fingerprint. Readable versions are in readable/.");
     Ok(())
 }
 
 /// Checks an export directory without any installation.
 pub fn verify_export(dir: &Path) -> Result<(), Failure> {
     let manifest = export::verify_export(dir).map_err(fail)?;
-    println!(
+    sayln!(
         "ok: export of {} made on {}, {} space(s), every file matches its fingerprint.",
         manifest["person"]["name"].as_str().unwrap_or("?"),
         manifest["created_at"].as_str().unwrap_or("?"),
@@ -283,12 +283,12 @@ pub fn adopt(
     let owner = person(&brain, user)?;
     let done = export::adopt(&brain, dir, &owner, prefix).map_err(fail)?;
     for a in &done {
-        println!(
+        sayln!(
             "adopted {:<24} {:<10} facts {}  files {}",
             a.name, a.kind, a.facts, a.files
         );
     }
-    println!(
+    sayln!(
         "{} space(s) now belong to {}. Instructions came with them; connections do not: make new ones.",
         done.len(),
         owner.name
@@ -315,7 +315,7 @@ pub fn merge(
             let plan = merge::plan(&brain, export_dir, &who, policy).map_err(fail)?;
             for l in &plan.lines {
                 let p = &l.preview;
-                eprintln!(
+                esayln!(
                     "{:<24} {:<5} -> {:<24} new {} already {} differing {} files {} ({})",
                     l.source,
                     l.action.word(),
@@ -330,12 +330,12 @@ pub fn merge(
             match out {
                 Some(path) => {
                     std::fs::write(path, plan.to_text()).map_err(fail)?;
-                    eprintln!(
+                    esayln!(
                         "plan written to {}; nothing else was written.",
                         path.display()
                     );
                 }
-                None => print!("{}", plan.to_text()),
+                None => say!("{}", plan.to_text()),
             }
             Ok(())
         }
@@ -358,11 +358,11 @@ pub fn merge(
             };
             let report = merge::apply(&brain, &plan, &opts).map_err(fail)?;
             match &report.backup {
-                Some(b) => println!("backup: {}", b.display()),
-                None => println!("nothing to change: the memories already agree on this plan."),
+                Some(b) => sayln!("backup: {}", b.display()),
+                None => sayln!("nothing to change: the memories already agree on this plan."),
             }
             for l in &report.lines {
-                println!(
+                sayln!(
                     "{:<24} -> {:<24}{} added {} tagged {} replaced {} left {} files {}",
                     l.source,
                     l.destination,
@@ -375,7 +375,7 @@ pub fn merge(
                 );
             }
             for (space, _) in &report.guide_proposals {
-                println!(
+                sayln!(
                     "the instructions of the other memory for {space} differ: not applied (policy replace applies them)."
                 );
             }
@@ -407,7 +407,7 @@ pub fn connections(data: &Path) -> Result<(), Failure> {
     let ctl = open(data)?.open_control().map_err(fail)?;
     let list = access::list(&ctl).map_err(fail)?;
     if list.is_empty() {
-        println!("No connection.");
+        sayln!("No connection.");
     }
     for c in list {
         let state = if c.revoked_at.is_some() {
@@ -417,7 +417,7 @@ pub fn connections(data: &Path) -> Result<(), Failure> {
         } else {
             "active"
         };
-        println!(
+        sayln!(
             "{:<24} {:<34} {:<10} last used: {}",
             c.agent,
             c.rights,
@@ -431,7 +431,7 @@ pub fn connections(data: &Path) -> Result<(), Failure> {
 pub fn revoke(data: &Path, agent: &str) -> Result<(), Failure> {
     let ctl = open(data)?.open_control().map_err(fail)?;
     if access::revoke(&ctl, agent).map_err(fail)? {
-        println!("Connection {agent:?} revoked: refused from the next request on.");
+        sayln!("Connection {agent:?} revoked: refused from the next request on.");
         Ok(())
     } else {
         Err(fail(format!("no active connection {agent:?}")))
@@ -443,7 +443,7 @@ pub fn regrant(data: &Path, agent: &str, rights: &Rights) -> Result<(), Failure>
     if !access::regrant(&ctl, agent, rights).map_err(fail)? {
         return Err(fail(format!("no active connection {agent:?}")));
     }
-    println!(
+    sayln!(
         "Connection {agent:?}: rights {}. Same token, effective on the next request.",
         rights.label()
     );
@@ -458,7 +458,7 @@ pub fn readonly(data: &Path, agent: &str, on: &str) -> Result<(), Failure> {
     };
     let ctl = open(data)?.open_control().map_err(fail)?;
     if access::set_read_only(&ctl, agent, on).map_err(fail)? {
-        println!("{agent:?}: read-only {}.", if on { "on" } else { "off" });
+        sayln!("{agent:?}: read-only {}.", if on { "on" } else { "off" });
         Ok(())
     } else {
         Err(fail(format!("unknown connection: {agent}")))
@@ -473,7 +473,7 @@ pub fn person_guide(data: &Path, agent: &str, on: &str) -> Result<(), Failure> {
     };
     let ctl = open(data)?.open_control().map_err(fail)?;
     if access::set_no_person_guide(&ctl, agent, !told).map_err(fail)? {
-        println!(
+        sayln!(
             "{agent:?}: {} the person's own guide when it connects.",
             if told { "told" } else { "not told" }
         );
@@ -487,7 +487,7 @@ pub fn limit(data: &Path, agent: &str, key: &str, value: &str) -> Result<(), Fai
     let v: i64 = value.parse().map_err(|_| bad("the limit is an integer"))?;
     let ctl = open(data)?.open_control().map_err(fail)?;
     if access::set_limit(&ctl, agent, key, v).map_err(fail)? {
-        println!("{agent:?}: {key} = {v}.");
+        sayln!("{agent:?}: {key} = {v}.");
         Ok(())
     } else {
         Err(fail(format!("unknown connection: {agent}")))
@@ -510,22 +510,22 @@ pub fn duplicates(data: &Path) -> Result<(), Failure> {
                 .push((space.to_string(), id, text));
         }
         let pairs = facts::close_pairs(&conn, facts::SAME_FACT_THRESHOLD).map_err(fail)?;
-        println!("{space}: {} pairs of close facts", pairs.len());
+        sayln!("{space}: {} pairs of close facts", pairs.len());
         for p in pairs {
-            println!(
+            sayln!(
                 "  {:.2}  {}  {}",
                 p.similarity,
                 p.first.0,
                 short(&p.first.1)
             );
-            println!("        {}  {}", p.second.0, short(&p.second.1));
+            sayln!("        {}  {}", p.second.0, short(&p.second.1));
         }
     }
     let same: Vec<_> = by_text.values().filter(|v| v.len() > 1).collect();
-    println!("Same text in several spaces: {}", same.len());
+    sayln!("Same text in several spaces: {}", same.len());
     for v in same {
         let places: Vec<String> = v.iter().map(|(s, id, _)| format!("{s}:{id}")).collect();
-        println!("  {}  {}", places.join(" "), short(&v[0].2));
+        sayln!("  {}  {}", places.join(" "), short(&v[0].2));
     }
     Ok(())
 }
@@ -555,9 +555,9 @@ pub fn import(
         },
     )
     .map_err(fail)?;
-    print!("{report}");
+    say!("{report}");
     if dry_run {
-        println!(
+        sayln!(
             "\nNothing was written. To import for real: run again without --dry-run (within 24 h) or with --yes."
         );
     }
@@ -566,7 +566,7 @@ pub fn import(
 
 pub fn backup(data: &Path, to: &Path, keep: usize) -> Result<(), Failure> {
     let dest = open(data)?.backup(to, keep, now()).map_err(fail)?;
-    println!("backup: {} ({keep} kept)", dest.display());
+    sayln!("backup: {} ({keep} kept)", dest.display());
     Ok(())
 }
 
@@ -581,7 +581,7 @@ pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failur
     let conn = brain.open_space(&space).map_err(fail)?;
     let id = memcp_core::library::add_root(&conn, folder, now()).map_err(fail)?;
     let report = memcp_core::library::rescan(&conn, id, now()).map_err(fail)?;
-    println!(
+    sayln!(
         "mounted on {space}: {} added, {} unchanged",
         report.added, report.unchanged
     );
@@ -601,7 +601,7 @@ pub fn library_scan(data: &Path, space: Option<&str>) -> Result<(), Failure> {
             continue;
         }
         let r = memcp_core::library::rescan_all(&conn, now()).map_err(fail)?;
-        println!(
+        sayln!(
             "{s}: {} added, {} updated, {} unchanged, {} removed",
             r.added, r.updated, r.unchanged, r.removed
         );
@@ -615,7 +615,7 @@ pub fn library_list(data: &Path) -> Result<(), Failure> {
     for s in brain.spaces().map_err(fail)? {
         let conn = brain.open_space(&s).map_err(fail)?;
         for r in memcp_core::library::roots(&conn).map_err(fail)? {
-            println!("{s}\t{}\t{} files", r.root, r.entries);
+            sayln!("{s}\t{}\t{} files", r.root, r.entries);
         }
     }
     Ok(())
@@ -641,7 +641,7 @@ pub fn vocabulary_import(
     let mut conn = brain.open_space(&space).map_err(fail)?;
     let kept =
         memcp_core::vocabulary::import(&mut conn, name, source, &terms, now()).map_err(fail)?;
-    println!("vocabulary {name} on {space}: {kept} terms");
+    sayln!("vocabulary {name} on {space}: {kept} terms");
     Ok(())
 }
 
@@ -655,7 +655,7 @@ pub fn vocabulary_list(data: &Path, space: Option<&str>) -> Result<(), Failure> 
     for s in spaces {
         let conn = brain.open_space(&s).map_err(fail)?;
         for v in memcp_core::vocabulary::list(&conn).map_err(fail)? {
-            println!("{s}\t{}\t{} terms\t{}", v.name, v.terms, v.source);
+            sayln!("{s}\t{}\t{} terms\t{}", v.name, v.terms, v.source);
         }
     }
     Ok(())
@@ -667,7 +667,7 @@ pub fn vocabulary_remove(data: &Path, space: &str, name: &str) -> Result<(), Fai
     let space = Space::new(space).map_err(fail)?;
     let mut conn = brain.open_space(&space).map_err(fail)?;
     if memcp_core::vocabulary::remove(&mut conn, name).map_err(fail)? {
-        println!("removed {name} from {space}");
+        sayln!("removed {name} from {space}");
         Ok(())
     } else {
         Err(bad(&format!("no vocabulary {name} on {space}")))
@@ -683,7 +683,7 @@ pub fn internal(data: &Path, agent: &str, on: &str) -> Result<(), Failure> {
     };
     let ctl = open(data)?.open_control().map_err(fail)?;
     if access::set_internal(&ctl, agent, on).map_err(fail)? {
-        println!(
+        sayln!(
             "{agent:?}: internal tool {}.",
             if on { "on" } else { "off" }
         );

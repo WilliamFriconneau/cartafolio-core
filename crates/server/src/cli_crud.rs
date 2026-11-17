@@ -105,7 +105,7 @@ fn space_new(data: &Path, c: &Cmd) -> Result<(), Failure> {
             },
         )
         .map_err(fail)?;
-    println!("space {s} created ({}).", c.arg(2, "")?);
+    sayln!("space {s} created ({}).", c.arg(2, "")?);
     Ok(())
 }
 
@@ -115,7 +115,7 @@ fn space_show(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let i = brain
         .space_info(&who.id, &space(c.arg(2, "the space")?)?)
         .map_err(fail)?;
-    println!(
+    sayln!(
         "{}\t{}\tkind {}\tparent {}\t{} notes, {} files",
         i.space,
         i.label,
@@ -124,8 +124,8 @@ fn space_show(data: &Path, c: &Cmd) -> Result<(), Failure> {
         i.facts,
         i.files
     );
-    println!("keywords: {}", i.rules.keywords.join(", "));
-    println!("tags: {}", i.rules.tags.join(", "));
+    sayln!("keywords: {}", i.rules.keywords.join(", "));
+    sayln!("tags: {}", i.rules.tags.join(", "));
     Ok(())
 }
 
@@ -146,7 +146,7 @@ fn space_tree(data: &Path, c: &Cmd) -> Result<(), Failure> {
                 break;
             }
         }
-        println!(
+        sayln!(
             "{}{}  ({}, {})",
             "  ".repeat(depth),
             p.label,
@@ -177,7 +177,7 @@ fn space_set(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let i = brain
         .update_space(&who.id, &who.name, &s, &u)
         .map_err(fail)?;
-    println!(
+    sayln!(
         "space {s}: {} (kind {}, parent {}, position {}).",
         i.label,
         i.kind,
@@ -206,23 +206,23 @@ fn space_delete(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let r = brain
         .delete_space(&who.id, &s, &disposition, &children, c.dry(), now())
         .map_err(fail)?;
-    println!(
+    sayln!(
         "{}{}",
         if r.dry_run { "dry run: " } else { "" },
         r.sentence()
     );
     for (k, p) in &r.children {
-        println!(
+        sayln!(
             "  sub-space {k} goes {}",
             p.as_deref()
                 .map_or("to the top".into(), |p| format!("under {p}"))
         );
     }
     if !r.connections.is_empty() {
-        println!("  connections losing access: {}", r.connections.join(", "));
+        sayln!("  connections losing access: {}", r.connections.join(", "));
     }
     if let (false, Some(a)) = (r.dry_run, &r.archive) {
-        println!(
+        sayln!(
             "  archive: {}  (restore with: space restore {})",
             a.display(),
             a.file_name()
@@ -236,7 +236,7 @@ fn space_archived(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let brain = open(data)?;
     let who = me(&brain, c)?;
     for a in brain.archived_spaces(&who.id).map_err(fail)? {
-        println!(
+        sayln!(
             "{}\t{}\t{} notes\tarchived {}{}",
             a.name,
             a.label,
@@ -254,7 +254,7 @@ fn space_restore(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let s = brain
         .restore_space(&who.id, c.arg(2, "the archive name")?, c.dry())
         .map_err(fail)?;
-    println!(
+    sayln!(
         "{}space {s} {}.",
         if c.dry() { "dry run: " } else { "" },
         if c.dry() {
@@ -276,7 +276,7 @@ fn rules_cmd(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     let edit = match op {
         "show" => {
             let r = rules::read(&conn).1;
-            println!(
+            sayln!(
                 "keywords: {}\ntags: {}",
                 r.keywords.join(", "),
                 r.tags.join(", ")
@@ -306,7 +306,7 @@ fn rules_cmd(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         }
     };
     let r = rules::edit(&conn, &s, &who.name, &edit).map_err(fail)?;
-    println!(
+    sayln!(
         "keywords: {}\ntags: {}",
         r.keywords.join(", "),
         r.tags.join(", ")
@@ -320,7 +320,7 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     let t = now();
     if op == "list" {
         for n in peers::list(&brain, &who, t, (c.sw)("--all")).map_err(fail)? {
-            println!(
+            sayln!(
                 "{:<26} {:<18} {:<8} last seen {}  {}",
                 n.peer,
                 n.name,
@@ -334,7 +334,7 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     let peer = c.arg(2, "the peer (peer-...)")?;
     let n = peers::get(&brain, &who, peer, t).map_err(fail)?;
     if c.dry() {
-        println!("dry run: {} ({}) would be {op}d", n.name, n.state);
+        sayln!("dry run: {} ({}) would be {op}d", n.name, n.state);
         return Ok(());
     }
     match op {
@@ -361,7 +361,7 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             ));
         }
     }
-    println!("{peer}: {op} done.");
+    sayln!("{peer}: {op} done.");
     Ok(())
 }
 
@@ -375,7 +375,7 @@ fn connection(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         .filter(|i| i.user_id == who.id)
         .ok_or_else(|| fail(format!("no connection {agent:?} for {}", who.name)))?;
     match op {
-        "show" => println!(
+        "show" => sayln!(
             "{}\t{}\t{}\tlast used {}",
             info.agent,
             info.rights,
@@ -388,11 +388,11 @@ fn connection(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         ),
         "rename" => {
             access::rename(&ctl, agent, c.arg(3, "the new name")?).map_err(fail)?;
-            println!("{agent} renamed.");
+            sayln!("{agent} renamed.");
         }
         "rotate" => {
             if c.dry() {
-                println!(
+                sayln!(
                     "dry run: {agent} would get a new key at the same address; the old key stops at once."
                 );
                 return Ok(());
@@ -400,18 +400,18 @@ fn connection(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             let t = access::rotate(&ctl, agent, &who.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail("the connection is revoked"))?;
-            println!("New key for {agent} (shown ONCE, the old one stopped):\n  {t}");
+            sayln!("New key for {agent} (shown ONCE, the old one stopped):\n  {t}");
         }
         "delete" => {
             if c.dry() {
-                println!(
+                sayln!(
                     "dry run: {agent} would be removed from the list (revoked: {}).",
                     info.revoked_at.is_some()
                 );
                 return Ok(());
             }
             access::delete(&ctl, agent, &who.id).map_err(fail)?;
-            println!("{agent} removed from the list.");
+            sayln!("{agent} removed from the list.");
         }
         _ => return Err(bad("connection show|rename|rotate|delete AGENT [NAME]")),
     }
@@ -424,7 +424,7 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     let ctl = brain.open_control().map_err(fail)?;
     if op == "list" {
         for u in users::list_users(&ctl).map_err(fail)? {
-            println!(
+            sayln!(
                 "{}\t{}\t{}\t{}",
                 u.name,
                 u.display,
@@ -440,7 +440,7 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         .or(users::user_by_name(&ctl, name).map_err(fail)?)
         .ok_or_else(|| fail(format!("unknown person {name}")))?;
     match op {
-        "show" => println!(
+        "show" => sayln!(
             "{}\t{}\t{}\their heir: {}\trecovery key: {}",
             target.name,
             target.display,
@@ -461,19 +461,19 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             if let Some(r) = (c.flag)("--role") {
                 users::set_admin(&ctl, &actor.id, &target.id, r == "admin").map_err(fail)?;
             }
-            println!("{} updated.", target.name);
+            sayln!("{} updated.", target.name);
         }
         "heir" => {
             users::set_heir(&ctl, &target.id, c.pos.get(3).map(String::as_str)).map_err(fail)?;
-            println!("{}: heir set.", target.name);
+            sayln!("{}: heir set.", target.name);
         }
         "recovery-key" => {
             if (c.sw)("--clear") {
                 users::clear_recovery_key(&ctl, &target.id).map_err(fail)?;
-                println!("{}: recovery key cleared.", target.name);
+                sayln!("{}: recovery key cleared.", target.name);
             } else {
                 let k = users::make_recovery_key(&ctl, &target.id).map_err(fail)?;
-                println!(
+                sayln!(
                     "Recovery key for {} (shown ONCE, replaces any earlier one):\n  {k}",
                     target.name
                 );
@@ -481,25 +481,25 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         }
         "disable" | "enable" => {
             if c.dry() {
-                println!(
+                sayln!(
                     "dry run: {} would be {}d; nothing is deleted.",
                     target.name, op
                 );
                 return Ok(());
             }
             users::set_disabled(&ctl, &actor.id, &target.id, op == "disable").map_err(fail)?;
-            println!("{}: {op}d.", target.name);
+            sayln!("{}: {op}d.", target.name);
         }
         "delete" => {
             let r =
                 people::retire_person(&brain, &actor, &target.id, c.dry(), now()).map_err(fail)?;
-            println!(
+            sayln!(
                 "{}{}",
                 if r.dry_run { "dry run: " } else { "" },
                 r.sentence()
             );
             if let (false, Some(p)) = (r.dry_run, &r.export) {
-                println!("  export: {}", p.display());
+                sayln!("  export: {}", p.display());
             }
         }
         _ => {
@@ -528,11 +528,11 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             let text = new.text.clone();
             memcp_core::autotag::add_to(&brain, &who.id, &s, &conn, &text, &mut new.tags);
             match facts::remember(&conn, &s, &author, new, &[]).map_err(fail)? {
-                Remembered::Created(f) => println!("note {} created.", f.id),
-                Remembered::Duplicate(f) => println!("already there: {}.", f.id),
+                Remembered::Created(f) => sayln!("note {} created.", f.id),
+                Remembered::Duplicate(f) => sayln!("already there: {}.", f.id),
                 Remembered::NeedsDecision(cands) => {
                     for x in cands {
-                        println!("close to {}: {}", x.id, x.text);
+                        sayln!("close to {}: {}", x.id, x.text);
                     }
                     return Err(bad("close notes exist: correct one with `note edit`"));
                 }
@@ -540,7 +540,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         }
         "show" => {
             for f in facts::history(&conn, c.arg(3, "the note id")?).map_err(fail)? {
-                println!("{}\t{}\t{}\t{}", f.id, f.status, iso(f.created_at), f.text);
+                sayln!("{}\t{}\t{}\t{}", f.id, f.status, iso(f.created_at), f.text);
             }
         }
         "list" => {
@@ -552,7 +552,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 .map_err(fail)?;
             for row in rows {
                 let (id, text) = row.map_err(fail)?;
-                println!("{id}\t{text}");
+                sayln!("{id}\t{text}");
             }
         }
         "edit" => {
@@ -569,7 +569,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 (c.flag)("--reason"),
             )
             .map_err(fail)?;
-            println!("note replaced by {}.", f.id);
+            sayln!("note replaced by {}.", f.id);
         }
         "retire" => {
             let f = facts::retire(
@@ -579,7 +579,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 c.need("--reason")?,
             )
             .map_err(fail)?;
-            println!(
+            sayln!(
                 "note {} retired (it stays in the history; `note restore` brings it back).",
                 f.id
             );
@@ -593,7 +593,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 (c.flag)("--reason"),
             )
             .map_err(fail)?;
-            println!("note restored as {}.", f.id);
+            sayln!("note restored as {}.", f.id);
         }
         _ => return Err(bad("note add|show|list|edit|retire|restore SPACE ...")),
     }
@@ -614,14 +614,14 @@ fn library_remove(data: &Path, c: &Cmd) -> Result<(), Failure> {
         .find(|r| r.root == canon || r.root == want)
         .ok_or_else(|| fail(format!("{want} is not mounted on {s}")))?;
     if c.dry() {
-        println!(
+        sayln!(
             "dry run: {} would be unmounted from {s}: its index is forgotten, the folder is never touched.",
             root.root
         );
         return Ok(());
     }
     memcp_core::library::remove_root(&conn, root.id).map_err(fail)?;
-    println!(
+    sayln!(
         "{} unmounted from {s}. The folder itself was not touched.",
         root.root
     );
@@ -643,7 +643,7 @@ fn vocabulary_terms(data: &Path, c: &Cmd, add: bool) -> Result<(), Failure> {
         memcp_core::vocabulary::remove_terms(&mut conn, name, &terms)
     }
     .map_err(fail)?;
-    println!(
+    sayln!(
         "{name} on {s}: {n} term(s) {}.",
         if add { "added" } else { "removed" }
     );

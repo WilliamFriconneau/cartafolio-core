@@ -557,9 +557,9 @@ pub fn run_with(
     if let Some(x) = extra {
         linux(&mut r, x);
     }
-    print!("{}", r.render());
+    say!("{}", r.render());
     let (p, w) = (r.problems(), r.warnings());
-    println!("\n{p} problem(s), {w} warning(s).");
+    sayln!("\n{p} problem(s), {w} warning(s).");
     if p > 0 {
         return Err((1, "problems found".into()));
     }

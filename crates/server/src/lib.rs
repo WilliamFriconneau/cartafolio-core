@@ -1,9 +1,12 @@
 //! memcp-server: MCP over HTTP, the OAuth endpoints and the admin page.
 
+#[macro_use]
+pub mod out;
 pub mod admin;
 pub mod app;
 pub mod cli;
 pub mod cli_crud;
+pub mod commands;
 pub mod config;
 pub mod crud;
 pub mod discovery;
