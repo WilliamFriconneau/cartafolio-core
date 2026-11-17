@@ -20,7 +20,7 @@ const TIDY_MESSAGE: &str = "Written. Tidy before moving on: `supersede` a close 
 
 /// The notes of « À trier » reserved by a sorter: note id to (connection, end of the lease). Kept in memory:
 /// a lease is short, and a restart gives every note back.
-static LEASES: std::sync::LazyLock<
+pub(crate) static LEASES: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashMap<String, (String, i64)>>,
 > = std::sync::LazyLock::new(Default::default);
 
