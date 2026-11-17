@@ -251,6 +251,56 @@ details.fold[open]>summary{margin-bottom:8px}
 .add-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
 header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 @media (max-width:640px){.hero{padding:18px}.hero .facts{margin-left:0}.hero .facts div{text-align:left}h1{font-size:19px}.choice{padding:18px}.three-words{font-size:26px}.tree-wrap{grid-template-columns:1fr}.bar{position:static}dialog{padding:16px;max-width:96vw}.frow .acts2{display:flex}}
+
+/* Nesting: breadcrumb, folder tiles, rules line of a space */
+:root{--g1:#53735d;--g2:#4d6a80;--g3:#8a5d4a;--g4:#675d86;--g5:#9a7424;--g6:#a2506b;--g7:#2f7f84;--g8:#6b6f66;--gn:#8c9083}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--g1:#8fc19d;--g2:#8fb4d0;--g3:#d9a48e;--g4:#b4a9dc;--g5:#d6b25a;--g6:#e08aa8;--g7:#6fc3c8;--g8:#a3a89b;--gn:#7d8377}}
+:root[data-theme="dark"]{--g1:#8fc19d;--g2:#8fb4d0;--g3:#d9a48e;--g4:#b4a9dc;--g5:#d6b25a;--g6:#e08aa8;--g7:#6fc3c8;--g8:#a3a89b;--gn:#7d8377}
+.crumb{display:flex;flex-wrap:wrap;align-items:center;gap:2px 4px;font-size:13.5px;margin:0 0 12px}
+.crumb button.link{padding:3px 8px;border-radius:10px}
+.crumb button.link.over{outline:2px solid var(--primary);background:color-mix(in srgb,var(--primary) 14%,transparent)}
+.crumb .sep{opacity:.5}.crumb [aria-current]{font-weight:500;padding:3px 8px}
+.tile[draggable=true]{cursor:grab}
+.tile.over-in{outline:3px solid var(--primary);outline-offset:-3px}
+.tile .inside{display:flex;flex-wrap:wrap;gap:4px}
+.ruleline{display:flex;flex-wrap:wrap;gap:4px 6px;align-items:center;margin:0 0 10px;font-size:13px}
+.ruleline .chip{cursor:pointer;border:0}
+.ruleline .chip.tg{background:var(--primary-c);color:var(--on-primary-c)}
+/* The journal of everything, and the graph */
+.chip.sp{cursor:pointer;border:0;font-size:12px;padding:2px 8px;margin:0}
+.chip.sp::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--gc,var(--gn));margin-right:6px}
+.note .meta{display:flex;flex-direction:column;gap:4px;align-items:flex-start;flex:none;width:8.5em}
+.note .tg{margin-top:4px;display:flex;flex-wrap:wrap}
+.note .tg .chip{cursor:pointer;border:0;font-size:11.5px;padding:1px 8px}
+.fbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 10px}
+.fbar input[type=search]{flex:1;min-width:9em}
+.fbar select{max-width:100%}
+.gwrap{position:relative;background:var(--sc);border-radius:20px;overflow:hidden}
+.gwrap svg{display:block;width:100%;touch-action:none;cursor:grab;user-select:none;-webkit-user-select:none}
+.gwrap svg.grabbing{cursor:grabbing}
+.gedge{stroke:var(--outline);stroke-width:1;opacity:.45;fill:none}
+.gedge.link{stroke:var(--primary);stroke-width:1.6;opacity:.8}
+.gedge.raised{stroke:var(--primary);stroke-dasharray:5 3;opacity:.8}
+.gedge.shared_tag,.gedge.inside{stroke-dasharray:2 4;opacity:.5}
+.gedge.dim{opacity:.07}
+.gnode{cursor:pointer}
+.gnode .shape{fill:var(--gc,var(--gn));stroke:var(--sc);stroke-width:1.5}
+.gnode.tag .shape{fill-opacity:.55;stroke:var(--gc,var(--gn));stroke-width:2}
+.gnode.keyword .shape{fill-opacity:.9}
+.gnode.space .shape{stroke:var(--on-surface);stroke-width:2}
+.gnode.library .shape{fill-opacity:.35;stroke:var(--gc,var(--gn));stroke-width:2;stroke-dasharray:3 2}
+.gnode text{font-size:11.5px;fill:var(--on-surface);paint-order:stroke;stroke:var(--sc);stroke-width:3.5px;stroke-linejoin:round;pointer-events:none}
+.gnode.dim{opacity:.15}
+.gnode.sel .shape{stroke:var(--primary);stroke-width:3.5}
+.gtools{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:6px}
+.gtools button{width:36px;height:36px;padding:0;border-radius:12px;background:var(--sc-low);font-size:18px}
+.glegend{display:flex;flex-wrap:wrap;gap:4px 10px;font-size:12.5px;margin:8px 0}
+.glegend .k{display:inline-flex;align-items:center;gap:5px}
+.glegend .k i{width:11px;height:11px;border-radius:50%;background:var(--gc,var(--gn));display:inline-block}
+.glegend .k i.t{background:transparent;border:2px solid var(--gn)}.glegend .k i.w{border-radius:2px}
+.ginfo{margin:8px 0;min-height:2.4em}
+.gnodes{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
+@media (max-width:640px){.note{flex-wrap:wrap}.note .meta{flex-direction:row;flex-wrap:wrap;align-items:center;width:100%}}
 </style>
 </head>
 <body>
@@ -309,6 +359,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     </section>
     <div id="home">
     <div class="hero" id="hero"></div>
+    <div class="tabs" id="home-nav"></div>
     <div id="join-banner" hidden></div>
     <section id="machines-section">
       <h2>Machines</h2>
@@ -335,7 +386,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 
     <section>
       <h2>Your spaces</h2>
-      <p class="mute small">What you keep. A folder holds other spaces; open the space inside it. Connect one to an assistant on its own, or write its instructions.</p>
+      <p class="mute small">What you keep. A folder holds other spaces: open it to see them, drag a space onto it to put it inside. Connect a space to an assistant on its own, or write its instructions.</p>
+      <nav class="crumb" id="spaces-crumb" aria-label="Where you are"></nav>
       <div id="spaces" class="bento"></div>
     </section>
 
@@ -447,10 +499,22 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 
     <div id="view-space" hidden>
       <section>
+        <nav class="crumb" id="space-crumb" aria-label="Where you are"></nav>
         <h2 id="space-title"></h2>
         <p class="mute small" id="space-sub"></p>
+        <div class="ruleline" id="space-rules"></div>
         <div class="tabs" id="space-tabs"></div>
         <div id="space-body"></div>
+      </section>
+    </div>
+
+    <div id="view-global" hidden>
+      <section>
+        <nav class="crumb" id="global-crumb" aria-label="Where you are"></nav>
+        <h2 id="global-title"></h2>
+        <p class="mute small" id="global-sub"></p>
+        <div class="tabs" id="global-tabs"></div>
+        <div id="global-body"></div>
       </section>
     </div>
 
@@ -574,6 +638,47 @@ try { LANG = localStorage.getItem("memcp-lang") || ((navigator.language || "en")
 const loc = () => (LANG === "fr" ? "fr" : "en");
 const FR = {
   "MemCP": "MemCP",
+  "Graph": "Graphe",
+  "Spaces": "Espaces",
+  "Edit": "Modifier",
+  "Clear": "Effacer",
+  "Fit": "Ajuster",
+  "Zoom in": "Zoomer",
+  "Zoom out": "Dézoomer",
+  "tag": "étiquette",
+  "keyword": "mot-clé",
+  "Where you are": "Où vous êtes",
+  "Your memory": "Votre mémoire",
+  "Add keywords": "Ajouter des mots-clés",
+  "Files here:": "Classe ici :",
+  "Spaces inside:": "Espaces à l’intérieur :",
+  "No keyword yet: the janitor adds some as notes arrive.": "Pas encore de mot-clé : le rangeur en ajoute à mesure que les notes arrivent.",
+  "Show the notes with this tag": "Voir les notes avec cette étiquette",
+  "Show the notes that cite this word": "Voir les notes qui citent ce mot",
+  "What you keep. A folder holds other spaces: open it to see them, drag a space onto it to put it inside. Connect a space to an assistant on its own, or write its instructions.": "Ce que vous gardez. Un dossier contient d’autres espaces : ouvrez-le pour les voir, glissez un espace dessus pour le ranger dedans. Connectez un espace à un assistant seul, ou écrivez ses consignes.",
+  "search all notes": "chercher dans toutes les notes",
+  "Search all notes": "Chercher dans toutes les notes",
+  "All spaces": "Tous les espaces",
+  "All tags": "Toutes les étiquettes",
+  "Clear filters": "Effacer les filtres",
+  "No note matches these filters.": "Aucune note ne correspond à ces filtres.",
+  "Nothing in your memory yet.": "Rien dans votre mémoire pour l’instant.",
+  "Open your spaces to write the first note": "Ouvrez vos espaces pour écrire la première note",
+  "The notes of every space you read, newest first. A tag also takes the tags under it.": "Les notes de tous les espaces que vous lisez, les plus récentes d’abord. Une étiquette prend aussi celles qui sont dessous.",
+  "Nothing to link yet: notes with tags, and the keywords of a space, draw the graph.": "Rien à relier pour l’instant : les notes avec étiquettes et les mots-clés d’un espace dessinent le graphe.",
+  "Nothing to draw yet: write a few notes first.": "Rien à dessiner pour l’instant : écrivez d’abord quelques notes.",
+  "Open the journal": "Ouvrir le journal",
+  "Find a node": "Trouver un nœud",
+  "Library folders": "Dossiers de bibliothèque",
+  "shared by several spaces": "partagé par plusieurs espaces",
+  "Drag to move, scroll or pinch to zoom, tap a node to see what it is linked to.": "Glissez pour déplacer, molette ou pincement pour zoomer, touchez un nœud pour voir à quoi il est relié.",
+  "Show its notes": "Voir ses notes",
+  "Show these notes": "Voir ces notes",
+  "Open the space": "Ouvrir l’espace",
+  "Linked to: ": "Relié à : ",
+  "Linked to:": "Relié à :",
+  "Folder": "Dossier",
+  "A space inside": "Un espace dedans",
   "Open this page from Home Assistant if you use it, or paste a console token (": "Ouvrez cette page depuis Home Assistant si vous l’utilisez, ou collez un jeton de console (",
   "Open": "Ouvrir",
   "Have a recovery key?": "Vous avez une clé de récupération ?",
@@ -1016,6 +1121,19 @@ const FR = {
   "Instructions apps proposed": "Consignes proposées par les applications"
 };
 const FRX = [
+  [/^(.+) · its own notes$/, n => n + " · ses propres notes"],
+  [/^(\d+) spaces inside$/, n => n + " espaces à l’intérieur"],
+  [/^1 space inside$/, () => "1 espace à l’intérieur"],
+  [/^A space inside (.+)$/, n => "Un espace dans " + n],
+  [/^All nodes \((\d+)\)$/, n => "Tous les nœuds (" + n + ")"],
+  [/^(Tags|Keywords|Library folders) \((\d+)\)$/, (t, n) => ({ Tags: "Étiquettes", Keywords: "Mots-clés", "Library folders": "Dossiers de bibliothèque" }[t]) + " (" + n + ")"],
+  [/^Graph: (\d+) spaces, (\d+) tags, (\d+) keywords$/, (a, b, c) => "Graphe : " + a + " espaces, " + b + " étiquettes, " + c + " mots-clés"],
+  [/^Tag (.+) · (\d+) notes?(?: · in (.+))?$/, (t, n, w) => "Étiquette " + t + " · " + n + (n === "1" ? " note" : " notes") + (w ? " · dans " + w : "")],
+  [/^Keyword (.+) · cited in (\d+) notes?(?: · listed by (.+))?$/, (t, n, w) => "Mot-clé " + t + " · cité dans " + n + (n === "1" ? " note" : " notes") + (w ? " · listé par " + w : "")],
+  [/^Library folder (.+) · (\d+) files?$/, (t, n) => "Dossier de bibliothèque " + t + " · " + n + (n === "1" ? " fichier" : " fichiers")],
+  [/^([\d\s.,  ]+) notes? · (\d+) spaces?$/, (n, k) => n + " " + (n === "1" ? "note" : "notes") + " · " + k + " " + (k === "1" ? "espace" : "espaces")],
+  [/^Showing the most used tags: (\d+) less used tags? (?:is|are) left out\.$/, n => "Seules les étiquettes les plus utilisées sont affichées : " + n + " moins utilisées sont laissées de côté."],
+  [/^(.+) · (\d+) notes?$/, (a, n) => tr(a) + " · " + n + (n === "1" ? " note" : " notes")],
   [/^Step (\d+) of 4$/, (n) => "Étape " + n + " sur 4"],
   [/^Memory of (.+) · (\d+) machines? · last sync (.+)$/, (name, n, when) => "Mémoire de " + name + " · " + n + (Number(n) > 1 ? " machines" : " machine") + " · dernière synchro " + frAgo(when)],
   [/^This machine · version (.+)$/, (v) => "Cette machine · version " + v],
@@ -1185,10 +1303,10 @@ async function loadTimeline() {
   const rows = t.vaults.map(v => {
     const max = Math.max(1, ...v.counts), total = v.counts.reduce((a, b) => a + b, 0);
     return el("div", { class: "tl-row" },
-      el("span", { class: "nm" }, spaceLabel(v.name)),
+      el("span", { class: "nm", title: spacePath(v.name) }, spacePath(v.name)),
       el("div", { class: "tl-bars" }, ...v.counts.map((n, i) => {
         const b = el("i", { class: n ? "" : "z", style: "height:" + (n ? Math.max(8, Math.round(100 * n / max)) : 0) + "%" });
-        b.title = n + (n === 1 ? " fact" : " facts") + " · " + new Date(Date.parse(t.from) + i * t.bucket_secs * 1000).toLocaleString(loc(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
+        b.title = n + (n === 1 ? " note" : " notes") + " · " + new Date(Date.parse(t.from) + i * t.bucket_secs * 1000).toLocaleString(loc(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
         return b;
       })),
       el("span", { class: "tot mute" }, total));
@@ -1254,15 +1372,33 @@ function fail(x) { $("#err").textContent = x.message || String(x); setTimeout(()
 async function loadSpace(name) {
   const keep = SP && SP.name === name ? SP : null;
   SP = { name, tab: keep ? keep.tab : "journal", tag: keep ? keep.tag : "", q: keep ? keep.q : "", open: null, hash: keep ? keep.hash : "", jlimit: keep ? keep.jlimit : 100 };
+  if (PENDING && PENDING.space === name) { SP.tab = "notes"; SP.open = PENDING.id; SP.tag = ""; SP.q = ""; PENDING = null; }
   try { SP.ov = await api("space?space=" + q(name)); } catch (x) { return fail(x); }
   renderSpace();
+}
+// What files notes into this space (its tags and keywords), or the spaces inside it: shown under the title, on every tab.
+function renderRuleLine(ov) {
+  const r = ov.rules || {}, kw = r.keywords || [], rt = r.tags || [], inner = kids(ov.space);
+  const toNotes = (tag, word) => () => { SP.tab = "notes"; SP.tag = tag; SP.q = word; SP.hash = ""; renderSpace(); };
+  const out = [];
+  if (inner.length) out.push(el("span", { class: "mute" }, "Spaces inside:"), ...inner.map(c => el("button", { type: "button", class: "chip", onclick: () => { location.hash = "#space/" + c.space; } }, c.label)));
+  if (inner.length && (kw.length || rt.length)) out.push(el("span", { style: "flex-basis:100%" }));
+  if (kw.length || rt.length) out.push(el("span", { class: "mute" }, "Files here:"),
+    ...rt.map(t => el("button", { type: "button", class: "chip tg", title: "Show the notes with this tag", onclick: toNotes(t, "") }, "tag " + t)),
+    ...kw.map(k => el("button", { type: "button", class: "chip", title: "Show the notes that cite this word", onclick: toNotes("", k) }, "#" + k)),
+    el("button", { type: "button", class: "link", onclick: () => { SP.tab = "words"; renderSpace(); } }, "Edit"));
+  else if (!inner.length) out.push(el("span", { class: "mute" }, "No keyword yet: the janitor adds some as notes arrive."),
+    el("button", { type: "button", class: "link", onclick: () => { SP.tab = "words"; renderSpace(); } }, "Add keywords"));
+  $("#space-rules").replaceChildren(...out);
 }
 function renderSpace() {
   const ov = SP.ov;
   $("#space-title").textContent = spaceLabel(ov.space);
+  crumbs($("#space-crumb"), ancestors(ov.space), null);
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
-  $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + spaceLabel(ov.parent) : "");
-  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["boards", "Boards"], ["words", "Keywords and targets"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
+  $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes");
+  renderRuleLine(ov);
+  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["boards", "Boards"], ["words", "Keywords and targets"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"], ["graph", "Graph"]].map(([k, t]) =>
     el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
   const body = $("#space-body");
   if (SP.tab === "journal") journalView(body);
@@ -1270,6 +1406,7 @@ function renderSpace() {
   else if (SP.tab === "words") wordsView(body);
   else if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
   else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
+  else if (SP.tab === "graph") graphView(body, { space: ov.space });
   else notesView(body);
 }
 
@@ -1291,6 +1428,30 @@ function dayTitle(d) {
   if (same(d, today)) return "Today";
   if (same(d, y)) return "Yesterday";
   return d.toLocaleDateString(loc(), { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
+}
+// A list of notes by day, newest first: one row each, with the tags it carries (and its space, in the journal of everything).
+const HIDDEN_TAGS = new Set(["dashboard", "rules", "living", "living-meta", "index", "guide", "inbox", "sources"]);
+function noteRows(facts, o) {
+  const days = new Map();
+  for (const f of facts) {
+    const d = new Date(f.created_at * 1000), key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    if (!days.has(key)) days.set(key, { d, items: [] });
+    days.get(key).items.push(f);
+  }
+  const rows = [];
+  for (const { d, items } of days.values()) {
+    rows.push(el("h3", { style: "margin:18px 0 4px" }, dayTitle(d)));
+    for (const f of items) {
+      const hm = new Date(f.created_at * 1000).toLocaleTimeString(loc(), { hour: "2-digit", minute: "2-digit" });
+      const tags = (f.tags || []).filter(t => !HIDDEN_TAGS.has(t.split("/")[0]));
+      rows.push(el("div", { class: "note", onclick: () => o.open(f) },
+        el("div", { class: "meta" }, hm, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
+        el("div", { class: "tx" },
+          ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file) : null]),
+          tags.length ? el("div", { class: "tg" }, ...tags.map(t => el("button", { type: "button", class: "chip", onclick: e => { e.stopPropagation(); o.onTag(t); } }, t))) : null)));
+    }
+  }
+  return rows;
 }
 async function journalView(body) {
   const text = el("textarea", { placeholder: "Write a note. #hashtags file it where it belongs." });
@@ -1314,23 +1475,11 @@ async function journalView(body) {
   let facts;
   try { facts = (await api("facts?space=" + q(SP.name) + "&limit=" + SP.jlimit)).facts; } catch (x) { return fail(x); }
   if (SP.hash) facts = facts.filter(f => (f.text.match(HASHTAG) || []).some(h => h.toLowerCase() === SP.hash.toLowerCase()));
-  const days = new Map();
-  for (const f of facts) {
-    const d = new Date(f.created_at * 1000), key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
-    if (!days.has(key)) days.set(key, { d, items: [] });
-    days.get(key).items.push(f);
-  }
-  const rows = [];
-  for (const { d, items } of days.values()) {
-    rows.push(el("h3", { style: "margin:18px 0 4px" }, dayTitle(d)));
-    for (const f of items) {
-      const hm = new Date(f.created_at * 1000).toLocaleTimeString(loc(), { hour: "2-digit", minute: "2-digit" });
-      rows.push(el("div", { class: "note", onclick: () => { SP.tab = "notes"; SP.open = f.id; renderSpace(); } },
-        el("div", { class: "meta" }, hm),
-        isTrace(f.text) ? el("div", { class: "tx" }, ...traceBody(f.text)) :
-        el("div", { class: "tx" }, ...withHashtags(f.file ? (f.extract || "") : f.text, h => { SP.hash = h; journalView(body); }), f.file ? attachmentLine(f.file) : null)));
-    }
-  }
+  const rows = noteRows(facts, {
+    open: f => { SP.tab = "notes"; SP.open = f.id; renderSpace(); },
+    onTag: t => { SP.tab = "notes"; SP.tag = t; SP.q = ""; renderSpace(); },
+    onHash: h => { SP.hash = h; journalView(body); },
+  });
   if (facts.length >= SP.jlimit && !SP.hash) rows.push(el("p", {}, el("button", { type: "button", onclick: () => { SP.jlimit += 100; journalView(body); } }, "Older notes")));
   list.replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, SP.hash ? "No note with this hashtag in the latest ones." : "Nothing yet: write the first note above.")]));
 }
@@ -1681,6 +1830,7 @@ async function addChild(parent) {
   input.addEventListener("keydown", e => { if (e.key === "Enter") go(); if (e.key === "Escape") renderLayout(); });
   row.append(input, el("button", { type: "button", class: "primary", onclick: go }, "Add"), el("button", { type: "button", class: "link", onclick: () => renderLayout() }, "Cancel"));
   $("#ftree").prepend(row); input.focus();
+  if (row.scrollIntoView) row.scrollIntoView({ block: "center", behavior: "smooth" });
 }
 async function loadSide() {
   const side = $("#fside"); if (!FT.sel) { side.hidden = true; return; }
@@ -1738,8 +1888,16 @@ function route() {
   // Everyone lands in their own memory. The other people (an administrator only) are on a page of their own.
   const admin = !!(S && S.installation && S.installation.admin);
   const inSpace = location.hash.match(/^#space\/([a-z][a-z0-9-]*)$/);
-  const page = inSpace ? "space" : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
+  const inFolder = location.hash.match(/^#folder\/([a-z][a-z0-9-]*)$/);
+  const global = location.hash === "#journal" || location.hash === "#graph";
+  const page = inSpace ? "space" : global ? "global" : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
   $("#view-space").hidden = page !== "space";
+  $("#view-global").hidden = page !== "global";
+  // Only one graph and one list of notes at a time in the page (their ids are unique).
+  if (page !== "global") $("#global-body").replaceChildren();
+  if (page !== "space" && !REC) $("#space-body").replaceChildren();
+  if (page === "global") renderGlobal();
+  if (page === "memory" && S) { const f = inFolder ? inFolder[1] : ""; if (f !== HOME.folder) { HOME.folder = f; renderSpaceTiles(); } }
   if (inSpace) loadSpace(inSpace[1]);
   $("#view-people").hidden = page !== "admin";
   $("#view-memory").hidden = page !== "memory";
@@ -1747,7 +1905,7 @@ function route() {
   $("#back-people").hidden = page === "memory";
   $("#nav-admin").hidden = !(admin && page === "memory");
   $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
-  document.title = page === "space" ? "MemCP · " + spaceLabel(inSpace[1]) : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
+  document.title = page === "space" ? "MemCP · " + spacePath(inSpace[1]) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
 }
 $("#back-people").addEventListener("click", () => { location.hash = ""; });
 $("#nav-admin").addEventListener("click", () => { location.hash = "#admin"; });
@@ -1881,6 +2039,8 @@ $("#tr-send").addEventListener("click", async () => {
 // The page takes the tone of the person who opened it, and greets them: it is their space they entered.
 const TONES = ["sage", "mist", "clay", "dusk"];
 function renderHero() {
+  $("#home-nav").replaceChildren(el("button", { type: "button", class: "on", onclick: () => { location.hash = ""; } }, "Spaces"),
+    el("button", { type: "button", onclick: () => { location.hash = "#journal"; } }, "Journal"), el("button", { type: "button", onclick: () => { location.hash = "#graph"; } }, "Graph"));
   const me = S.me, name = me.display || me.name;
   let h = 0; for (const ch of String(me.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   document.documentElement.dataset.tone = TONES[h % TONES.length];
@@ -1894,7 +2054,7 @@ function renderHero() {
     el("div", { class: "avatar" }, name.slice(0, 1).toUpperCase()),
     el("div", {}, el("h2", {}, hello + ", " + name),
       el("p", { class: "lead" }, el("span", { class: "lock" }), "Your memory. Nobody else on this server reads it.")),
-    el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "space" : "spaces"), stat(facts, facts === 1 ? "fact" : "facts"),
+    el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "space" : "spaces"), stat(facts, facts === 1 ? "note" : "notes"),
       stat(S.connections.filter(c => !c.revoked).length, "connections"), last ? el("div", {}, el("b", { style: "font-size:15px;padding-top:9px" }, ago(last)), el("span", {}, "last write")) : null));
 }
 
@@ -2036,7 +2196,7 @@ function rightsEditor(c) {
   return el("div", {},
     el("label", { class: "inline" }, el("input", { type: "checkbox", checked: g.all, onchange: e => { g.all = e.target.checked; render(); } }), "all spaces"),
     g.all ? null : el("div", {},
-      ...S.spaces.map(v => el("label", { class: "inline" }, el("span", { style: "min-width:9em" }, v.name), pick(v))),
+      ...S.spaces.map(v => el("label", { class: "inline" }, el("span", { style: "min-width:9em" }, spaceLabel(v.name)), pick(v))),
       el("div", { class: "small mute" }, "paths inside a space (for example health/journal:rw), one per line"),
       el("textarea", { rows: "2", cols: "28", onchange: e => { g.paths = e.target.value.split(/[\s,]+/).filter(Boolean); } }, g.paths.join("\n"))),
     el("div", {},
@@ -2516,6 +2676,54 @@ function niceLabel(p, kind) {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : name; };
+const spaceByName = n => (FT.l || []).find(x => x.space === n);
+// The folders above a space, outermost first.
+function ancestors(name) {
+  const out = [], seen = new Set([name]);
+  let p = spaceByName(name);
+  while (p && p.parent && !seen.has(p.parent)) { seen.add(p.parent); const up = spaceByName(p.parent); if (!up) break; out.unshift(up); p = up; }
+  return out;
+}
+// « Perso › Health »: a sub-space is always named with the folders above it.
+const spacePath = name => [...ancestors(name).map(x => x.label), spaceLabel(name)].join(" › ");
+// Every space of the person in tree order, with its depth.
+function orderedSpaces() {
+  const out = [], walk = (parent, depth) => { for (const s of kids(parent)) { out.push({ space: s.space, label: s.label, depth }); walk(s.space, depth + 1); } };
+  walk("", 0);
+  const placed = new Set(out.map(x => x.space));
+  for (const v of (S ? S.spaces : []).filter(v => v.kind !== "a-trier" && !placed.has(v.name))) out.push({ space: v.name, label: spaceLabel(v.name), depth: 0 });
+  return out;
+}
+// A colour per space, the same on the journal chips and in the graph.
+const spaceColor = name => {
+  const names = (S ? S.spaces : []).filter(v => v.kind !== "a-trier").map(v => v.name).sort();
+  const i = names.indexOf(name);
+  return i < 0 ? "var(--gn)" : "var(--g" + (1 + i % 8) + ")";
+};
+const HOME = { folder: "" };
+// Puts a space inside another (or back at the top level with an empty target): only the layout changes.
+async function moveInto(moved, target) {
+  if (!moved || moved === target) return;
+  try {
+    await api("layout/set", { space: moved, parent: target || null, position: kids(target || "").length + 1 });
+    if (target) FT.open.add(target);
+    await renderLayout();
+  } catch (x) { fail(x); }
+}
+// « Your spaces › Perso › Health »: every folder above is a link, and a drop target to move a space up to it.
+function crumbs(box, chain, current) {
+  const mk = (label, hash, target) => {
+    const b = el("button", { type: "button", class: "link", onclick: () => { location.hash = hash; } }, label);
+    b.addEventListener("dragover", e => { e.preventDefault(); b.classList.add("over"); });
+    b.addEventListener("dragleave", () => b.classList.remove("over"));
+    b.addEventListener("drop", e => { e.preventDefault(); b.classList.remove("over"); moveInto(e.dataTransfer.getData("text/space"), target); });
+    return b;
+  };
+  const parts = [mk("Your spaces", "", "")];
+  for (const a of chain) parts.push(el("span", { class: "sep" }, "›"), mk(a.label, "#folder/" + a.space, a.space));
+  if (current) parts.push(el("span", { class: "sep" }, "›"), el("span", { "aria-current": "page" }, current));
+  box.replaceChildren(...parts);
+}
 function renderSpaceTiles() {
   if (!S) return;
   const kindLabel = k => { const c = (S.catalogue || []).find(x => x.key === k); return c ? c.label : k; };
@@ -2523,39 +2731,60 @@ function renderSpaceTiles() {
   const real = S.spaces.filter(v => v.kind !== "a-trier");
   const byName = new Map(real.map(v => [v.name, v]));
   const placed = new Set((FT.l || []).map(x => x.space));
-  const top = [...kids("").filter(x => byName.has(x.space) || kids(x.space).length), ...real.filter(v => !placed.has(v.name)).map(v => ({ space: v.name, label: v.name }))];
+  if (HOME.folder && !kids(HOME.folder).length) HOME.folder = "";
+  const folder = HOME.folder;
+  // The top level shows top-level spaces only: a sub-space is found by opening its folder.
+  const level = folder ? kids(folder) : [...kids("").filter(x => byName.has(x.space) || kids(x.space).length), ...real.filter(v => !placed.has(v.name)).map(v => ({ space: v.name, label: v.name }))];
+  $("#spaces-crumb").hidden = !folder;
+  if (folder) crumbs($("#spaces-crumb"), ancestors(folder), spaceLabel(folder));
   const biggest = real.reduce((m, x) => Math.max(m, x.stats ? x.stats.facts : 0), 0);
-  const inside = (parent, depth) => kids(parent).flatMap(c => [
-    el("div", { class: "frow", style: "margin-left:" + depth * 18 + "px;cursor:default" },
-      el("span", { class: "ico" }, kids(c.space).length ? "📁" : "📄"), el("span", { class: "nm" }, c.label),
-      kids(c.space).length ? null : el("button", { type: "button", class: "mini link", onclick: () => { location.hash = "#space/" + c.space; } }, "Open")),
-    ...inside(c.space, depth + 1)]);
-  const cards = top.map((p, i) => {
-    const tone = ["t1", "t2", "t3", ""][i % 4];
-    if (kids(p.space).length) {
-      return el("div", { class: "tile " + tone + " wide", "data-folder": p.space },
-        el("h3", {}, "📁 " + p.label),
-        el("div", { class: "kind" }, "Folder"),
-        el("div", { class: "ftree" }, ...inside(p.space, 0)),
-        el("div", { class: "acts" }, el("button", { type: "button", class: "link", onclick: () => addChild({ space: p.space, label: p.label }) }, "A space inside")));
-    }
-    const s = byName.get(p.space);
-    if (!s) return null;
+  const drag = (node, space) => { node.draggable = true; node.addEventListener("dragstart", e => { e.dataTransfer.setData("text/space", space); e.dataTransfer.effectAllowed = "move"; }); return node; };
+  const leaf = (s, label, tone, large, own) => {
     const nFacts = s.stats ? s.stats.facts : 0, nFiles = s.stats ? s.stats.files : 0;
-    const large = nFacts > 0 && nFacts === biggest;
-    return el("div", { class: "tile " + tone + (large ? " wide tall" : "") + (s.stats && !nFacts && !nFiles ? " empty" : ""), "data-space": s.name },
-      el("h3", { style: "cursor:pointer", onclick: () => { location.hash = "#space/" + s.name; } }, p.label),
+    const t = el("div", { class: "tile " + tone + (large ? " wide tall" : "") + (s.stats && !nFacts && !nFiles ? " empty" : ""), "data-space": s.name },
+      el("h3", { style: "cursor:pointer", onclick: () => { location.hash = "#space/" + s.name; } }, label),
       el("div", { class: "kind" }, s.kind && s.kind !== "custom" ? kindLabel(s.kind) : "Space"),
       el("div", { class: "big" }, !s.stats ? "—" : num(nFacts)),
       el("div", { class: "reach mute" }, (n => n === 0 ? "No assistant reaches it" : n === 1 ? "1 connection reaches it" : n + " connections reach it")(
         S.connections.filter(c => !c.revoked && (c.rights === "all" || c.rights.split(",").some(r => r.split(":")[0].split("/")[0] === s.name))).length)),
-      el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "fact" : "facts") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : "") + (s.stats.last_write ? " · last write " + ago(s.stats.last_write) : "")),
+      el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "note" : "notes") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : "") + (s.stats.last_write ? " · last write " + ago(s.stats.last_write) : "")),
       el("div", { class: "acts" },
         el("button", { class: "primary", onclick: () => { location.hash = "#space/" + s.name; } }, "Open"),
         el("button", { class: "link", onclick: () => openWizard({ space: s.name }) }, "Connect"),
         el("button", { class: "link", onclick: () => openWizard({ space: s.name, readOnly: true }) }, "Read-only"),
-        el("button", { class: "link", onclick: () => openGuide("space:" + s.name, "Instructions for the space " + p.label) }, s.guide ? "Instructions ✓" : "Instructions")));
+        el("button", { class: "link", onclick: () => openGuide("space:" + s.name, "Instructions for the space " + label) }, s.guide ? "Instructions ✓" : "Instructions")));
+    if (!own) {
+      t.addEventListener("dragover", e => { e.preventDefault(); t.classList.add("over-in"); });
+      t.addEventListener("dragleave", () => t.classList.remove("over-in"));
+      t.addEventListener("drop", e => { e.preventDefault(); t.classList.remove("over-in"); moveInto(e.dataTransfer.getData("text/space"), s.name); });
+    }
+    return drag(t, s.name);
+  };
+  const cards = level.map((p, i) => {
+    const tone = ["t1", "t2", "t3", ""][i % 4];
+    if (kids(p.space).length) {
+      const inner = kids(p.space), n = inner.length;
+      const open = () => { location.hash = "#folder/" + p.space; };
+      const t = el("div", { class: "tile " + tone + " wide", "data-folder": p.space },
+        el("h3", { style: "cursor:pointer", onclick: open }, "📁 " + p.label),
+        el("div", { class: "kind" }, "Folder"),
+        el("div", { class: "inside" }, ...inner.slice(0, 5).map(c => el("span", { class: "chip" }, c.label)), n > 5 ? el("span", { class: "chip" }, "+" + (n - 5)) : null),
+        el("div", { class: "nums mute" }, n + (n === 1 ? " space inside" : " spaces inside")),
+        el("div", { class: "acts" }, el("button", { type: "button", class: "primary", onclick: open }, "Open"),
+          el("button", { type: "button", class: "link", onclick: () => addChild({ space: p.space, label: p.label }) }, "A space inside")));
+      t.addEventListener("dragover", e => { e.preventDefault(); t.classList.add("over-in"); });
+      t.addEventListener("dragleave", () => t.classList.remove("over-in"));
+      t.addEventListener("drop", e => { e.preventDefault(); t.classList.remove("over-in"); moveInto(e.dataTransfer.getData("text/space"), p.space); });
+      return drag(t, p.space);
+    }
+    const s = byName.get(p.space);
+    if (!s) return null;
+    return leaf(s, p.label, tone, !folder && s.stats && s.stats.facts > 0 && s.stats.facts === biggest);
   }).filter(Boolean);
+  // A folder is a space too: what was written in it itself stays one click away.
+  if (folder && byName.has(folder) && byName.get(folder).stats && byName.get(folder).stats.facts > 0) cards.unshift(leaf(byName.get(folder), spaceLabel(folder) + " · its own notes", "", false, true));
+  if (folder) cards.push(el("div", { class: "tile empty", "data-add-inside": "" }, el("h3", {}, "A space inside " + spaceLabel(folder)),
+    el("div", { class: "acts" }, el("button", { type: "button", class: "primary", onclick: () => addChild({ space: folder, label: spaceLabel(folder) }) }, "A space inside"))));
   $("#spaces").replaceChildren(...(cards.length ? cards : [el("p", { class: "mute", style: "grid-column:1/-1" }, "No space yet. Open “Advanced” below and make one under “New space”: for instance “me”, for who you are and what you value, then “health”, “work”, “home”.")]));
 }
 
@@ -2814,6 +3043,320 @@ async function wordsView(body) {
 }
 
 // ---- Language and theme ----
+// =====================================================================================================================
+// The journal of every space, and the graph (of one space, or of all of them)
+// =====================================================================================================================
+let PENDING = null; // { space, id }: a note to open as soon as its space has loaded
+const GL = { space: "", tag: "", q: "", more: null, facts: [], busy: false };
+const sv = (tag, attrs = {}, ...kids) => {
+  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) n.setAttribute(k, v);
+  n.append(...kids.filter(Boolean));
+  return n;
+};
+function renderGlobal() {
+  const graph = location.hash === "#graph";
+  const real = S.spaces.filter(v => v.kind !== "a-trier");
+  const notes = real.reduce((n, v) => n + (v.stats ? v.stats.facts : 0), 0);
+  crumbs($("#global-crumb"), [], graph ? "Graph" : "Journal");
+  $("#global-title").textContent = "Your memory";
+  $("#global-sub").textContent = Number(notes).toLocaleString(loc()) + (notes === 1 ? " note" : " notes") + " · " + real.length + (real.length === 1 ? " space" : " spaces");
+  $("#global-tabs").replaceChildren(...[["#journal", "Journal", !graph], ["#graph", "Graph", graph]].map(([h, t, on]) =>
+    el("button", { type: "button", class: on ? "on" : "", onclick: () => { location.hash = h; } }, t)));
+  const body = $("#global-body");
+  if (graph) graphView(body, { space: "" }); else globalJournal(body);
+}
+async function globalJournal(body) {
+  const search = el("input", { type: "search", placeholder: "search all notes", value: GL.q, "aria-label": "Search all notes" });
+  const spaceSel = el("select", { "aria-label": "Space", id: "gj-space" }, el("option", { value: "" }, "All spaces"),
+    ...orderedSpaces().map(x => el("option", { value: x.space }, "  ".repeat(x.depth) + x.label)));
+  spaceSel.value = GL.space;
+  const tagSel = el("select", { "aria-label": "Tag", id: "gj-tag" }, el("option", { value: "" }, "All tags"));
+  const clear = el("button", { type: "button", class: "link", id: "gj-clear" }, "Clear filters");
+  const list = el("div", { id: "gj-list" }, el("p", { class: "mute" }, "…"));
+  const fillTags = tags => {
+    const have = new Set(tags.map(t => t.tag));
+    tagSel.replaceChildren(el("option", { value: "" }, "All tags"),
+      ...(GL.tag && !have.has(GL.tag) ? [el("option", { value: GL.tag }, GL.tag)] : []),
+      ...tags.map(t => el("option", { value: t.tag }, t.tag + " (" + t.count + ")")));
+    tagSel.value = GL.tag;
+  };
+  const filtered = () => !!(GL.space || GL.tag || GL.q);
+  const draw = () => {
+    clear.hidden = !filtered();
+    const rows = noteRows(GL.facts, {
+      space: true,
+      open: f => { PENDING = { space: f.space, id: f.id }; location.hash = "#space/" + f.space; },
+      onSpace: s => { GL.space = s; spaceSel.value = s; pull(true); },
+      onTag: t => { GL.tag = t; tagSel.value = t; pull(true); },
+      onHash: h => { GL.q = h.replace(/^#/, ""); search.value = GL.q; pull(true); },
+    });
+    if (GL.more) rows.push(el("p", {}, el("button", { type: "button", id: "gj-more", onclick: () => pull(false) }, "Older notes")));
+    list.replaceChildren(...(rows.length ? rows : [el("div", {},
+      el("p", { class: "mute" }, filtered() ? "No note matches these filters." : "Nothing in your memory yet."),
+      filtered() ? el("button", { type: "button", class: "primary", onclick: () => { clear.click(); } }, "Clear filters")
+        : el("button", { type: "button", class: "primary", onclick: () => { location.hash = ""; } }, "Open your spaces to write the first note"))]));
+  };
+  async function pull(reset) {
+    if (GL.busy) return;
+    GL.busy = true;
+    if (reset) { GL.more = null; list.replaceChildren(el("p", { class: "mute" }, "…")); }
+    const qs = ["limit=50"];
+    if (GL.space) qs.push("space=" + q(GL.space));
+    if (GL.tag) qs.push("tag=" + q(GL.tag));
+    if (GL.q) qs.push("q=" + q(GL.q));
+    if (!reset && GL.more) qs.push("before=" + GL.more.before, "before_id=" + q(GL.more.before_id));
+    try {
+      const r = await api("journal?" + qs.join("&"));
+      GL.facts = reset ? r.facts : GL.facts.concat(r.facts);
+      GL.more = r.more ? r.next : null;
+      if (r.tags) fillTags(r.tags);
+      draw();
+    } catch (x) { fail(x); } finally { GL.busy = false; }
+  }
+  spaceSel.addEventListener("change", () => { GL.space = spaceSel.value; pull(true); });
+  tagSel.addEventListener("change", () => { GL.tag = tagSel.value; pull(true); });
+  const go = () => { GL.q = search.value.trim(); pull(true); };
+  search.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  clear.addEventListener("click", () => { GL.space = GL.tag = GL.q = ""; spaceSel.value = ""; tagSel.value = ""; search.value = ""; pull(true); });
+  body.replaceChildren(el("div", { class: "fbar" }, search, el("button", { type: "button", onclick: go }, "Search"), spaceSel, tagSel, clear),
+    el("p", { class: "mute small" }, "The notes of every space you read, newest first. A tag also takes the tags under it."), list);
+  clear.hidden = !filtered();
+  await pull(true);
+}
+
+// ---- The graph: spaces, tags and keywords, joined by what they share ----
+function buildGraph(g, scope) {
+  const nodes = new Map(), edges = new Map(), spaceId = new Map();
+  for (const n of g.nodes) if (n.type === "space") {
+    const name = n.id.slice(6), label = spaceLabel(name);
+    nodes.set(n.id, { id: n.id, type: "space", label, space: name, count: n.count || 0 });
+    spaceId.set(name.toLowerCase(), n.id); spaceId.set(label.toLowerCase(), n.id);
+  }
+  // The name of a space is a tag too: a tag that is the name of a space is that space.
+  const via = id => { if (id.startsWith("tag:")) { const hit = spaceId.get(id.slice(4).toLowerCase()); if (hit) return hit; } return id; };
+  const others = g.nodes.filter(n => n.type !== "space" && via(n.id) === n.id);
+  const cap = scope.space ? 80 : 60;
+  const tags = others.filter(n => n.type === "tag").sort((a, b) => (b.count || 0) - (a.count || 0));
+  const dropped = new Set(tags.slice(cap).map(n => n.id));
+  for (const n of others) if (!dropped.has(n.id)) nodes.set(n.id, { id: n.id, type: n.type, label: n.label, space: n.space || "", count: n.count || 1 });
+  const add = (type, a, b, count, tagList) => {
+    a = via(a); b = via(b);
+    if (a === b || !nodes.has(a) || !nodes.has(b)) return;
+    const k = type + "|" + [a, b].sort().join("|"), old = edges.get(k);
+    if (old) old.count += count; else edges.set(k, { type, source: a, target: b, count, tags: tagList || [] });
+  };
+  for (const e of g.edges) add(e.type, e.source, e.target, e.count || 1, e.tags);
+  for (const p of FT.l || []) if (p.parent) add("inside", "space:" + p.parent, "space:" + p.space, 1);
+  // Colour: a space has its own; what only one space holds takes it; what several share stays neutral.
+  const holders = new Map();
+  for (const e of edges.values()) {
+    const a = nodes.get(e.source), b = nodes.get(e.target);
+    if (e.type === "inside" || e.type === "shared_tag") continue;
+    const [sp, other] = a.type === "space" ? [a, b] : b.type === "space" ? [b, a] : [null, null];
+    if (sp && other.type !== "space") { if (!holders.has(other.id)) holders.set(other.id, new Set()); holders.get(other.id).add(sp.space); }
+  }
+  for (const d of nodes.values()) {
+    const h = holders.get(d.id);
+    d.holders = h ? [...h] : [];
+    d.color = d.type === "space" ? spaceColor(d.space) : d.type === "library" && d.space ? spaceColor(d.space) : h && h.size === 1 ? spaceColor([...h][0]) : "var(--gn)";
+    d.r = Math.min(30, d.type === "space" ? 11 + Math.sqrt(d.count) * 3.2 : 5 + Math.sqrt(d.count) * 2.6);
+  }
+  return { nodes: [...nodes.values()], edges: [...edges.values()], hiddenTags: dropped.size };
+}
+// A small force layout: nodes repel, edges are springs, a weak pull keeps the whole in view. Seeded, so it is stable.
+function relax(nodes, edges, iters, heat, aspect = 1) {
+  const gx = aspect < 1 ? 0.03 : 0.012, gy = aspect < 1 ? 0.005 : 0.012;
+  const idx = new Map(nodes.map((d, i) => [d.id, i]));
+  const links = edges.map(e => [idx.get(e.source), idx.get(e.target), e]).filter(l => l[0] !== undefined && l[1] !== undefined);
+  for (let it = 0; it < iters; it++) {
+    const alpha = heat * (1 - 0.85 * it / iters);
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      let dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy;
+      if (d2 < 0.01) { dx = 0.1 * ((i % 3) - 1 || 1); dy = 0.1; d2 = 0.02; }
+      const d = Math.sqrt(d2), room = a.r + b.r + 8;
+      let f = 700 / d + (d < room ? (room - d) * 0.6 : 0);
+      f *= alpha; dx /= d; dy /= d;
+      a.vx += dx * f; a.vy += dy * f; b.vx -= dx * f; b.vy -= dy * f;
+    }
+    for (const [i, j, e] of links) {
+      const a = nodes[i], b = nodes[j];
+      const dx = b.x - a.x, dy = b.y - a.y, d = Math.sqrt(dx * dx + dy * dy) || 1;
+      const L = 50 + a.r + b.r, f = (d - L) * (e.type === "inside" ? 0.02 : 0.05) * alpha;
+      a.vx += dx / d * f; a.vy += dy / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f;
+    }
+    for (const a of nodes) {
+      if (a.pinned) { a.vx = a.vy = 0; continue; }
+      a.vx -= a.x * gx * alpha; a.vy -= a.y * gy * alpha;
+      a.vx *= 0.78; a.vy *= 0.78;
+      a.x += Math.max(-25, Math.min(25, a.vx)); a.y += Math.max(-25, Math.min(25, a.vy));
+    }
+  }
+}
+function graphView(body, scope) {
+  body.replaceChildren(el("p", { class: "mute" }, "…"));
+  api("links" + (scope.space ? "?space=" + q(scope.space) : "")).then(g => drawGraph(body, scope, g)).catch(fail);
+}
+function drawGraph(body, scope, g) {
+  const M = buildGraph(g, scope);
+  const count = t => M.nodes.filter(n => n.type === t).length;
+  const linked = M.edges.some(e => e.type !== "inside");
+  if (!M.nodes.length || (!linked && !count("tag") && !count("keyword"))) {
+    body.replaceChildren(el("div", {},
+      el("p", { class: "mute" }, M.nodes.length ? "Nothing to link yet: notes with tags, and the keywords of a space, draw the graph." : "Nothing to draw yet: write a few notes first."),
+      scope.space ? el("button", { type: "button", class: "primary", onclick: () => { SP.tab = "words"; renderSpace(); } }, "Add keywords")
+        : el("button", { type: "button", class: "primary", onclick: () => { location.hash = "#journal"; } }, "Open the journal")));
+    return;
+  }
+  const show = { tag: true, keyword: true, library: true };
+  const W = Math.max(280, body.clientWidth || 640), H = W < 600 ? 460 : 560;
+  const V = { k: 1, tx: W / 2, ty: H / 2 }, byId = new Map(M.nodes.map(d => [d.id, d]));
+  M.nodes.forEach((d, i) => { const a = i / M.nodes.length * Math.PI * 2, r = d.type === "space" ? 70 : 170 + (i % 5) * 24; d.x = Math.cos(a) * r; d.y = Math.sin(a) * r; d.vx = d.vy = 0; });
+  relax(M.nodes, M.edges, 300, 1, W / H);
+  const adj = new Map(M.nodes.map(d => [d.id, new Set()]));
+  for (const e of M.edges) { adj.get(e.source).add(e.target); adj.get(e.target).add(e.source); }
+  const svg = sv("svg", { id: "graph-svg", viewBox: "0 0 " + W + " " + H, height: H, role: "img", tabindex: "0",
+    "aria-label": "Graph: " + count("space") + " spaces, " + count("tag") + " tags, " + count("keyword") + " keywords" });
+  const eLayer = sv("g"), nLayer = sv("g");
+  svg.append(eLayer, nLayer);
+  const eEls = M.edges.map(e => { const l = sv("line", { class: "gedge " + e.type, "data-s": e.source, "data-t": e.target }); l.__e = e; eLayer.append(l); return l; });
+  const nEls = M.nodes.map(d => {
+    const shape = d.type === "keyword" ? sv("rect", { class: "shape", transform: "rotate(45)" }) : d.type === "library" ? sv("rect", { class: "shape", rx: 3 }) : sv("circle", { class: "shape" });
+    const t = sv("text", { x: 0, y: 0 }); t.textContent = d.label;
+    const n = sv("g", { class: "gnode " + d.type, "data-id": d.id }, shape, t);
+    n.style.setProperty("--gc", d.color); n.__d = d; n.__shape = shape; n.__text = t;
+    nLayer.append(n); return n;
+  });
+  const topIds = new Set([...M.nodes].sort((a, b) => b.count - a.count).slice(0, 12).map(d => d.id));
+  const G = { sel: null, find: "" };
+  const vis = d => d.type === "space" || show[d.type];
+  const shownEdge = e => vis(byId.get(e.source)) && vis(byId.get(e.target));
+  const rs = d => d.r * Math.min(1.7, Math.max(0.7, Math.sqrt(V.k)));
+  function update() {
+    const near = G.sel ? adj.get(G.sel.id) : null, needle = G.find.trim().toLowerCase();
+    for (const l of eEls) {
+      const e = l.__e, a = byId.get(e.source), b = byId.get(e.target), on = shownEdge(e);
+      l.style.display = on ? "" : "none";
+      if (!on) continue;
+      l.setAttribute("x1", a.x * V.k + V.tx); l.setAttribute("y1", a.y * V.k + V.ty); l.setAttribute("x2", b.x * V.k + V.tx); l.setAttribute("y2", b.y * V.k + V.ty);
+      l.classList.toggle("dim", !!G.sel && e.source !== G.sel.id && e.target !== G.sel.id);
+    }
+    for (const n of nEls) {
+      const d = n.__d, on = vis(d);
+      n.style.display = on ? "" : "none";
+      if (!on) continue;
+      const r = rs(d), s = n.__shape;
+      n.setAttribute("transform", "translate(" + (d.x * V.k + V.tx).toFixed(1) + "," + (d.y * V.k + V.ty).toFixed(1) + ")");
+      if (d.type === "keyword") { const w = r * 1.5; s.setAttribute("x", -w / 2); s.setAttribute("y", -w / 2); s.setAttribute("width", w); s.setAttribute("height", w); }
+      else if (d.type === "library") { s.setAttribute("x", -r); s.setAttribute("y", -r * 0.75); s.setAttribute("width", r * 2); s.setAttribute("height", r * 1.5); }
+      else s.setAttribute("r", r);
+      const isNear = !!near && near.has(d.id), isSel = G.sel === d, hit = !!needle && d.label.toLowerCase().includes(needle);
+      n.classList.toggle("sel", isSel); n.classList.toggle("dim", (!!G.sel && !isSel && !isNear) || (!!needle && !hit));
+      n.__text.setAttribute("x", r + 4); n.__text.setAttribute("y", 4);
+      n.__text.style.display = isSel || isNear || hit || d.type === "space" || topIds.has(d.id) || r >= 14 || V.k >= 1.6 ? "" : "none";
+    }
+  }
+  function fit() {
+    const v = M.nodes.filter(vis);
+    if (!v.length) return;
+    const x0 = Math.min(...v.map(d => d.x - d.r)), x1 = Math.max(...v.map(d => d.x + d.r)), y0 = Math.min(...v.map(d => d.y - d.r)), y1 = Math.max(...v.map(d => d.y + d.r));
+    V.k = Math.max(0.25, Math.min(2.5, (W - (W < 600 ? 70 : 90)) / Math.max(1, x1 - x0), (H - 50) / Math.max(1, y1 - y0)));
+    V.tx = W / 2 - (x0 + x1) / 2 * V.k; V.ty = H / 2 - (y0 + y1) / 2 * V.k;
+    update();
+  }
+  const zoomAt = (sx, sy, nk) => { nk = Math.max(0.25, Math.min(6, nk)); const wx = (sx - V.tx) / V.k, wy = (sy - V.ty) / V.k; V.k = nk; V.tx = sx - wx * nk; V.ty = sy - wy * nk; update(); };
+  const local = e => { const r = svg.getBoundingClientRect(); return [(e.clientX - r.left) * W / r.width, (e.clientY - r.top) * H / r.height]; };
+  svg.addEventListener("wheel", e => { e.preventDefault(); const [x, y] = local(e); zoomAt(x, y, V.k * Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  const pts = new Map(); let drag = null, pinch = null;
+  svg.addEventListener("pointerdown", e => {
+    try { svg.setPointerCapture(e.pointerId); } catch (_) {}
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch = { d: Math.hypot(a[0] - b[0], a[1] - b[1]), k: V.k }; drag = null; return; }
+    const hit = e.target.closest ? e.target.closest(".gnode") : null;
+    drag = { node: hit ? hit.__d : null, x0: e.clientX, y0: e.clientY, tx0: V.tx, ty0: V.ty, moved: false };
+  });
+  svg.addEventListener("pointermove", e => {
+    if (!pts.has(e.pointerId)) return;
+    pts.set(e.pointerId, [e.clientX, e.clientY]);
+    if (pinch && pts.size === 2) {
+      const [a, b] = [...pts.values()], r = svg.getBoundingClientRect();
+      zoomAt(((a[0] + b[0]) / 2 - r.left) * W / r.width, ((a[1] + b[1]) / 2 - r.top) * H / r.height, pinch.k * Math.hypot(a[0] - b[0], a[1] - b[1]) / pinch.d);
+      return;
+    }
+    if (!drag) return;
+    const dx = e.clientX - drag.x0, dy = e.clientY - drag.y0;
+    if (!drag.moved && Math.hypot(dx, dy) < 5) return;
+    drag.moved = true; svg.classList.add("grabbing");
+    if (drag.node) { const [x, y] = local(e); drag.node.x = (x - V.tx) / V.k; drag.node.y = (y - V.ty) / V.k; drag.node.pinned = true; relax(M.nodes, M.edges, 4, 0.35, W / H); }
+    else { V.tx = drag.tx0 + dx * W / svg.getBoundingClientRect().width; V.ty = drag.ty0 + dy * H / svg.getBoundingClientRect().height; }
+    update();
+  });
+  const up = e => {
+    pts.delete(e.pointerId);
+    if (pts.size < 2) pinch = null;
+    if (pts.size === 0) { if (drag && !drag.moved) select(drag.node && G.sel !== drag.node ? drag.node : null); drag = null; svg.classList.remove("grabbing"); }
+  };
+  svg.addEventListener("pointerup", up); svg.addEventListener("pointercancel", up);
+  svg.addEventListener("keydown", e => {
+    const step = 40, m = { ArrowLeft: [step, 0], ArrowRight: [-step, 0], ArrowUp: [0, step], ArrowDown: [0, -step] }[e.key];
+    if (m) { e.preventDefault(); V.tx += m[0]; V.ty += m[1]; update(); }
+    else if (e.key === "+" || e.key === "=") zoomAt(W / 2, H / 2, V.k * 1.25);
+    else if (e.key === "-") zoomAt(W / 2, H / 2, V.k / 1.25);
+  });
+  const info = el("div", { class: "ginfo", id: "graph-info", "aria-live": "polite" });
+  const describe = d => {
+    const inSp = d.holders.map(spaceLabel).join(", ");
+    return d.type === "space" ? spacePath(d.space) + " · " + d.count + (d.count === 1 ? " note" : " notes")
+      : d.type === "tag" ? "Tag " + d.label + " · " + d.count + (d.count === 1 ? " note" : " notes") + (inSp ? " · in " + inSp : "")
+      : d.type === "keyword" ? "Keyword " + d.label + " · cited in " + d.count + (d.count === 1 ? " note" : " notes") + (inSp ? " · listed by " + inSp : "")
+      : "Library folder " + d.label + " · " + d.count + (d.count === 1 ? " file" : " files");
+  };
+  function select(d) {
+    G.sel = d; update();
+    if (!d) { info.replaceChildren(el("span", { class: "mute small" }, "Drag to move, scroll or pinch to zoom, tap a node to see what it is linked to.")); return; }
+    const next = [...adj.get(d.id)].map(id => byId.get(id)).filter(vis).sort((a, b) => b.count - a.count).slice(0, 8);
+    const canShow = d.type !== "library";
+    info.replaceChildren(el("div", {}, el("b", {}, describe(d))),
+      el("div", { class: "row", style: "margin:6px 0" },
+        canShow ? el("button", { type: "button", class: "primary", id: "graph-show", onclick: () => graphOpen(d, scope) }, d.type === "space" ? "Show its notes" : "Show these notes") : null,
+        d.type === "space" && !scope.space ? el("button", { type: "button", onclick: () => { location.hash = "#space/" + d.space; } }, "Open the space") : null,
+        el("button", { type: "button", class: "link", onclick: () => select(null) }, "Clear")),
+      next.length ? el("div", { class: "small" }, el("span", { class: "mute" }, "Linked to: "), ...next.map(n => el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: () => select(n) }, n.label))) : null);
+  }
+  const tools = el("div", { class: "gtools" },
+    el("button", { type: "button", "aria-label": "Zoom in", title: "Zoom in", onclick: () => zoomAt(W / 2, H / 2, V.k * 1.3) }, "+"),
+    el("button", { type: "button", "aria-label": "Zoom out", title: "Zoom out", onclick: () => zoomAt(W / 2, H / 2, V.k / 1.3) }, "−"),
+    el("button", { type: "button", "aria-label": "Fit", title: "Fit", onclick: fit }, "⤢"));
+  const find = el("input", { type: "search", placeholder: "Find a node", "aria-label": "Find a node", size: 16 });
+  find.addEventListener("input", () => { G.find = find.value; update(); });
+  const toggles = [["tag", "Tags"], ["keyword", "Keywords"], ["library", "Library folders"]].filter(([t]) => count(t)).map(([t, name]) =>
+    el("label", { class: "inline" }, el("input", { type: "checkbox", checked: "", "data-kind": t, onchange: e => { show[t] = e.target.checked; if (G.sel && !vis(G.sel)) G.sel = null; fit(); } }), name + " (" + count(t) + ")"));
+  const spaces = M.nodes.filter(d => d.type === "space");
+  const legend = el("div", { class: "glegend" },
+    ...spaces.map(d => el("button", { type: "button", class: "k link", style: "--gc:" + d.color + ";padding:2px 6px", onclick: () => select(d) }, el("i"), d.label)),
+    el("span", { class: "k" }, el("i", { class: "t", style: "--gc:var(--gn)" }), "tag"), el("span", { class: "k" }, el("i", { class: "w", style: "--gc:var(--gn)" }), "keyword"),
+    el("span", { class: "k" }, el("i", { style: "--gc:var(--gn)" }), "shared by several spaces"));
+  const list = el("details", {}, el("summary", {}, "All nodes (" + M.nodes.length + ")"),
+    el("div", { class: "gnodes" }, ...[...M.nodes].sort((a, b) => b.count - a.count).map(d => el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: () => select(d) }, d.label + " · " + d.count))));
+  body.replaceChildren(
+    el("div", { class: "fbar" }, find, ...toggles),
+    el("div", { class: "gwrap" }, svg, tools), legend, info,
+    (M.hiddenTags > 0) ? el("p", { class: "mute small" }, "Showing the most used tags: " + M.hiddenTags + " less used " + (M.hiddenTags === 1 ? "tag is" : "tags are") + " left out.") : null,
+    list);
+  fit(); select(null);
+}
+// What a node leads to: the notes that carry it.
+function graphOpen(d, scope) {
+  if (scope.space) {
+    SP.tab = d.type === "space" ? "journal" : "notes"; SP.hash = "";
+    SP.tag = d.type === "tag" ? d.id.slice(4) : ""; SP.q = d.type === "keyword" ? d.label : "";
+    renderSpace(); return;
+  }
+  GL.space = d.type === "space" ? d.space : ""; GL.tag = d.type === "tag" ? d.id.slice(4) : ""; GL.q = d.type === "keyword" ? d.label : "";
+  location.hash = "#journal";
+}
+
 function renderSwitches() {
   const theme = (() => { try { return localStorage.getItem("memcp-theme") || "auto"; } catch (_) { return "auto"; } })();
   for (const box of $$("[data-switches]")) {
