@@ -534,3 +534,33 @@ fn a_note_sent_out_of_a_triage_space_is_tagged_like_one_written_there() -> Res {
     );
     Ok(())
 }
+
+#[test]
+fn a_connection_to_all_spaces_makes_and_moves_a_sub_space() -> Res {
+    let t = Temp::new("space-tools");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let made = tools::call(
+        &b,
+        &c,
+        "space_create",
+        &json!({ "label": "Firefighting", "parent": "hobbies", "keywords": ["vsav"] }),
+    )?;
+    assert_eq!(made["result"], "created", "{made}");
+    let name = made["space"]["space"]
+        .as_str()
+        .or(made["space"]["name"].as_str())
+        .ok_or("name")?
+        .to_string();
+    let moved = tools::call(
+        &b,
+        &c,
+        "space_move",
+        &json!({ "space": name, "label": "Fire", "parent": "" }),
+    )?;
+    assert_eq!(moved["result"], "updated", "{moved}");
+    // A connection limited to one space cannot arrange the person's spaces.
+    let one = caller(&b, "only-work", "work:rw")?;
+    assert!(tools::call(&b, &one, "space_create", &json!({ "label": "X" })).is_err());
+    Ok(())
+}
