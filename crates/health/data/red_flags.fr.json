@@ -1,0 +1,938 @@
+{
+ "schema": "memcp.health.red_flags/1",
+ "version": 1,
+ "language": "fr",
+ "provenance": "Vocabulary compiled by a private health project of the same owner and published here under this repository's licence (AGPL-3.0-or-later; the source repository is AGPL-3.0, and its referential files carry no licence line of their own). The origin of each keyword inside the source file is not recorded: unknown. Messages and phrases written by that project, citing the public sources listed below (a source marked missing has none).",
+ "license": "AGPL-3.0-or-later",
+ "negators": [
+  "pas de",
+  "pas d",
+  "pas",
+  "aucun",
+  "aucune",
+  "sans",
+  "jamais de",
+  "jamais d",
+  "jamais",
+  "ni"
+ ],
+ "negation_articles": [
+  "un",
+  "une",
+  "des",
+  "du",
+  "de",
+  "d"
+ ],
+ "negators_after_ne": [
+  "plus de",
+  "plus d",
+  "plus"
+ ],
+ "ne_words": [
+  "ne",
+  "n"
+ ],
+ "ne_window": 3,
+ "negators_after_ne_not_after": [
+  "en"
+ ],
+ "clause_breaks": [
+  ".",
+  "!",
+  "?",
+  ";",
+  ",",
+  ":",
+  "\n",
+  " mais ",
+  " par contre ",
+  " cependant "
+ ],
+ "characterization_intro": "Ces questions sont facultatives, pour le médecin ou le SAMU. Vous pouvez passer. Vos réponses ne changent rien au message ci-dessus : le réflexe reste le même, quel que soit ce que vous cochez.",
+ "sources": [
+  {
+   "id": "ameli-abces-dentaire-2026",
+   "title": "ameli.fr (Assurance Maladie), Abcès dentaire : soulager la douleur et consulter",
+   "level": "institutional",
+   "date": "2026-10-23",
+   "url": "https://www.ameli.fr/assure/sante/themes/abces-dentaire/soulager-douleur-consulter"
+  },
+  {
+   "id": "ameli-avc-2026",
+   "title": "ameli.fr (Assurance Maladie), AVC : que faire ?",
+   "level": "institutional",
+   "date": "2026-06-18",
+   "url": "https://www.ameli.fr/assure/sante/urgence/pathologies/avc"
+  },
+  {
+   "id": "ameli-crise-suicidaire-2026",
+   "title": "ameli.fr (Assurance Maladie), Crise suicidaire : agir avant la tentative de suicide",
+   "level": "institutional",
+   "date": "2026-04-08",
+   "url": "https://www.ameli.fr/assure/sante/urgence/pathologies/crise-suicidaire-tentative-suicide"
+  },
+  {
+   "id": "ameli-douleur-thoracique-2026",
+   "title": "ameli.fr (Assurance Maladie), Reconnaître une douleur thoracique qui nécessite des soins urgents",
+   "level": "institutional",
+   "date": "2026-03-17",
+   "url": "https://www.ameli.fr/assure/sante/themes/douleur-thoracique/reconnaitre-agit-urgence"
+  },
+  {
+   "id": "ameli-essoufflement-brutal-2025",
+   "title": "ameli.fr (Assurance Maladie), Je suis brutalement essoufflé et j'ai du mal à respirer : que faire ?",
+   "level": "institutional",
+   "date": "2025-11-19",
+   "url": "https://www.ameli.fr/assure/sante/themes/essoufflement-recent/je-suis-brutalement-essouffle-et-j-ai-du-mal-respirer-que-faire"
+  },
+  {
+   "id": "ameli-intoxication-2025",
+   "title": "ameli.fr (Assurance Maladie), Intoxication par voie orale (par ingestion)",
+   "level": "institutional",
+   "date": "2025-09-11",
+   "url": "https://www.ameli.fr/assure/sante/urgence/accidents-domestiques/intoxication-voie-orale-ingestion"
+  },
+  {
+   "id": "ameli-meningite-2024",
+   "title": "ameli.fr (Assurance Maladie), Méningite : symptômes, diagnostic et évolution",
+   "level": "institutional",
+   "date": "2024-04-08",
+   "url": "https://www.ameli.fr/assure/sante/themes/meningite-aigue/symptomes-diagnostic-evolution"
+  },
+  {
+   "id": "ameli-oedeme-quincke-2026",
+   "title": "ameli.fr (Assurance Maladie), Œdème de Quincke",
+   "level": "institutional",
+   "date": "2026-03-11",
+   "url": "https://www.ameli.fr/assure/sante/urgence/pathologies/oedeme-quincke"
+  },
+  {
+   "id": "ameli-perte-connaissance-2024",
+   "title": "ameli.fr (Assurance Maladie), Perte de connaissance",
+   "level": "institutional",
+   "date": "2024-09-04",
+   "url": "https://www.ameli.fr/assure/sante/urgence/pathologies/perte-connaissance"
+  },
+  {
+   "id": "fr-3114",
+   "title": "3114, numéro national de prévention du suicide, piloté par le ministère chargé de la santé",
+   "level": "institutional",
+   "date": "2026-10-20",
+   "url": "https://3114.fr/"
+  },
+  {
+   "id": "missing-bleeding",
+   "title": "Signe d'alerte « hémorragies extériorisées » : recommandation officielle à citer (HAS, SAMU, sociétés savantes)",
+   "level": "missing",
+   "date": "",
+   "url": ""
+  },
+  {
+   "id": "nhs-confusion-2024",
+   "title": "NHS (Royaume-Uni), Confusion",
+   "level": "institutional",
+   "date": "2024-05-28",
+   "url": "https://www.nhs.uk/conditions/confusion/"
+  },
+  {
+   "id": "nhs-epilepsy-2025",
+   "title": "NHS (Royaume-Uni), Epilepsy",
+   "level": "institutional",
+   "date": "2025-03-06",
+   "url": "https://www.nhs.uk/conditions/epilepsy/"
+  },
+  {
+   "id": "nhs-head-injury-2025",
+   "title": "NHS (Royaume-Uni), Head injury and concussion",
+   "level": "institutional",
+   "date": "2025-05-29",
+   "url": "https://www.nhs.uk/conditions/head-injury-and-concussion/"
+  }
+ ],
+ "rules": [
+  {
+   "id": "chest_pain",
+   "patterns": [
+    "douleur thoracique",
+    "douleurs thoraciques",
+    "douleur a la poitrine",
+    "douleur dans la poitrine",
+    "douleurs dans la poitrine",
+    "douleur poitrine",
+    "mal a la poitrine",
+    "mal dans la poitrine",
+    "mal au thorax",
+    "poitrine serree",
+    "poitrine qui serre",
+    "serre la poitrine",
+    "serrement dans la poitrine",
+    "oppression thoracique",
+    "oppression dans la poitrine",
+    "poids sur la poitrine",
+    "douleur au thorax"
+   ],
+   "message": "Une douleur dans la poitrine peut être urgente, surtout si elle est brutale, serre, dure plus de cinq minutes, irradie (bras, mâchoire, cou, dos) ou s'accompagne d'essoufflement, de sueurs ou d'un malaise. Dans le doute, appelez le 15 (ou le 112).",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "radiation",
+     "text": "Irradie-t-elle vers le bras, la mâchoire, le dos ?"
+    },
+    {
+     "id": "effort",
+     "text": "Augmente-t-elle à l'effort ?"
+    },
+    {
+     "id": "repos",
+     "text": "Diminue-t-elle au repos ?"
+    },
+    {
+     "id": "inspiration",
+     "text": "Augmente-t-elle à l'inspiration profonde ?"
+    },
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand ?"
+    }
+   ],
+   "sources": [
+    "ameli-douleur-thoracique-2026"
+   ]
+  },
+  {
+   "id": "loss_of_consciousness",
+   "patterns": [
+    "perte de connaissance",
+    "perdu connaissance",
+    "perte de conscience",
+    "perdu conscience",
+    "evanoui",
+    "evanouie",
+    "evanouissement",
+    "syncope",
+    "tombe dans les pommes",
+    "tombee dans les pommes",
+    "tombe dans les vapes",
+    "tombee dans les vapes"
+   ],
+   "message": "Une perte de connaissance, surtout à l'effort, demande un avis sans attendre : appelez le 15 (ou le 112), qui vous dira quoi faire.",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "circonstances",
+     "text": "Dans quelles circonstances ? (debout, assis, à l'effort)"
+    },
+    {
+     "id": "duree",
+     "text": "Combien de temps ?"
+    },
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand, et combien de fois ?"
+    }
+   ],
+   "sources": [
+    "ameli-perte-connaissance-2024"
+   ]
+  },
+  {
+   "id": "stroke_signs",
+   "patterns": [
+    "bouche de travers",
+    "visage de travers",
+    "bouche tordue",
+    "visage qui tombe",
+    "bouche qui tombe",
+    "n arrive plus a parler",
+    "arrive plus a parler",
+    "arrive pas a parler",
+    "peux plus parler",
+    "peux pas parler",
+    "peut plus parler",
+    "peut pas parler",
+    "mal a parler",
+    "difficulte a parler",
+    "difficultes a parler",
+    "trouble de la parole",
+    "troubles de la parole",
+    "mots qui sortent plus",
+    "mots sortent plus",
+    "mots ne sortent plus",
+    "mots qui ne sortent plus",
+    "mots qui sortent pas",
+    "mots sortent pas",
+    "bras qui ne repond plus",
+    "jambe qui ne repond plus",
+    "bras qui repond plus",
+    "jambe qui repond plus",
+    "bras ne repond plus",
+    "jambe ne repond plus",
+    "bras repond plus",
+    "jambe repond plus",
+    "peux plus lever le bras",
+    "peux plus lever mon bras",
+    "peux pas lever le bras",
+    "peux pas lever mon bras",
+    "arrive plus a lever le bras",
+    "arrive plus a lever mon bras",
+    "arrive pas a lever le bras",
+    "arrive pas a lever mon bras",
+    "faiblesse d un cote",
+    "engourdissement d un cote",
+    "engourdi d un cote",
+    "engourdie d un cote",
+    "paralysie",
+    "paralyse",
+    "paralysee"
+   ],
+   "except": [
+    "n arrive plus a parler de",
+    "n arrive plus a parler d",
+    "n arrive plus a parler a",
+    "n arrive plus a parler au",
+    "n arrive plus a parler aux",
+    "n arrive plus a parler avec",
+    "n arrive plus a parler en public",
+    "n arrive plus a parler sans",
+    "n arrive plus a parler comme",
+    "n arrive plus a parler devant",
+    "arrive plus a parler de",
+    "arrive plus a parler d",
+    "arrive plus a parler a",
+    "arrive plus a parler au",
+    "arrive plus a parler aux",
+    "arrive plus a parler avec",
+    "arrive plus a parler en public",
+    "arrive plus a parler sans",
+    "arrive plus a parler comme",
+    "arrive plus a parler devant",
+    "arrive pas a parler de",
+    "arrive pas a parler d",
+    "arrive pas a parler a",
+    "arrive pas a parler au",
+    "arrive pas a parler aux",
+    "arrive pas a parler avec",
+    "arrive pas a parler en public",
+    "arrive pas a parler sans",
+    "arrive pas a parler comme",
+    "arrive pas a parler devant",
+    "peux plus parler de",
+    "peux plus parler d",
+    "peux plus parler a",
+    "peux plus parler au",
+    "peux plus parler aux",
+    "peux plus parler avec",
+    "peux plus parler en public",
+    "peux plus parler sans",
+    "peux plus parler comme",
+    "peux plus parler devant",
+    "peux pas parler de",
+    "peux pas parler d",
+    "peux pas parler a",
+    "peux pas parler au",
+    "peux pas parler aux",
+    "peux pas parler avec",
+    "peux pas parler en public",
+    "peux pas parler sans",
+    "peux pas parler comme",
+    "peux pas parler devant",
+    "peut plus parler de",
+    "peut plus parler d",
+    "peut plus parler a",
+    "peut plus parler au",
+    "peut plus parler aux",
+    "peut plus parler avec",
+    "peut plus parler en public",
+    "peut plus parler sans",
+    "peut plus parler comme",
+    "peut plus parler devant",
+    "peut pas parler de",
+    "peut pas parler d",
+    "peut pas parler a",
+    "peut pas parler au",
+    "peut pas parler aux",
+    "peut pas parler avec",
+    "peut pas parler en public",
+    "peut pas parler sans",
+    "peut pas parler comme",
+    "peut pas parler devant",
+    "mal a parler de",
+    "mal a parler d",
+    "mal a parler a",
+    "mal a parler au",
+    "mal a parler aux",
+    "mal a parler avec",
+    "mal a parler en public",
+    "mal a parler sans",
+    "mal a parler comme",
+    "mal a parler devant",
+    "difficulte a parler de",
+    "difficulte a parler d",
+    "difficulte a parler a",
+    "difficulte a parler au",
+    "difficulte a parler aux",
+    "difficulte a parler avec",
+    "difficulte a parler en public",
+    "difficulte a parler sans",
+    "difficulte a parler comme",
+    "difficulte a parler devant",
+    "difficultes a parler de",
+    "difficultes a parler d",
+    "difficultes a parler a",
+    "difficultes a parler au",
+    "difficultes a parler aux",
+    "difficultes a parler avec",
+    "difficultes a parler en public",
+    "difficultes a parler sans",
+    "difficultes a parler comme",
+    "difficultes a parler devant"
+   ],
+   "message": "Une faiblesse d'un côté, une bouche de travers ou une difficulté soudaine à parler peuvent être urgentes : appelez le 15 (ou le 112) tout de suite et notez l'heure du début.",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "debut",
+     "text": "À quelle heure est-ce apparu ?"
+    },
+    {
+     "id": "cote",
+     "text": "Duquel des deux côtés ?"
+    },
+    {
+     "id": "evolution",
+     "text": "Ça a-t-il changé depuis ?"
+    }
+   ],
+   "sources": [
+    "ameli-avc-2026"
+   ]
+  },
+  {
+   "id": "sudden_vision_loss",
+   "patterns": [
+    "vision double",
+    "vois double",
+    "voit double",
+    "voir double",
+    "perte de la vue",
+    "perdu la vue",
+    "perte de vision",
+    "baisse brutale de la vue",
+    "baisse brutale de vision",
+    "vois plus rien",
+    "voit plus rien",
+    "vois plus d un oeil",
+    "voit plus d un oeil",
+    "vois plus de l oeil",
+    "voit plus de l oeil",
+    "voile noir",
+    "aveugle d un oeil"
+   ],
+   "except": [
+    "vois plus rien a faire",
+    "voit plus rien a faire",
+    "vois plus rien d autre",
+    "voit plus rien d autre"
+   ],
+   "message": "Une perte brutale de la vue, même passagère, ou une vision double peuvent être urgentes : appelez le 15 (ou le 112) tout de suite et notez l'heure du début.",
+   "first": "15",
+   "sources": [
+    "ameli-avc-2026"
+   ]
+  },
+  {
+   "id": "thunderclap_headache",
+   "patterns": [
+    "pire mal de tete",
+    "pire mal de crane",
+    "pire migraine",
+    "mal de tete brutal",
+    "mal de crane brutal",
+    "mal de tete soudain et violent",
+    "cephalee brutale",
+    "cephalee en coup de tonnerre",
+    "coup de tonnerre dans la tete",
+    "mal de tete le plus violent"
+   ],
+   "message": "Un mal de tête brutal, intense et inhabituel, le pire de votre vie, demande un avis sans attendre : appelez le 15 (ou le 112) et notez l'heure du début.",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "debut",
+     "text": "À quelle heure exacte ?"
+    },
+    {
+     "id": "intensite",
+     "text": "De 0 à 10, l'intensité au pire moment ?"
+    },
+    {
+     "id": "accompagnements",
+     "text": "Avec quoi ? (fièvre, raideur de nuque, vomissements)"
+    }
+   ],
+   "sources": [
+    "ameli-avc-2026"
+   ]
+  },
+  {
+   "id": "seizure",
+   "patterns": [
+    "convulsion",
+    "convulsions",
+    "convulse",
+    "convulser",
+    "convulsait",
+    "crise d epilepsie",
+    "crise epileptique",
+    "crise convulsive",
+    "crise comitiale"
+   ],
+   "message": "Des convulsions demandent un appel sans attendre, surtout si c'est la première fois, si elles durent plus de cinq minutes ou se répètent : appelez le 15 (ou le 112).",
+   "first": "15",
+   "sources": [
+    "nhs-epilepsy-2025",
+    "ameli-perte-connaissance-2024"
+   ]
+  },
+  {
+   "id": "confusion_drowsiness",
+   "patterns": [
+    "confusion soudaine",
+    "confusion brutale",
+    "soudain confus",
+    "soudain confuse",
+    "soudainement confus",
+    "soudainement confuse",
+    "brutalement confus",
+    "brutalement confuse",
+    "desoriente",
+    "desorientee",
+    "desorientation",
+    "sait plus ou il est",
+    "sait plus ou elle est",
+    "sais plus ou je suis",
+    "reconnait plus personne",
+    "reconnais plus personne",
+    "somnolence inhabituelle",
+    "anormalement somnolent",
+    "anormalement somnolente",
+    "impossible a reveiller",
+    "difficile a reveiller",
+    "arrive pas a le reveiller",
+    "arrive pas a la reveiller",
+    "arrive plus a le reveiller",
+    "arrive plus a la reveiller",
+    "arrive pas a rester eveille",
+    "arrive pas a rester eveillee",
+    "arrive plus a rester eveille",
+    "arrive plus a rester eveillee",
+    "peux pas rester eveille",
+    "peux pas rester eveillee",
+    "peux plus rester eveille",
+    "peux plus rester eveillee"
+   ],
+   "message": "Une confusion qui apparaît soudainement, ou une somnolence inhabituelle dont on sort mal, demande un avis sans attendre : appelez le 15 (ou le 112).",
+   "first": "15",
+   "sources": [
+    "nhs-confusion-2024",
+    "ameli-intoxication-2025"
+   ]
+  },
+  {
+   "id": "head_injury",
+   "together": [
+    [
+     "choc a la tete",
+     "choc sur la tete",
+     "coup a la tete",
+     "coup sur la tete",
+     "cogne la tete",
+     "cognee la tete",
+     "tape la tete",
+     "tapee la tete",
+     "heurte la tete",
+     "heurtee la tete",
+     "tombe sur la tete",
+     "tombee sur la tete",
+     "chute sur la tete",
+     "traumatisme cranien",
+     "commotion"
+    ],
+    [
+     "vomi",
+     "vomis",
+     "vomit",
+     "vomir",
+     "vomissement",
+     "vomissements",
+     "somnolent",
+     "somnolente",
+     "somnolence",
+     "envie de dormir",
+     "rester eveille",
+     "rester eveillee",
+     "s endort",
+     "confus",
+     "confuse",
+     "desoriente",
+     "desorientee",
+     "convulsion",
+     "convulsions"
+    ]
+   ],
+   "message": "Après un choc à la tête, des vomissements, une somnolence ou un comportement inhabituel demandent un avis sans attendre : appelez le 15 (ou le 112).",
+   "first": "15",
+   "sources": [
+    "nhs-head-injury-2025"
+   ]
+  },
+  {
+   "id": "purpura_fever",
+   "together": [
+    [
+     "purpura",
+     "taches violacees",
+     "taches violettes",
+     "taches qui ne s effacent pas",
+     "taches rouges qui ne s effacent pas",
+     "taches qui s effacent pas",
+     "taches rouges qui s effacent pas",
+     "taches qui ne disparaissent pas",
+     "taches rouges qui ne disparaissent pas",
+     "taches qui disparaissent pas",
+     "taches rouges qui disparaissent pas",
+     "boutons qui ne s effacent pas",
+     "boutons qui s effacent pas"
+    ],
+    [
+     "fievre",
+     "fievreux",
+     "fievreuse",
+     "de la temperature",
+     "raideur de nuque",
+     "raideur de la nuque",
+     "raideur dans la nuque",
+     "nuque raide"
+    ]
+   ],
+   "message": "Des taches rouges ou violacées qui ne s'effacent pas quand on appuie dessus, avec de la fièvre ou une nuque raide, sont une urgence : appelez le 15 (ou le 112) tout de suite.",
+   "first": "15",
+   "sources": [
+    "ameli-meningite-2024"
+   ]
+  },
+  {
+   "id": "bleeding",
+   "patterns": [
+    "crache du sang",
+    "cracher du sang",
+    "craché du sang",
+    "vomi du sang",
+    "vomir du sang",
+    "vomis du sang",
+    "sang dans les selles",
+    "sang dans mes selles",
+    "selles noires"
+   ],
+   "message": "Du sang dans les crachats, les vomissements ou les selles demande un avis sans attendre : appelez les urgences.",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "quantite",
+     "text": "Quelle quantité, à votre avis ?"
+    },
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand, et combien de fois ?"
+    },
+    {
+     "id": "circonstances",
+     "text": "Dans quelles circonstances ?"
+    }
+   ],
+   "sources": [
+    "missing-bleeding"
+   ]
+  },
+  {
+   "id": "breathing",
+   "patterns": [
+    "arrive plus a respirer",
+    "arrive pas a respirer",
+    "peux plus respirer",
+    "peux pas respirer",
+    "peut plus respirer",
+    "peut pas respirer",
+    "respire plus",
+    "mal a respirer",
+    "difficulte a respirer",
+    "difficultes a respirer",
+    "difficulte respiratoire",
+    "difficultes respiratoires",
+    "grande difficulte a respirer",
+    "impossible de respirer",
+    "j etouffe",
+    "etouffement",
+    "levres bleues",
+    "levres bleutees",
+    "essouffle au repos",
+    "essoufflee au repos",
+    "essoufflement au repos",
+    "essouffle meme au repos",
+    "essoufflee meme au repos",
+    "essoufflement meme au repos",
+    "arrive pas a finir mes phrases",
+    "arrive plus a finir mes phrases",
+    "peux pas finir mes phrases",
+    "peux plus finir mes phrases"
+   ],
+   "except": [
+    "respire plus facilement",
+    "respire plus librement",
+    "respire plus calmement",
+    "respire plus lentement",
+    "respire plus profondement",
+    "respire plus doucement"
+   ],
+   "message": "Avoir du mal à respirer peut être une urgence, surtout si c'est brutal, si vous n'arrivez plus à finir vos phrases ou si les lèvres bleuissent : appelez le 15 (ou le 112).",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand ?"
+    },
+    {
+     "id": "position",
+     "text": "Mieux ou pire en position assise, debout, allongée ?"
+    },
+    {
+     "id": "exposant",
+     "text": "Après quoi ? (exposition, effort, fièvre)"
+    }
+   ],
+   "sources": [
+    "ameli-essoufflement-brutal-2025"
+   ]
+  },
+  {
+   "id": "dental_swelling",
+   "patterns": [
+    "abces dentaire",
+    "abces a la dent",
+    "abces sur la dent",
+    "joue gonflee a cause d une dent",
+    "rage de dent et fievre"
+   ],
+   "together": [
+    [
+     "dent",
+     "dents",
+     "molaire",
+     "molaires",
+     "gencive",
+     "gencives",
+     "machoire"
+    ],
+    [
+     "gonfle",
+     "gonflee",
+     "gonflent",
+     "gonflement",
+     "enfle",
+     "enflee",
+     "enflure",
+     "fievre",
+     "fievreux",
+     "fievreuse"
+    ]
+   ],
+   "message": "Une dent douloureuse avec la joue, la mâchoire ou le visage qui gonfle, surtout avec de la fièvre, ne doit pas attendre : voyez un chirurgien-dentiste tout de suite, ou allez aux urgences si ce n'est pas possible. Si vous avez du mal à avaler, à ouvrir la bouche ou à respirer, appelez le 15 (ou le 112).",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand le gonflement ?"
+    },
+    {
+     "id": "fievre",
+     "text": "Avez-vous pris votre température ?"
+    },
+    {
+     "id": "avaler",
+     "text": "Avaler ou ouvrir la bouche est-il difficile ?"
+    }
+   ],
+   "sources": [
+    "ameli-abces-dentaire-2026"
+   ]
+  },
+  {
+   "id": "anaphylaxis",
+   "patterns": [
+    "gorge qui gonfle",
+    "gonflement de la gorge",
+    "levres qui gonflent",
+    "visage qui gonfle",
+    "choc anaphylactique",
+    "reaction allergique grave",
+    "langue qui gonfle",
+    "gonflement des levres",
+    "gonflement du visage"
+   ],
+   "message": "Un gonflement de la gorge, des lèvres ou du visage, surtout avec une gêne pour respirer, peut être une réaction allergique grave : appelez le 15 (ou le 112).",
+   "first": "15",
+   "characterization": [
+    {
+     "id": "exposant",
+     "text": "Qu'avez-vous mangé, touché, pris juste avant ?"
+    },
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand les gonflements ?"
+    },
+    {
+     "id": "respiration",
+     "text": "La respiration est-elle gênée aussi ?"
+    }
+   ],
+   "sources": [
+    "ameli-oedeme-quincke-2026"
+   ]
+  },
+  {
+   "id": "overdose",
+   "patterns": [
+    "pris tous mes cachets",
+    "pris tous mes medicaments",
+    "pris tous mes comprimes",
+    "pris toutes mes pilules",
+    "pris tous les cachets",
+    "pris tous les medicaments",
+    "pris tous les comprimes",
+    "pris toutes les pilules",
+    "pris toute la boite",
+    "pris toute ma boite",
+    "pris toute la plaquette",
+    "pris une boite entiere",
+    "avale tous mes cachets",
+    "avale tous mes medicaments",
+    "avale tous mes comprimes",
+    "avale toutes mes pilules",
+    "avale toute la boite",
+    "avale toute la plaquette",
+    "pris trop de cachets",
+    "pris trop de medicaments",
+    "pris trop de comprimes",
+    "pris trop de pilules",
+    "surdose",
+    "overdose",
+    "intoxication",
+    "intoxique",
+    "intoxiquee",
+    "empoisonne",
+    "empoisonnee",
+    "bu de la javel",
+    "bu de l eau de javel",
+    "avale de la javel"
+   ],
+   "except": [
+    "intoxication alimentaire",
+    "empoisonne la vie",
+    "empoisonne ma vie",
+    "empoisonne l existence",
+    "empoisonne mon existence"
+   ],
+   "message": "Si vous avez pris plus de médicaments que prévu, ou un produit toxique, appelez le 15 (ou le 112) tout de suite, même si vous vous sentez bien : on vous dira quoi faire.",
+   "first": "15",
+   "sources": [
+    "ameli-intoxication-2025",
+    "ameli-crise-suicidaire-2026"
+   ]
+  },
+  {
+   "id": "suicidal_ideation",
+   "patterns": [
+    "idees noires",
+    "idee noire",
+    "idees suicidaires",
+    "idee suicidaire",
+    "suicide",
+    "suicider",
+    "suicidaire",
+    "me tuer",
+    "en finir",
+    "plus envie de vivre",
+    "pas envie de vivre",
+    "aucune envie de vivre",
+    "veux plus vivre",
+    "veut plus vivre",
+    "plus la force de vivre",
+    "plus de raison de vivre",
+    "aucune raison de vivre",
+    "marre de vivre",
+    "fatigue de vivre",
+    "fatiguee de vivre",
+    "las de vivre",
+    "lasse de vivre",
+    "envie de mourir",
+    "veux mourir",
+    "envie de crever",
+    "veux crever",
+    "me foutre en l air",
+    "me fous en l air",
+    "me faire du mal",
+    "me scarifier",
+    "me mutiler",
+    "me couper les veines",
+    "m ouvrir les veines",
+    "me pendre",
+    "me jeter sous",
+    "me jeter par la fenetre",
+    "mettre fin a mes jours",
+    "mettre fin a ma vie",
+    "disparaitre pour toujours",
+    "dormir pour toujours",
+    "mieux sans moi"
+   ],
+   "except": [
+    "prevention du suicide",
+    "envie de mourir de rire",
+    "veux mourir de rire",
+    "en finir avec * dossier",
+    "en finir avec * dossiers",
+    "en finir avec * projet",
+    "en finir avec * rapport",
+    "en finir avec * travaux",
+    "en finir avec * chantier",
+    "en finir avec * paperasse",
+    "en finir avec * papiers",
+    "en finir avec * demenagement",
+    "en finir avec * menage",
+    "en finir avec * corvee",
+    "en finir avec * devoirs",
+    "en finir avec * examen",
+    "en finir avec * examens",
+    "en finir avec * partiels",
+    "en finir avec * reunion",
+    "en finir avec * reunions"
+   ],
+   "message": "Ce que vous avez écrit compte. Le 3114 répond jour et nuit, gratuitement, pour vous ou pour un proche. En cas de danger immédiat, appelez le 15 (ou le 112).",
+   "first": "3114",
+   "characterization": [
+    {
+     "id": "idees",
+     "text": "Des idées, un projet, un plan ?"
+    },
+    {
+     "id": "depuis_quand",
+     "text": "Depuis quand ?"
+    }
+   ],
+   "sources": [
+    "fr-3114",
+    "ameli-crise-suicidaire-2026"
+   ]
+  }
+ ]
+}

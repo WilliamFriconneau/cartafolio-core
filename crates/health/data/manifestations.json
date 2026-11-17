@@ -1,0 +1,631 @@
+{
+ "schema": "memcp.health.manifestations/1",
+ "version": 1,
+ "provenance": "Vocabulary compiled by a private health project of the same owner and published here under this repository's licence (AGPL-3.0-or-later; the source repository is AGPL-3.0, and its referential files carry no licence line of their own). The origin of each keyword inside the source file is not recorded: unknown. Entries with origin \"added\" and every keywords_added list were written for this project.",
+ "license": "AGPL-3.0-or-later",
+ "categories": [
+  "pain",
+  "physical",
+  "psychic",
+  "positive",
+  "mood"
+ ],
+ "dimensions": [
+  "physical",
+  "mental",
+  "social"
+ ],
+ "scales": [
+  {
+   "id": "pain",
+   "min": 0,
+   "max": 10
+  },
+  {
+   "id": "intensity",
+   "min": 0,
+   "max": 10
+  },
+  {
+   "id": "wellbeing",
+   "min": 0,
+   "max": 10
+  },
+  {
+   "id": "mood",
+   "min": -5,
+   "max": 5
+  },
+  {
+   "id": "presence"
+  }
+ ],
+ "manifestations": [
+  {
+   "id": "pain",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "located": true,
+   "tag": "douleur"
+  },
+  {
+   "id": "headache",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "tag": "cephalee"
+  },
+  {
+   "id": "lower_back_pain",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "tag": "douleur-dos"
+  },
+  {
+   "id": "chest_pain",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "tag": "douleur-thoracique"
+  },
+  {
+   "id": "generalized_body_ache",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "located": true
+  },
+  {
+   "id": "stiffness",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "located": true
+  },
+  {
+   "id": "abdominal_cramps",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "tag": "douleur-abdominale"
+  },
+  {
+   "id": "pelvic_pain",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain"
+  },
+  {
+   "id": "breast_pain",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain"
+  },
+  {
+   "id": "sore_throat",
+   "category": "pain",
+   "dimension": "physical",
+   "scale": "pain",
+   "tag": "douleur-gorge"
+  },
+  {
+   "id": "fatigue",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "tag": "fatigue"
+  },
+  {
+   "id": "physical_fatigue",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "also": [
+    "fatigue"
+   ]
+  },
+  {
+   "id": "mental_fatigue",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity",
+   "also": [
+    "fatigue"
+   ]
+  },
+  {
+   "id": "lassitude",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "drowsiness",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "fever",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "fievre"
+  },
+  {
+   "id": "chills",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "frissons"
+  },
+  {
+   "id": "night_sweats",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "hot_flashes",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "dizziness",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "tag": "vertige"
+  },
+  {
+   "id": "fainting",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "sleep_changes",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "insomnie"
+  },
+  {
+   "id": "appetite_changes",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "palpitations",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "palpitations"
+  },
+  {
+   "id": "skipped_heartbeat",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "shortness_of_breath",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "tag": "essoufflement"
+  },
+  {
+   "id": "wheezing",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "coughing",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "tag": "toux"
+  },
+  {
+   "id": "nausea",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity",
+   "tag": "nausee"
+  },
+  {
+   "id": "vomiting",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "vomissement"
+  },
+  {
+   "id": "heartburn",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "bloating",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "diarrhea",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "diarrhee"
+  },
+  {
+   "id": "constipation",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "constipation"
+  },
+  {
+   "id": "runny_nose",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "sinus_congestion",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "loss_of_smell",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "loss_of_taste",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "dry_skin",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "acne",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "hair_loss",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "bladder_incontinence",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence"
+  },
+  {
+   "id": "vaginal_dryness",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "intensity"
+  },
+  {
+   "id": "anxiety",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity",
+   "tag": "anxiete"
+  },
+  {
+   "id": "sadness",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "irritability",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity",
+   "also": [
+    "mood_changes"
+   ]
+  },
+  {
+   "id": "mood_changes",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "presence"
+  },
+  {
+   "id": "memory_lapse",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "presence"
+  },
+  {
+   "id": "social_battery_empty",
+   "category": "psychic",
+   "dimension": "social",
+   "scale": "intensity"
+  },
+  {
+   "id": "dark_thoughts",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "presence"
+  },
+  {
+   "id": "wellbeing",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "energy",
+   "category": "positive",
+   "dimension": "physical",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "calm",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "pride",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "psychic_pain",
+   "category": "pain",
+   "dimension": "mental",
+   "scale": "pain"
+  },
+  {
+   "id": "loneliness",
+   "category": "psychic",
+   "dimension": "social",
+   "scale": "intensity"
+  },
+  {
+   "id": "relational_tension",
+   "category": "psychic",
+   "dimension": "social",
+   "scale": "intensity"
+  },
+  {
+   "id": "feeling_supported",
+   "category": "positive",
+   "dimension": "social",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "social_pain",
+   "category": "pain",
+   "dimension": "social",
+   "scale": "pain"
+  },
+  {
+   "id": "mood",
+   "category": "mood",
+   "dimension": "mental",
+   "scale": "mood"
+  },
+  {
+   "id": "rested",
+   "category": "positive",
+   "dimension": "physical",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "fit",
+   "category": "positive",
+   "dimension": "physical",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "at_ease_in_body",
+   "category": "positive",
+   "dimension": "physical",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "good_appetite",
+   "category": "positive",
+   "dimension": "physical",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "joy",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "relief",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "hope",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "gratitude",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "motivation",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "pleasure",
+   "category": "positive",
+   "dimension": "mental",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "shared_moment",
+   "category": "positive",
+   "dimension": "social",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "useful_to_others",
+   "category": "positive",
+   "dimension": "social",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "listened_to",
+   "category": "positive",
+   "dimension": "social",
+   "scale": "wellbeing"
+  },
+  {
+   "id": "anger",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity",
+   "also": [
+    "mood_changes"
+   ]
+  },
+  {
+   "id": "fear",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "shame",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "guilt",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "self_devaluation",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "discouragement",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "emptiness",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "loss_of_pleasure",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "poor_concentration",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "restlessness",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity"
+  },
+  {
+   "id": "itching",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "demangeaison",
+   "origin": "added"
+  },
+  {
+   "id": "rash",
+   "category": "physical",
+   "dimension": "physical",
+   "scale": "presence",
+   "tag": "eruption",
+   "origin": "added"
+  }
+ ],
+ "pairs": [
+  {
+   "weighs": "pain",
+   "helps": "at_ease_in_body"
+  },
+  {
+   "weighs": "fatigue",
+   "helps": "energy"
+  },
+  {
+   "weighs": "anxiety",
+   "helps": "calm"
+  },
+  {
+   "weighs": "sadness",
+   "helps": "joy"
+  },
+  {
+   "weighs": "discouragement",
+   "helps": "hope"
+  },
+  {
+   "weighs": "shame",
+   "helps": "pride"
+  },
+  {
+   "weighs": "loneliness",
+   "helps": "feeling_supported"
+  },
+  {
+   "weighs": "relational_tension",
+   "helps": "shared_moment"
+  },
+  {
+   "weighs": "loss_of_pleasure",
+   "helps": "pleasure"
+  }
+ ]
+}

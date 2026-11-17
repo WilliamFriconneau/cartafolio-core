@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor", "crates/capture-ffi", "crates/spaces", "crates/bench"]
+members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor", "crates/capture-ffi", "crates/spaces", "crates/health", "crates/bench"]
 exclude = ["vendor/tiny_http"]
 
 [workspace.package]

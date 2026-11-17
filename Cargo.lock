@@ -782,6 +782,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "memcp-health"
+version = "20261117.0.20"
+dependencies = [
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "memcp-janitor"
 version = "20261117.0.20"
 dependencies = [

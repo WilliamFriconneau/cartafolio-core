@@ -1,0 +1,1219 @@
+{
+ "schema": "memcp.health.manifestations.text/1",
+ "version": 1,
+ "language": "fr",
+ "provenance": "Vocabulary compiled by a private health project of the same owner and published here under this repository's licence (AGPL-3.0-or-later; the source repository is AGPL-3.0, and its referential files carry no licence line of their own). The origin of each keyword inside the source file is not recorded: unknown.",
+ "negators": [
+  "pas de",
+  "pas d",
+  "aucun",
+  "aucune",
+  "sans",
+  "jamais de"
+ ],
+ "level_words": [
+  "léger",
+  "légère",
+  "légers",
+  "légères",
+  "faible",
+  "faibles",
+  "modéré",
+  "modérée",
+  "fort",
+  "forte",
+  "forts",
+  "fortes",
+  "intense",
+  "intenses",
+  "sévère",
+  "sévères",
+  "important",
+  "importante"
+ ],
+ "scales": {
+  "pain": {
+   "low": "aucune douleur",
+   "high": "la pire douleur imaginable"
+  },
+  "intensity": {
+   "low": "absent",
+   "high": "le plus fort possible"
+  },
+  "wellbeing": {
+   "low": "pas du tout",
+   "high": "complètement"
+  },
+  "mood": {
+   "low": "très désagréable",
+   "high": "très agréable"
+  }
+ },
+ "categories": {
+  "pain": "Douleur",
+  "physical": "Physique",
+  "psychic": "Psychique",
+  "positive": "Positif",
+  "mood": "Humeur"
+ },
+ "pairs": {
+  "pain/at_ease_in_body": [
+   "Douleur",
+   "Confort"
+  ],
+  "fatigue/energy": [
+   "Fatigue",
+   "Énergie"
+  ],
+  "anxiety/calm": [
+   "Anxiété",
+   "Calme"
+  ],
+  "sadness/joy": [
+   "Tristesse",
+   "Joie"
+  ],
+  "discouragement/hope": [
+   "Découragement",
+   "Espoir"
+  ],
+  "shame/pride": [
+   "Honte",
+   "Fierté"
+  ],
+  "loneliness/feeling_supported": [
+   "Seul",
+   "Entouré"
+  ],
+  "relational_tension/shared_moment": [
+   "Tensions",
+   "Bon moment"
+  ],
+  "loss_of_pleasure/pleasure": [
+   "Plus de plaisir",
+   "Plaisir"
+  ]
+ },
+ "manifestations": [
+  {
+   "id": "pain",
+   "label": "Douleur physique",
+   "keywords": [
+    "douleur",
+    "douloureux",
+    "douloureuse",
+    "j'ai mal",
+    "ça lance",
+    "ça élance",
+    "ça fait mal",
+    "mal de dent",
+    "mal aux dents",
+    "rage de dent",
+    "rage de dents",
+    "mal au",
+    "mal à la",
+    "mal à l'",
+    "mal aux",
+    "douleurs",
+    "ça tire"
+   ]
+  },
+  {
+   "id": "headache",
+   "label": "Mal de tête",
+   "keywords": [
+    "mal au crâne",
+    "mal à la tête",
+    "maux de tête",
+    "migraine",
+    "céphalée",
+    "tête qui cogne"
+   ],
+   "keywords_added": [
+    "céphalées",
+    "migraines",
+    "mal de tête"
+   ]
+  },
+  {
+   "id": "lower_back_pain",
+   "label": "Douleur lombaire",
+   "keywords": [
+    "mal au dos",
+    "mal aux reins",
+    "lombaires",
+    "lumbago",
+    "tour de reins",
+    "bas du dos",
+    "mal au bas du dos",
+    "mal de dos"
+   ]
+  },
+  {
+   "id": "chest_pain",
+   "label": "Douleur à la poitrine",
+   "keywords": [
+    "mal à la poitrine",
+    "douleur thoracique",
+    "serrement dans la poitrine",
+    "oppression"
+   ]
+  },
+  {
+   "id": "generalized_body_ache",
+   "label": "Courbatures",
+   "keywords": [
+    "courbatures",
+    "courbaturé",
+    "courbaturée",
+    "mal partout",
+    "endolori",
+    "endolorie",
+    "corps endolori"
+   ]
+  },
+  {
+   "id": "stiffness",
+   "label": "Raideur",
+   "keywords": [
+    "raide",
+    "raideur",
+    "rouillé",
+    "rouillée",
+    "bloqué",
+    "bloquée",
+    "ankylosé",
+    "ankylosée"
+   ]
+  },
+  {
+   "id": "abdominal_cramps",
+   "label": "Crampes abdominales",
+   "keywords": [
+    "mal au ventre",
+    "crampes",
+    "ventre qui tire"
+   ],
+   "keywords_added": [
+    "douleur abdominale",
+    "douleurs abdominales"
+   ]
+  },
+  {
+   "id": "pelvic_pain",
+   "label": "Douleur pelvienne",
+   "keywords": [
+    "douleur pelvienne",
+    "mal au bas ventre",
+    "règles douloureuses"
+   ]
+  },
+  {
+   "id": "breast_pain",
+   "label": "Douleur mammaire",
+   "keywords": [
+    "mal au sein",
+    "mal aux seins",
+    "douleur au sein",
+    "douleur aux seins",
+    "seins douloureux",
+    "sein douloureux",
+    "tension mammaire"
+   ]
+  },
+  {
+   "id": "sore_throat",
+   "label": "Mal de gorge",
+   "keywords": [
+    "mal à la gorge",
+    "gorge qui gratte",
+    "gorge irritée",
+    "angine"
+   ]
+  },
+  {
+   "id": "fatigue",
+   "label": "Fatigue",
+   "keywords": [
+    "fatigué",
+    "fatiguée",
+    "crevé",
+    "crevée",
+    "épuisé",
+    "épuisée",
+    "claqué",
+    "claquée",
+    "naze",
+    "à plat",
+    "vidé",
+    "vidée",
+    "fatigue",
+    "fatigue générale",
+    "pas d'énergie",
+    "plus d'énergie",
+    "à bout de forces",
+    "lessivé",
+    "lessivée",
+    "rincé",
+    "rincée",
+    "éreinté",
+    "éreintée",
+    "mort de fatigue",
+    "morte de fatigue",
+    "vanné",
+    "vannée",
+    "sur les rotules",
+    "dans le gaz",
+    "pompé",
+    "pompée",
+    "épuisement",
+    "exténué",
+    "exténuée"
+   ],
+   "keywords_added": [
+    "fatigues",
+    "asthénie"
+   ]
+  },
+  {
+   "id": "physical_fatigue",
+   "label": "Fatigue physique",
+   "keywords": [
+    "fatigue physique",
+    "fatigué physiquement",
+    "fatiguée physiquement",
+    "jambes lourdes",
+    "corps lourd",
+    "bras lourds",
+    "corps fatigué",
+    "plus de force",
+    "plus de jambes",
+    "jambes en coton",
+    "tout le corps est lourd"
+   ]
+  },
+  {
+   "id": "mental_fatigue",
+   "label": "Fatigue mentale",
+   "keywords": [
+    "fatigue mentale",
+    "fatigué mentalement",
+    "fatiguée mentalement",
+    "fatigue nerveuse",
+    "cerveau fatigué",
+    "tête fatiguée",
+    "charge mentale",
+    "saturé",
+    "saturée",
+    "tête vide",
+    "cerveau en vrac",
+    "cerveau grillé",
+    "plus de jus",
+    "brain fog",
+    "tête dans le brouillard",
+    "trop réfléchi",
+    "je sature"
+   ]
+  },
+  {
+   "id": "lassitude",
+   "label": "Lassitude",
+   "keywords": [
+    "lassitude",
+    "lassé",
+    "lassée",
+    "plus d'élan",
+    "plus le courage",
+    "plus la motivation",
+    "mal à m'y mettre",
+    "coup de mou",
+    "lassante",
+    "marre de tout",
+    "plus la foi",
+    "blasé",
+    "blasée"
+   ]
+  },
+  {
+   "id": "drowsiness",
+   "label": "Somnolence",
+   "keywords": [
+    "somnolence",
+    "somnolent",
+    "somnolente",
+    "je somnole",
+    "m'endors",
+    "envie de dormir",
+    "paupières lourdes",
+    "coup de barre"
+   ]
+  },
+  {
+   "id": "fever",
+   "label": "Fièvre",
+   "keywords": [
+    "fièvre",
+    "de la température",
+    "fiévreux",
+    "fiévreuse",
+    "de température",
+    "température élevée",
+    "grosse température"
+   ],
+   "keywords_added": [
+    "fébrile"
+   ]
+  },
+  {
+   "id": "chills",
+   "label": "Frissons",
+   "keywords": [
+    "frissons",
+    "grelotte",
+    "froid partout"
+   ],
+   "keywords_added": [
+    "frisson"
+   ]
+  },
+  {
+   "id": "night_sweats",
+   "label": "Sueurs nocturnes",
+   "keywords": [
+    "transpiré la nuit",
+    "sueurs la nuit",
+    "trempé",
+    "trempée"
+   ]
+  },
+  {
+   "id": "hot_flashes",
+   "label": "Bouffées de chaleur",
+   "keywords": [
+    "bouffées de chaleur",
+    "coups de chaud"
+   ]
+  },
+  {
+   "id": "dizziness",
+   "label": "Étourdissement, vertige",
+   "keywords": [
+    "vertige",
+    "vertiges",
+    "tête qui tourne",
+    "la tête tourne"
+   ]
+  },
+  {
+   "id": "fainting",
+   "label": "Malaise, évanouissement",
+   "keywords": [
+    "malaise",
+    "évanoui",
+    "évanouie",
+    "tombé dans les pommes",
+    "tombée dans les pommes"
+   ]
+  },
+  {
+   "id": "sleep_changes",
+   "label": "Troubles du sommeil",
+   "keywords": [
+    "pas fermé l'œil",
+    "mal dormi",
+    "pas dormi",
+    "peu dormi",
+    "insomnie",
+    "nuit blanche",
+    "réveillé la nuit",
+    "réveillée la nuit",
+    "pas réussi à dormir",
+    "nuits hachées",
+    "nuit hachée",
+    "réveils multiples",
+    "nuit courte",
+    "nuits courtes",
+    "me réveille la nuit",
+    "me réveille à",
+    "ne me rendors pas",
+    "me rendors pas",
+    "insomnies",
+    "sommeil agité",
+    "dors mal",
+    "dors pas",
+    "dors plus",
+    "dors très mal",
+    "dors vraiment mal",
+    "dormi par à-coups",
+    "sommeil léger",
+    "réveils fréquents",
+    "me réveille tôt",
+    "réveillé trop tôt",
+    "réveillée trop tôt",
+    "dors trop",
+    "dormi trop",
+    "sommeil perturbé"
+   ]
+  },
+  {
+   "id": "appetite_changes",
+   "label": "Appétit modifié",
+   "keywords": [
+    "pas faim",
+    "plus faim",
+    "coupe faim",
+    "mange trop",
+    "grignote",
+    "plus d'appétit",
+    "pas d'appétit",
+    "perdu l'appétit",
+    "manque d'appétit",
+    "appétit changé"
+   ]
+  },
+  {
+   "id": "palpitations",
+   "label": "Palpitations",
+   "keywords": [
+    "cœur qui bat vite",
+    "cœur qui s'emballe",
+    "palpitations",
+    "cœur qui bat fort",
+    "cœur qui bat très fort",
+    "cœur bat fort",
+    "cœur qui cogne",
+    "cœur qui bat la chamade"
+   ],
+   "keywords_added": [
+    "palpitation"
+   ]
+  },
+  {
+   "id": "skipped_heartbeat",
+   "label": "Battements manqués",
+   "keywords": [
+    "cœur qui saute",
+    "cœur saute",
+    "battement sauté",
+    "battements sautés",
+    "extrasystole",
+    "extrasystoles",
+    "raté de cœur"
+   ]
+  },
+  {
+   "id": "shortness_of_breath",
+   "label": "Essoufflement",
+   "keywords": [
+    "essoufflé",
+    "essoufflée",
+    "souffle court",
+    "du mal à respirer"
+   ],
+   "keywords_added": [
+    "essoufflement",
+    "dyspnée"
+   ]
+  },
+  {
+   "id": "wheezing",
+   "label": "Respiration sifflante",
+   "keywords": [
+    "sifflements",
+    "sifflement",
+    "je siffle",
+    "ça siffle",
+    "respiration qui siffle"
+   ]
+  },
+  {
+   "id": "coughing",
+   "label": "Toux",
+   "keywords": [
+    "toux",
+    "tousse",
+    "toussé"
+   ]
+  },
+  {
+   "id": "nausea",
+   "label": "Nausée",
+   "keywords": [
+    "nausée",
+    "envie de vomir",
+    "mal au cœur",
+    "barbouillé",
+    "barbouillée"
+   ],
+   "keywords_added": [
+    "nausées",
+    "nauséeux"
+   ]
+  },
+  {
+   "id": "vomiting",
+   "label": "Vomissements",
+   "keywords": [
+    "vomi",
+    "vomissements"
+   ],
+   "keywords_added": [
+    "vomis",
+    "vomissement"
+   ]
+  },
+  {
+   "id": "heartburn",
+   "label": "Brûlures d'estomac",
+   "keywords": [
+    "brûlures d'estomac",
+    "remontées acides",
+    "reflux"
+   ]
+  },
+  {
+   "id": "bloating",
+   "label": "Ballonnements",
+   "keywords": [
+    "ballonné",
+    "ballonnée",
+    "ventre gonflé"
+   ]
+  },
+  {
+   "id": "diarrhea",
+   "label": "Diarrhée",
+   "keywords": [
+    "diarrhée",
+    "la courante"
+   ],
+   "keywords_added": [
+    "diarrhées"
+   ]
+  },
+  {
+   "id": "constipation",
+   "label": "Constipation",
+   "keywords": [
+    "constipé",
+    "constipée",
+    "mal à aller à la selle",
+    "pas été à la selle"
+   ]
+  },
+  {
+   "id": "runny_nose",
+   "label": "Nez qui coule",
+   "keywords": [
+    "nez qui coule",
+    "rhume",
+    "enrhumé",
+    "enrhumée",
+    "mouche"
+   ]
+  },
+  {
+   "id": "sinus_congestion",
+   "label": "Congestion nasale",
+   "keywords": [
+    "nez bouché",
+    "sinus",
+    "nez pris",
+    "sinus bouchés"
+   ]
+  },
+  {
+   "id": "loss_of_smell",
+   "label": "Perte de l'odorat",
+   "keywords": [
+    "odorat",
+    "anosmie",
+    "sens plus les odeurs"
+   ]
+  },
+  {
+   "id": "loss_of_taste",
+   "label": "Perte du goût",
+   "keywords": [
+    "plus de goût",
+    "perdu le goût"
+   ]
+  },
+  {
+   "id": "dry_skin",
+   "label": "Peau sèche",
+   "keywords": [
+    "peau sèche",
+    "peau qui tire",
+    "peau rêche",
+    "peau qui gratte"
+   ]
+  },
+  {
+   "id": "acne",
+   "label": "Acné",
+   "keywords": [
+    "acné",
+    "poussée de boutons",
+    "boutons"
+   ]
+  },
+  {
+   "id": "hair_loss",
+   "label": "Chute de cheveux",
+   "keywords": [
+    "perds mes cheveux",
+    "perd mes cheveux",
+    "chute de cheveux",
+    "cheveux qui tombent",
+    "perte de cheveux"
+   ]
+  },
+  {
+   "id": "bladder_incontinence",
+   "label": "Fuites urinaires",
+   "keywords": [
+    "fuites urinaires",
+    "fuite d'urine",
+    "fuites d'urine",
+    "incontinence",
+    "pipi sans le vouloir"
+   ]
+  },
+  {
+   "id": "vaginal_dryness",
+   "label": "Sécheresse vaginale",
+   "keywords": [
+    "sécheresse vaginale",
+    "sécheresse intime"
+   ]
+  },
+  {
+   "id": "anxiety",
+   "label": "Anxiété",
+   "keywords": [
+    "angoisse",
+    "angoissé",
+    "angoissée",
+    "anxieux",
+    "anxieuse",
+    "stress",
+    "stressé",
+    "stressée",
+    "inquiet",
+    "inquiète",
+    "boule au ventre",
+    "hypervigilance",
+    "sur le qui-vive",
+    "boule à l'estomac",
+    "tendu",
+    "tendue",
+    "sous pression",
+    "crise d'angoisse"
+   ],
+   "keywords_added": [
+    "angoisses",
+    "anxiété"
+   ]
+  },
+  {
+   "id": "sadness",
+   "label": "Tristesse",
+   "keywords": [
+    "triste",
+    "tristesse",
+    "cafard",
+    "pleuré",
+    "déprimé",
+    "déprimée",
+    "le moral à zéro",
+    "désespéré",
+    "désespérée",
+    "désespoir",
+    "moral dans les chaussettes",
+    "envie de pleurer",
+    "les larmes"
+   ]
+  },
+  {
+   "id": "irritability",
+   "label": "Irritabilité",
+   "keywords": [
+    "irritable",
+    "agacé",
+    "agacée",
+    "à cran",
+    "sur les nerfs",
+    "à fleur de peau",
+    "m'énerve",
+    "énervé",
+    "énervée",
+    "nerveux",
+    "nerveuse",
+    "m'agace",
+    "à bout",
+    "irritabilité",
+    "énervement",
+    "mèche courte",
+    "je m'énerve"
+   ]
+  },
+  {
+   "id": "mood_changes",
+   "label": "Sautes d'humeur",
+   "keywords": [
+    "humeur changeante",
+    "sautes d'humeur",
+    "montagnes russes",
+    "mauvaise humeur",
+    "de mauvaise humeur",
+    "humeur de chien",
+    "grincheux",
+    "ronchon",
+    "humeur massacrante"
+   ]
+  },
+  {
+   "id": "memory_lapse",
+   "label": "Trous de mémoire",
+   "keywords": [
+    "oublié",
+    "oublie tout",
+    "trous de mémoire",
+    "perds la mémoire",
+    "perd la mémoire",
+    "trou de mémoire"
+   ]
+  },
+  {
+   "id": "social_battery_empty",
+   "label": "Batterie sociale vide",
+   "keywords": [
+    "batterie sociale",
+    "plus envie de voir personne",
+    "besoin d'être seul",
+    "besoin d'être seule"
+   ]
+  },
+  {
+   "id": "dark_thoughts",
+   "label": "Idées noires",
+   "keywords": [
+    "idées noires"
+   ]
+  },
+  {
+   "id": "wellbeing",
+   "label": "Bien-être",
+   "keywords": [
+    "bien-être",
+    "je vais bien",
+    "ça va bien",
+    "bien dans ma peau",
+    "me sens bien",
+    "bonne journée"
+   ]
+  },
+  {
+   "id": "energy",
+   "label": "Énergie",
+   "keywords": [
+    "énergie",
+    "énergique",
+    "de l'énergie"
+   ]
+  },
+  {
+   "id": "calm",
+   "label": "Calme",
+   "keywords": [
+    "calme",
+    "serein",
+    "sereine",
+    "apaisé",
+    "apaisée",
+    "zen",
+    "tranquille"
+   ]
+  },
+  {
+   "id": "pride",
+   "label": "Fierté",
+   "keywords": [
+    "fier",
+    "fière",
+    "fierté"
+   ]
+  },
+  {
+   "id": "psychic_pain",
+   "label": "Souffrance psychique",
+   "keywords": [
+    "souffrance",
+    "je souffre",
+    "mal-être",
+    "mal être"
+   ]
+  },
+  {
+   "id": "loneliness",
+   "label": "Seul, isolé",
+   "keywords": [
+    "seul",
+    "seule",
+    "isolé",
+    "isolée",
+    "solitude",
+    "personne à qui parler"
+   ]
+  },
+  {
+   "id": "relational_tension",
+   "label": "Tensions avec des proches",
+   "keywords": [
+    "dispute",
+    "disputé",
+    "disputée",
+    "engueulé",
+    "engueulée",
+    "conflit",
+    "tensions"
+   ]
+  },
+  {
+   "id": "feeling_supported",
+   "label": "Entouré, soutenu",
+   "keywords": [
+    "entouré",
+    "entourée",
+    "soutenu",
+    "soutenue",
+    "soutien"
+   ]
+  },
+  {
+   "id": "social_pain",
+   "label": "Douleur sociale (rejet, exclusion)",
+   "keywords": [
+    "rejeté",
+    "rejetée",
+    "exclu",
+    "exclue",
+    "mis de côté",
+    "mise de côté",
+    "ignoré",
+    "ignorée"
+   ]
+  },
+  {
+   "id": "mood",
+   "label": "Humeur",
+   "keywords": [
+    "humeur",
+    "moral",
+    "le moral",
+    "mon moral"
+   ]
+  },
+  {
+   "id": "rested",
+   "label": "Reposé",
+   "keywords": [
+    "reposé",
+    "reposée",
+    "bien dormi",
+    "bonne nuit",
+    "nuit réparatrice",
+    "dormi comme un bébé"
+   ]
+  },
+  {
+   "id": "fit",
+   "label": "En forme",
+   "keywords": [
+    "en forme",
+    "la pêche",
+    "la patate",
+    "plein d'énergie",
+    "pleine d'énergie"
+   ]
+  },
+  {
+   "id": "at_ease_in_body",
+   "label": "À l'aise dans mon corps",
+   "keywords": [
+    "souple",
+    "souplesse",
+    "à l'aise dans mon corps",
+    "bien dans mon corps",
+    "léger",
+    "légère"
+   ]
+  },
+  {
+   "id": "good_appetite",
+   "label": "Bon appétit",
+   "keywords": [
+    "bon appétit",
+    "faim",
+    "bien mangé",
+    "mangé avec plaisir",
+    "de l'appétit"
+   ]
+  },
+  {
+   "id": "joy",
+   "label": "Joie",
+   "keywords": [
+    "joie",
+    "joyeux",
+    "joyeuse",
+    "heureux",
+    "heureuse",
+    "content",
+    "contente",
+    "ravi",
+    "ravie"
+   ]
+  },
+  {
+   "id": "relief",
+   "label": "Soulagement",
+   "keywords": [
+    "soulagement",
+    "soulagé",
+    "soulagée",
+    "ouf"
+   ]
+  },
+  {
+   "id": "hope",
+   "label": "Espoir",
+   "keywords": [
+    "espoir",
+    "j'espère",
+    "confiant",
+    "confiante",
+    "optimiste"
+   ]
+  },
+  {
+   "id": "gratitude",
+   "label": "Gratitude",
+   "keywords": [
+    "gratitude",
+    "reconnaissant",
+    "reconnaissante",
+    "merci"
+   ]
+  },
+  {
+   "id": "motivation",
+   "label": "Motivation",
+   "keywords": [
+    "motivation",
+    "motivé",
+    "motivée",
+    "envie de faire",
+    "plein d'envie"
+   ]
+  },
+  {
+   "id": "pleasure",
+   "label": "Plaisir",
+   "keywords": [
+    "plaisir",
+    "kiffé",
+    "adoré",
+    "savouré",
+    "régalé",
+    "régalée"
+   ]
+  },
+  {
+   "id": "shared_moment",
+   "label": "Bon moment partagé",
+   "keywords": [
+    "bon moment",
+    "bons moments",
+    "on a ri",
+    "rigolé",
+    "bien ri",
+    "belle soirée",
+    "bonne soirée"
+   ]
+  },
+  {
+   "id": "useful_to_others",
+   "label": "Utile aux autres",
+   "keywords": [
+    "utile",
+    "aidé quelqu'un",
+    "rendu service",
+    "donné un coup de main"
+   ]
+  },
+  {
+   "id": "listened_to",
+   "label": "Écouté",
+   "keywords": [
+    "écouté",
+    "écoutée",
+    "compris",
+    "comprise",
+    "pu parler",
+    "pu en parler"
+   ]
+  },
+  {
+   "id": "anger",
+   "label": "Colère",
+   "keywords": [
+    "colère",
+    "furieux",
+    "furieuse",
+    "rage",
+    "hors de moi",
+    "en colère",
+    "j'explose",
+    "j'ai explosé"
+   ]
+  },
+  {
+   "id": "fear",
+   "label": "Peur",
+   "keywords": [
+    "peur",
+    "effrayé",
+    "effrayée",
+    "terrifié",
+    "terrifiée",
+    "flippé",
+    "flippée"
+   ]
+  },
+  {
+   "id": "shame",
+   "label": "Honte",
+   "keywords": [
+    "honte",
+    "honteux",
+    "honteuse"
+   ]
+  },
+  {
+   "id": "guilt",
+   "label": "Culpabilité",
+   "keywords": [
+    "culpabilité",
+    "coupable",
+    "culpabilise",
+    "culpabiliser"
+   ]
+  },
+  {
+   "id": "self_devaluation",
+   "label": "Mauvaise estime de soi",
+   "keywords": [
+    "dévalorisation",
+    "je me dévalorise",
+    "je me déteste",
+    "je suis nul",
+    "je suis nulle",
+    "je me sens nul",
+    "je me sens nulle",
+    "bon à rien",
+    "bonne à rien",
+    "je ne vaux rien"
+   ]
+  },
+  {
+   "id": "discouragement",
+   "label": "Découragement",
+   "keywords": [
+    "découragement",
+    "découragé",
+    "découragée",
+    "baisser les bras",
+    "plus la force",
+    "à quoi bon"
+   ]
+  },
+  {
+   "id": "emptiness",
+   "label": "Sentiment de vide",
+   "keywords": [
+    "me sens vide",
+    "sentiment de vide",
+    "ressens rien",
+    "ressens plus rien",
+    "vide intérieur",
+    "vide"
+   ]
+  },
+  {
+   "id": "loss_of_pleasure",
+   "label": "Perte de plaisir",
+   "keywords": [
+    "plus de plaisir",
+    "aucun plaisir",
+    "plus envie de rien",
+    "envie de rien",
+    "plus d'intérêt",
+    "rien ne me fait plaisir",
+    "rien ne me fait envie",
+    "anhédonie",
+    "goût à rien"
+   ]
+  },
+  {
+   "id": "poor_concentration",
+   "label": "Difficultés de concentration",
+   "keywords": [
+    "concentrer",
+    "concentration",
+    "dispersé",
+    "dispersée",
+    "éparpillé",
+    "éparpillée",
+    "la tête ailleurs",
+    "décroche",
+    "mal à me concentrer"
+   ]
+  },
+  {
+   "id": "restlessness",
+   "label": "Agitation",
+   "keywords": [
+    "agité",
+    "agitée",
+    "agitation",
+    "tenir en place",
+    "la bougeotte",
+    "besoin de bouger"
+   ]
+  },
+  {
+   "id": "itching",
+   "label": "Démangeaisons",
+   "keywords": [
+    "démangeaison",
+    "démangeaisons",
+    "ça me gratte",
+    "ça gratte",
+    "prurit"
+   ]
+  },
+  {
+   "id": "rash",
+   "label": "Éruption cutanée",
+   "keywords": [
+    "éruption",
+    "éruptions",
+    "plaques rouges",
+    "rougeurs",
+    "urticaire"
+   ]
+  }
+ ]
+}
