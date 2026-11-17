@@ -292,6 +292,7 @@ fn page(app: &App, status: u16, body: &str) -> Response {
             ("Cache-Control".into(), "no-store".into()),
         ],
         body: html.into_bytes(),
+        file: None,
     }
 }
 

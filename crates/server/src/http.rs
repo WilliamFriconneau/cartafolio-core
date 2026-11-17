@@ -41,6 +41,9 @@ pub struct Response {
     pub status: u16,
     pub headers: Vec<(String, String)>,
     pub body: Vec<u8>,
+    /// A big answer kept in a file, sent from it block by block instead of held in memory (the export). The file is
+    /// removed once it is sent. When set, `body` is empty.
+    pub file: Option<std::path::PathBuf>,
 }
 
 impl Response {
@@ -49,6 +52,7 @@ impl Response {
             status,
             headers: vec![("Content-Type".into(), "application/json".into())],
             body: v.to_string().into_bytes(),
+            file: None,
         }
     }
 
@@ -57,12 +61,26 @@ impl Response {
             status,
             headers: vec![],
             body: vec![],
+            file: None,
         }
     }
 
     pub fn with(mut self, name: &str, value: &str) -> Response {
         self.headers.push((name.into(), value.into()));
         self
+    }
+
+    /// The whole answer: the body, or the file it is kept in (which is removed, as sending it would). For tests and
+    /// small answers; a big one is sent from its file, never held.
+    pub fn bytes(&self) -> Vec<u8> {
+        match &self.file {
+            Some(p) => {
+                let b = std::fs::read(p).unwrap_or_default();
+                let _ = std::fs::remove_file(p);
+                b
+            }
+            None => self.body.clone(),
+        }
     }
 
     pub fn body_json(&self) -> serde_json::Value {

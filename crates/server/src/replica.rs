@@ -92,7 +92,7 @@ fn status_file(app: &App, id: &str) -> PathBuf {
 }
 
 /// `POST /join-memory` {address}: asks that node to let this one in. Answers an id to follow it by.
-pub fn join_start(app: &App, address: &str) -> Result<Value, String> {
+pub fn join_start(app: &App, address: &str, ticket: Option<&str>) -> Result<Value, String> {
     let address = address.trim().trim_end_matches('/');
     if !(address.starts_with("https://") || address.starts_with("http://"))
         || address.chars().any(|c| c.is_whitespace() || c.is_control())
@@ -110,7 +110,13 @@ pub fn join_start(app: &App, address: &str) -> Result<Value, String> {
     }
     let id = util::random_base32(12).to_ascii_lowercase();
     let file = status_file(app, &id);
-    let child = Command::new(sync_program())
+    let mut command = Command::new(sync_program());
+    // A one-time ticket from a node of the same person (no words to compare): in the environment, never in the arguments
+    // another user of the machine could read. The program reads `MEMCP_JOIN_TICKET`.
+    if let Some(t) = ticket.map(str::trim).filter(|t| !t.is_empty()) {
+        command.env("MEMCP_JOIN_TICKET", t);
+    }
+    let child = command
         .arg("--data")
         .arg(app.brain.dir())
         .args(["--join", address, "--status-file"])

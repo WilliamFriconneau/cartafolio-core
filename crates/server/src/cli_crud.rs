@@ -50,6 +50,31 @@ fn open(data: &Path) -> Result<Brain, Failure> {
     Ok(brain)
 }
 
+/// One tool of the memory, called with the person's own rights (the page does the same): what an assistant could do.
+fn tool(
+    brain: &Brain,
+    who: &users::User,
+    name: &str,
+    args: &serde_json::Value,
+) -> Result<serde_json::Value, Failure> {
+    let ctl = brain.open_control().map_err(fail)?;
+    let grants = users::access_of(&ctl, &who.id).map_err(fail)?;
+    let caller = access::Caller {
+        id: "cli".into(),
+        agent: "cli".into(),
+        user_id: who.id.clone(),
+        all_spaces: false,
+        known: grants.keys().cloned().collect(),
+        grants,
+        paths: Default::default(),
+        read_only_forced: false,
+        no_person_guide: true,
+        rate_per_min: access::DEFAULT_RATE_PER_MIN,
+        max_text: access::DEFAULT_MAX_TEXT,
+    };
+    memcp_core::tools::call(brain, &caller, name, args).map_err(fail)
+}
+
 fn me(brain: &Brain, c: &Cmd) -> Result<users::User, Failure> {
     let ctl = brain.open_control().map_err(fail)?;
     users::resolve(&ctl, (c.flag)("--user").unwrap_or(users::OWNER)).map_err(fail)
@@ -435,6 +460,28 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         return Ok(());
     }
     let name = c.arg(2, "the person")?;
+    if op == "new" {
+        let admin = match (c.flag)("--role").unwrap_or("member") {
+            "admin" => true,
+            "member" => false,
+            _ => return Err(bad("--role: admin or member")),
+        };
+        let u = users::create_user(
+            &ctl,
+            &actor.id,
+            name,
+            (c.flag)("--display").unwrap_or(name),
+            admin,
+        )
+        .map_err(fail)?;
+        sayln!(
+            "{} created ({}). Make them a space with `space make KIND --user {}`.",
+            u.name,
+            if u.admin { "admin" } else { "member" },
+            u.name
+        );
+        return Ok(());
+    }
     let target = users::user(&ctl, name)
         .map_err(fail)?
         .or(users::user_by_name(&ctl, name).map_err(fail)?)
@@ -483,7 +530,8 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             if c.dry() {
                 sayln!(
                     "dry run: {} would be {}d; nothing is deleted.",
-                    target.name, op
+                    target.name,
+                    op
                 );
                 return Ok(());
             }
@@ -504,7 +552,7 @@ fn person(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         }
         _ => {
             return Err(bad(
-                "person list|show|set|heir|recovery-key|disable|enable|delete NAME",
+                "person list|show|new|set|heir|recovery-key|disable|enable|delete NAME",
             ));
         }
     }
@@ -555,6 +603,34 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 sayln!("{id}\t{text}");
             }
         }
+        "recall" => {
+            let query = c.arg(3, "the words to look for")?;
+            let opts = facts::RecallOptions {
+                limit: (c.flag)("--limit")
+                    .and_then(|n| n.parse().ok())
+                    .unwrap_or(10),
+                tags: tags.clone(),
+                ..Default::default()
+            };
+            for h in facts::recall(&conn, query, &opts, now()).map_err(fail)? {
+                sayln!("{}\t{}", h.fact.id, h.fact.text);
+            }
+        }
+        "tags" => {
+            let given = |name: &str| (c.flag)(name).map(|_| c.list(name));
+            let args = serde_json::json!({
+                "id": c.arg(3, "the note id")?,
+                "tags": given("--tag"),
+                "add": given("--add"),
+                "remove": given("--remove"),
+            });
+            let out = tool(&brain, &who, "tags_set", &args)?;
+            let list: Vec<&str> = out["tags"]
+                .as_array()
+                .map(|t| t.iter().filter_map(|x| x.as_str()).collect())
+                .unwrap_or_default();
+            sayln!("note {}: tags {}.", c.arg(3, "")?, list.join(", "));
+        }
         "edit" => {
             let new = NewFact {
                 tags,
@@ -595,7 +671,11 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
             .map_err(fail)?;
             sayln!("note restored as {}.", f.id);
         }
-        _ => return Err(bad("note add|show|list|edit|retire|restore SPACE ...")),
+        _ => {
+            return Err(bad(
+                "note add|show|list|recall|tags|edit|retire|restore SPACE ...",
+            ));
+        }
     }
     Ok(())
 }

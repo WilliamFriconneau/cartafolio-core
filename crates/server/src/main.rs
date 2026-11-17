@@ -16,7 +16,10 @@ fn main() -> ExitCode {
     match run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err((code, message)) => {
-            eprintln!("{message}");
+            // A command that ran on a node already printed its own message.
+            if !message.is_empty() {
+                eprintln!("{message}");
+            }
             ExitCode::from(code)
         }
     }
@@ -35,6 +38,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
             .get(1)
             .ok_or_else(|| (2, format!("missing the export directory\n\n{USAGE}")))?;
         return cli::verify_export(Path::new(dir));
+    }
+    // Against a running node (`--node`, or MEMCP_NODE): the same commands, over HTTP with a key (docs/CLI.md).
+    if let Some(target) = memcp_server::remote::target(&a)? {
+        return memcp_server::remote::run(&target, args, &a);
     }
     // The settings file fills in what the command line does not say.
     // `setup` may name a file that does not exist yet: it makes it.

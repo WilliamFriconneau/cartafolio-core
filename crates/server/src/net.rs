@@ -186,6 +186,27 @@ pub fn header_is_safe(name: &str, value: &str) -> bool {
 }
 
 fn send(rq: tiny_http::Request, resp: http::Response) {
+    if let Some(path) = &resp.file {
+        // A file is handed over block by block, and gone once it is sent (or could not be).
+        match std::fs::File::open(path) {
+            Ok(f) => {
+                let mut out = tiny_http::Response::from_file(f).with_status_code(resp.status);
+                for (k, v) in &resp.headers {
+                    if header_is_safe(k, v)
+                        && let Ok(h) = tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes())
+                    {
+                        out.add_header(h);
+                    }
+                }
+                let _ = rq.respond(out);
+            }
+            Err(_) => {
+                let _ = rq.respond(tiny_http::Response::empty(500));
+            }
+        }
+        let _ = std::fs::remove_file(path);
+        return;
+    }
     let mut out = tiny_http::Response::from_data(resp.body).with_status_code(resp.status);
     for (k, v) in resp.headers {
         if !header_is_safe(&k, &v) {

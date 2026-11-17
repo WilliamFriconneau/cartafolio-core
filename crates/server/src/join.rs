@@ -332,23 +332,40 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
         .flatten()
         .map(|u| u.name)
         .unwrap_or_default();
-    let ticket = util::random_base32(24);
-    {
-        let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        t.retain(|_, (_, _, until)| *until > now);
-        if t.len() >= MAX_TICKETS {
-            return refused(429, "too many invitations are waiting");
+    match make_ticket(app, &caller.user_id, &name, now) {
+        Ok(v) => {
+            memcp_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
+            Response::json(200, &v)
         }
-        t.insert(
-            ticket_key(&ticket),
-            (caller.user_id.clone(), name, now + TICKET_TTL),
-        );
+        Err(r) => r,
     }
-    memcp_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
-    Response::json(
-        200,
-        &json!({ "ticket": ticket, "expires_in": TICKET_TTL, "single_use": true }),
-    )
+}
+
+/// A one-time ticket for a device of this person (the answer of both routes that make one).
+fn make_ticket(app: &App, user_id: &str, name: &str, now: i64) -> Result<Value, Response> {
+    let ticket = util::random_base32(24);
+    let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
+    t.retain(|_, (_, _, until)| *until > now);
+    if t.len() >= MAX_TICKETS {
+        return Err(refused(429, "too many invitations are waiting"));
+    }
+    t.insert(
+        ticket_key(&ticket),
+        (user_id.to_string(), name.to_string(), now + TICKET_TTL),
+    );
+    Ok(json!({ "ticket": ticket, "expires_in": TICKET_TTL, "single_use": true }))
+}
+
+/// `POST /admin/api/join/invite`: the same ticket, for the signed-in person (a console key or the page), so that a
+/// person who holds a key to this node can invite a device from the command line.
+pub fn invite_by_person(app: &App, ctl: &Connection, me: &User) -> Result<Value, Response> {
+    let now = util::now();
+    if !app.rate_ok(now, &format!("invite:{}", me.id), 6) {
+        return Err(refused(429, "too many invitations, wait a minute").with("Retry-After", "60"));
+    }
+    let v = make_ticket(app, &me.id, &me.name, now)?;
+    memcp_core::access::auth_event(ctl, None, None, "join_invite", &me.name);
+    Ok(v)
 }
 
 /// `GET /mcp/<connection>/join/pending` and `POST /mcp/<connection>/join/approve|deny` {id}, with the key of a PEER of

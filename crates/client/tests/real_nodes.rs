@@ -1701,3 +1701,379 @@ fn a_sub_space_made_on_one_node_and_a_dictation_on_another_reach_all_three() {
         );
     }
 }
+
+// --- the command line against a running node (docs/CLI.md) ------------------------------------------------------------
+
+/// `memcp --node ADDRESS --key-file FILE ARGS` (more options first, in `extra`).
+fn remote(node: &Node, key_file: &Path, extra: &[&str], args: &[&str]) -> Output {
+    let mut c = Command::new(exe("memcp"));
+    c.arg("--node")
+        .arg(node.base())
+        .arg("--key-file")
+        .arg(key_file)
+        .args(extra)
+        .args(args)
+        .stdin(Stdio::null());
+    c.output().unwrap()
+}
+
+fn text_of(o: &Output) -> String {
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&o.stdout),
+        String::from_utf8_lossy(&o.stderr)
+    )
+}
+
+fn write_key(root: &Root, name: &str, key: &str) -> PathBuf {
+    let p = root.path(name);
+    std::fs::write(&p, format!("{key}\n")).unwrap();
+    p
+}
+
+/// What two runs of the same command may differ in: the random parts (ids, keys) and the folders.
+fn sameness(text: &str, dirs: &[&Path]) -> String {
+    let mut out = String::new();
+    for line in text.lines() {
+        let mut l = line.to_string();
+        for d in dirs {
+            l = l.replace(&d.display().to_string(), "<dir>");
+        }
+        let words: Vec<String> = l
+            .split(' ')
+            .map(|w| {
+                let bare = w.trim_matches(|c: char| !c.is_ascii_alphanumeric() && c != '_');
+                if bare.starts_with("f_") || bare.starts_with("hcp") || bare.len() > 28 {
+                    w.replace(bare, "<id>")
+                } else {
+                    w.to_string()
+                }
+            })
+            .collect();
+        out.push_str(&words.join(" "));
+        out.push('\n');
+    }
+    out
+}
+
+#[test]
+fn the_same_commands_give_the_same_text_run_locally_and_through_a_node() {
+    let root = Root::new("cli-same");
+    // The reference runs on the directory; the other one is reached through its node, with a console key.
+    let local = Node::init(&root, "local", true);
+    let mut served = Node::init(&root, "served", true);
+    served.serve();
+    let key = write_key(&root, "console.key", &served.console());
+    let scenario: Vec<Vec<&str>> = vec![
+        vec!["status"],
+        vec!["catalogue"],
+        vec!["space", "list"],
+        vec![
+            "space",
+            "new",
+            "Cars",
+            "--parent",
+            "work",
+            "--keywords",
+            "garage,tyres",
+        ],
+        vec!["space", "tree"],
+        vec!["rules", "add-keyword", "work", "invoice"],
+        vec!["rules", "show", "work"],
+        vec!["note", "add", "work", "The garage is open on Mondays."],
+        vec!["note", "recall", "work", "garage"],
+        vec!["note", "list", "work"],
+        vec!["person", "new", "sam", "--display", "Sam"],
+        vec!["person", "list"],
+        vec!["person", "show", "sam"],
+        vec![
+            "space",
+            "delete",
+            "hobbies",
+            "--into",
+            "personal",
+            "--dry-run",
+        ],
+        vec!["space", "set", "work", "--label", "Job"],
+        vec!["space", "show", "work"],
+        vec!["connections"],
+        vec!["node", "list"],
+        vec!["library", "list"],
+        vec!["vocabulary", "list"],
+        vec!["space", "archived"],
+    ];
+    for args in &scenario {
+        let l = local.cli_out(args);
+        let r = remote(&served, &key, &[], args);
+        assert_eq!(
+            l.status.code(),
+            r.status.code(),
+            "{args:?}: local {} / remote {}",
+            text_of(&l),
+            text_of(&r)
+        );
+        assert_eq!(
+            sameness(&text_of(&l), &[&local.data]),
+            sameness(&text_of(&r), &[&served.data]),
+            "{args:?}"
+        );
+    }
+    // The change is in the node's own data, not in a copy.
+    assert!(
+        served
+            .notes()
+            .get("work")
+            .is_some_and(|n| n.iter().any(|(_, t)| t.contains("garage is open")))
+    );
+    // A failure keeps its exit code and its message.
+    let l = local.cli_out(&["space", "show", "nowhere"]);
+    let r = remote(&served, &key, &[], &["space", "show", "nowhere"]);
+    assert_eq!(l.status.code(), r.status.code());
+    assert_ne!(r.status.code(), Some(0));
+    assert_eq!(
+        sameness(&text_of(&l), &[]),
+        sameness(&text_of(&r), &[]),
+        "same message"
+    );
+    // --json: the node's JSON answer, with the text in it.
+    let j = remote(&served, &key, &["--json"], &["status"]);
+    assert!(j.status.success());
+    let v: Value = serde_json::from_slice(&j.stdout).unwrap();
+    assert_eq!(v["code"], 0);
+    assert!(v["stdout"].as_str().unwrap().contains("spaces:"), "{v}");
+}
+
+#[test]
+fn a_wrong_key_a_member_key_and_a_node_that_is_down_are_told_apart() {
+    let root = Root::new("cli-keys");
+    let mut node = Node::init(&root, "n", true);
+    node.serve();
+    // A key that is not one: refused, exit 3.
+    let bad = write_key(
+        &root,
+        "bad.key",
+        "hcpc_00000000_ffffffffffffffffffffffffffffffff",
+    );
+    let r = remote(&node, &bad, &[], &["status"]);
+    assert_eq!(r.status.code(), Some(3), "{}", text_of(&r));
+    assert!(text_of(&r).contains("refused the key"), "{}", text_of(&r));
+    // A member: their own things work, what needs an administrator says so, exit 4.
+    node.cli(&["person", "new", "sam"]);
+    node.cli(&["space", "make", "me", "--user", "sam"]);
+    let sam = write_key(
+        &root,
+        "sam.key",
+        &token_in(&node.cli(&["console-token", "sam"]), "hcpc_"),
+    );
+    let ok = remote(&node, &sam, &[], &["space", "tree"]);
+    assert!(ok.status.success(), "{}", text_of(&ok));
+    assert!(text_of(&ok).contains("sam"), "{}", text_of(&ok));
+    let made = remote(&node, &sam, &[], &["space", "new", "Garden"]);
+    assert!(made.status.success(), "{}", text_of(&made));
+    for args in [
+        vec!["person", "list"],
+        vec!["backup", "--to", "/tmp/nowhere"],
+        vec!["connections"],
+        vec!["space", "tree", "--user", "owner"],
+    ] {
+        let r = remote(&node, &sam, &[], &args);
+        assert_eq!(r.status.code(), Some(4), "{args:?}: {}", text_of(&r));
+        assert!(text_of(&r).contains("not allowed"), "{}", text_of(&r));
+    }
+    // Sam does not see the owner's spaces.
+    let sam_tree = text_of(&remote(&node, &sam, &[], &["space", "tree"]));
+    assert!(!sam_tree.contains("work"), "{sam_tree}");
+    // Both a directory and a node is not a command.
+    let both = Command::new(exe("memcp"))
+        .args(["--data", "x", "--node", "http://127.0.0.1:1", "status"])
+        .env("MEMCP_KEY", "k")
+        .output()
+        .unwrap();
+    assert_eq!(both.status.code(), Some(2));
+    // A command of the machine itself has no remote form, and says why.
+    let key = write_key(&root, "console.key", &node.console());
+    let init = remote(&node, &key, &[], &["init"]);
+    assert_eq!(init.status.code(), Some(2), "{}", text_of(&init));
+    assert!(
+        text_of(&init).contains("works on the machine itself"),
+        "{}",
+        text_of(&init)
+    );
+    // The node goes down: exit 5 and the address in the message.
+    node.stop();
+    let r = remote(&node, &key, &[], &["status"]);
+    assert_eq!(r.status.code(), Some(5), "{}", text_of(&r));
+    assert!(text_of(&r).contains(&node.base()), "{}", text_of(&r));
+    // The address and the key come from the environment too.
+    let env = Command::new(exe("memcp"))
+        .arg("status")
+        .env("MEMCP_NODE", node.base())
+        .env("MEMCP_KEY_FILE", &key)
+        .output()
+        .unwrap();
+    assert_eq!(env.status.code(), Some(5));
+}
+
+#[test]
+fn an_export_comes_down_and_a_folder_goes_up_in_chunks() {
+    let root = Root::new("cli-streams");
+    let mut node = Node::init(&root, "n", true);
+    node.serve();
+    let key = write_key(&root, "console.key", &node.console());
+    node.cli(&["note", "add", "work", "Remember the tyres."]);
+    // Down: written here as it arrives, checked, the same report as the local command.
+    let down = root.path("down");
+    let r = remote(
+        &node,
+        &key,
+        &[],
+        &["export", "--to", down.to_str().unwrap()],
+    );
+    assert!(r.status.success(), "{}", text_of(&r));
+    let local_down = root.path("local-down");
+    let l = node.cli_out(&["export", "--to", local_down.to_str().unwrap()]);
+    assert!(l.status.success());
+    assert_eq!(
+        sameness(&text_of(&r), &[&down])
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>(),
+        sameness(&text_of(&l), &[&local_down])
+            .lines()
+            .skip(1)
+            .collect::<Vec<_>>()
+    );
+    let made: Vec<_> = std::fs::read_dir(&down).unwrap().flatten().collect();
+    assert_eq!(made.len(), 1);
+    let export_dir = made[0].path();
+    assert!(export_dir.join("manifest.json").is_file());
+    let checked = Command::new(exe("memcp"))
+        .arg("verify-export")
+        .arg(&export_dir)
+        .output()
+        .unwrap();
+    assert!(checked.status.success(), "{}", text_of(&checked));
+    // Up: a folder is sent in chunks of 4 KiB (the files of an export are bigger) and adopted by the node.
+    let mut up = Command::new(exe("memcp"));
+    up.args(["--node", &node.base(), "--key-file"])
+        .arg(&key)
+        .arg("adopt")
+        .arg(&export_dir)
+        .args(["--prefix", "copy"])
+        .env("MEMCP_UPLOAD_CHUNK", "4096");
+    let r = up.output().unwrap();
+    assert!(r.status.success(), "{}", text_of(&r));
+    assert!(text_of(&r).contains("adopted"), "{}", text_of(&r));
+    let spaces = node.cli(&["space", "list"]);
+    assert!(spaces.contains("copy"), "{spaces}");
+    // The staging folder is gone once the command is over.
+    let staged = node.data.join("uploads");
+    let left = std::fs::read_dir(&staged)
+        .map(|d| {
+            d.flatten()
+                .map(|p| std::fs::read_dir(p.path()).map_or(0, Iterator::count))
+                .sum::<usize>()
+        })
+        .unwrap_or(0);
+    assert_eq!(left, 0, "{staged:?}");
+    // A chunk that is out of order is refused, not written twice.
+    let token = node.console();
+    let post = |path: &str, offset: u64, body: &[u8]| {
+        http()
+            .post(&format!(
+                "{}/admin/api/upload?id=abcdefgh12345678&path={path}&offset={offset}",
+                node.base()
+            ))
+            .header("Authorization", &format!("Bearer {token}"))
+            .header("X-Requested-With", "memcp")
+            .send(body)
+            .unwrap()
+            .status()
+            .as_u16()
+    };
+    assert_eq!(post("a.txt", 0, b"hello "), 200);
+    assert_eq!(post("a.txt", 0, b"hello "), 409);
+    assert_eq!(post("a.txt", 6, b"world"), 200);
+    // A name that leaves the folder is refused.
+    assert_eq!(post("../x", 0, b"x"), 400);
+}
+
+#[test]
+fn a_connection_key_does_the_note_commands_and_nothing_more() {
+    let root = Root::new("cli-agent");
+    let mut node = Node::init(&root, "n", true);
+    node.serve();
+    let (_, agent_key) = node.connect("helper", "work:rw");
+    let key = write_key(&root, "agent.key", &agent_key);
+    let with = ["--agent", "helper"];
+    let r = remote(
+        &node,
+        &key,
+        &with,
+        &["note", "add", "work", "The boiler needs a service in May."],
+    );
+    assert!(r.status.success(), "{}", text_of(&r));
+    assert!(text_of(&r).contains("created"), "{}", text_of(&r));
+    let found = remote(&node, &key, &with, &["note", "recall", "work", "boiler"]);
+    assert!(found.status.success(), "{}", text_of(&found));
+    assert!(
+        text_of(&found).contains("boiler needs a service"),
+        "{}",
+        text_of(&found)
+    );
+    let local = node.cli(&["note", "recall", "work", "boiler"]);
+    assert_eq!(sameness(&text_of(&found), &[]), sameness(&local, &[]));
+    // Beyond the tools of an assistant, the key lacks the rights, exit 4.
+    let no = remote(&node, &key, &with, &["person", "list"]);
+    assert_eq!(no.status.code(), Some(4), "{}", text_of(&no));
+    // A connection key given as a console key is refused, with the way out.
+    let wrong = remote(&node, &key, &[], &["status"]);
+    assert_eq!(wrong.status.code(), Some(3));
+    assert!(text_of(&wrong).contains("--agent"), "{}", text_of(&wrong));
+    // Another space of the node is out of this key's reach.
+    let out = remote(
+        &node,
+        &key,
+        &with,
+        &["note", "add", "health", "Not for this key."],
+    );
+    assert_ne!(out.status.code(), Some(0), "{}", text_of(&out));
+}
+
+#[test]
+fn devices_join_through_the_command_line_and_the_folder_command_is_pending() {
+    let root = Root::new("cli-invite");
+    let mut node = Node::init(&root, "n", true);
+    node.serve();
+    let key = write_key(&root, "console.key", &node.console());
+    let code = remote(&node, &key, &[], &["invite", "code"]);
+    assert!(code.status.success(), "{}", text_of(&code));
+    assert!(
+        text_of(&code).contains("memcp://join?"),
+        "{}",
+        text_of(&code)
+    );
+    let ticket = remote(&node, &key, &[], &["invite", "ticket"]);
+    assert!(ticket.status.success(), "{}", text_of(&ticket));
+    assert!(text_of(&ticket).contains("Ticket"), "{}", text_of(&ticket));
+    let pending = remote(&node, &key, &[], &["invite", "pending"]);
+    assert!(
+        text_of(&pending).contains("No device is waiting"),
+        "{}",
+        text_of(&pending)
+    );
+    let allow = remote(
+        &node,
+        &key,
+        &[],
+        &["invite", "allow", "old-phone", "--minutes", "5"],
+    );
+    assert!(text_of(&allow).contains("old-phone"), "{}", text_of(&allow));
+    // Without a node these have nothing to read.
+    let local = node.cli_out(&["invite", "pending"]);
+    assert_eq!(local.status.code(), Some(2));
+    // The folder of a space: defined, the routes come with the space folders.
+    let f = remote(&node, &key, &[], &["folder", "get", "work"]);
+    assert_eq!(f.status.code(), Some(6), "{}", text_of(&f));
+    assert!(text_of(&f).contains("pending"), "{}", text_of(&f));
+}

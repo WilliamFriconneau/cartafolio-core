@@ -1028,7 +1028,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
         header("Content-Disposition").contains("memcp-export-alex-")
             && header("Content-Disposition").ends_with(".tar\"")
     );
-    let entries = untar(&r.body);
+    let entries = untar(&r.bytes());
     let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
     assert!(
         names.iter().any(|n| n.ends_with("/manifest.json"))
@@ -1063,7 +1063,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
     // A parameter does not change whose memory it is, not even for an administrator.
     let r = ha_get(&e, "/admin/api/export", ALEX, &[("user", "sam")]);
     let m: Value = serde_json::from_slice(
-        &untar(&r.body)
+        &untar(&r.bytes())
             .iter()
             .find(|(n, _)| n.ends_with("/manifest.json"))
             .ok_or("manifest")?
@@ -1072,7 +1072,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
     assert_eq!(m["person"]["name"], "alex");
     let r = ha_get(&e, "/admin/api/export", SAM, &[("user", "alex")]);
     let m: Value = serde_json::from_slice(
-        &untar(&r.body)
+        &untar(&r.bytes())
             .iter()
             .find(|(n, _)| n.ends_with("/manifest.json"))
             .ok_or("manifest")?

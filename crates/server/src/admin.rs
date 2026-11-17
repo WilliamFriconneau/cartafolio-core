@@ -40,6 +40,7 @@ pub fn page() -> Response {
             ("Cache-Control".into(), "no-store".into()),
         ],
         body: PAGE.as_bytes().to_vec(),
+        file: None,
     }
 }
 
@@ -248,11 +249,21 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     if req.header(CSRF_HEADER) != CSRF_VALUE {
         return err(403, "missing X-Requested-With: memcp");
     }
+    // A chunk of a file the remote command line sends: raw bytes, not JSON.
+    if path == "/upload" {
+        return crate::cli_remote::upload(app, &me, req);
+    }
     let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
         return err(400, "invalid JSON");
     };
     let done = if let Some(r) = crate::crud::post(app, &ctl, &me, path, &body) {
         r
+    } else if path == "/cli" {
+        crate::cli_remote::exec(app, &me, &body, req.ip.as_deref())
+    } else if path == "/upload/discard" {
+        crate::cli_remote::discard(app, &me, &body)
+    } else if path == "/join/invite" {
+        crate::join::invite_by_person(app, &ctl, &me)
     } else if path.starts_with("/fact/") {
         crate::explore::write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/join/") {
@@ -481,6 +492,7 @@ fn action(
             crate::replica::join_start(
                 app,
                 body.get("address").and_then(Value::as_str).unwrap_or(""),
+                body.get("ticket").and_then(Value::as_str),
             )
             .map_err(|m| err(400, &m))
         }
@@ -776,6 +788,7 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
                 ("Cache-Control".into(), "no-store".into()),
             ],
             body: bytes,
+            file: None,
         },
         Ok(None) => err(404, "unknown file"),
         Err(e) => fail(e),
@@ -950,7 +963,9 @@ fn export_get(app: &App, me: &User) -> Response {
         "memcp-export-{}",
         memcp_core::text::hex(&util::random_bytes::<8>())
     ));
-    let built = (|| -> Result<(Vec<u8>, String), Error> {
+    // The tar is written to a file, block by block, and sent from it: a big memory is never held whole.
+    let tar_path = work.with_extension("tar");
+    let built = (|| -> Result<String, Error> {
         let dir = export::export_person(&app.brain, me, &work, util::now())?;
         export::verify_export(&dir)?;
         let name = dir
@@ -958,13 +973,17 @@ fn export_get(app: &App, me: &User) -> Response {
             .and_then(|n| n.to_str())
             .unwrap_or("memcp-export")
             .to_string();
-        let tar = crate::tar::pack(&dir, &name, util::now().max(0) as u64)
-            .map_err(|e| Error::Invalid(format!("the archive could not be made: {e}")))?;
-        Ok((tar, name))
+        let made =
+            |e: std::io::Error| Error::Invalid(format!("the archive could not be made: {e}"));
+        let mut out = std::io::BufWriter::new(std::fs::File::create(&tar_path).map_err(made)?);
+        crate::tar::pack_to(&dir, &name, util::now().max(0) as u64, &mut out)
+            .and_then(|()| std::io::Write::flush(&mut out))
+            .map_err(made)?;
+        Ok(name)
     })();
     let _ = std::fs::remove_dir_all(&work);
     match built {
-        Ok((body, name)) => Response {
+        Ok(name) => Response {
             status: 200,
             headers: vec![
                 ("Content-Type".into(), "application/x-tar".into()),
@@ -974,9 +993,13 @@ fn export_get(app: &App, me: &User) -> Response {
                 ),
                 ("Cache-Control".into(), "no-store".into()),
             ],
-            body,
+            body: vec![],
+            file: Some(tar_path),
         },
-        Err(e) => fail(e),
+        Err(e) => {
+            let _ = std::fs::remove_file(&tar_path);
+            fail(e)
+        }
     }
 }
 

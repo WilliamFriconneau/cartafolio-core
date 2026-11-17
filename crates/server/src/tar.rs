@@ -2,7 +2,7 @@
 //! without another dependency: regular files only, paths up to 255 characters.
 
 use std::fs;
-use std::io;
+use std::io::{self, Read, Write};
 use std::path::Path;
 
 fn put(field: &mut [u8], bytes: &[u8]) {
@@ -63,16 +63,95 @@ fn collect(dir: &Path, base: &Path, out: &mut Vec<String>) -> io::Result<()> {
 
 /// The files of `dir`, sorted, as one tar under the top-level folder `top`.
 pub fn pack(dir: &Path, top: &str, mtime: u64) -> io::Result<Vec<u8>> {
+    let mut out = Vec::new();
+    pack_to(dir, top, mtime, &mut out)?;
+    Ok(out)
+}
+
+/// Like [`pack`], written to `out` one file at a time: a big memory is never held whole.
+pub fn pack_to(dir: &Path, top: &str, mtime: u64, out: &mut impl Write) -> io::Result<()> {
     let mut rels = vec![];
     collect(dir, dir, &mut rels)?;
     rels.sort();
-    let mut out = Vec::new();
     for rel in rels {
-        let bytes = fs::read(dir.join(&rel))?;
-        out.extend_from_slice(&header(&format!("{top}/{rel}"), bytes.len() as u64, mtime)?);
-        out.extend_from_slice(&bytes);
-        out.resize(out.len().div_ceil(512) * 512, 0);
+        let mut file = fs::File::open(dir.join(&rel))?;
+        let size = file.metadata()?.len();
+        out.write_all(&header(&format!("{top}/{rel}"), size, mtime)?)?;
+        let copied = io::copy(&mut file, out)?;
+        if copied != size {
+            return Err(io::Error::other(format!("{rel} changed while it was read")));
+        }
+        let pad = (512 - (size % 512) as usize) % 512;
+        out.write_all(&vec![0u8; pad])?;
     }
-    out.extend_from_slice(&[0u8; 1024]);
-    Ok(out)
+    out.write_all(&[0u8; 1024])
+}
+
+/// Reads the number in a ustar field (octal, padded with spaces or NULs).
+fn octal(field: &[u8]) -> u64 {
+    field
+        .iter()
+        .take_while(|b| **b != 0 && **b != b' ')
+        .fold(0, |n, b| n * 8 + u64::from(b.wrapping_sub(b'0') & 7))
+}
+
+/// Writes the files of a tar read from `input` under `dest`, one at a time. Only plain files and folders are made, and a
+/// name that is absolute or leaves `dest` is refused. Answers the folders made at the top of `dest`.
+pub fn unpack(input: &mut impl Read, dest: &Path) -> io::Result<Vec<String>> {
+    let mut tops: Vec<String> = vec![];
+    loop {
+        let mut h = [0u8; 512];
+        if input.read_exact(&mut h).is_err() || h.iter().all(|b| *b == 0) {
+            return Ok(tops);
+        }
+        let end = |f: &[u8]| f.iter().position(|b| *b == 0).unwrap_or(f.len());
+        let name = String::from_utf8_lossy(&h[..end(&h[..100])]).to_string();
+        let prefix = String::from_utf8_lossy(&h[345..345 + end(&h[345..500])]).to_string();
+        let full = if prefix.is_empty() {
+            name
+        } else {
+            format!("{prefix}/{name}")
+        };
+        let size = octal(&h[124..136]);
+        let kind = h[156];
+        let safe = !full.is_empty()
+            && !full.starts_with('/')
+            && !full
+                .split('/')
+                .any(|p| p == ".." || p.contains('\\') || p.contains(':'));
+        if !safe {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("the archive names a path outside the folder: {full}"),
+            ));
+        }
+        let target = dest.join(&full);
+        if let Some(top) = full.split('/').next()
+            && !tops.iter().any(|t| t == top)
+        {
+            tops.push(top.to_string());
+        }
+        match kind {
+            b'5' => fs::create_dir_all(&target)?,
+            b'0' | 0 => {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                let mut out = fs::File::create(&target)?;
+                let copied = io::copy(&mut input.take(size), &mut out)?;
+                if copied != size {
+                    return Err(io::Error::new(
+                        io::ErrorKind::UnexpectedEof,
+                        "the archive ends in the middle of a file",
+                    ));
+                }
+                let pad = (512 - (size % 512)) % 512;
+                io::copy(&mut input.take(pad), &mut io::sink())?;
+            }
+            _ => {
+                let skip = size.div_ceil(512) * 512;
+                io::copy(&mut input.take(skip), &mut io::sink())?;
+            }
+        }
+    }
 }

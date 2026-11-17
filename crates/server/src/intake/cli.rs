@@ -44,7 +44,9 @@ pub fn transcribe(data: &Path, file: &File, user: Option<&str>) -> Result<(), Fa
     let r = intake.transcribe().map_err(|e| (1, e.to_string()))?;
     sayln!(
         "recordings read: {}, nothing audible: {}, erased: {}",
-        r.transcribed, r.nothing_audible, r.erased
+        r.transcribed,
+        r.nothing_audible,
+        r.erased
     );
     for p in &r.problems {
         esayln!("  {p}");
@@ -191,7 +193,9 @@ pub fn intake(
                     Ok(r) => {
                         sayln!(
                             "{label}: {} passage(s) sent, {} file(s) read, {} only noted",
-                            r.sent, r.files_read, r.noted
+                            r.sent,
+                            r.files_read,
+                            r.noted
                         );
                         for p in &r.problems {
                             problems += 1;

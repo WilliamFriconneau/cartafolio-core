@@ -192,7 +192,8 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
     );
     sayln!(
         "Any other MCP client: address {}/mcp/{}, header \"Authorization: Bearer <token>\".",
-        o.url, o.agent
+        o.url,
+        o.agent
     );
     Ok(())
 }
@@ -243,8 +244,14 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
     let who = person(&brain, user)?;
     let dir = export::export_person(&brain, &who, to, now()).map_err(fail)?;
     let manifest = export::verify_export(&dir).map_err(fail)?;
-    sayln!("exported the memory of {} to {}", who.name, dir.display());
-    for v in memcp_core::export::manifest_spaces(&manifest)
+    export_report(&who.name, &dir, &manifest);
+    Ok(())
+}
+
+/// What an export says about itself, the same for the one written here and the one that came down from a node.
+pub fn export_report(person: &str, dir: &Path, manifest: &serde_json::Value) {
+    sayln!("exported the memory of {person} to {}", dir.display());
+    for v in memcp_core::export::manifest_spaces(manifest)
         .into_iter()
         .flatten()
     {
@@ -257,7 +264,6 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
         );
     }
     sayln!("checked: every file matches its fingerprint. Readable versions are in readable/.");
-    Ok(())
 }
 
 /// Checks an export directory without any installation.
@@ -285,7 +291,10 @@ pub fn adopt(
     for a in &done {
         sayln!(
             "adopted {:<24} {:<10} facts {}  files {}",
-            a.name, a.kind, a.facts, a.files
+            a.name,
+            a.kind,
+            a.facts,
+            a.files
         );
     }
     sayln!(
@@ -401,6 +410,46 @@ pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     crate::stdio::run(&app, token.trim(), stdin.lock(), stdout.lock()).map_err(|e| (1, e))
+}
+
+/// `status`: what this memory holds, in a few lines: version, people, spaces with their counts, connections.
+pub fn status(data: &Path, user: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let who = person(&brain, user)?;
+    let ctl = brain.open_control().map_err(fail)?;
+    sayln!(
+        "memcp {}, search language {}",
+        memcp_core::directory::own_version(),
+        brain.language().map_err(fail)?.code()
+    );
+    let people = users::list_users(&ctl).map_err(fail)?;
+    sayln!(
+        "people: {} ({} administrator(s), {} disabled)",
+        people.len(),
+        people.iter().filter(|p| p.admin).count(),
+        people.iter().filter(|p| p.disabled).count()
+    );
+    let spaces = brain.spaces().map_err(fail)?;
+    sayln!("spaces: {}", spaces.len());
+    for s in &spaces {
+        match brain.space_info(&who.id, s) {
+            Ok(i) => sayln!(
+                "  {:<24} {:<10} {} notes, {} files",
+                s,
+                i.kind,
+                i.facts,
+                i.files
+            ),
+            Err(_) => sayln!("  {s}"),
+        }
+    }
+    let conns = access::list(&ctl).map_err(fail)?;
+    sayln!(
+        "connections: {} active, {} revoked",
+        conns.iter().filter(|c| c.revoked_at.is_none()).count(),
+        conns.iter().filter(|c| c.revoked_at.is_some()).count()
+    );
+    Ok(())
 }
 
 pub fn connections(data: &Path) -> Result<(), Failure> {
@@ -583,7 +632,8 @@ pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failur
     let report = memcp_core::library::rescan(&conn, id, now()).map_err(fail)?;
     sayln!(
         "mounted on {space}: {} added, {} unchanged",
-        report.added, report.unchanged
+        report.added,
+        report.unchanged
     );
     Ok(())
 }
@@ -603,7 +653,10 @@ pub fn library_scan(data: &Path, space: Option<&str>) -> Result<(), Failure> {
         let r = memcp_core::library::rescan_all(&conn, now()).map_err(fail)?;
         sayln!(
             "{s}: {} added, {} updated, {} unchanged, {} removed",
-            r.added, r.updated, r.unchanged, r.removed
+            r.added,
+            r.updated,
+            r.unchanged,
+            r.removed
         );
     }
     Ok(())

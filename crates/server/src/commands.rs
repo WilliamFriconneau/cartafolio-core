@@ -96,6 +96,22 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          indexes a Markdown folder (first run: --dry-run; --vault DIR still works)
   backup --to DIR [--keep 14]            consistent copy of every database (safe while serving), outside the data dir
 
+  status [--user PERSON]                 what this memory holds: version, people, spaces with their counts, connections
+  folder get SPACE | folder set SPACE (FOLDER | --clear)
+                                         the folder of a space (needs a node: pending the space folders)
+  person new NAME [--display D] [--role admin|member]
+  note recall SPACE WORDS [--tag T] [--limit N] | note tags SPACE ID [--tag a,b | --add a,b | --remove a,b]
+  connection list|new|regrant|revoke|internal|readonly|person-guide|limit ...
+                                         the connection commands, under one word (`connections`, `connect`... still work)
+  invite code|ticket|pending|approve ID|deny ID|allow DEVICE [--minutes N]
+                                         devices joining the person's memory (a running node: --node)
+  join ADDRESS [--ticket TICKET]         asks another node to let this one in (a running node: --node)
+
+Against a running node, with a key (docs/CLI.md): `memcp --node ADDRESS --key-file FILE <command>`, or MEMCP_NODE and
+MEMCP_KEY_FILE / MEMCP_KEY. The same commands print the same text; --json prints the node's JSON; --agent NAME (or
+MEMCP_AGENT) with a connection key does the note commands through the assistants' tools; --local forces the data directory.
+Exit codes: 0 done, 1 failed, 2 wrong command line, 3 key refused, 4 key lacks the rights, 5 node unreachable, 6 odd answer.
+
 Settings come from memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp/memcp.toml, /etc/memcp/memcp.toml); a flag wins.
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
@@ -153,6 +169,17 @@ pub const VALUE_FLAGS: &[&str] = &[
     "--login-url",
     "--oauth-redirect",
     "--seconds",
+    "--node",
+    "--key-file",
+    "--key",
+    "--agent",
+    "--ticket",
+    "--prefix",
+    "--token-env",
+    "--minutes",
+    "--limit",
+    "--add",
+    "--remove",
 ];
 
 pub struct Args {
@@ -193,6 +220,32 @@ pub fn list(v: Option<&str>) -> Vec<String> {
     .unwrap_or_default()
 }
 
+/// `connection list|new|regrant|revoke|internal|readonly|person-guide|limit ...` are the verbs of the `connection` family
+/// under the names the commands always had (`connections`, `connect`, `regrant`...): the same command, said either way.
+pub fn normalize(a: &Args) -> Args {
+    let mut b = Args {
+        flags: a.flags.clone(),
+        switches: a.switches.clone(),
+        pos: a.pos.clone(),
+    };
+    if b.pos.first().map(String::as_str) == Some("connection") {
+        let verb = b.pos.get(1).cloned().unwrap_or_default();
+        let target = match verb.as_str() {
+            "list" => Some("connections"),
+            "new" => Some("connect"),
+            "regrant" | "revoke" | "internal" | "readonly" | "person-guide" | "limit" => {
+                Some(verb.as_str())
+            }
+            _ => None,
+        };
+        if let Some(t) = target {
+            b.pos.remove(0);
+            b.pos[0] = t.to_string();
+        }
+    }
+    b
+}
+
 /// Runs a command that works on the data directory (everything but `serve`, `setup`, `config`, `verify-export`).
 pub fn dispatch(
     data: &Path,
@@ -201,6 +254,8 @@ pub fn dispatch(
     cfg_path: Option<&Path>,
 ) -> Result<(), Failure> {
     let data: PathBuf = data.to_path_buf();
+    let normal = normalize(a);
+    let a = &normal;
     let sw = |name: &str| a.switches.iter().any(|s| s == name);
     let flag = |name: &str| a.flags.get(name).map(String::as_str);
     let arg = |i: usize, what: &str| -> Result<&str, Failure> {
@@ -273,6 +328,23 @@ pub fn dispatch(
             crate::setup::prepare(kind, &data, &settings, Path::new(need("--out")?))
         }
         ("catalogue", _) => cli::catalogue_list(&data),
+        ("status", _) => cli::status(&data, flag("--user")),
+        // What a running node holds in its memory (the requests waiting, the tickets): there is nothing to read in a directory.
+        ("invite" | "join", _) => Err((
+            2,
+            format!(
+                "`{}` talks to a running node: add --node ADDRESS and a key (--key-file FILE); see docs/CLI.md",
+                a.pos[0]
+            ),
+        )),
+        // The folder of a space: the routes it calls (`/admin/api/space/folder`) and the tools (`folder_set`, `folder_get`)
+        // come with the branch `space-folders`; until it is merged the command says so.
+        ("folder", _) => Err((
+            1,
+            "folder: not available yet in this build (it comes with the space folders); the remote form is defined and \
+             calls /admin/api/space/folder"
+                .into(),
+        )),
         ("transcribe", _) => {
             crate::intake::cli::transcribe(&data, &settings, flag("--user"))
         }
