@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::cli::Failure;
 use crate::http::{self, Request, Response};
@@ -170,7 +171,10 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         let mut rq = rq;
         let declared = rq.body_length();
         let mut body = Vec::new();
-        let read = rq.as_reader().take(limit + 1).read_to_end(&mut body);
+        // A keyless body has a deadline as a whole (twice the timeout of one read): sent a byte at a time, it would
+        // otherwise hold its place for ever without ever being silent.
+        let deadline = (pool == Pool::Keyless).then(|| Instant::now() + read_timeout() * 2);
+        let read = read_body(rq.as_reader(), limit + 1, &mut body, deadline);
         let too_big = body.len() as u64 > limit;
         // A body that stopped before its end (the connection closed or failed, or fewer bytes than announced) is not a
         // request: what came may be whole JSON and still not be what the client meant to send.
@@ -178,8 +182,14 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         let resp = if too_big {
             http::Response::json(413, &serde_json::json!({ "error": "body too large" }))
         } else if cut {
+            let late = read.as_ref().is_err_and(|e| {
+                matches!(
+                    e.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                )
+            });
             http::Response::json(
-                400,
+                if late { 408 } else { 400 },
                 &serde_json::json!({ "error": "the body did not come whole" }),
             )
         } else {
@@ -194,9 +204,54 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
                 via_ingress: mode == Mode::Ingress,
             })
         };
-        send(rq, resp);
-        give_place(pool, &who);
+        if cut {
+            // What is left of a body cut short is drained by the connection after the answer, at the client's pace:
+            // the place is not held for that.
+            give_place(pool, &who);
+            send(rq, resp);
+        } else {
+            send(rq, resp);
+            give_place(pool, &who);
+        }
     });
+}
+
+/// How long a connection may stay silent before the node closes it: `MEMCP_READ_TIMEOUT_SECS`, 30 by default.
+fn read_timeout() -> Duration {
+    std::env::var("MEMCP_READ_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .map_or(Duration::from_secs(30), Duration::from_secs)
+}
+
+/// Reads a body into `body`, at most `max` bytes, and gives up with `TimedOut` past `deadline`.
+fn read_body(
+    r: &mut dyn Read,
+    max: u64,
+    body: &mut Vec<u8>,
+    deadline: Option<Instant>,
+) -> std::io::Result<()> {
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        if deadline.is_some_and(|d| Instant::now() > d) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "the body is too slow",
+            ));
+        }
+        let room = usize::try_from(max.saturating_sub(body.len() as u64)).unwrap_or(usize::MAX);
+        if room == 0 {
+            return Ok(());
+        }
+        let take = room.min(buf.len());
+        match r.read(&mut buf[..take]) {
+            Ok(0) => return Ok(()),
+            Ok(n) => body.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Answers a request turned away before its body is read, from a thread of its own: once answered, the request reads
@@ -233,6 +288,7 @@ fn send(rq: tiny_http::Request, resp: http::Response) {
 
 /// Listens until the process ends. `banner` is what is printed once the listeners are open.
 pub fn serve<H: Handler>(app: Arc<H>, l: &Listeners, banner: &str) -> Result<(), Failure> {
+    tiny_http::set_read_timeout(Some(read_timeout()));
     let server = tiny_http::Server::http(&l.listen)
         .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
     serve_server(app, server, l, banner)
@@ -246,6 +302,7 @@ pub fn serve_on<H: Handler>(
     l: &Listeners,
     banner: &str,
 ) -> Result<(), Failure> {
+    tiny_http::set_read_timeout(Some(read_timeout()));
     let server = tiny_http::Server::from_listener(listener, None)
         .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
     serve_server(app, server, l, banner)

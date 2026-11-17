@@ -1,6 +1,7 @@
-# tiny_http 0.12.0 (MIT OR Apache-2.0, https://github.com/tiny-http/tiny-http), kept here with two fixes, each marked
+# tiny_http 0.12.0 (MIT OR Apache-2.0, https://github.com/tiny-http/tiny-http), kept here with fixes of ours, each marked
 # "memcp:" in the code: the connection pool starts a thread for every connection no idle thread is free to take
-# (src/util/task_pool.rs), and a body left unread is drained through a small buffer (src/util/equal_reader.rs).
+# (src/util/task_pool.rs), a body left unread is drained through a small buffer (src/util/equal_reader.rs), and a read
+# timeout can be set on every connection accepted (`set_read_timeout`, src/connection.rs).
 # The TLS features are not offered. Used through [patch.crates-io] in the workspace manifest.
 [package]
 name = "tiny_http"

@@ -552,12 +552,22 @@ fn serve_on_a_free_port(
     dir: &std::path::Path,
     extra: &[&str],
 ) -> Result<(std::process::Child, u16), Box<dyn Error>> {
+    serve_with_env(bin, dir, extra, &[])
+}
+
+fn serve_with_env(
+    bin: &str,
+    dir: &std::path::Path,
+    extra: &[&str],
+    env: &[(&str, &str)],
+) -> Result<(std::process::Child, u16), Box<dyn Error>> {
     use std::io::{BufRead, BufReader};
     let mut child = std::process::Command::new(bin)
         .arg("--data")
         .arg(dir)
         .args(["serve", "--listen", "127.0.0.1:0"])
         .args(extra)
+        .envs(env.iter().copied())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
     let mut reader = BufReader::new(child.stderr.take().ok_or("no stderr")?);
@@ -1664,5 +1674,86 @@ fn a_body_cut_short_is_not_taken_as_a_request() -> Res {
     std::thread::sleep(Duration::from_millis(300));
     let listed = run(&["note", "list", "personal"])?;
     assert!(!listed.contains("never ended"), "{listed}");
+    Ok(())
+}
+
+#[test]
+fn a_connection_that_falls_silent_or_drips_gives_its_place_back() -> Res {
+    let dir = temp("silent");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    // One second of silence for the test (30 by default).
+    let (child, port) = serve_with_env(bin, &dir, &[], &[("MEMCP_READ_TIMEOUT_SECS", "1")])?;
+    let _srv = Child(child, dir.clone());
+    let pair = "POST /pair HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}";
+    let answered_within = |secs: u64| -> Result<bool, Box<dyn Error>> {
+        let started = std::time::Instant::now();
+        while started.elapsed() < Duration::from_secs(secs) {
+            std::thread::sleep(Duration::from_millis(250));
+            let (head, _) = http(port, pair)?;
+            if !head.starts_with("HTTP/1.1 503") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    };
+    // Every keyless place of this address taken by a body that never comes.
+    let mut held = vec![];
+    for _ in 0..24 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\nab")?;
+        held.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let (head, _) = http(port, pair)?;
+    assert!(
+        head.starts_with("HTTP/1.1 503"),
+        "the places are taken: {head}"
+    );
+    assert!(
+        answered_within(10)?,
+        "still turned away 10 s after they fell silent"
+    );
+    drop(held);
+    // Every place taken by bodies sent a byte at a time: never silent long enough for the timeout of one read, they
+    // meet the deadline of the whole body.
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut drips = vec![];
+    for _ in 0..16 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\n")?;
+        let stop = stop.clone();
+        drips.push(std::thread::spawn(move || {
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                if s.write_all(b"a").is_err() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
+        }));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    let (head, _) = http(port, pair)?;
+    assert!(
+        head.starts_with("HTTP/1.1 503"),
+        "the places are taken: {head}"
+    );
+    let freed = answered_within(10)?;
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    for d in drips {
+        let _ = d.join();
+    }
+    assert!(
+        freed,
+        "still turned away 10 s after the bodies began to drip"
+    );
     Ok(())
 }

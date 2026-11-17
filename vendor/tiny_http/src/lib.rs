@@ -169,6 +169,23 @@ pub struct IncomingRequests<'a> {
     server: &'a Server,
 }
 
+/// memcp: the read timeout of every connection accepted from now on, in milliseconds (0: none, the default).
+static READ_TIMEOUT_MS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// memcp: sets how long a connection may stay silent (no byte of a request line, a header or a body) before it is
+/// closed; `None` waits for ever, as tiny_http always did. Applies to the connections accepted after the call.
+pub fn set_read_timeout(timeout: Option<Duration>) {
+    let ms = timeout.map_or(0, |t| (t.as_millis() as u64).max(1));
+    READ_TIMEOUT_MS.store(ms, std::sync::atomic::Ordering::Relaxed);
+}
+
+pub(crate) fn read_timeout() -> Option<Duration> {
+    match READ_TIMEOUT_MS.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => None,
+        ms => Some(Duration::from_millis(ms)),
+    }
+}
+
 /// Represents the parameters required to create a server.
 #[derive(Debug, Clone)]
 pub struct ServerConfig {
