@@ -1,5 +1,12 @@
 # Changelog
 
+## Next version
+
+- **A bench of real nodes** (`scripts/bench.sh`, docs/BENCH.md): three nodes of one person writing at once, load, security probes and `kill -9`, on macOS and Linux, with a summary table. What it found is fixed below.
+- **Swarm:** a node that joins a second node on the same host (or one whose name starts the same way) keeps both peers instead of replacing the first; two passes of one node that make the same space at the same moment both end clean; a box offered by a peer of another person can no longer turn a space of this person into a box; the sync loops a node starts end when the node is killed instead of piling up at the next start.
+- **The node keeps answering:** requests without a key that keep their body waiting have places of their own and no longer turn away assistants and peers; a connection silent for 30 s is closed (`MEMCP_READ_TIMEOUT_SECS`) and a keyless body has a deadline; a body that stops before its announced length is refused (400) instead of being acted on; a request line or a header is at most 8 KiB, 100 headers at most (one connection could fill the memory).
+- **Load:** SQLite is built without its process-wide memory count (`.cargo/config.toml`): with 32 clients a node answers about six times as many calls as before, and more clients no longer means fewer answers.
+
 ## 20261117.0.17
 
 - **The swarm:** every node of a person is equal. A space or sub-space made on any node reaches the others with its label and parent; a rename, a move or an archive follows; the person's À trier is one box across the nodes, so a dictation captured on a device reaches every node, and a note filed from it by two janitors is one note. Peers that joined earlier reach the spaces made since.

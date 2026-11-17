@@ -71,5 +71,43 @@ row: the second moves nothing.
 ## Reading the table
 
 `ok` and `FAIL` are checks; `-` is a measure. The numbers depend on the machine; the table of a run is what to compare,
-on the same machine, before and after a change. The results of the bench run that came with this file are in the
-changelog of its version.
+on the same machine, before and after a change.
+
+## First run: version 20261117.0.17, and after the fixes
+
+On a Mac laptop (10 cores) and on a Linux server (16 cores), the programs of 20261117.0.17 and those of the version
+after it, the same bench.
+
+| | 0.17, Mac | 0.17, Linux | after, Mac | after, Linux |
+|---|---|---|---|---|
+| Swarm: the triangle could be closed | no (the second peer replaced the first) | no | yes | yes |
+| Swarm: 3,000 notes from 8 writers on 3 nodes | (chain only) | (chain only) | 3,000 kept, 0 lost, 0 twice, converged 0.6 s after the last write | the same |
+| Load: calls answered per second, 32 clients | 70 | 55 | 450 | 754 |
+| Load: `remember` p50 / p99 | 420 / 1,256 ms | 510 / 1,573 ms | 58 / 247 ms | 13 / 68 ms |
+| Load: `recall` p50 / p99 | 586 / 1,358 ms | 631 / 1,555 ms | 76 / 282 ms | 54 / 90 ms |
+| A peer of another person offering a box | took the owner's À trier and turned a sub-space of the owner into a box | the same | refused | refused |
+| A request line without an end (64 MiB) | all kept: +65 MiB | all kept | cut at 8 KiB | cut at 8 KiB |
+| 64 keyless bodies that never come | an assistant with its key turned away (503) for as long as they waited | the same | answered in 26 ms | answered in 11 ms |
+| A node killed | its 3 sync loops kept running | the same | none left | none left |
+
+What it found, each fixed with a test that failed before:
+
+- Joining a second node whose address starts the same way (two nodes on one machine, `nas.home` and `nas.office`)
+  replaced the first peer kept, its key with it.
+- A peer of another person could offer « À trier » under the name of a space of the owner: the answer said `created`,
+  and a sub-space of the owner became a box.
+- The sync loops a node starts (`memcp-sync --every`) outlived the node: killed and started again, a node ran two loops
+  with each peer. They now end with it (`MEMCP_SYNC_PARENT`; not on Windows).
+- Two passes of one node (one per peer) that made the same space at the same moment: the second failed with « already
+  exists ».
+- Requests without a key that announced a body and never sent it took every place of their address, the person's
+  assistants and peers included, for as long as the connections stayed open. They now have places of their own, a
+  connection silent for 30 s is closed (`MEMCP_READ_TIMEOUT_SECS`), and a keyless body has a deadline.
+- A body that stopped before the length it announced was taken as a request (a whole JSON could write a note).
+- A request line or a header without an end was kept whole, until the memory ran out.
+- With SQLite counting its memory under one lock of the process, more clients meant fewer answers (8 clients: 55
+  calls a second, 1 client: 82). The workspace builds it without that count.
+
+What the bench measures and leaves as it is: one address may have 16 requests in flight, so 32 clients on one machine
+are told to come back (503, `Retry-After: 1`) often; a client of the person behind one address (all of them on the
+loopback here) that sends ten wrong keys turns that address away for 15 minutes, its good keys too.

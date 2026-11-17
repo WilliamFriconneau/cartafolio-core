@@ -486,7 +486,7 @@ pub fn run(env: &Env) -> R<Vec<Row>> {
     rows.push(row(
         PHASE,
         "a request line without an end does not fill the memory",
-        Some(grew < 32 && ok(&alive)),
+        Some(sent < 64 && grew < 32 && ok(&alive)),
         format!("{sent} MiB of 64 taken before the node closed; memory +{grew} MiB"),
     ));
 
