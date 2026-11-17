@@ -949,6 +949,12 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             return Err(Fault::Missing(format!("fact {f} has not arrived")));
         }
     }
+    let mut mime = String::new();
+    // The name is cleaned as it is when an assistant puts a file: no path, no control character.
+    let clean = crate::files::clean_name(req(p, "name")?);
+    if clean.is_empty() {
+        return Err(Fault::Bad("a file needs a name".into()));
+    }
     if p.get("erased").and_then(Value::as_bool) != Some(true) {
         let data = req(p, "data")?;
         let bytes = base64::engine::general_purpose::STANDARD
@@ -957,11 +963,22 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
         if hex(&Sha256::digest(&bytes)) != sha || i64::try_from(bytes.len()).ok() != Some(size) {
             return Err(Fault::Bad("the bytes do not match their digest".into()));
         }
+        // The type is what the bytes say, never what the sender claims; a kind that is not kept is refused.
+        mime = crate::files::sniff(&bytes, &clean)
+            .ok_or_else(|| Fault::Bad("this kind of file is not kept".into()))?
+            .to_string();
         crate::files::store_blob(brain, space, sha, &bytes).map_err(Fault::from)?;
+    } else {
+        let claimed = req(p, "mime")?;
+        mime = if crate::files::is_kept_type(claimed) {
+            claimed.to_string()
+        } else {
+            "application/octet-stream".into()
+        };
     }
     // The same name with other content: both stay, and the later one by the clock takes the name with its
     // node and time, on every node alike.
-    let mut name = req(p, "name")?.to_string();
+    let mut name = clean;
     let clash: Option<(String, String)> = conn
         .query_row(
             "SELECT id, sha256 FROM files WHERE name = ?1 AND status = 'active' AND sha256 <> ?2 LIMIT 1",
@@ -993,7 +1010,7 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
         params![
             id,
             name,
-            req(p, "mime")?,
+            mime,
             size,
             sha,
             opt(p, "note").unwrap_or_default(),
@@ -1198,6 +1215,46 @@ fn window_gate(
     Ok(None)
 }
 
+/// The biggest text of one fact a peer may send, and how many tags it may carry.
+const MAX_EVENT_TEXT: usize = 1 << 20;
+const MAX_EVENT_TAGS: usize = 64;
+
+/// What every event must look like before anything is read from it: short plain identifiers for who and when, and
+/// bounded text, so that a peer cannot fill the store or put control characters where a name is shown.
+fn check_shape(ev: &Event) -> std::result::Result<(), Fault> {
+    if !plain_id(&ev.origin) {
+        return Err(Fault::Bad("the origin is not a plain identifier".into()));
+    }
+    let replica = ev.hlc.rsplit('.').next().unwrap_or("");
+    if !plain_id(replica) {
+        return Err(Fault::Bad("the clock stamp is malformed".into()));
+    }
+    let p = &ev.payload;
+    let small = |k: &str, max: usize| match opt(p, k) {
+        Some(v) if v.chars().count() > max || v.chars().any(|c| c == '\0') => {
+            Err(Fault::Bad(format!("{k} is too long")))
+        }
+        _ => Ok(()),
+    };
+    for k in ["author", "actor", "source_agent", "source_kind", "type"] {
+        small(k, 200)?;
+    }
+    for k in ["source_path", "source_hash", "source_range", "source_ref", "reason", "note"] {
+        small(k, 4096)?;
+    }
+    small("fields", 64 * 1024)?;
+    if opt(p, "text").is_some_and(|t| t.len() > MAX_EVENT_TEXT) {
+        return Err(Fault::Bad("text is too long".into()));
+    }
+    if p.get("tags")
+        .and_then(Value::as_array)
+        .is_some_and(|t| t.len() > MAX_EVENT_TAGS)
+    {
+        return Err(Fault::Bad("too many tags".into()));
+    }
+    Ok(())
+}
+
 fn apply_one(
     brain: &Brain,
     space: &Space,
@@ -1211,6 +1268,7 @@ fn apply_one(
             "the identifier does not match the change".into(),
         ));
     }
+    check_shape(ev)?;
     match parse_hlc(&ev.hlc) {
         None => return Err(Fault::Bad("the clock stamp is malformed".into())),
         Some((ms, _)) if ms > util::now_ms().saturating_add(MAX_DRIFT_MS) => {

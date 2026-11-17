@@ -56,6 +56,18 @@ impl FileInfo {
 }
 
 /// The type of an `.xlsx` workbook.
+/// Whether `mime` is one of the types this program keeps (`sniff` can name it).
+pub(crate) fn is_kept_type(mime: &str) -> bool {
+    mime == XLSX
+        || [
+            "image/", "audio/", "text/plain", "application/pdf",
+        ]
+        .iter()
+        .any(|p| mime.starts_with(p))
+            && mime.len() <= 60
+            && mime.bytes().all(|b| b.is_ascii_graphic())
+}
+
 pub const XLSX: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /// The type of the content, from its first bytes. `None` for anything not accepted.
@@ -237,7 +249,7 @@ pub(crate) fn read_blob(brain: &Brain, space: &Space, sha: &str) -> Result<Optio
     }
 }
 
-fn clean_name(name: &str) -> String {
+pub(crate) fn clean_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     base.chars()
         .filter(|c| !c.is_control())
