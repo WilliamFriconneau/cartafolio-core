@@ -671,25 +671,34 @@ impl Janitor {
             }
             // The person's rule for work: a meeting, or a note about their work, goes to `work`.
             let mut why = String::new();
-            let (to, by): (Vec<String>, &str) = if vaults.iter().any(|v| v == work_rule::WORK)
-                && work_rule::applies(text, &self.config.work_words)
+            let (mut to, mut by): (Vec<String>, &str) =
+                if vaults.iter().any(|v| v == work_rule::WORK)
+                    && work_rule::applies(text, &self.config.work_words)
+                {
+                    (vec![work_rule::WORK.to_string()], "the person's work rule")
+                } else {
+                    let routed =
+                        router::decide(text, &tags_of(note), &self.routing_rules(), &self.layout)
+                            .unwrap_or_else(|reason| {
+                                why = reason;
+                                vec![]
+                            });
+                    (
+                        routed
+                            .into_iter()
+                            .filter(|t| t != triage && vaults.contains(t))
+                            .collect(),
+                        "the keywords",
+                    )
+                };
+            // No keyword matched: where the person has sent notes like this one (the node learned it), when one space is sure.
+            if to.is_empty()
+                && (why.is_empty() || why == "no keyword matched")
+                && let Some(v) = self.taught_route(text, triage, vaults)
             {
-                (vec![work_rule::WORK.to_string()], "the person's work rule")
-            } else {
-                let routed =
-                    router::decide(text, &tags_of(note), &self.routing_rules(), &self.layout)
-                        .unwrap_or_else(|reason| {
-                            why = reason;
-                            vec![]
-                        });
-                (
-                    routed
-                        .into_iter()
-                        .filter(|t| t != triage && vaults.contains(t))
-                        .collect(),
-                    "the keywords",
-                )
-            };
+                to = vec![v];
+                by = "what the person taught";
+            }
             if to.is_empty() {
                 report.unsure += 1;
                 if why.is_empty() {
@@ -714,6 +723,22 @@ impl Janitor {
             }
         }
         unplaced
+    }
+
+    /// Where the person has sent notes like this one, as the node learned it (`tags_suggest`, `route`): the first space,
+    /// when it is one of the vaults that can be filled. A node without the tool, or that learned nothing, says nothing.
+    fn taught_route(&mut self, text: &str, triage: &str, vaults: &[String]) -> Option<String> {
+        let answer = self
+            .client
+            .call("tags_suggest", json!({ "text": text }))
+            .ok()?;
+        answer["route"]
+            .as_array()?
+            .first()?
+            .get("space")?
+            .as_str()
+            .filter(|s| *s != triage && vaults.iter().any(|v| v == s))
+            .map(String::from)
     }
 
     /// The files of one « À trier » (documents, images; never a recording, which the bridge reads): the same router as for
@@ -785,7 +810,7 @@ impl Janitor {
             let text = format!("{name}\n{note}\n{body}");
             let tags: Vec<&str> = tags_of(file);
             let mut why = String::new();
-            let to: Vec<String> = if vaults.iter().any(|v| v == work_rule::WORK)
+            let mut to: Vec<String> = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(&text, &self.config.work_words)
             {
                 vec![work_rule::WORK.to_string()]
@@ -799,6 +824,12 @@ impl Janitor {
                     .filter(|t| t != triage && vaults.contains(t))
                     .collect()
             };
+            if to.is_empty()
+                && (why.is_empty() || why == "no keyword matched")
+                && let Some(v) = self.taught_route(&text, triage, vaults)
+            {
+                to = vec![v];
+            }
             let Some(target) = to.first() else {
                 report.unsure += 1;
                 if why.is_empty() {
