@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor", "crates/bridge", "crates/bridge-ffi", "crates/spaces"]
 
 [workspace.package]
-version = "20261117.0.3"
+version = "20261117.0.4"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/WilliamFriconneau/memcp-core"

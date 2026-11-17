@@ -62,6 +62,8 @@ pub struct Janitor {
     rules: BTreeMap<String, router::Rules>,
     /// The terms of the vocabularies of each vault (read after its rules, never written back into them).
     vocab: BTreeMap<String, Vec<String>>,
+    /// This pass holds leases on notes of « À trier » (given back at its end).
+    claimed: bool,
     rule_ids: BTreeMap<String, String>,
 }
 
@@ -136,6 +138,7 @@ impl Janitor {
             state: state::State::open(&config.state_dir)?,
             rules: BTreeMap::new(),
             vocab: BTreeMap::new(),
+            claimed: false,
             rule_ids: BTreeMap::new(),
             client,
             config,
@@ -336,6 +339,11 @@ impl Janitor {
             }
         }
         self.file_notes(&triage, &vaults, &tags, night, &mut report);
+        if self.claimed {
+            // What was not sorted goes back to the other sorters at once.
+            let _ = self.client.call("triage_release", json!({}));
+            self.claimed = false;
+        }
         if let Some(e) = self.state.write_error.take() {
             report
                 .problems
@@ -554,15 +562,37 @@ impl Janitor {
         if vaults.is_empty() {
             return unplaced;
         }
-        let listed = match self.client.call(
-            "recall",
-            json!({ "space": triage, "query": "", "tags": ["inbox"], "limit": 50 }),
-        ) {
-            Ok(l) => l,
-            Err(e) => {
-                self.fail(report, "À trier cannot be read", &e);
-                return unplaced;
+        // The notes are claimed (a lease of ten minutes), so that another sorter, on a device, does not take the same
+        // ones. A node without the tool is read the old way.
+        let listed = match self
+            .client
+            .call("triage_claim", json!({ "limit": 50, "minutes": 10 }))
+        {
+            Ok(c) => {
+                let notes: Vec<Value> = c["claimed"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter(|n| n["space"].as_str().is_none_or(|s| s == triage))
+                    .cloned()
+                    .map(|mut n| {
+                        n["status"] = json!("active");
+                        n
+                    })
+                    .collect();
+                self.claimed = true;
+                json!({ "results": notes })
             }
+            Err(_) => match self.client.call(
+                "recall",
+                json!({ "space": triage, "query": "", "tags": ["inbox"], "limit": 50 }),
+            ) {
+                Ok(l) => l,
+                Err(e) => {
+                    self.fail(report, "À trier cannot be read", &e);
+                    return unplaced;
+                }
+            },
         };
         for note in listed["results"].as_array().into_iter().flatten() {
             let (Some(id), Some(text)) = (note["id"].as_str(), note["text"].as_str()) else {

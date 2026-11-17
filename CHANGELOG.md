@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.4
+
+- Vocabularies: a list of terms (signs, symptoms, project words) imported into a space (`memcp vocabulary import|list|remove`, MCP `vocabulary_terms`); the janitor reads them after the keywords of the space.
+- The janitor claims the notes of À trier (`triage_claim`) and gives them back at the end of its pass, so that a sorter on a device does not take the same notes.
+- A busy node answers 503 with Retry-After.
+
 ## 20261117.0.3
 
 - One address is enough to connect an assistant: the key can ride in the address (`/mcp/<connection>?key=…`), and the page shows that address when a connection is made.
