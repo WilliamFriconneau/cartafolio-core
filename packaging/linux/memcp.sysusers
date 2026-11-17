@@ -1,0 +1,2 @@
+# The user and group of the service (systemd-sysusers).
+u memcp - "MemCP" /var/lib/memcp /usr/sbin/nologin

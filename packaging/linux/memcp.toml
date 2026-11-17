@@ -1,0 +1,157 @@
+# memcp.toml: the settings of this node. Every option is listed with its default.
+# A line that starts with # is a default left alone: remove the # to change it.
+# A flag on the command line wins over this file. Check it with `memcp config check`.
+# The same options as the Home Assistant app: docs/PARITY.md.
+
+# --- Where things are --------------------------------------------
+
+# The data directory: one SQLite file per space, the control database, the
+# files. Private to its owner (0700). Back it up with `memcp backup`, never by
+# copying it while the server runs.
+# data = "/var/lib/memcp"
+
+# The address the server listens on. The loopback by default: put a TLS proxy
+# or Tailscale serve in front (docs/LINUX.md).
+# listen = "127.0.0.1:8791"
+
+# Allow `listen` to be an address other than the loopback. Keys travel in
+# clear on this port: only behind a firewall that lets nothing from outside
+# through, or with a proxy on the same machine.
+# allow_remote = false
+
+# Worker threads of the server (1 to 1024).
+# threads = 4
+
+# Announce this node on the local network (mDNS) so that another machine finds
+# it without typing an address.
+# advertise = false
+
+# Web origins a browser page may call this server from (a list of URLs).
+# Empty: none.
+# allow_origin = []
+
+# Serve the node page (`/admin`) on `listen` with a console token. On by
+# itself while `listen` is the loopback; never through Tailscale Funnel.
+# console_admin = false
+
+# Extra redirect addresses accepted by the OAuth sign-in of an assistant (a
+# list of URLs).
+# oauth_redirect = []
+
+# --- The node ----------------------------------------------------
+
+# The name of this node, shown to the other nodes of your memory and on the
+# network.
+# node_name = "MemCP"
+
+# The search language of a new memory (`en` or `fr`). It is written once, by
+# `memcp setup` or `init`; changing it later needs a reindex.
+# language = "en"
+
+# The address assistants reach, `https://...`, with no slash at the end.
+# Empty: the loopback address.
+# public_url = ""
+
+# --- Who may sign in ---------------------------------------------
+
+# Logins that administer the installation when the page is opened through an
+# ingress listener. Empty: the first login. Not used for the console token or
+# the tailnet.
+# admins = []
+
+# Only for `memcp-manager` (several people on one node): `auto` gives every
+# new login a memory of their own, `ask` makes them wait for an administrator.
+# `memcp serve` holds one memory and ignores it.
+# new_people = "auto"
+
+# The address of the identity listener: the consent page of Claude on the web
+# and the node page for the tailnet. Put it behind `tailscale serve` (never
+# Funnel), for example `127.0.0.1:8792`. Empty: none.
+# identity_listen = ""
+
+# The one address (an IP) whose `Tailscale-User-Login` header is believed on
+# the identity listener. Empty: the loopback only.
+# identity_trust = ""
+
+# The public address of the identity listener, where the consent page of an
+# assistant is shown.
+# login_url = ""
+
+# Tailnet logins allowed on the node page, each as `login=person` (for example
+# `you@example.org=owner`). Anyone else is refused.
+# tailnet_users = []
+
+# --- The janitor -------------------------------------------------
+
+# Run the janitor (`memcp-janitor.service`): it files the notes of the inboxes
+# with the model named below.
+# janitor = false
+
+# The person whose inboxes it files.
+# janitor_person = "owner"
+
+# The spaces whose inbox it files. Empty: every space its key reaches.
+# janitor_inboxes = []
+
+# Words that mark a note as being about your work: it goes to the work space
+# before any model.
+# janitor_work_words = []
+
+# Seconds after the last write into an inbox before it files (10 to 86400).
+# janitor_quiet = 120
+
+# The hour of the nightly pass, `HH:MM`.
+# janitor_night = "03:00"
+
+# An OpenAI-compatible service the janitor may ask. Empty: none. Your notes
+# leave this machine for it.
+# janitor_api_url = ""
+
+# The model asked at that service.
+# janitor_api_model = ""
+
+# A file that holds the key of that service (mode 0600). The key itself is
+# never written here.
+# janitor_api_key_file = ""
+
+# An Ollama on this machine or another, for example `http://127.0.0.1:11434`.
+# Empty: none.
+# janitor_ollama_url = ""
+
+# The model asked of that Ollama.
+# janitor_ollama_model = "qwen3:8b"
+
+# --- Voice notes -------------------------------------------------
+
+# Read voice notes (`memcp-transcribe.timer`): a recording waiting in an inbox
+# becomes text through the speech service below. The recording leaves this
+# machine for it.
+# transcribe = false
+
+# The person whose recordings are read. Empty: `janitor_person`.
+# transcribe_person = ""
+
+# The spaces whose recordings are read, comma separated. Empty: the person's
+# to-sort space.
+# transcribe_spaces = ""
+
+# An OpenAI-compatible speech service (`.../v1/audio/transcriptions`).
+# transcribe_api_url = ""
+
+# The speech model asked at that service.
+# transcribe_api_model = "whisper-1"
+
+# A file that holds the key of that service (mode 0600).
+# transcribe_api_key_file = ""
+
+# The language of the recordings (`en`, `fr`...). Empty: the model finds it.
+# transcribe_language = ""
+
+# --- Backups -----------------------------------------------------
+
+# Where `memcp backup` (and `memcp-backup.timer`) puts a consistent copy.
+# Outside the data directory, ideally on another disk.
+# backup_dir = "/var/backups/memcp"
+
+# How many backups are kept; the oldest are removed.
+# backup_keep = 14

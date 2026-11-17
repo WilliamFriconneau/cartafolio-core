@@ -11,6 +11,7 @@ use memcp_server::net;
 
 const USAGE: &str = "usage: memcp-manager --data DIR <command>
 
+  Settings: memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp, /etc/memcp); a flag wins.
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--public-url URL] [--admins ha_name,...] [--language en|fr] [--new-people auto|ask]
         [--ingress-listen ADDR --trust-ingress IP]
@@ -32,7 +33,8 @@ struct Args {
     switches: Vec<String>,
 }
 
-const VALUE_FLAGS: [&str; 19] = [
+const VALUE_FLAGS: [&str; 20] = [
+    "--config",
     "--data",
     "--node-name",
     "--listen",
@@ -125,7 +127,14 @@ fn options(a: &Args) -> Result<Options, Failure> {
 }
 
 fn run(args: &[String]) -> Result<(), Failure> {
-    let a = parse(args)?;
+    let mut a = parse(args)?;
+    // memcp.toml (the same file as `memcp`) fills in what the command line does not say.
+    if let Some(p) = memcp_server::config::locate(a.flags.get("--config").map(String::as_str))
+        .map_err(|e| (2, e))?
+    {
+        let s = memcp_server::config::Settings::load(&p).map_err(|e| (2, e))?;
+        memcp_server::config::fill_flags(&s, &mut a.flags, &mut a.switches);
+    }
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
         println!("{USAGE}");
         return Ok(());

@@ -88,6 +88,143 @@ fn quick(c: &Connection) -> String {
         .unwrap_or_else(|e| e.to_string())
 }
 
+/// Every check `doctor` makes: its name in docs/LINUX.md, a phrase of the line it writes, and what it looks at. A test
+/// keeps this list, the documentation and the code together.
+pub const CHECKS: &[(&str, &str, &str)] = &[
+    (
+        "data-dir-private",
+        "the data directory is private",
+        "the data directory is not readable by others",
+    ),
+    (
+        "files-private",
+        "are readable by others",
+        "the database files are not readable by others",
+    ),
+    (
+        "control-version",
+        "control database: version",
+        "the control database is at the version of this program",
+    ),
+    (
+        "control-integrity",
+        "failed its integrity check",
+        "SQLite's quick check of the control database",
+    ),
+    (
+        "vault-file",
+        "its file is missing",
+        "every space has its file",
+    ),
+    (
+        "vault-version",
+        "migrates to",
+        "every space is at the version of this program",
+    ),
+    (
+        "vault-integrity",
+        "integrity ok",
+        "SQLite's quick check of every space",
+    ),
+    (
+        "inbox",
+        "wait in the inbox",
+        "quick notes waiting to be sorted",
+    ),
+    (
+        "people",
+        "no administrator",
+        "there is a person who can open the page",
+    ),
+    (
+        "connections",
+        "connections:",
+        "active and revoked connections",
+    ),
+    (
+        "connection-all",
+        "reaches every vault",
+        "a connection that reaches everything",
+    ),
+    (
+        "connection-idle",
+        "no longer used",
+        "a connection nobody uses",
+    ),
+    (
+        "connection-expired",
+        "has expired",
+        "a connection past its date",
+    ),
+    (
+        "public-address",
+        "the public address",
+        "the public address is HTTPS, without a slash, reachable from outside",
+    ),
+    (
+        "server-answers",
+        "the server answers",
+        "something answers on the listen address like this server",
+    ),
+    (
+        "settings",
+        "settings file",
+        "memcp.toml reads, and says what has no effect",
+    ),
+    ("backup", "backup:", "the newest backup is recent"),
+];
+
+/// The settings file, as far as `doctor` is concerned.
+pub struct Extra<'a> {
+    pub settings_file: Option<&'a Path>,
+    pub settings: &'a crate::config::Settings,
+}
+
+/// The settings file and the backups: what a Linux installation adds to the checks.
+pub fn linux(r: &mut Report, extra: &Extra) {
+    match extra.settings_file {
+        None => r.add(
+            Level::Info,
+            "settings file: none found, the defaults apply (`memcp setup` writes one)",
+        ),
+        Some(p) => {
+            r.add(
+                Level::Ok,
+                format!("settings file {} reads without a problem", p.display()),
+            );
+            for w in crate::config::describe(extra.settings) {
+                r.add(Level::Warn, format!("settings file: {w}"));
+            }
+        }
+    }
+    let dir = extra.settings.text_or_default("backup_dir");
+    let newest = std::fs::read_dir(&dir).ok().and_then(|rd| {
+        rd.flatten()
+            .filter(|e| e.file_name().to_string_lossy().starts_with("backup-"))
+            .filter_map(|e| e.metadata().ok()?.modified().ok())
+            .max()
+    });
+    match newest {
+        None => r.add(
+            Level::Warn,
+            format!("backup: none in {dir}. Run `memcp backup`, or enable memcp-backup.timer"),
+        ),
+        Some(t) => {
+            let days = std::time::SystemTime::now()
+                .duration_since(t)
+                .map_or(0, |d| d.as_secs() / 86_400);
+            if days > 3 {
+                r.add(
+                    Level::Warn,
+                    format!("backup: the newest in {dir} is {days} days old. Is memcp-backup.timer running?"),
+                );
+            } else {
+                r.add(Level::Ok, format!("backup: the newest in {dir} is recent"));
+            }
+        }
+    }
+}
+
 /// What a directory is, which decides what is expected of it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
@@ -406,7 +543,20 @@ fn listener(r: &mut Report, addr: &str) {
 
 /// The command: prints the report, and fails when something is wrong.
 pub fn run(data: &Path, public_url: Option<&str>, listen: Option<&str>) -> Result<(), Failure> {
-    let r = inspect(data, public_url, listen);
+    run_with(data, public_url, listen, None)
+}
+
+/// [`run`] with the settings of a Linux installation: its file and its backups are read too.
+pub fn run_with(
+    data: &Path,
+    public_url: Option<&str>,
+    listen: Option<&str>,
+    extra: Option<&Extra>,
+) -> Result<(), Failure> {
+    let mut r = inspect(data, public_url, listen);
+    if let Some(x) = extra {
+        linux(&mut r, x);
+    }
     print!("{}", r.render());
     let (p, w) = (r.problems(), r.warnings());
     println!("\n{p} problem(s), {w} warning(s).");

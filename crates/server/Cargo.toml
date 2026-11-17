@@ -29,3 +29,31 @@ workspace = true
 [[bin]]
 name = "memcp"
 path = "src/main.rs"
+
+# `cargo deb -p memcp-server` (packaging/linux/build-deb.sh): the package of the Linux server app.
+[package.metadata.deb]
+name = "memcp"
+maintainer = "The MemCP project <noreply@users.noreply.github.com>"
+copyright = "AGPL-3.0-or-later"
+license-file = ["../../LICENSE", "0"]
+extended-description = "A durable memory for AI assistants over MCP, kept on your own machine. Runs as a hardened system service; first run with `memcp setup --system`."
+section = "utils"
+priority = "optional"
+depends = "$auto, systemd"
+maintainer-scripts = "../../packaging/linux/deb"
+conf-files = ["/etc/memcp/memcp.toml"]
+assets = [
+    ["../../target/release/memcp", "usr/bin/", "755"],
+    ["../../target/release/memcp-janitor", "usr/bin/", "755"],
+    ["../../target/release/memcp-capture", "usr/bin/", "755"],
+    ["../../packaging/linux/memcp.toml", "etc/memcp/memcp.toml", "644"],
+    ["../../packaging/linux/memcp.service", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp-backup.service", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp-backup.timer", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp-janitor.service", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp-transcribe.service", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp-transcribe.timer", "lib/systemd/system/", "644"],
+    ["../../packaging/linux/memcp.sysusers", "usr/lib/sysusers.d/memcp.conf", "644"],
+    ["../../packaging/linux/memcp.tmpfiles", "usr/lib/tmpfiles.d/memcp.conf", "644"],
+    ["../../docs/LINUX.md", "usr/share/doc/memcp/LINUX.md", "644"],
+]
