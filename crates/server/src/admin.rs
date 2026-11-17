@@ -459,16 +459,16 @@ fn action(
         )
         .map_err(|m| err(400, &m)),
         "/spaces" => {
-            // A vault comes from a kind of the catalogue, named after the person.
+            // A space comes from a kind of the catalogue, named after the person.
             let space = app
                 .brain
-                .add_vault(&me.id, &me.name, arg(body, "kind")?)
+                .add_space_of_kind(&me.id, &me.name, arg(body, "kind")?)
                 .map_err(fail)?;
             Ok(json!({ "space": space.as_str(), "owner": me.id }))
         }
         "/pairing" => {
             // A code a bridge exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
-            // never chooses a vault, the janitor or the person sorts what it sends.
+            // never chooses a space, the janitor or the person sorts what it sends.
             let (code, triage) =
                 memcp_core::pairing::create_for_triage(&app.brain, &me.id, &me.name, util::now())
                     .map_err(fail)?;
@@ -488,7 +488,7 @@ fn action(
             }))
         }
         "/triage/send" => {
-            // The person decides where a capture of « À trier » goes: the inbox of one of their vaults.
+            // The person decides where a capture of « À trier » goes: the inbox of one of their spaces.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
@@ -499,7 +499,7 @@ fn action(
                 .is_some_and(|g| g.write)
             {
                 return Err(fail(Error::Invalid(format!(
-                    "{to} is not one of your vaults"
+                    "{to} is not one of your spaces"
                 ))));
             }
             let id = memcp_core::triage::send(&app.brain, &from, arg(body, "id")?, &to, &me.id)
@@ -507,7 +507,7 @@ fn action(
             Ok(json!({ "ok": true, "id": id, "space": to.as_str() }))
         }
         "/triage/send-many" => {
-            // Several captures of « À trier » at once, to the inbox of one vault. Each one is sent on its own:
+            // Several captures of « À trier » at once, to the inbox of one space. Each one is sent on its own:
             // one that fails stays where it is and is named in the answer, the others still go.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
@@ -519,7 +519,7 @@ fn action(
                 .is_some_and(|g| g.write)
             {
                 return Err(fail(Error::Invalid(format!(
-                    "{to} is not one of your vaults"
+                    "{to} is not one of your spaces"
                 ))));
             }
             let ids: Vec<&str> = body
@@ -542,7 +542,7 @@ fn action(
             )
         }
         "/spaces/open" => {
-            // Opens one vault to an assistant: a connection limited to it.
+            // Opens one space to an assistant: a connection limited to it.
             let space = Space::new(arg(body, "space")?).map_err(fail)?;
             let write = body.get("access").and_then(Value::as_str) != Some("r");
             let (agent, token) =
@@ -588,7 +588,7 @@ fn action(
             Ok(json!({ "ok": true }))
         }
         "/connections/regrant" => {
-            // Changes what an active connection reaches (vaults and paths, read or write) without
+            // Changes what an active connection reaches (spaces and paths, read or write) without
             // touching its token or its address: the assistant has nothing to redo.
             let agent = arg(body, "agent")?;
             if access::owner_of(ctl, agent).map_err(fail)?.as_deref() != Some(me.id.as_str()) {
@@ -722,7 +722,7 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
 }
 
 /// The scope of a guide a person may write: their own (`person`, or `person:ID` for an
-/// administrator), or that of a vault they own (an administrator may write any, as operator).
+/// administrator), or that of a space they own (an administrator may write any, as operator).
 /// Never reachable by an MCP connection: this is the admin page.
 fn guide_scope(ctl: &Connection, me: &User, raw: &str) -> Result<String, Response> {
     let scope = if raw == "person" {
@@ -742,7 +742,7 @@ fn guide_scope(ctl: &Connection, me: &User, raw: &str) -> Result<String, Respons
         if !me.admin && !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
             return Err(err(
                 403,
-                "only the owner of a vault, or an administrator, writes its guide",
+                "only the owner of a space, or an administrator, writes its guide",
             ));
         }
     } else {
@@ -751,19 +751,19 @@ fn guide_scope(ctl: &Connection, me: &User, raw: &str) -> Result<String, Respons
     Ok(scope)
 }
 
-/// The vault whose app guides a person may approve: its owner, or an administrator.
+/// The space whose app guides a person may approve: its owner, or an administrator.
 fn guide_owner(ctl: &Connection, me: &User, name: &str) -> Result<Space, Response> {
     let space = Space::new(name).map_err(fail)?;
     if !me.admin && !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
         return Err(err(
             403,
-            "only the owner of a vault, or an administrator, approves its app guides",
+            "only the owner of a space, or an administrator, approves its app guides",
         ));
     }
     Ok(space)
 }
 
-/// The guides apps proposed in the vaults this person may approve for.
+/// The guides apps proposed in the spaces this person may approve for.
 fn app_guides_json(
     app: &App,
     ctl: &Connection,
@@ -919,8 +919,8 @@ fn export_get(app: &App, me: &User) -> Response {
     }
 }
 
-/// Counters of a vault, never its content: active facts, active files, last write.
-fn vault_stats(app: &App, space: &Space) -> Value {
+/// Counters of a space, never its content: active facts, active files, last write.
+fn space_stats(app: &App, space: &Space) -> Value {
     let Ok(conn) = app.brain.open_space(space) else {
         return Value::Null;
     };
@@ -938,11 +938,11 @@ fn vault_stats(app: &App, space: &Space) -> Value {
     })
 }
 
-/// Number of bars on the timeline of a vault.
+/// Number of bars on the timeline of a space.
 const TIMELINE_BUCKETS: i64 = 48;
 const TIMELINE_MAX_HOURS: i64 = 24 * 30;
 
-/// How many facts each vault of the person received, per slice of the last `hours` hours
+/// How many facts each space of the person received, per slice of the last `hours` hours
 /// (`?hours=`, 1 to 720, 24 by default): the slices are `hours * 75` seconds wide, 48 of them,
 /// the last one ending now. Counts only, never content. A fact counts when it was added, whatever
 /// became of it since.
@@ -958,7 +958,7 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
     let build = || -> Result<Value, Error> {
         let reach = users::access_of(ctl, &me.id)?;
         let triage = memcp_core::triage::of(&app.brain, &me.id)?;
-        let mut vaults = vec![];
+        let mut spaces = vec![];
         for s in app.brain.spaces()? {
             if !reach.contains_key(&s) || Some(&s) == triage.as_ref() {
                 continue;
@@ -980,10 +980,10 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
                     counts[i.min(last)] += n;
                 }
             }
-            vaults.push(json!({ "name": s.as_str(), "counts": counts }));
+            spaces.push(json!({ "name": s.as_str(), "counts": counts }));
         }
         Ok(json!({ "hours": hours, "from": iso(from), "to": iso(now),
-            "bucket_secs": width, "vaults": vaults }))
+            "bucket_secs": width, "vaults": spaces }))
     };
     match build() {
         Ok(v) => Response::json(200, &v),
@@ -1017,7 +1017,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                     .flatten()
                     .is_some();
                 json!({ "name": s.as_str(), "kind": kind, "guide": has_guide,
-                    "stats": vault_stats(app, &s) })
+                    "stats": space_stats(app, &s) })
             })
             .collect();
         let connections: Vec<Value> = access::list(ctl)?

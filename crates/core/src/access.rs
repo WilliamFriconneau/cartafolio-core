@@ -32,10 +32,10 @@ pub const R: Grant = Grant {
     write: false,
 };
 
-/// A grant limited to a tag path inside a vault: (vault, path, may write).
+/// A grant limited to a tag path inside a space: (space, path, may write).
 pub type PathGrant = (Space, String, bool);
 
-/// What a rights spec holds: whole-vault grants, and grants by path.
+/// What a rights spec holds: whole-space grants, and grants by path.
 pub type ParsedSpec = (Vec<(Space, Grant)>, Vec<PathGrant>);
 
 /// What a connection may do.
@@ -44,7 +44,7 @@ pub struct Rights {
     /// Every space the person reaches, including spaces shared later.
     pub all_spaces: bool,
     pub grants: Vec<(Space, Grant)>,
-    /// Grants limited to a tag path inside a vault: (vault, path, may write). A vault listed
+    /// Grants limited to a tag path inside a space: (space, path, may write). A space listed
     /// here also has a row in `grants`; the connection sees only what is filed under the paths.
     pub paths: Vec<PathGrant>,
 }
@@ -96,7 +96,7 @@ impl Rights {
 }
 
 /// Parses `health:rw,work:r`, and `health/sources/bevel:rw` for a grant limited to a tag path
-/// inside a vault. A vault is either granted whole or by paths, never both.
+/// inside a space. A space is either granted whole or by paths, never both.
 pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
     let mut whole: Vec<(Space, Grant)> = vec![];
     let mut paths: Vec<PathGrant> = vec![];
@@ -118,7 +118,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                     || paths.iter().any(|(s, _, _)| *s == space)
                 {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 whole.push((space, grant));
@@ -131,7 +131,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                 }
                 if whole.iter().any(|(s, _)| *s == space) {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 if paths.iter().any(|(s, p, _)| *s == space && *p == path) {
@@ -141,7 +141,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
             }
         }
     }
-    // A vault reached by paths also has a row of its own: read if any path is, write if any is.
+    // A space reached by paths also has a row of its own: read if any path is, write if any is.
     for (space, _, _) in paths.clone() {
         if whole.iter().any(|(s, _)| *s == space) {
             continue;
@@ -177,8 +177,8 @@ pub struct Caller {
     pub user_id: String,
     pub all_spaces: bool,
     pub grants: BTreeMap<Space, Grant>,
-    /// For a vault reached by paths only: the tag paths and whether each may be written. A
-    /// vault absent here is reached whole.
+    /// For a space reached by paths only: the tag paths and whether each may be written. A
+    /// space absent here is reached whole.
     pub paths: BTreeMap<Space, Vec<(String, bool)>>,
     /// Spaces reachable through this connection, as of authentication.
     pub known: Vec<Space>,
@@ -194,8 +194,8 @@ impl Caller {
         self.known.contains(s)
     }
 
-    /// This connection seen through one vault: it reaches that vault with its own rights on
-    /// it, and nothing else. Used for an address that names a vault (`/mcp/<vault>`), so a
+    /// This connection seen through one space: it reaches that space with its own rights on
+    /// it, and nothing else. Used for an address that names a space (`/mcp/<space>`), so a
     /// key never goes beyond the address it is used at.
     pub fn only(&self, space: &Space) -> Caller {
         let mut c = self.clone();
@@ -235,14 +235,14 @@ impl Caller {
         !self.writable().is_empty()
     }
 
-    /// Whether this connection is limited to paths inside some vault. Such a connection is a
+    /// Whether this connection is limited to paths inside some space. Such a connection is a
     /// narrow one (an app depositing its data, a reader of one subject): it gets the few tools
     /// that can be bounded to a path and no others.
     pub fn is_scoped(&self) -> bool {
         !self.paths.is_empty()
     }
 
-    /// The tag paths a vault is limited to, `None` when it is reached whole.
+    /// The tag paths a space is limited to, `None` when it is reached whole.
     pub fn read_paths(&self, s: &Space) -> Option<Vec<String>> {
         self.paths
             .get(s)
@@ -256,7 +256,7 @@ impl Caller {
                 && tag.as_bytes()[path.len()] == b'/')
     }
 
-    /// Whether a fact filed under `tags` in vault `s` is inside what this connection reads.
+    /// Whether a fact filed under `tags` in space `s` is inside what this connection reads.
     pub fn may_read_tags(&self, s: &Space, tags: &[String]) -> bool {
         match self.paths.get(s) {
             None => true,
@@ -266,7 +266,7 @@ impl Caller {
         }
     }
 
-    /// Whether a fact filed under `tags` in vault `s` is inside what this connection writes: **every** tag
+    /// Whether a fact filed under `tags` in space `s` is inside what this connection writes: **every** tag
     /// under one of its write paths (one tag inside would let the others land anywhere, another app's
     /// layer, the index).
     pub fn may_write_tags(&self, s: &Space, tags: &[String]) -> bool {
@@ -281,7 +281,7 @@ impl Caller {
         }
     }
 
-    /// The only path of a vault this connection writes, if it writes exactly one.
+    /// The only path of a space this connection writes, if it writes exactly one.
     pub fn sole_write_path(&self, s: &Space) -> Option<String> {
         let paths = self.paths.get(s)?;
         let mut w = paths.iter().filter(|(_, w)| *w);
@@ -311,15 +311,15 @@ pub fn hash_token(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
 
-/// A connection's name is the end of its address (`/mcp/<name>`), as a vault's name is: the two never
+/// A connection's name is the end of its address (`/mcp/<name>`), as a space's name is: the two never
 /// share one.
-fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
-    let is_vault: Option<i64> = ctl
+fn refuse_space_name(ctl: &Connection, name: &str) -> Result<()> {
+    let is_space: Option<i64> = ctl
         .query_row("SELECT 1 FROM spaces WHERE name = ?1", [name], |r| r.get(0))
         .optional()?;
-    if is_vault.is_some() {
+    if is_space.is_some() {
         return Err(Error::Invalid(format!(
-            "{name} is the name of a vault: a connection needs another name"
+            "{name} is the name of a space: a connection needs another name"
         )));
     }
     Ok(())
@@ -464,7 +464,7 @@ pub fn connect_for(
             "agent name: 1 to 40 characters, lowercase letters, digits and dashes".into(),
         ));
     }
-    refuse_vault_name(ctl, agent)?;
+    refuse_space_name(ctl, agent)?;
     if !rights.all_spaces && rights.grants.is_empty() {
         return Err(Error::Invalid("no space requested".into()));
     }
@@ -590,7 +590,7 @@ pub fn rename(ctl: &Connection, agent: &str, new: &str) -> Result<bool> {
             "a name is 1 to 40 characters: lowercase letters, digits and dashes".into(),
         ));
     }
-    refuse_vault_name(ctl, new)?;
+    refuse_space_name(ctl, new)?;
     let taken: Option<String> = ctl
         .query_row(
             "SELECT agent FROM connections WHERE agent = ?1",
@@ -811,7 +811,7 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         for row in rows {
             let (space, path, w) = row?;
             let Ok(s) = Space::new(&space) else { continue };
-            // Capped like the vault grant: a person who can no longer write cannot be written for.
+            // Capped like the space grant: a person who can no longer write cannot be written for.
             let Some(have) = grants.get(&s) else { continue };
             paths
                 .entry(s)

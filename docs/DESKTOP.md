@@ -61,7 +61,7 @@ a week after its text was filed. Two ways:
   key in `MEMCP_SPEECH_API_KEY`. The recordings leave the computer for that service: choose one you trust.
 
 A file (`memcp-capture send devis.pdf --note "…"`) is kept in « À trier » as it is, and the person or the janitor sends
-it to a vault from the page.
+it to a space from the page.
 
 ## Assistants
 

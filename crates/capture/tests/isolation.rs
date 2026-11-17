@@ -1,5 +1,5 @@
 //! An assistant that knows neither the memory's address nor its key: the settings file, the socket and `connect`; and a
-//! folder absorbed into a vault, with names replaced by posts and proposals put down as files.
+//! folder absorbed into a space, with names replaced by posts and proposals put down as files.
 #![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
@@ -18,7 +18,7 @@ fn bridge() -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_memcp-capture"));
     for v in [
         "MEMCP_URL",
-        "MEMCP_VAULT",
+        "MEMCP_SPACE",
         "MEMCP_OUTBOX",
         "MEMCP_KEY_FILE",
         "MEMCP_CAPTURE_DIRS",
@@ -49,7 +49,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     mem.up();
     let dir = private_dir("socket");
     let conf_body = format!(
-        "# the gateway's own settings\nurl = {}\nkey = {}\nvault = sam-me\noutbox = {}\n",
+        "# the gateway's own settings\nurl = {}\nkey = {}\nspace = sam-me\noutbox = {}\n",
         mem.url(0),
         mem.tokens[0],
         dir.join("outbox").display()

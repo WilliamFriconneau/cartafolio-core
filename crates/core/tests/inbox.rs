@@ -201,7 +201,7 @@ fn a_write_into_an_inbox_marks_it_and_tidy_asks_for_order_now() -> Res {
         &b,
         &c,
         "remember",
-        &serde_json::json!({"text": "A plain fact of the vault."}),
+        &serde_json::json!({"text": "A plain fact of the space."}),
     )?;
     assert!(!mark.exists(), "a write outside the inbox wakes nobody");
     tools::call(

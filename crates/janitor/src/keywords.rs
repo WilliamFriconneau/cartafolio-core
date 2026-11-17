@@ -98,14 +98,14 @@ fn extract(text: &str, n: usize) -> String {
 }
 
 impl Janitor {
-    /// Reads the `rules` note of each vault. The problems met.
-    pub(crate) fn load_rules(&mut self, vaults: &[String]) -> Vec<String> {
+    /// Reads the `rules` note of each space. The problems met.
+    pub(crate) fn load_rules(&mut self, spaces: &[String]) -> Vec<String> {
         self.rules.clear();
         self.rule_ids.clear();
         self.vocab.clear();
         let mut problems = vec![];
-        for v in vaults {
-            // The vocabularies a person imported into this vault: an old node has no such tool, which is no problem.
+        for v in spaces {
+            // The vocabularies a person imported into this space: an old node has no such tool, which is no problem.
             if let Ok(t) = self
                 .client
                 .call("vocabulary_terms", json!({ "space": v, "limit": 20000 }))
@@ -151,7 +151,7 @@ impl Janitor {
         problems
     }
 
-    /// The rules the router reads: each vault's own keywords and tags, then the terms of its vocabularies. A term
+    /// The rules the router reads: each space's own keywords and tags, then the terms of its vocabularies. A term
     /// that is also a keyword counts once; the `rules` notes themselves are never changed by it.
     pub(crate) fn routing_rules(&self) -> BTreeMap<String, Rules> {
         let mut all = self.rules.clone();
@@ -246,7 +246,7 @@ impl Janitor {
         &mut self,
         models: &Models<'_>,
         waiting: &BTreeMap<String, Vec<Unplaced>>,
-        vaults: &[String],
+        spaces: &[String],
         night: bool,
     ) -> (u32, Vec<String>) {
         let mut problems = vec![];
@@ -255,7 +255,7 @@ impl Janitor {
             Ok(s) => s,
             Err(e) => return (0, vec![format!("the memory cannot be read: {e}")]),
         };
-        for v in vaults {
+        for v in spaces {
             match self.filed_sample(v, &stats) {
                 Ok(s) => {
                     samples.insert(v.clone(), s);
@@ -295,7 +295,7 @@ impl Janitor {
                 }
             }
             let mut log = vec![];
-            match models.propose(&models::propose_prompt(), &shown, vaults, &mut log) {
+            match models.propose(&models::propose_prompt(), &shown, spaces, &mut log) {
                 Some((proposals, _)) => {
                     // A keyword two spaces ask for is no use to either; one that another space already owns stays its.
                     let mut asked: BTreeMap<&str, usize> = BTreeMap::new();

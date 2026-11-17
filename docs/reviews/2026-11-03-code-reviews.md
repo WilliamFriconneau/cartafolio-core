@@ -8,7 +8,7 @@ the time; this file is that report, with what was done since.
 
 | sev. | what | fixed in |
 |---|---|---|
-| critical | a key limited to a path wrote anywhere in the vault (one tag of its own carried the others) | 0.18.0 |
+| critical | a key limited to a path wrote anywhere in the space (one tag of its own carried the others) | 0.18.0 |
 | critical | a key to `finances/inbox` was offered the money tools and read every movement | 0.18.0 |
 | high | the welcome message told a path-limited key the index, the guides and the counters outside its paths | 0.18.0 |
 | high | `file_erase` accepted any old fact as the transcript of a recording never transcribed | 0.18.0 |
@@ -22,7 +22,7 @@ the time; this file is that report, with what was done since.
 | medium | opening the admin page counted as a failed guess, in the counter the MCP guard uses | 0.18.3 |
 | medium | anyone could fill the 200 OAuth registrations and keep new connectors out for a day; the rate table grew without bound | 0.18.3 |
 | medium | the money crate could return a full account number when a statement had no summary line | 0.18.3 |
-| low | different refusals told a key whether a vault name existed | 0.18.3 |
+| low | different refusals told a key whether a space name existed | 0.18.3 |
 | low | no error names the memory's address any more | 0.18.2 |
 
 ## Still open

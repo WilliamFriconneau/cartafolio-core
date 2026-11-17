@@ -1,4 +1,4 @@
-//! A connection limited to paths inside a vault (`health/sources/bevel:rw`): it reads and writes
+//! A connection limited to paths inside a space (`health/sources/bevel:rw`): it reads and writes
 //! only what is filed under them, sees only the few tools that can be bounded to a path, and
 //! learns nothing about what lies outside.
 
@@ -27,7 +27,7 @@ fn world() -> Result<World, Box<dyn Error>> {
     let brain = Brain::init(&t.path().join("data"), &[sp("legacy")], Language::English)?;
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?.id;
-    brain.add_vault(&sam, "sam", "health")?;
+    brain.add_space_of_kind(&sam, "sam", "health")?;
     Ok(World {
         _t: t,
         brain,
@@ -58,7 +58,7 @@ fn texts(v: &Value) -> Vec<String> {
 }
 
 #[test]
-fn a_path_is_parsed_labelled_and_never_mixed_with_the_whole_vault() -> Res {
+fn a_path_is_parsed_labelled_and_never_mixed_with_the_whole_space() -> Res {
     let r = Rights::parse("sam-health/sources/bevel:rw,work:r")?;
     assert_eq!(r.paths.len(), 1);
     assert_eq!(r.label(), "work:r,sam-health/sources/bevel:rw");
@@ -394,7 +394,7 @@ fn rights_with_paths_survive_a_regrant_and_show_in_the_list() -> Res {
         c.rights,
         "sam-health/sources/bevel:r,sam-health/sources/other:rw"
     );
-    // Widening back to the whole vault drops the paths.
+    // Widening back to the whole space drops the paths.
     access::regrant(&w.ctl, "bevel", &Rights::parse("sam-health:rw")?)?;
     let c2 = access::authenticate(&w.ctl, "no", 0)?;
     assert!(c2.is_none());
@@ -472,7 +472,7 @@ fn the_handshake_tells_a_path_limited_key_nothing_outside_its_path() -> Res {
         &w.ctl,
         &w.sam,
         "space:sam-health",
-        "Private rules of the health vault",
+        "Private rules of the health space",
     )?;
     let whole = memcp_core::guide::instructions(&w.brain, &owner)?;
     assert!(
@@ -491,7 +491,7 @@ fn the_handshake_tells_a_path_limited_key_nothing_outside_its_path() -> Res {
 #[test]
 fn a_connection_can_be_kept_from_the_persons_own_guide() -> Res {
     let w = world()?;
-    w.brain.add_vault(&w.sam, "sam", "work")?;
+    w.brain.add_space_of_kind(&w.sam, "sam", "work")?;
     memcp_core::guide::set(
         &w.ctl,
         &w.sam,
@@ -532,7 +532,7 @@ fn a_connection_can_be_kept_from_the_persons_own_guide() -> Res {
 }
 
 #[test]
-fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
+fn an_assistant_is_told_which_tools_read_the_proposals_of_a_space() -> Res {
     let w = world()?;
     caller(
         &w,
@@ -542,7 +542,7 @@ fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
     let owner = caller(&w, "claude", "sam-health:rw")?;
     let told = memcp_core::guide::instructions(&w.brain, &owner)?;
     assert!(
-        told.contains("PROPOSALS of the vault \"sam-health\"")
+        told.contains("PROPOSALS of the space \"sam-health\"")
             && told.contains("`kalios` (tag `proposals/kalios`)"),
         "{told}"
     );

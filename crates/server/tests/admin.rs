@@ -115,7 +115,7 @@ fn state(e: &Env, who: (&str, &str)) -> Value {
     ha(e, "GET", "/admin/api/state", who, json!({})).body_json()
 }
 
-/// Gives a person (made at their first sign-in) a vault of a name of their own: what an operator
+/// Gives a person (made at their first sign-in) a space of a name of their own: what an operator
 /// does from the command line.
 fn own(e: &Env, ha: (&str, &str), space: &str) -> Res {
     let _ = state(e, ha);
@@ -429,7 +429,7 @@ fn files_are_uploaded_and_opened_from_the_page_within_each_person_reach() -> Res
 }
 
 #[test]
-fn opening_a_vault_returns_the_address_and_a_token_limited_to_it() -> Res {
+fn opening_a_space_returns_the_address_and_a_token_limited_to_it() -> Res {
     let e = env()?;
     own(&e, SAM, "sam-notes")?;
     let r = post(&e, SAM, "spaces/open", json!({ "space": "sam-notes" }))?;
@@ -450,7 +450,7 @@ fn opening_a_vault_returns_the_address_and_a_token_limited_to_it() -> Res {
             .is_some_and(|c| c.contains("https://memory.example.net/mcp"))
     );
 
-    // The token reaches that vault and nothing else.
+    // The token reaches that space and nothing else.
     let auth = format!("Bearer {token}");
     let call = |space: &str| {
         let body = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call",
@@ -470,24 +470,24 @@ fn opening_a_vault_returns_the_address_and_a_token_limited_to_it() -> Res {
 }
 
 #[test]
-fn a_member_cannot_open_a_vault_they_do_not_reach() -> Res {
+fn a_member_cannot_open_a_space_they_do_not_reach() -> Res {
     let e = env()?;
     own(&e, SAM, "sam-notes")?;
-    // Alex signs in once, then asks for Sam's vault.
+    // Alex signs in once, then asks for Sam's space.
     let _ = state(&e, ALEX);
     assert!(post(&e, ALEX, "spaces/open", json!({ "space": "sam-notes" })).is_err());
     Ok(())
 }
 
 #[test]
-fn the_page_shows_counters_for_each_vault_and_never_the_content() -> Res {
+fn the_page_shows_counters_for_each_space_and_never_the_content() -> Res {
     let e = env()?;
     own(&e, SAM, "sam-notes")?;
     let s = state(&e, SAM);
     let v = s["spaces"]
         .as_array()
         .and_then(|a| a.iter().find(|v| v["name"] == "sam-notes"))
-        .ok_or("vault missing")?;
+        .ok_or("space missing")?;
     assert_eq!(v["stats"]["facts"], 0);
     assert_eq!(v["stats"]["files"], 0);
     assert!(v["stats"]["last_write"].is_null());
@@ -573,10 +573,10 @@ fn a_person_an_administrator_created_is_linked_at_first_login_without_a_request(
 }
 
 #[test]
-fn a_member_makes_vaults_from_the_catalogue_and_names_none() -> Res {
+fn a_member_makes_spaces_from_the_catalogue_and_names_none() -> Res {
     let e = env()?;
     join(&e, ALEX)?;
-    // The page offers the kinds of the catalogue, and the way each vault is shown.
+    // The page offers the kinds of the catalogue, and the way each space is shown.
     let a = state(&e, ALEX);
     let keys: Vec<&str> = a["catalogue"]
         .as_array()
@@ -588,10 +588,10 @@ fn a_member_makes_vaults_from_the_catalogue_and_names_none() -> Res {
         keys,
         ["me", "health", "people", "home", "money", "work", "hobbies"]
     );
-    // A member cannot name a vault by hand, nor use a kind that is not offered.
+    // A member cannot name a space by hand, nor use a kind that is not offered.
     assert!(post(&e, ALEX, "spaces", json!({ "name": "mine" })).is_err());
     assert!(post(&e, ALEX, "spaces", json!({ "kind": "notes" })).is_err());
-    // From a kind, the vault is named after the person and the kind, and keeps its kind.
+    // From a kind, the space is named after the person and the kind, and keeps its kind.
     let r = post(&e, ALEX, "spaces", json!({ "kind": "health" }))?;
     assert_eq!(r["space"], "alex-health");
     let a = state(&e, ALEX);
@@ -632,11 +632,11 @@ fn ha_get(e: &Env, path: &str, user: (&str, &str), query: &[(&str, &str)]) -> Re
 }
 
 #[test]
-fn a_person_writes_their_own_guide_and_the_guides_of_their_vaults() -> Res {
+fn a_person_writes_their_own_guide_and_the_guides_of_their_spaces() -> Res {
     let e = env()?;
     join(&e, ALEX)?;
     post(&e, ALEX, "spaces", json!({ "kind": "me" }))?;
-    // Their own, by the short name; and the guide of a vault they own.
+    // Their own, by the short name; and the guide of a space they own.
     post(
         &e,
         ALEX,
@@ -663,7 +663,7 @@ fn a_person_writes_their_own_guide_and_the_guides_of_their_vaults() -> Res {
     )?;
     let g = ha_get(&e, "/admin/api/guide", ALEX, &[("scope", "space:alex-me")]).body_json();
     assert_eq!(g["versions"], 2);
-    // The page knows which vaults have one, and where the person may write one.
+    // The page knows which spaces have one, and where the person may write one.
     let a = state(&e, ALEX);
     assert_eq!(a["my_guide"], true);
     let v = a["spaces"]
@@ -686,7 +686,7 @@ fn a_person_writes_their_own_guide_and_the_guides_of_their_vaults() -> Res {
 }
 
 #[test]
-fn nobody_writes_the_guide_of_a_vault_or_a_person_that_is_not_theirs() -> Res {
+fn nobody_writes_the_guide_of_a_space_or_a_person_that_is_not_theirs() -> Res {
     let e = env()?;
     join(&e, ALEX)?;
     post(&e, SAM, "spaces", json!({ "kind": "work" }))?;
@@ -703,7 +703,7 @@ fn nobody_writes_the_guide_of_a_vault_or_a_person_that_is_not_theirs() -> Res {
             json!({ "scope": scope, "body": body }),
         )
     };
-    // Alex does not own Sam's vault, and is not Sam.
+    // Alex does not own Sam's space, and is not Sam.
     assert_eq!(
         set(ALEX, "space:sam-work", "I give orders here.").status,
         403
@@ -721,7 +721,7 @@ fn nobody_writes_the_guide_of_a_vault_or_a_person_that_is_not_theirs() -> Res {
     assert_eq!(
         set(SAM, "space:alex-work", "x").status,
         400,
-        "that vault does not exist"
+        "that space does not exist"
     );
     post(&e, ALEX, "spaces", json!({ "kind": "work" }))?;
     assert_eq!(
@@ -798,13 +798,13 @@ fn each_person_sees_the_events_of_their_own_connections_and_an_administrator_all
     let e = env()?;
     join(&e, ALEX)?;
     join(&e, BEN)?;
-    for (who, vault, agent) in [(ALEX, "alex-me", "alex-key"), (BEN, "ben-me", "ben-key")] {
+    for (who, space, agent) in [(ALEX, "alex-me", "alex-key"), (BEN, "ben-me", "ben-key")] {
         post(&e, who, "spaces", json!({ "kind": "me" }))?;
         post(
             &e,
             who,
             "connections",
-            json!({ "agent": agent, "rights": format!("{vault}:rw") }),
+            json!({ "agent": agent, "rights": format!("{space}:rw") }),
         )?;
         post(&e, who, "connections/revoke", json!({ "agent": agent }))?;
     }
@@ -1093,7 +1093,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
         r.status >= 400
             && r.body_json()["error"]
                 .as_str()
-                .is_some_and(|m| m.contains("owns no vault")),
+                .is_some_and(|m| m.contains("owns no space")),
         "{}",
         r.body_json()
     );
@@ -1189,7 +1189,7 @@ fn nobody_takes_their_own_administration_away_by_a_stray_click() -> Res {
 }
 
 #[test]
-fn a_connection_changes_its_vaults_with_the_same_key_and_only_for_its_person() -> Res {
+fn a_connection_changes_its_spaces_with_the_same_key_and_only_for_its_person() -> Res {
     let e = env()?;
     own(&e, SAM, "sam-notes")?;
     own(&e, SAM, "sam-more")?;
@@ -1200,7 +1200,7 @@ fn a_connection_changes_its_vaults_with_the_same_key_and_only_for_its_person() -
         json!({ "agent": "assistant", "rights": "sam-notes:rw" }),
     )?;
     let token = t["token"].as_str().ok_or("token")?;
-    // A vault is added, another cut: the key keeps working and the rights are the new ones.
+    // A space is added, another cut: the key keeps working and the rights are the new ones.
     post(
         &e,
         SAM,
@@ -1298,7 +1298,7 @@ fn the_owner_approves_what_an_app_proposed_as_it_reads_and_nobody_else_does() ->
 }
 
 #[test]
-fn the_timeline_counts_what_each_vault_received_per_slice() -> Res {
+fn the_timeline_counts_what_each_space_received_per_slice() -> Res {
     let e = env()?;
     state(&e, SAM);
     own(&e, SAM, "work")?;
@@ -1342,7 +1342,7 @@ fn the_timeline_counts_what_each_vault_received_per_slice() -> Res {
         .ok_or("vaults")?
         .iter()
         .find(|v| v["name"] == "work")
-        .ok_or("work vault")?;
+        .ok_or("work space")?;
     let counts = work["counts"].as_array().ok_or("counts")?;
     assert_eq!(counts.len(), 48, "forty-eight slices");
     let total: i64 = counts.iter().filter_map(Value::as_i64).sum();

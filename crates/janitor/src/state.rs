@@ -8,7 +8,7 @@ use serde_json::{Value, json};
 
 pub struct State {
     file: PathBuf,
-    /// `{note_fails: {note_id: n}, learned: {vault: {...}}, alone: n, checks: n, keywords_fact: {vault: id}}`
+    /// `{note_fails: {note_id: n}, learned: {space: {...}}, alone: n, checks: n, keywords_fact: {space: id}}`
     data: Value,
     /// Set when the file could not be written: said once by the pass.
     pub write_error: Option<String>,
@@ -44,13 +44,13 @@ impl State {
         self.data["note_fails"][note_id].as_u64().unwrap_or(0)
     }
 
-    /// What a vault has learned (see `learn.rs`); saved with [`State::saved`].
-    pub fn learned(&mut self, vault: &str) -> crate::learn::Learned<'_> {
+    /// What a space has learned (see `learn.rs`); saved with [`State::saved`].
+    pub fn learned(&mut self, space: &str) -> crate::learn::Learned<'_> {
         if !self.data["learned"].is_object() {
             self.data["learned"] = json!({});
         }
         crate::learn::Learned {
-            data: &mut self.data["learned"][vault],
+            data: &mut self.data["learned"][space],
         }
     }
 
@@ -61,13 +61,13 @@ impl State {
         n
     }
 
-    /// The fact that holds the night's note of a vault, if one was written.
-    pub fn keywords_fact(&self, vault: &str) -> Option<String> {
-        self.data["keywords_fact"][vault].as_str().map(String::from)
+    /// The fact that holds the night's note of a space, if one was written.
+    pub fn keywords_fact(&self, space: &str) -> Option<String> {
+        self.data["keywords_fact"][space].as_str().map(String::from)
     }
 
-    pub fn set_keywords_fact(&mut self, vault: &str, id: &str) {
-        self.data["keywords_fact"][vault] = json!(id);
+    pub fn set_keywords_fact(&mut self, space: &str, id: &str) {
+        self.data["keywords_fact"][space] = json!(id);
         self.save();
     }
 

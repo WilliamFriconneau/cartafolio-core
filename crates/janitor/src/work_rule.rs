@@ -1,5 +1,5 @@
 //! The person's rule for work notes, applied before any model: what comes out of a meeting, or speaks of the
-//! person's work, goes to the vault `work`, never to another one. A small model had filed meetings elsewhere.
+//! person's work, goes to the space `work`, never to another one. A small model had filed meetings elsewhere.
 //!
 //! - A recording whose file name says `reunion` or `meeting` (a meeting captured by the browser, a call…) is a meeting.
 //! - A note that holds one of the person's own work words (`work_words` in the janitor's settings: a product, a
@@ -7,7 +7,7 @@
 //! - Only « À trier » is concerned: the note is sent to the inbox of `work`, which files it as it files any note.
 //! - A health note (`#santé`) is never taken: the health rule comes first.
 
-/// The vault work notes go to.
+/// The space work notes go to.
 pub const WORK: &str = "work";
 
 /// Words of a recording's file name that say it is a meeting.

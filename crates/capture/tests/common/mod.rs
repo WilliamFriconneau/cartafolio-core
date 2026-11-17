@@ -1,4 +1,4 @@
-//! A memory with one person and one vault, started late: the port is reserved and nobody listens on it until
+//! A memory with one person and one space, started late: the port is reserved and nobody listens on it until
 //! [`Memory::up`], which is the computer being offline and then back.
 
 // A setup that fails is a test that fails: `expect` says where.
@@ -32,7 +32,7 @@ pub fn unique(tag: &str) -> PathBuf {
     std::env::temp_dir().join(format!("memcp-capture-{tag}-{}-{n}", std::process::id()))
 }
 
-/// A memory with one person and one vault, a key per entry of `rights`, and a port reserved but **not
+/// A memory with one person and one space, a key per entry of `rights`, and a port reserved but **not
 /// listened on yet**: the computer is offline until [`Memory::up`].
 pub fn memory(tag: &str, rights: &[&str]) -> Memory {
     let dir = unique(tag);
@@ -42,7 +42,7 @@ pub fn memory(tag: &str, rights: &[&str]) -> Memory {
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .expect("user")
             .id;
-        brain.add_vault(&sam, "sam", "me").expect("vault");
+        brain.add_space_of_kind(&sam, "sam", "me").expect("vault");
         rights
             .iter()
             .enumerate()

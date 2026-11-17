@@ -109,7 +109,7 @@ fn server(name: &str) -> Server {
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .unwrap()
             .id;
-        brain.add_vault(&sam, "sam", "me").unwrap();
+        brain.add_space_of_kind(&sam, "sam", "me").unwrap();
         access::connect_for(
             &ctl,
             &sam,
@@ -339,7 +339,7 @@ fn say_in_local(b: &Brain) {
     let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
         .unwrap()
         .id;
-    b.add_vault(&sam, "sam", "me").unwrap();
+    b.add_space_of_kind(&sam, "sam", "me").unwrap();
     say(b, "A note that stays.");
 }
 

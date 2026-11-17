@@ -1,7 +1,7 @@
 //! The manager: one memory per person, created and administered from one place.
 //!
 //! A person is a directory of their own (`people/<name>`), with its own control database and
-//! its own vaults, served by an ordinary [`App`] that knows exactly one person. Nothing is
+//! its own spaces, served by an ordinary [`App`] that knows exactly one person. Nothing is
 //! shared between people: no group, no share, no common table. The manager holds the
 //! **registry** (who the people are, which Home Assistant login each answers to, who
 //! administers, who is waiting to be let in), and routes what comes in to the one person it
@@ -52,7 +52,7 @@ pub struct Options {
 }
 
 pub struct Manager {
-    /// The registry: an installation with no vault, whose people are the people of this one.
+    /// The registry: an installation with no space, whose people are the people of this one.
     registry: Arc<App>,
     people_dir: PathBuf,
     opts: Options,
@@ -226,7 +226,7 @@ impl Manager {
             Brain::open(&dir).map_err(fail)?
         };
         if fresh {
-            // The bootstrap user of a new directory becomes the person. No vault is made for
+            // The bootstrap user of a new directory becomes the person. No space is made for
             // them: they make the ones they want, from the catalogue, on their page.
             let ctl = brain.open_control().map_err(fail)?;
             users::claim_owner(&ctl, &u.name, &u.display, u.ha_user.as_deref()).map_err(fail)?;
@@ -282,17 +282,17 @@ impl Manager {
             if is_placeholder(&u) {
                 continue;
             }
-            let vaults = self
+            let spaces = self
                 .person_app(&u.name)
                 .and_then(|a| a.brain.spaces().ok())
                 .map(|s| s.len())
                 .unwrap_or(0);
             println!(
-                "{:<20} {:<7} {:<24} {} vault(s){}",
+                "{:<20} {:<7} {:<24} {} space(s){}",
                 u.name,
                 if u.admin { "admin" } else { "member" },
                 u.ha_user.as_deref().unwrap_or("(no Home Assistant login)"),
-                vaults,
+                spaces,
                 if u.disabled { "  (disabled)" } else { "" }
             );
         }
@@ -426,7 +426,7 @@ impl Manager {
             if reg.status == 200 {
                 let (mine, theirs) = (r.body_json(), reg.body_json());
                 let mut st = mine;
-                // What each person holds, counted, never read: vaults and live connections.
+                // What each person holds, counted, never read: spaces and live connections.
                 let people: Vec<Value> = theirs["users"]
                     .as_array()
                     .map(|a| {
@@ -441,7 +441,7 @@ impl Manager {
                                 let name = x["name"].as_str().unwrap_or_default().to_string();
                                 if let Some(app) = self.person_app(&name) {
                                     x["vaults"] = json!(app.brain.spaces().map_or(0, |s| s.len()));
-                                    // Their names only, to draw the tiles: never what a vault holds.
+                                    // Their names only, to draw the tiles: never what a space holds.
                                     x["vault_names"] = json!(
                                         app.brain
                                             .spaces()

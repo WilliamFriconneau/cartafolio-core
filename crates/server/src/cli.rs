@@ -70,14 +70,14 @@ pub fn space_add(
     Ok(())
 }
 
-/// Creates a person's vault of a kind of the catalogue, named after them and the kind.
-pub fn vault_add(data: &Path, kind: &str, user: Option<&str>) -> Result<(), Failure> {
+/// Creates a person's space of a kind of the catalogue, named after them and the kind.
+pub fn space_add_kind(data: &Path, kind: &str, user: Option<&str>) -> Result<(), Failure> {
     let brain = open(data)?;
     let owner = person(&brain, user)?;
     let space = brain
-        .add_vault(&owner.id, &owner.name, kind)
+        .add_space_of_kind(&owner.id, &owner.name, kind)
         .map_err(fail)?;
-    println!("vault {space} created for {}, kind {kind}.", owner.name);
+    println!("space {space} created for {}, kind {kind}.", owner.name);
     Ok(())
 }
 
@@ -90,7 +90,7 @@ pub fn space_kind(data: &Path, name: &str, kind: &str) -> Result<(), Failure> {
     Ok(())
 }
 
-/// The kinds of vault this installation offers.
+/// The kinds of space this installation offers.
 pub fn catalogue_list(data: &Path) -> Result<(), Failure> {
     for k in open(data)?.catalogue().map_err(fail)? {
         println!(
@@ -193,10 +193,10 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
     Ok(())
 }
 
-/// Opens one vault to an assistant: a connection limited to it, token shown once.
-pub fn open_vault(
+/// Opens one space to an assistant: a connection limited to it, token shown once.
+pub fn open_space(
     data: &Path,
-    vault: &str,
+    space: &str,
     user: Option<&str>,
     read_only: bool,
     days: Option<i64>,
@@ -204,12 +204,12 @@ pub fn open_vault(
 ) -> Result<(), Failure> {
     let brain = open(data)?;
     let who = person(&brain, user)?;
-    let space = Space::new(vault).map_err(fail)?;
+    let space = Space::new(space).map_err(fail)?;
     let ctl = brain.open_control().map_err(fail)?;
     let (agent, token) =
         access::open_space_connection(&ctl, &who.id, &space, !read_only, days).map_err(fail)?;
     println!(
-        "Vault {space} opened to {agent:?}, {}.",
+        "Space {space} opened to {agent:?}, {}.",
         if read_only {
             "read-only"
         } else {
@@ -257,7 +257,7 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
 pub fn verify_export(dir: &Path) -> Result<(), Failure> {
     let manifest = export::verify_export(dir).map_err(fail)?;
     println!(
-        "ok: export of {} made on {}, {} vault(s), every file matches its fingerprint.",
+        "ok: export of {} made on {}, {} space(s), every file matches its fingerprint.",
         manifest["person"]["name"].as_str().unwrap_or("?"),
         manifest["created_at"].as_str().unwrap_or("?"),
         manifest["vaults"].as_array().map_or(0, Vec::len)
@@ -265,7 +265,7 @@ pub fn verify_export(dir: &Path) -> Result<(), Failure> {
     Ok(())
 }
 
-/// Takes the vaults of an export into this installation, as the property of a person.
+/// Takes the spaces of an export into this installation, as the property of a person.
 pub fn adopt(
     data: &Path,
     dir: &Path,
@@ -282,7 +282,7 @@ pub fn adopt(
         );
     }
     println!(
-        "{} vault(s) now belong to {}. Instructions came with them; connections do not: make new ones.",
+        "{} space(s) now belong to {}. Instructions came with them; connections do not: make new ones.",
         done.len(),
         owner.name
     );
@@ -386,7 +386,7 @@ pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
     let token = std::env::var(token_env).map_err(|_| {
         (
             2,
-            format!("set {token_env} to a key (make one with `memcp open VAULT`)"),
+            format!("set {token_env} to a key (make one with `memcp open SPACE`)"),
         )
     })?;
     let brain = open(data)?;
@@ -525,7 +525,7 @@ pub fn duplicates(data: &Path) -> Result<(), Failure> {
 
 pub fn import(
     data: &Path,
-    vault: &Path,
+    space: &Path,
     rules: &Path,
     only: Option<&str>,
     dry_run: bool,
@@ -538,7 +538,7 @@ pub fn import(
     let rules = ImportRules::parse(&src).map_err(fail)?;
     let report = import::import(
         &brain,
-        vault,
+        space,
         &rules,
         &ImportOptions {
             only: only.map(String::from),

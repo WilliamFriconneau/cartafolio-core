@@ -58,17 +58,17 @@ fn digest(brain: &Brain, space: &str) -> Result<Vec<String>, Box<dyn Error>> {
     Ok(rows)
 }
 
-/// The other memory (person `sam`, vaults `sam-work` and `sam-health`) is exported later by each
+/// The other memory (person `sam`, spaces `sam-work` and `sam-health`) is exported later by each
 /// test; this installation has `kim` with `kim-work`.
 fn world() -> Result<World, Box<dyn Error>> {
     let t = Temp::new("merge");
     let other = Brain::init(&t.path().join("other"), &[], Language::English)?;
     let sam = users::create_user(&other.open_control()?, OWNER, "sam", "Sam", false)?;
-    other.add_vault(&sam.id, "sam", "work")?;
-    other.add_vault(&sam.id, "sam", "health")?;
+    other.add_space_of_kind(&sam.id, "sam", "work")?;
+    other.add_space_of_kind(&sam.id, "sam", "health")?;
     let mine = Brain::init(&t.path().join("mine"), &[], Language::English)?;
     let kim = users::create_user(&mine.open_control()?, OWNER, "kim", "Kim", false)?;
-    mine.add_vault(&kim.id, "kim", "work")?;
+    mine.add_space_of_kind(&kim.id, "kim", "work")?;
     Ok(World {
         t,
         other,
@@ -90,7 +90,7 @@ fn drifted(seed: impl Fn(&Brain) -> Res) -> Result<World, Box<dyn Error>> {
     let t = Temp::new("merge-drift");
     let other = Brain::init(&t.path().join("other"), &[], Language::English)?;
     let sam = users::create_user(&other.open_control()?, OWNER, "sam", "Sam", false)?;
-    other.add_vault(&sam.id, "sam", "work")?;
+    other.add_space_of_kind(&sam.id, "sam", "work")?;
     seed(&other)?;
     let first = export::export_person(&other, &sam, &t.path().join("first"), 1_900_000_000)?;
     let mine = Brain::init(&t.path().join("mine"), &[], Language::English)?;
@@ -628,7 +628,7 @@ fn another_persons_space_cannot_be_merged_into() -> Res {
     let mut w = world()?;
     let ctl = w.mine.open_control()?;
     let lou = users::create_user(&ctl, OWNER, "lou", "Lou", false)?;
-    w.mine.add_vault(&lou.id, "lou", "health")?;
+    w.mine.add_space_of_kind(&lou.id, "lou", "health")?;
     say(&w.other, "sam-work", "The audit is due on Friday.", &[])?;
     export_now(&mut w, "out", 1_900_000_200)?;
     let mut p = plan_of(&w, Policy::KeepBoth)?;

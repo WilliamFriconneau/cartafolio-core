@@ -126,7 +126,7 @@ impl Brain {
             .is_some())
     }
 
-    /// The kinds of vault this installation offers: its `catalogue.txt` if it has one, the
+    /// The kinds of space this installation offers: its `catalogue.txt` if it has one, the
     /// default for a person's life otherwise.
     pub fn catalogue(&self) -> Result<Vec<crate::catalogue::Kind>> {
         match fs::read_to_string(self.dir.join("catalogue.txt")) {
@@ -174,9 +174,9 @@ impl Brain {
         }
     }
 
-    /// Creates a person's vault of a kind of the catalogue, named after the person and the
-    /// kind. A person has one vault of each kind.
-    pub fn add_vault(&self, user_id: &str, person: &str, kind: &str) -> Result<Space> {
+    /// Creates a person's space of a kind of the catalogue, named after the person and the
+    /// kind. A person has one space of each kind.
+    pub fn add_space_of_kind(&self, user_id: &str, person: &str, kind: &str) -> Result<Space> {
         if !self.catalogue()?.iter().any(|k| k.key == kind) {
             return Err(Error::Invalid(format!(
                 "unknown kind {kind:?}; the catalogue has: {}",
@@ -187,7 +187,7 @@ impl Brain {
                     .join(", ")
             )));
         }
-        // One of each kind per person, however the vault got its kind.
+        // One of each kind per person, however the space got its kind.
         let owned: Option<String> = self
             .open_control()?
             .query_row(
@@ -199,18 +199,18 @@ impl Brain {
             .optional()?;
         if let Some(name) = owned {
             return Err(Error::Invalid(format!(
-                "{person} already has a {kind} vault ({name})"
+                "{person} already has a {kind} space ({name})"
             )));
         }
-        let space = crate::catalogue::vault_name(person, kind)?;
+        let space = crate::catalogue::space_name(person, kind)?;
         if self.has_space(&space)? {
             return Err(Error::Invalid(format!(
-                "{person} already has a {kind} vault ({space})"
+                "{person} already has a {kind} space ({space})"
             )));
         }
         self.add_space_for(&space, user_id)?;
         self.set_space_kind(&space, kind)?;
-        // A bridge paired before « À trier » existed, for « all my vaults », writes to the inbox of this one too.
+        // A bridge paired before « À trier » existed, for « all my spaces », writes to the inbox of this one too.
         let ctl = self.open_control()?;
         let ids: Vec<String> = ctl
             .prepare(
@@ -256,7 +256,7 @@ impl Brain {
         if self.has_space(space)? || self.dir.join(space.file_name()).exists() {
             return Err(Error::Invalid(format!("space {space} already exists")));
         }
-        // A vault and a connection end an address the same way (`/mcp/<name>`): never the same name.
+        // A space and a connection end an address the same way (`/mcp/<name>`): never the same name.
         let used: Option<i64> = self
             .open_control()?
             .query_row(
@@ -267,7 +267,7 @@ impl Brain {
             .optional()?;
         if used.is_some() {
             return Err(Error::Invalid(format!(
-                "{space} is the name of a connection: a vault needs another name"
+                "{space} is the name of a connection: a space needs another name"
             )));
         }
         let mut created = Vec::new();

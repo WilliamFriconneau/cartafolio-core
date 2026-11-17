@@ -1,7 +1,7 @@
 //! Facts that an app deposits under its own record ids, and the point to resume from.
 //!
 //! A source (a health app, a sensor hub) gives each record the id it has for it, and the
-//! instant of the data point. The vault then does three things and nothing more:
+//! instant of the data point. The space then does three things and nothing more:
 //!
 //! - the same app sending the same id again changes nothing when the text is the same, and
 //!   otherwise **merges** into the app's own earlier version instead of replacing it (the
@@ -70,7 +70,7 @@ pub struct Origin {
     pub at: Option<String>,
     /// A standard code for what was measured, `system:code` (`loinc:8867-4`). The fact is then
     /// filed under `code/<system>/<code>`, so the same measure from two sources is found
-    /// together. The vault carries no table of codes and checks only the shape.
+    /// together. The space carries no table of codes and checks only the shape.
     pub code: Option<String>,
     /// Raw source (the default) or the sorted dossier.
     pub layer: Layer,
@@ -80,7 +80,7 @@ pub struct Origin {
 #[derive(Clone, Debug)]
 pub enum Deposit {
     Created(Fact),
-    /// The vault already held exactly this under this id: nothing written.
+    /// The space already held exactly this under this id: nothing written.
     Unchanged(Fact),
     /// Exactly this text is held, but not under this app's id (another source, or a record
     /// the app has under another id): nothing written, and the app's cursor does not move.

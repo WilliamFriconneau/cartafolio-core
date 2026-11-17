@@ -476,9 +476,9 @@ pub fn erase(
 /// [`erase`] at a given instant. The one exception to « nothing is erased », and a narrow one:
 /// only a recording filed under `inbox/audio` (waiting to be transcribed), only once an active
 /// text fact, named by the caller, has existed for [`ERASE_AFTER`]. The transcription may have
-/// been filed in another vault than the recording (it is sorted after it is written): the
+/// been filed in another space than the recording (it is sorted after it is written): the
 /// caller says which, and the tool only looks where the key can read. The
-/// bytes go unless another record of the vault still holds them; the record, its fact (retired)
+/// bytes go unless another record of the space still holds them; the record, its fact (retired)
 /// and the reason (« erased: » and the id of the transcript) stay as the trace.
 pub fn erase_at(
     brain: &Brain,
@@ -523,7 +523,7 @@ pub fn erase_at(
         .optional()?;
     let Some((status, kind, at, text)) = written else {
         return Err(Error::Invalid(
-            "the transcript is not a fact of a vault you can read".into(),
+            "the transcript is not a fact of a space you can read".into(),
         ));
     };
     if status != "active" || kind.as_deref() == Some("file") {

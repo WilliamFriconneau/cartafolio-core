@@ -20,7 +20,7 @@ struct Rig {
     models: String,
 }
 
-/// The engine (vaults `sam-me`, `sam-health`, `sam-work`, and `sam-a-trier`, where the devices write), the two keys,
+/// The engine (spaces `sam-me`, `sam-health`, `sam-work`, and `sam-a-trier`, where the devices write), the two keys,
 /// and the model server.
 fn rig(tag: &str) -> Rig {
     use memcp_core::access::{self, Rights};
@@ -39,7 +39,7 @@ fn rig(tag: &str) -> Rig {
             .expect("user")
             .id;
         for kind in ["me", "health", "work"] {
-            brain.add_vault(&sam, "sam", kind).expect("vault");
+            brain.add_space_of_kind(&sam, "sam", kind).expect("vault");
         }
         memcp_core::triage::ensure(&brain, &sam, "sam").expect("À trier");
         [("edge", "sam-a-trier/inbox:rw"), ("janitor", "all")]
@@ -228,7 +228,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
         "Dictée du 2026-11-02 à 15h00, audio 2026-11-02-15h00-deja.wav : tension des enfants à surveiller.",
     );
 
-    // A note in the inbox of the work vault: the model says `sam-health`, the note stays in the work vault.
+    // A note in the inbox of the work space: the model says `sam-health`, the note stays in the work space.
     let mut owner = Client::new(&r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
     owner
         .call(
@@ -248,7 +248,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             )
             .expect("rules");
     }
-    // Pieces of a note the bridge absorbed: facts are drawn out, in their own vault, and the pieces leave.
+    // Pieces of a note the bridge absorbed: facts are drawn out, in their own space, and the pieces leave.
     for t in [
         "D'après la note Projets/Alpha.md, modifiée le 2026-11-03 : Alpha — Suite : la directrice des opérations valide le budget le 2026-11-10.",
         "D'après la note Projets/Vide.md, modifiée le 2026-11-03 : RIEN à retenir.",
@@ -260,7 +260,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             )
             .expect("an absorbed piece");
     }
-    // A note whose title would only repeat it, in its own vault: it is replaced by its filed version, never lost.
+    // A note whose title would only repeat it, in its own space: it is replaced by its filed version, never lost.
     owner
         .call(
             "remember",
@@ -294,14 +294,14 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             .any(|t| t.contains("la deuxième idée pour alpha")),
         "{work:?}"
     );
-    // Out of the frame (a vault it may not name): no vault by default, it stays in À trier, the same words.
+    // Out of the frame (a space it may not name): no space by default, it stays in À trier, the same words.
     assert!(texts(&mut all, "sam-me", &[], "range").is_empty());
     let stayed = texts(&mut all, "sam-work", &["janitor"], "planning");
     assert_eq!(stayed.len(), 1, "{stayed:?}");
     assert!(stayed[0].ends_with("Tension dans l'équipe sur le planning de jeudi."));
     assert!(
         texts(&mut all, "sam-health", &[], "planning").is_empty(),
-        "a work note never leaves the work vault"
+        "a work note never leaves the work space"
     );
     assert!(
         texts(&mut all, "sam-work", &["inbox"], "planning").is_empty(),
@@ -324,7 +324,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     assert!(
         texts(&mut all, "sam-me", &[], "budget").is_empty()
             && texts(&mut all, "sam-health", &[], "budget").is_empty(),
-        "never another vault"
+        "never another space"
     );
     let revoir = texts(&mut all, "sam-work", &["janitor"], "revoir");
     assert_eq!(
@@ -353,7 +353,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     );
     assert!(
         texts(&mut all, "sam-me", &["inbox"], "").is_empty(),
-        "no vault is a default"
+        "no space is a default"
     );
 
     // A second pass does nothing again: nothing filed twice.
@@ -458,7 +458,7 @@ fn it_learns_from_the_model_and_files_alone_what_it_is_sure_of() {
     let mut all = Client::new(&r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
     let alone = texts(&mut all, "sam-work", &["projets/alpha"], "numéro");
     assert_eq!(alone.len(), 8, "{alone:?}");
-    // Its note of the night stays in the vault and says what it learned.
+    // Its note of the night stays in the space and says what it learned.
     assert!(j.write_learning_notes().is_empty());
     let night = texts(&mut all, "sam-work", &["janitor/keywords"], "janitor");
     assert_eq!(night.len(), 1, "{night:?}");

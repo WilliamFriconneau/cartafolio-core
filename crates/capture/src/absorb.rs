@@ -1,5 +1,5 @@
 //! Absorbing a folder of notes: the bridge reads the Markdown files of a folder the person keeps up to date (synced to
-//! this machine) and sends **what is new in them** to the inbox of a vault, tagged `inbox/absorb`. The server's janitor
+//! this machine) and sends **what is new in them** to the inbox of a space, tagged `inbox/absorb`. The server's janitor
 //! then draws short, dated facts out of each piece, in the note's own words: what is memorised is the information, not
 //! a copy of the files.
 //!
@@ -28,7 +28,7 @@ const PASSAGE_MAX: usize = 3500;
 #[derive(Clone, Debug)]
 pub struct Source {
     pub dir: PathBuf,
-    pub vault: String,
+    pub space: String,
     /// Folders (relative to `dir`, any case) never read.
     pub exclude: Vec<String>,
     /// Words that keep a file closed when its name holds one (any case).
@@ -314,7 +314,7 @@ pub fn absorb(
     if !src.dir.is_dir() {
         return Err(Error::Invalid("the folder to absorb is not there".into()));
     }
-    let name = hash(&format!("{}\0{}", src.dir.display(), src.vault));
+    let name = hash(&format!("{}\0{}", src.dir.display(), src.space));
     let mut state = State::open(state_dir.join(format!("absorb-{name}.json")));
     let stock_only = state.fresh && !everything;
     for (rel, path) in files(src) {
@@ -359,7 +359,7 @@ pub fn absorb(
                 );
                 match client.call(
                     "remember",
-                    json!({ "space": src.vault, "kind": "context", "tags": ["inbox/absorb"], "text": note }),
+                    json!({ "space": src.space, "kind": "context", "tags": ["inbox/absorb"], "text": note }),
                 ) {
                     Ok(_) => {
                         sent.push(h);
@@ -391,11 +391,11 @@ pub fn absorb(
     Ok(report)
 }
 
-/// Where proposals of a vault are put down as files: the facts under `tag` (`proposals/pro`) of `vault`, one file each, in
+/// Where proposals of a space are put down as files: the facts under `tag` (`proposals/pro`) of `space`, one file each, in
 /// `dir` (a folder an assistant that only reads files sees: the work assistant, say).
 #[derive(Clone, Debug)]
 pub struct Delivery {
-    pub vault: String,
+    pub space: String,
     pub tag: String,
     pub dir: PathBuf,
 }
@@ -409,7 +409,7 @@ pub fn deliver(
 ) -> Result<u32, Error> {
     let name = hash(&format!(
         "deliver\0{}\0{}\0{}",
-        d.vault,
+        d.space,
         d.tag,
         d.dir.display()
     ));
@@ -420,7 +420,7 @@ pub fn deliver(
         .unwrap_or_default();
     let listed = match client.call(
         "recall",
-        json!({ "space": d.vault, "query": "", "tags": [d.tag], "limit": 50 }),
+        json!({ "space": d.space, "query": "", "tags": [d.tag], "limit": 50 }),
     ) {
         Ok(l) => l,
         Err(e) => {
@@ -477,8 +477,8 @@ pub fn deliver(
     Ok(n)
 }
 
-/// Proposes the app guide that tells the assistants of `d.vault` what a proposal for this folder is (once per text: the
-/// person approves it on the memory's page, then every assistant of the vault is told). Only for `proposals/<name>`.
+/// Proposes the app guide that tells the assistants of `d.space` what a proposal for this folder is (once per text: the
+/// person approves it on the memory's page, then every assistant of the space is told). Only for `proposals/<name>`.
 pub fn propose_guide(client: &mut Client, d: &Delivery, state_dir: &Path, report: &mut Absorbed) {
     if !d.tag.starts_with("proposals/") {
         return;
@@ -488,19 +488,19 @@ pub fn propose_guide(client: &mut Client, d: &Delivery, state_dir: &Path, report
         |n| n.to_string_lossy().into_owned(),
     );
     let text = format!(
-        "What is written in this vault with the tag `{tag}` is put down as a file in the person's work folder, under « {folder} », once, for the assistants that read that folder. \
+        "What is written in this space with the tag `{tag}` is put down as a file in the person's work folder, under « {folder} », once, for the assistants that read that folder. \
 Write there an idea or a note meant for that folder, when the person asks for it (« idée pour le pro », « note-le pour le pro »): one fact each, dated, in the person's words, no person's name (the post instead). \
 It is not filed elsewhere and not changed afterwards; to take one back, retire it.",
         tag = d.tag
     );
     let mark = state_dir.join(format!(
         "guide-{}.txt",
-        hash(&format!("{}\0{text}", d.vault))
+        hash(&format!("{}\0{text}", d.space))
     ));
     if mark.exists() {
         return;
     }
-    match client.call("guide_propose", json!({ "space": d.vault, "text": text })) {
+    match client.call("guide_propose", json!({ "space": d.space, "text": text })) {
         Ok(_) => {
             let _ = std::fs::create_dir_all(state_dir);
             let _ = std::fs::write(&mark, b"proposed");

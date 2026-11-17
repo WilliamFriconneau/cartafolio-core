@@ -109,7 +109,7 @@ Say 'A durable memory for your AI assistants, kept on this computer.'
 # --- choices -------------------------------------------------------------------------------------------------
 Step '1/5  Choices'
 $Language = Ask 'Language of search and of the page (en or fr)?' $Language
-$Spaces = Ask 'First vaults, comma separated (a vault is one box for one part of your life)' $Spaces
+$Spaces = Ask 'First spaces, comma separated (a space is one box for one part of your life)' $Spaces
 $Port = [int](Ask 'Port of the node on this computer?' $Port)
 $BridgePort = [int](Ask 'Port of the bridge on this computer, for assistants?' $BridgePort)
 if ($Port -eq $BridgePort) { Die 'the node and the bridge need two ports' }

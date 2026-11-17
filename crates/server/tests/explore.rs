@@ -311,7 +311,7 @@ fn a_stored_dashboard_counts_the_signs_and_lists_the_targets() -> Res {
         .into_iter()
         .find(|u| u.ha_user.as_deref() == Some(SAM.0))
         .ok_or("no person")?;
-    let health = e.app.brain.add_vault(&me.id, &me.name, "health")?;
+    let health = e.app.brain.add_space_of_kind(&me.id, &me.name, "health")?;
     let today = memcp_core::util::iso(memcp_core::util::now());
     let day = &today[..10];
     let entry = format!(

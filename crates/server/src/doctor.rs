@@ -91,11 +91,11 @@ fn quick(c: &Connection) -> String {
 /// What a directory is, which decides what is expected of it.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Role {
-    /// An installation of its own: an administrator, vaults.
+    /// An installation of its own: an administrator, spaces.
     Engine,
-    /// The registry of a manager: the people, no vault.
+    /// The registry of a manager: the people, no space.
     Registry,
-    /// One person's directory under a manager: vaults, and no administrator (the manager has them).
+    /// One person's directory under a manager: spaces, and no administrator (the manager has them).
     Person,
 }
 
@@ -189,12 +189,12 @@ fn control(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
             format!("control database failed its integrity check: {q}"),
         );
     }
-    vaults(r, data, ctl, role);
+    spaces(r, data, ctl, role);
     people(r, ctl, role);
     connections(r, ctl);
 }
 
-fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
+fn spaces(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
     let names: Vec<String> = ctl
         .prepare("SELECT name FROM spaces ORDER BY name")
         .and_then(|mut st| st.query_map([], |row| row.get(0))?.collect())
@@ -202,19 +202,19 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
     if names.is_empty() && role != Role::Registry {
         r.add(
             Level::Warn,
-            "no vault yet: create one with `vault add KIND`, or on the page",
+            "no space yet: create one with `space new KIND`, or on the page",
         );
     }
     for name in names {
         let path = data.join(format!("{name}.sqlite"));
         if !path.exists() {
-            r.add(Level::Fail, format!("vault {name}: its file is missing"));
+            r.add(Level::Fail, format!("space {name}: its file is missing"));
             continue;
         }
         let c = match read_only(&path) {
             Ok(c) => c,
             Err(e) => {
-                r.add(Level::Fail, format!("vault {name}: cannot be opened ({e})"));
+                r.add(Level::Fail, format!("space {name}: cannot be opened ({e})"));
                 continue;
             }
         };
@@ -230,21 +230,21 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
         if q != "ok" {
             r.add(
                 Level::Fail,
-                format!("vault {name}: failed its integrity check: {q}"),
+                format!("space {name}: failed its integrity check: {q}"),
             );
         } else if v > SPACE_SCHEMA_VERSION {
             r.add(
                 Level::Fail,
                 format!(
-                    "vault {name}: version {v} is newer than this program ({SPACE_SCHEMA_VERSION})"
+                    "space {name}: version {v} is newer than this program ({SPACE_SCHEMA_VERSION})"
                 ),
             );
         } else if v < SPACE_SCHEMA_VERSION {
-            r.add(Level::Warn, format!("vault {name}: version {v}, migrates to {SPACE_SCHEMA_VERSION} at the next start ({facts} facts; take a backup first)"));
+            r.add(Level::Warn, format!("space {name}: version {v}, migrates to {SPACE_SCHEMA_VERSION} at the next start ({facts} facts; take a backup first)"));
         } else {
             r.add(
                 Level::Ok,
-                format!("vault {name}: version {v}, {facts} facts, integrity ok"),
+                format!("space {name}: version {v}, {facts} facts, integrity ok"),
             );
         }
         let inbox: i64 = c
@@ -258,7 +258,7 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
         if inbox > 0 {
             r.add(
                 Level::Info,
-                format!("vault {name}: {inbox} quick note(s) wait in the inbox to be sorted"),
+                format!("space {name}: {inbox} quick note(s) wait in the inbox to be sorted"),
             );
         }
     }
@@ -309,7 +309,7 @@ fn connections(r: &mut Report, ctl: &Connection) {
         if c.rights == "all" {
             r.add(
                 Level::Warn,
-                format!("connection {} reaches every vault of its person. Prefer one limited to the vaults it needs (`regrant {} --grant vault:rw`)", c.agent, c.agent),
+                format!("connection {} reaches every space of its person. Prefer one limited to the spaces it needs (`regrant {} --grant space:rw`)", c.agent, c.agent),
             );
         }
         let idle = c.last_used_at.map_or(t - c.created_at, |u| t - u);

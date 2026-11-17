@@ -18,7 +18,7 @@
 #   --version vX.Y.Z     a release other than the latest
 #   --from DIR           take memcp, memcp-capture and memcp-janitor from DIR (a build of your own) instead of a release
 #   --language en|fr     the language of search and of the page (default en)
-#   --spaces LIST        the first vaults (default personal,work,health)
+#   --spaces LIST        the first spaces (default personal,work,health)
 #   --port N             the node's port on the loopback (default 8791)
 #   --bridge-port N      the bridge's port on the loopback, for assistants (default 8792)
 #   --whisper-model FILE voice notes read on this Mac by whisper.cpp (`brew install whisper-cpp ffmpeg`) with this model
@@ -131,7 +131,7 @@ say "A durable memory for your AI assistants, kept on this Mac."
 # --- choices -------------------------------------------------------------------------------------------------
 step "1/5  Choices"
 ask "Language of search and of the page (en or fr)?" "$LANGUAGE"; LANGUAGE="$ANSWER"
-ask "First vaults, comma separated (a vault is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
+ask "First spaces, comma separated (a space is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
 ask "Port of the node on this Mac?" "$PORT"; PORT="$ANSWER"
 ask "Port of the bridge on this Mac, for assistants?" "$BRIDGE_PORT"; BRIDGE_PORT="$ANSWER"
 for p in "$PORT" "$BRIDGE_PORT"; do

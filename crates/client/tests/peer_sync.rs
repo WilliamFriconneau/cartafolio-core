@@ -52,7 +52,7 @@ fn server() -> (Brain, String, String, std::path::PathBuf) {
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .expect("user")
             .id;
-        brain.add_vault(&sam, "sam", "me").expect("vault");
+        brain.add_space_of_kind(&sam, "sam", "me").expect("vault");
         access::connect_for(
             &ctl,
             &sam,

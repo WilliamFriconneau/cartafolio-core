@@ -14,7 +14,7 @@ It is a check of the page's logic, not of a real browser: the clipboard and the 
 ## In a real browser
 
 `browser.test.js` drives the real page, served by the real program, in a real headless Chromium
-(through `playwright-core`): signing in with a console key, the vault list, the "connect an
+(through `playwright-core`): signing in with a console key, the space list, the "connect an
 assistant" steps and the wait for the first request, copying to the clipboard, the instructions
 editor, the download of the export, the activity list, and that nothing breaks the page's content
 security policy or logs an error.

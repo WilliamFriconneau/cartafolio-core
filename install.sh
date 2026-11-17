@@ -13,7 +13,7 @@
 #   --prefix DIR      where the programs go (default ~/.local/bin)
 #   --data DIR        where the memory lives (default ~/memory)
 #   --language en|fr  the language of search and of the page (default en)
-#   --spaces LIST     the first vaults, e.g. personal,health,home (default personal,health,home)
+#   --spaces LIST     the first spaces, e.g. personal,health,home (default personal,health,home)
 #   --port N          the port on the loopback (default 8791)
 #   --no-service      do not make a systemd user service
 #   --help
@@ -85,7 +85,7 @@ step "1/5  Choices"
 ask "Where should the programs go?" "$PREFIX"; PREFIX="$ANSWER"
 ask "Where should the memory live? (a folder of databases: back it up, move it, it is yours)" "$DATA"; DATA="$ANSWER"
 ask "Language of search and of the page (en or fr)?" "$LANGUAGE"; LANGUAGE="$ANSWER"
-ask "First vaults, comma separated (a vault is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
+ask "First spaces, comma separated (a space is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
 ask "Port on this machine (the server listens on the loopback only)?" "$PORT"; PORT="$ANSWER"
 case "$PORT" in ''|*[!0-9]*) die "the port must be a number" ;; esac
 

@@ -265,7 +265,7 @@ CREATE TABLE pairing_codes (
 ";
 
 /// What a person chose on the consent page, kept with the authorization code until the
-/// token is issued: the vaults (`health:rw,work:r`), whether the upstream tools (home,
+/// token is issued: the spaces (`health:rw,work:r`), whether the upstream tools (home,
 /// mail, finances) were ticked, and whether the connection is read-only. An empty
 /// `rights` (a code issued before this existed) grants nothing.
 const CONTROL_V5: &str = r"
@@ -312,13 +312,13 @@ CREATE INDEX fact_origin_key ON fact_origin(app, ext_id);
 CREATE INDEX fact_origin_at ON fact_origin(app, at);
 ";
 
-/// The kind of a vault (from the catalogue). A vault that existed before kinds, or one an
+/// The kind of a space (from the catalogue). A space that existed before kinds, or one an
 /// operator named by hand, is `custom`, and carries no built-in tools.
 const CONTROL_V7: &str = r"
 ALTER TABLE spaces ADD COLUMN kind TEXT NOT NULL DEFAULT 'custom';
 ";
 
-/// Guides: the standing instructions of a person, for their assistants. One per vault and one
+/// Guides: the standing instructions of a person, for their assistants. One per space and one
 /// for the person, written only through the admin page (no tool writes one). A new text
 /// never overwrites: the old row stays, no longer current. Clearing leaves no current row.
 const CONTROL_V8: &str = r"
@@ -335,8 +335,8 @@ CREATE UNIQUE INDEX guides_current ON guides(scope) WHERE current = 1;
 CREATE INDEX guides_scope ON guides(scope, id);
 ";
 
-/// A grant limited to a path inside a vault (`health/sources/bevel:rw`): the connection reads and
-/// writes only the facts filed under that tag path. The vault's own `grants` row says the
+/// A grant limited to a path inside a space (`health/sources/bevel:rw`): the connection reads and
+/// writes only the facts filed under that tag path. The space's own `grants` row says the
 /// connection reaches it at all; these rows narrow it.
 const CONTROL_V9: &str = r"
 CREATE TABLE grant_paths (
@@ -388,7 +388,7 @@ const CONTROL_V12: &str = r"
 ALTER TABLE oauth_codes ADD COLUMN agent TEXT NOT NULL DEFAULT '';
 ";
 
-/// A bridge paired for « all my vaults »: it writes to the inbox of each, and of the ones the person makes later.
+/// A bridge paired for « all my spaces »: it writes to the inbox of each, and of the ones the person makes later.
 const CONTROL_V15: &str = r"
 ALTER TABLE connections ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE bridge_pairings ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;

@@ -58,7 +58,7 @@ pub fn exchange(app: &App, req: &Request) -> Response {
                     "agent": p.agent,
                     "key": p.token,
                     "mcp_url": format!("{}/mcp/{}", app.public_url, p.agent),
-                    "vaults": p.vaults,
+                    "vaults": p.spaces,
                 }),
             )
         }

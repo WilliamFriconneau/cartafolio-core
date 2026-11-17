@@ -144,7 +144,7 @@ pub struct RecallOptions {
     /// Every one of these tags must match (a tag matches itself and its descendants).
     pub tags: Vec<String>,
     /// When not empty, only facts filed under at least one of these paths: what a connection
-    /// limited to paths inside the vault may read.
+    /// limited to paths inside the space may read.
     pub within: Vec<String>,
 }
 
@@ -207,7 +207,7 @@ pub fn read_fact(conn: &Connection, id: &str) -> Result<Option<Fact>> {
 /// by this tag, and each connection is told how many wait.
 pub const INBOX_TAG: &str = "inbox";
 
-/// The tag raw records from apps are filed under (`sources/<app>`): the vault's raw layer.
+/// The tag raw records from apps are filed under (`sources/<app>`): the space's raw layer.
 pub const SOURCES_TAG: &str = "sources";
 
 fn in_inbox(tag: &str) -> bool {

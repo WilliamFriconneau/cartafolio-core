@@ -16,13 +16,13 @@ program, the janitor, which transcribes a recording that has no text and files w
 
 **The simple way: pair.** On the memory's page, "Connect a capture program": the page gives a code (eight characters, ten minutes, once)
 and the server's address, and asks for nothing else. The app sends them (`POST <server>/pair {"code", "device"}`, or
-`memcp_client::pair` / the Swift `pair(server:code:device:)`) and gets back its own connection: `{agent, key, mcp_url, vaults}`, with
-the rights `<person>-a-trier/inbox:rw`: **À trier**, the person's one box for everything that comes in, which belongs to no vault
-(`vaults` names it). The capture program never chooses a vault: the janitor sends each capture to the inbox of one, or leaves it in À trier
+`memcp_client::pair` / the Swift `pair(server:code:device:)`) and gets back its own connection: `{agent, key, mcp_url, spaces}`, with
+the rights `<person>-a-trier/inbox:rw`: **À trier**, the person's one box for everything that comes in, which belongs to no space
+(`spaces` names it). The capture program never chooses a space: the janitor sends each capture to the inbox of one, or leaves it in À trier
 for the person to decide on their page. The key goes into the Keychain at once. The ways below remain for a key made by hand.
 
 - The address of a connection is its name: `https://<server>/mcp/<connection name>`. The key is the one the memory shows
-  once when the person makes the connection (the page, "A key by hand"): give it the rights **`<vault>/inbox:rw`**, for
+  once when the person makes the connection (the page, "A key by hand"): give it the rights **`<space>/inbox:rw`**, for
   example `personal/inbox:rw`. A key that can only write to an inbox reaches nothing else.
 - The capture program never refuses the person's address: it is their relay. An address that is neither HTTPS nor of this machine
   or the own network (a private address, a `.local` or `.lan` name) is taken **with a warning**: the key then travels in
@@ -125,7 +125,7 @@ can read, they can repeat. The gateway then runs **as a user of its own** and th
 nothing else.
 
 - **The settings in one file**, `--config FILE`, mode 600, owned by the gateway's user: `url`, `key` (or `key_file`),
-  `outbox`, `capture_dir` (an old `vault` line is ignored: there is no vault to choose). With it, an address or a key on the command line or in the environment is refused: nothing shows in
+  `outbox`, `capture_dir` (an old `space` line is ignored: there is no space to choose). With it, an address or a key on the command line or in the environment is refused: nothing shows in
   a process list or a service file. No error names the address.
 - **A Unix socket**, `--socket PATH`: mode 600 (only the gateway's user), or 660 with `--socket-group GID` (a group of two: the
   gateway's user and the person). The folder must not be writable by others. The kernel checks who connects; no secret to copy.
@@ -137,8 +137,8 @@ nothing else.
 On macOS: a user for the gateway (`_memcp`, say), its settings file in a folder only it reads, a LaunchDaemon that runs
 `memcp-capture --config … --socket …`, and a group with that user and the person. Setting that up needs an administrator.
 
-What it does not change: what the gateway returns (the vault's contents) enters the assistant's conversation; whoever can
-read that conversation can read it. A key limited to one vault is the boundary of what it can see.
+What it does not change: what the gateway returns (the space's contents) enters the assistant's conversation; whoever can
+read that conversation can read it. A key limited to one space is the boundary of what it can see.
 
 ## Voice: recordings read where the speech model is
 
@@ -147,35 +147,35 @@ timer, with `transcribe = <person>-a-trier` (where the devices put their recordi
 `whisper_lang`, `whisper_threads`, `lexicon`). A recording that reached one of those inboxes with no note naming it is read by
 Whisper; its text becomes a note of the same inbox (« Dictée du … audio <name> (<id>) : … », cut into parts if long, resumed if a
 pass stops halfway). Silence leaves the inbox; a recording that cannot be read is tried three times. A week after its text
-was filed (wherever the janitor filed it), the recording is erased from the memory. Its key needs the whole vaults it reads
+was filed (wherever the janitor filed it), the recording is erased from the memory. Its key needs the whole spaces it reads
 (erasing is not offered to a key limited to paths).
 
 ## Absorbing a folder, putting proposals down as files
 
-A folder of notes kept up to date on this machine (synced from elsewhere) can be **absorbed** into a vault, the way an app
+A folder of notes kept up to date on this machine (synced from elsewhere) can be **absorbed** into a space, the way an app
 deposits its records: `memcp-capture absorb --config FILE`, on a timer.
 
 ```text
-absorb = ~/Notes/Work -> work          # the folder and the vault whose inbox receives what is new in it
+absorb = ~/Notes/Work -> work          # the folder and the space whose inbox receives what is new in it
 absorb_exclude = Raw, Archive          # folders never read (relative to the folder)
 absorb_protect = confidential          # a file whose name holds one of these words is never opened
 absorb_roles = ~/Notes/Work/People.md  # a table « Name | Post »: a name is never sent, its post is
-deliver = work proposals/pro -> ~/Notes/Work/Ideas   # proposals of a vault put down as files
+deliver = work proposals/pro -> ~/Notes/Work/Ideas   # proposals of a space put down as files
 ```
 
-- Each note is cut at its headings; only the passages whose text is new are sent, to the inbox of the vault, tagged
+- Each note is cut at its headings; only the passages whose text is new are sent, to the inbox of the space, tagged
   `inbox/absorb`, starting with « D'après la note <path>, modifiée le <date> : ». The server's janitor draws short, dated
   facts out of each and the piece leaves: what is kept is the information, not a copy of the files.
 - The first pass only takes stock (a folder imported before is not sent twice); `absorb all` sends everything.
 - Hidden files and folders are never read; the delivery folder is never absorbed back.
 - Known names become posts before anything leaves; the janitor is told to write posts, never names, for the others.
-- **Proposals**: a fact of the vault tagged `proposals/<name>` (an idea noted for the work folder, say) is written as a file in
+- **Proposals**: a fact of the space tagged `proposals/<name>` (an idea noted for the work folder, say) is written as a file in
   the delivery folder, once (`date`, `source: mémoire`, `statut: nouvelle` in its front matter); an existing file is never
-  overwritten. The memory tells every assistant of the vault that this tool reads `proposals/<name>`, and the capture program proposes
+  overwritten. The memory tells every assistant of the space that this tool reads `proposals/<name>`, and the capture program proposes
   its own app guide once (what such a proposal is): approved on the memory's page, it is told to them too. No line to add to
   a guide by hand.
-- Name the connection after the tag (`pro` for `proposals/pro`). Its key needs `<vault>/inbox:rw`,
-  `<vault>/proposals/<name>:r` and `<vault>/guide:rw` (to propose its guide), nothing more.
+- Name the connection after the tag (`pro` for `proposals/pro`). Its key needs `<space>/inbox:rw`,
+  `<space>/proposals/<name>:r` and `<space>/guide:rw` (to propose its guide), nothing more.
 
 ## Mounted folders (planned)
 
@@ -251,7 +251,7 @@ public enum ItemKind  { case text, document, audio, call }
 public enum ItemState { case queued, sending, sent, failed }       // failed: the memory refused it, see detail
 public struct IntakeFlush { sent: UInt32; waiting: UInt32; failed: UInt32; unreachable: Bool; refused: Bool; busy: Bool }
 // on Intake: func retry(id: String?) throws -> UInt32   // put refused captures back in the queue
-public struct Pairing { agent: String; url: String; key: String; vaults: [String] }   // vaults: [À trier], nothing to choose
+public struct Pairing { agent: String; url: String; key: String; spaces: [String] }   // spaces: [À trier], nothing to choose
 public enum PairError: Error { case refused(message: String); case wait(message: String); case unreachable(message: String) }
 public func pair(server: String, code: String, device: String) throws -> Pairing   // BLOCKS (30 s at most); Pairing.inClear: warn
 // on Intake: func inClear() -> Bool                       // the key would travel in clear: show a warning, never refuse
@@ -291,7 +291,7 @@ Build `memcp` from the memory's repository and run a throwaway one:
 
 ```text
 memcp --data /tmp/try init --spaces legacy
-memcp --data /tmp/try vault add me --user owner
+memcp --data /tmp/try space new me --user owner
 memcp --data /tmp/try connect bridge --grant owner-me/inbox:rw        # prints the key once (a key made by hand: one inbox)
 memcp --data /tmp/try serve --listen 127.0.0.1:8791
 ```

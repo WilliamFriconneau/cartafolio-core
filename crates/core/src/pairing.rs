@@ -22,8 +22,8 @@ const CODE_LEN: usize = 8;
 pub struct Paired {
     pub agent: String,
     pub token: String,
-    /// The vaults whose inbox the connection writes to.
-    pub vaults: Vec<String>,
+    /// The spaces whose inbox the connection writes to.
+    pub spaces: Vec<String>,
 }
 
 /// A code as the person may type it: lower case, with a dash or spaces.
@@ -48,18 +48,18 @@ pub fn display(code: &str) -> String {
     }
 }
 
-/// The rights a bridge gets for the vaults ticked: the inbox of each, nothing else.
-pub fn rights_for(vaults: &[String]) -> Result<Rights> {
-    if vaults.is_empty() {
-        return Err(Error::Invalid("tick at least one vault".into()));
+/// The rights a bridge gets for the spaces ticked: the inbox of each, nothing else.
+pub fn rights_for(spaces: &[String]) -> Result<Rights> {
+    if spaces.is_empty() {
+        return Err(Error::Invalid("tick at least one space".into()));
     }
-    let spec: Vec<String> = vaults.iter().map(|v| format!("{v}/inbox:rw")).collect();
+    let spec: Vec<String> = spaces.iter().map(|v| format!("{v}/inbox:rw")).collect();
     Rights::parse(&spec.join(","))
 }
 
-/// A new code for `user_id`, valid [`CODE_TTL`] seconds from `now`, for the inboxes of `vaults`.
-pub fn create(ctl: &Connection, user_id: &str, vaults: &[String], now: i64) -> Result<String> {
-    create_with(ctl, user_id, rights_for(vaults)?, now)
+/// A new code for `user_id`, valid [`CODE_TTL`] seconds from `now`, for the inboxes of `spaces`.
+pub fn create(ctl: &Connection, user_id: &str, spaces: &[String], now: i64) -> Result<String> {
+    create_with(ctl, user_id, rights_for(spaces)?, now)
 }
 
 /// A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as the
@@ -197,7 +197,7 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
     let token = match made {
         Ok(t) => t,
         Err(e) => {
-            // The person's vaults changed since the code was made: the code can be tried again.
+            // The person's spaces changed since the code was made: the code can be tried again.
             ctl.execute(
                 "UPDATE bridge_pairings SET used_at = NULL, agent = NULL WHERE hash = ?1",
                 [hash(code)],
@@ -205,14 +205,14 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
             return Err(e);
         }
     };
-    let mut vaults: Vec<String> = spec
+    let mut spaces: Vec<String> = spec
         .split(',')
         .filter_map(|g| g.split('/').next().map(str::to_string))
         .collect();
-    vaults.dedup();
+    spaces.dedup();
     Ok(Paired {
         agent,
         token,
-        vaults,
+        spaces,
     })
 }

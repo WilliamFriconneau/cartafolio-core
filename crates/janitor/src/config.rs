@@ -10,11 +10,11 @@ pub struct Config {
     pub url: String,
     /// The connection's key, read from `key_file`.
     pub key: String,
-    /// The vaults whose inbox the janitor files. Empty (the default): every vault its key reaches. « À trier » is always
-    /// read: it is where the devices write, and no vault is a default.
+    /// The spaces whose inbox the janitor files. Empty (the default): every space its key reaches. « À trier » is always
+    /// read: it is where the devices write, and no space is a default.
     pub inbox_vaults: Vec<String>,
     /// Words that mark a note as being about the person's work (a product, a company, a colleague's team): such a note
-    /// goes to the vault `work` from « À trier » before any model. Empty by default: it is the person's own list.
+    /// goes to the space `work` from « À trier » before any model. Empty by default: it is the person's own list.
     pub work_words: Vec<String>,
     pub utc_offset_minutes: i32,
     /// The models to try, in order: `local` (Ollama, on this machine or another) and `api` (any OpenAI-compatible service, only when named).
@@ -99,8 +99,8 @@ impl Config {
         let known = [
             "url",
             "key_file",
-            // No longer used: « À trier » replaced the default vault. Accepted, so that an old file still works.
-            "default_vault",
+            // No longer used: « À trier » replaced the default space. Accepted, so that an old file still works.
+            "default_space",
             "inbox_vaults",
             "work_words",
             "utc_offset_minutes",
@@ -205,7 +205,7 @@ mod tests {
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         std::fs::write(dir.join("key"), "hcp_x\n").map_err(|e| e.to_string())?;
         Config::parse(&format!(
-            "url = http://127.0.0.1:8791/mcp/janitor\nkey_file = {}\ndefault_vault = personal\n{extra}",
+            "url = http://127.0.0.1:8791/mcp/janitor\nkey_file = {}\ndefault_space = personal\n{extra}",
             dir.join("key").display()
         ))
     }
@@ -214,7 +214,7 @@ mod tests {
     fn only_the_local_model_is_used_unless_an_api_is_named() {
         let c = settings("").expect("minimal settings");
         assert_eq!(c.models, ["local"]);
-        assert!(c.inbox_vaults.is_empty(), "every vault the key reaches");
+        assert!(c.inbox_vaults.is_empty(), "every space the key reaches");
         assert!(c.api_url.is_none());
         assert!(
             settings("models = api\n").is_err(),

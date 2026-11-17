@@ -27,7 +27,7 @@ fn world() -> Result<World, Box<dyn Error>> {
     let brain = Brain::init(&t.path().join("data"), &[sp("legacy")], Language::English)?;
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?.id;
-    brain.add_vault(&sam, "sam", "health")?;
+    brain.add_space_of_kind(&sam, "sam", "health")?;
     Ok(World {
         _t: t,
         brain,
@@ -74,7 +74,7 @@ fn only_a_connection_given_the_guide_path_gets_the_tool() -> Res {
     let whole = caller(&w, "claude", "sam-health:rw")?;
     assert!(
         !offers(&whole),
-        "a whole-vault key is not an app with its own guide"
+        "a whole-space key is not an app with its own guide"
     );
     let everything = caller(&w, "everything", "all")?;
     assert!(!offers(&everything));
@@ -109,9 +109,9 @@ fn a_proposal_is_data_until_the_person_approves_it_as_it_reads() -> Res {
     assert!(told.contains("approved by Sam"));
     assert!(told.contains(FORMAT));
 
-    // A connection that does not reach the vault is told nothing of it.
+    // A connection that does not reach the space is told nothing of it.
     let kim = users::create_user(&w.ctl, OWNER, "kim", "Kim", false)?.id;
-    w.brain.add_vault(&kim, "kim", "work")?;
+    w.brain.add_space_of_kind(&kim, "kim", "work")?;
     let t = access::connect_for(
         &w.ctl,
         &kim,

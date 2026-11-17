@@ -43,7 +43,7 @@ fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-/// What the passes remember: `{files: {file_id: {vault, name, done_at, parts, of, fails, erase_fails, erased}}}`.
+/// What the passes remember: `{files: {file_id: {space, name, done_at, parts, of, fails, erase_fails, erased}}}`.
 struct State {
     file: PathBuf,
     data: Value,
@@ -156,10 +156,10 @@ fn fail(report: &mut VoiceReport, what: &str, e: &ClientError) {
     report.problems.push(format!("{what}: {e}"));
 }
 
-/// One pass over the inboxes of `vaults`: recordings transcribed, old ones erased.
+/// One pass over the inboxes of `spaces`: recordings transcribed, old ones erased.
 pub fn transcribe(
     client: &mut Client,
-    vaults: &[String],
+    spaces: &[String],
     settings: &VoiceSettings,
     state_dir: &Path,
     offset_minutes: i32,
@@ -178,17 +178,17 @@ pub fn transcribe(
     }
     let mut state = State::open(state_dir)?;
     let whisper = Whisper::new(settings);
-    for vault in vaults {
+    for space in spaces {
         // The recordings waiting are the descriptions under inbox/audio, newest first.
         let listed = match client.call(
             "recall",
-            json!({ "space": vault, "query": "", "tags": ["inbox/audio"], "limit": 50 }),
+            json!({ "space": space, "query": "", "tags": ["inbox/audio"], "limit": 50 }),
         ) {
             Ok(l) => l,
             Err(e) => {
                 fail(
                     &mut report,
-                    &format!("the recordings of {vault} cannot be listed"),
+                    &format!("the recordings of {space} cannot be listed"),
                     &e,
                 );
                 if report.key_refused {
@@ -197,12 +197,12 @@ pub fn transcribe(
                 continue;
             }
         };
-        let files = match client.call("file_list", json!({ "space": vault, "limit": 50 })) {
+        let files = match client.call("file_list", json!({ "space": space, "limit": 50 })) {
             Ok(f) => f,
             Err(e) => {
                 fail(
                     &mut report,
-                    &format!("the files of {vault} cannot be listed"),
+                    &format!("the files of {space} cannot be listed"),
                     &e,
                 );
                 continue;
@@ -241,7 +241,7 @@ pub fn transcribe(
                 match named_by_a_note(client, name, desc_id) {
                     Ok(Some(note)) => {
                         let e = state.entry(id);
-                        e["vault"] = json!(vault);
+                        e["vault"] = json!(space);
                         e["name"] = json!(name);
                         e["done_at"] = json!(now());
                         e["text"] = json!(note);
@@ -259,7 +259,7 @@ pub fn transcribe(
                 client,
                 &whisper,
                 &mut state,
-                vault,
+                space,
                 f,
                 id,
                 name,
@@ -314,7 +314,7 @@ fn one(
     client: &mut Client,
     whisper: &Whisper,
     state: &mut State,
-    vault: &str,
+    space: &str,
     f: &Value,
     id: &str,
     name: &str,
@@ -324,7 +324,7 @@ fn one(
 ) -> Result<(), Error> {
     {
         let e = state.entry(id);
-        e["vault"] = json!(vault);
+        e["vault"] = json!(space);
         e["name"] = json!(name);
     }
     let bytes = match client.file_get(id) {
@@ -378,7 +378,7 @@ fn one(
                 } else {
                     String::new()
                 };
-                let args = json!({ "space": vault, "kind": "context", "tags": ["inbox", "dictee"], "text": format!("{head}{of} : {part}") });
+                let args = json!({ "space": space, "kind": "context", "tags": ["inbox", "dictee"], "text": format!("{head}{of} : {part}") });
                 match client.call("remember", args) {
                     Ok(r) => {
                         let Some(fact) = r["fact"]["id"].as_str() else {
@@ -423,7 +423,7 @@ fn one(
 }
 
 /// The recordings whose text is old enough, wherever it was filed: erased. The text is found by the recording's id, which
-/// it carries (« audio <name> (<id>) »), so a note filed in another vault, or corrected since, is found too.
+/// it carries (« audio <name> (<id>) »), so a note filed in another space, or corrected since, is found too.
 fn erase_old(client: &mut Client, state: &mut State, report: &mut VoiceReport) {
     let due: Vec<(String, i64)> = state.data["files"]
         .as_object()

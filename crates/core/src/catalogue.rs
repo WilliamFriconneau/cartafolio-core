@@ -1,6 +1,6 @@
-//! The catalogue: the kinds of vault a person can have.
+//! The catalogue: the kinds of space a person can have.
 //!
-//! A vault is created from a kind, never freely and never by an assistant. The catalogue is
+//! A space is created from a kind, never freely and never by an assistant. The catalogue is
 //! data: a default for a person's life, replaceable by a `catalogue.txt` in the data
 //! directory, one kind per line, `key | label | description` and optionally `| money` to say that
 //! the kind carries the bank-statement tools. Lines
@@ -12,12 +12,12 @@
 use crate::error::{Error, Result};
 use crate::space::Space;
 
-/// The kind of a vault that was created before kinds existed, or by an operator with a name
+/// The kind of a space that was created before kinds existed, or by an operator with a name
 /// of their own. It carries no built-in tools.
 pub const CUSTOM: &str = "custom";
 
-/// The kind of the person's « À trier »: the one box every capturing device writes to, which belongs to no vault. The
-/// janitor sends what lands there to the inbox of a vault, or leaves it for the person to decide. Never in a catalogue.
+/// The kind of the person's « À trier »: the one box every capturing device writes to, which belongs to no space. The
+/// janitor sends what lands there to the inbox of a space, or leaves it for the person to decide. Never in a catalogue.
 pub const TRIAGE: &str = "a-trier";
 
 /// A built-in set of tools a kind can carry.
@@ -45,7 +45,7 @@ impl Feature {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kind {
     /// Lowercase letters, digits and dashes, starting with a letter: it becomes part of a
-    /// vault name.
+    /// space name.
     pub key: String,
     pub label: String,
     pub description: String,
@@ -145,9 +145,9 @@ pub fn parse(text: &str) -> Result<Vec<Kind>> {
     Ok(out)
 }
 
-/// The name of the vault of `kind` that a person owns: `<person>-<kind>`, the person's name
+/// The name of the space of `kind` that a person owns: `<person>-<kind>`, the person's name
 /// shortened to fit the 32 characters of a space name.
-pub fn vault_name(person: &str, kind: &str) -> Result<Space> {
+pub fn space_name(person: &str, kind: &str) -> Result<Space> {
     let room = 32usize.saturating_sub(kind.len() + 1);
     let mut who: String = person
         .chars()

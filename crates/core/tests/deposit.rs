@@ -26,7 +26,7 @@ fn world() -> Result<World, Box<dyn Error>> {
     let brain = Brain::init(&t.path().join("data"), &[sp("legacy")], Language::English)?;
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?.id;
-    brain.add_vault(&sam, "sam", "health")?;
+    brain.add_space_of_kind(&sam, "sam", "health")?;
     Ok(World {
         _t: t,
         brain,

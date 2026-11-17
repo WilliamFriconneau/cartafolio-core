@@ -488,14 +488,14 @@ fn too_many_refusals_from_one_address_block_even_the_right_token() -> Res {
 }
 
 #[test]
-fn the_bank_statement_tools_follow_the_money_vault_and_its_rights() -> Res {
+fn the_bank_statement_tools_follow_the_money_space_and_its_rights() -> Res {
     let dir = temp("finances");
     let brain = Brain::init(&dir, &[sp("finances"), sp("home")], Language::English)?;
     let e = Env {
         dir,
         app: App::new(brain),
     };
-    // No vault of the money kind: the tools do not exist, whatever the rights.
+    // No space of the money kind: the tools do not exist, whatever the rights.
     let all = connect(&e, "owner", "all", false)?;
     assert!(
         !tool_names(&e, &all)
@@ -524,7 +524,7 @@ fn the_bank_statement_tools_follow_the_money_vault_and_its_rights() -> Res {
         json!({ "rules": { "fees": ["agios"] } }),
     ));
     assert_eq!(r["rules"]["fees"], json!(["AGIOS"]));
-    // A key limited to a path of the money vault (its inbox) gets no statement tool, and a call is refused.
+    // A key limited to a path of the money space (its inbox) gets no statement tool, and a call is refused.
     let inbox = connect(&e, "inbox", "finances/inbox:rw", false)?;
     assert!(
         !tool_names(&e, &inbox)
@@ -760,14 +760,14 @@ fn the_handshake_tells_a_connection_the_guides_of_what_it_reaches_only() -> Res 
         );
         assert!(
             !w.contains("usual range") && !w.contains("\"health\""),
-            "{method}: nothing about a vault it cannot reach"
+            "{method}: nothing about a space it cannot reach"
         );
         assert!(
             w.starts_with("memcp memory."),
             "the general rules come first"
         );
     }
-    // `guide_propose` (an app's proposal) needs a key given the path; `guide_set` is for a key that writes a vault whole.
+    // `guide_propose` (an app's proposal) needs a key given the path; `guide_set` is for a key that writes a space whole.
     for t in [&all, &work] {
         assert!(
             tool_names(&e, t).iter().all(|n| n != "guide_propose"),
@@ -890,7 +890,7 @@ fn the_stdio_server_speaks_mcp_with_the_rights_of_its_key_and_nothing_else_on_st
     assert_eq!(
         by_id(4)["result"]["isError"],
         true,
-        "the vault it was not opened on stays closed"
+        "the space it was not opened on stays closed"
     );
     assert_eq!(by_id(5)["result"], json!({}));
     assert_eq!(
@@ -960,7 +960,7 @@ fn rpc_at(e: &Env, path: &str, token: &str, body: Value) -> Response {
 }
 
 #[test]
-fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res {
+fn a_key_used_at_the_address_of_a_space_reaches_that_space_and_no_other() -> Res {
     let e = env()?;
     let ctl = e.app.brain.open_control()?;
     guide::set(&ctl, "owner", "space:work", "Work guide: formal tone.")?;
@@ -975,13 +975,13 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
         );
         text_of(&r.body_json())
     };
-    // At its own address a key with every right sees every vault...
+    // At its own address a key with every right sees every space...
     assert!(
         stats("/mcp/everything")
             .as_object()
             .is_some_and(|m| m.contains_key("health") && m.contains_key("work"))
     );
-    // ...at the address of a vault it sees that vault, and its instructions, and nothing else.
+    // ...at the address of a space it sees that space, and its instructions, and nothing else.
     let only_work = stats("/mcp/work");
     assert_eq!(
         only_work
@@ -1018,11 +1018,11 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
         names
             .iter()
             .all(|n| !n.starts_with("health_") && !n.starts_with("kalios_")),
-        "no health tool at the address of the work vault"
+        "no health tool at the address of the work space"
     );
     let denied = rpc_at(&e, "/mcp/work", &all, json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x", "space": "health" } } })).body_json();
     assert_eq!(denied["result"]["isError"], true);
-    // A key that does not reach the vault of the address is told so, whether or not it exists.
+    // A key that does not reach the space of the address is told so, whether or not it exists.
     let narrow = connect(&e, "narrow", "work:rw", false)?;
     let r = rpc_at(
         &e,
@@ -1035,7 +1035,7 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
         r.body_json()["error"],
         "this key does not reach this address"
     );
-    // An address that is no vault's names a connection: only its own key is let in.
+    // An address that is no space's names a connection: only its own key is let in.
     let r = rpc_at(
         &e,
         "/mcp/ghost",
@@ -1075,7 +1075,7 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
 }
 
 #[test]
-fn the_metadata_of_an_address_that_names_a_vault_says_that_resource() -> Res {
+fn the_metadata_of_an_address_that_names_a_space_says_that_resource() -> Res {
     let mut e = env()?;
     e.app.public_url = "https://memory.example.net".into();
     let get = |p: &str| e.app.handle(&rq("GET", p, &[], ""));
@@ -1166,7 +1166,7 @@ fn doctor_reads_an_installation_and_changes_nothing() -> Res {
         "the public address ends with a slash",
         "the public address is not HTTPS",
         "only works on your own network",
-        "connection wide-key reaches every vault",
+        "connection wide-key reaches every space",
         "nothing answers on 127.0.0.1:1",
     ] {
         assert!(text.contains(want), "missing {want:?} in:\n{text}");
@@ -1178,11 +1178,11 @@ fn doctor_reads_an_installation_and_changes_nothing() -> Res {
 }
 
 #[test]
-fn doctor_fails_on_a_missing_vault_file_and_on_a_data_directory_that_is_not_there() -> Res {
+fn doctor_fails_on_a_missing_space_file_and_on_a_data_directory_that_is_not_there() -> Res {
     use memcp_server::doctor;
     let e = env()?;
     let dir = e.app.brain.dir().to_path_buf();
-    let first = e.app.brain.spaces()?.into_iter().next().ok_or("no vault")?;
+    let first = e.app.brain.spaces()?.into_iter().next().ok_or("no space")?;
     std::fs::remove_file(dir.join(format!("{}.sqlite", first.as_str())))?;
     let r = doctor::inspect(&dir, None, None);
     assert!(r.problems() >= 1, "{}", r.render());
@@ -1198,7 +1198,7 @@ fn the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key() -> Res
     let mine = connect(&e, "claudeai", "work:rw", false)?;
     let other = connect(&e, "kalios", "health:rw", false)?;
     let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
-    // Its own address and the address of a vault it reaches take it; the bare /mcp is nobody's.
+    // Its own address and the address of a space it reaches take it; the bare /mcp is nobody's.
     for path in ["/mcp/claudeai", "/mcp/work"] {
         assert_eq!(rpc_at(&e, path, &mine, ping.clone()).status, 200, "{path}");
     }

@@ -16,8 +16,8 @@ fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -
     let t = Temp::new("pairing");
     let brain = brain(&t)?;
     let ctl = brain.open_control()?;
-    let vaults: Vec<String> = vec!["health".into(), "home".into()];
-    let code = pairing::create(&ctl, users::OWNER, &vaults, NOW)?;
+    let spaces: Vec<String> = vec!["health".into(), "home".into()];
+    let code = pairing::create(&ctl, users::OWNER, &spaces, NOW)?;
     assert_eq!(code.len(), 9, "ABCD-EFGH: {code}");
     assert!(
         code.chars()
@@ -32,7 +32,7 @@ fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -
         "{}",
         paired.agent
     );
-    assert_eq!(paired.vaults, ["health", "home"]);
+    assert_eq!(paired.spaces, ["health", "home"]);
     let caller = access::authenticate(&ctl, &paired.token, NOW + 6)?.ok_or("the key works")?;
     assert!(caller.may_write_tags(&common::sp("health"), &["inbox".to_string()]));
     assert!(!caller.may_write_tags(&common::sp("health"), &["sante".to_string()]));
@@ -56,11 +56,11 @@ fn a_code_expires_and_cannot_reach_beyond_the_person() -> Res {
     assert!(pairing::redeem(&ctl, &code, "x", NOW + CODE_TTL).is_err());
     assert!(
         pairing::create(&ctl, users::OWNER, &[], NOW).is_err(),
-        "no vault ticked"
+        "no space ticked"
     );
     assert!(
         pairing::create(&ctl, users::OWNER, &["nowhere".into()], NOW).is_err(),
-        "a vault the person does not have"
+        "a space the person does not have"
     );
     Ok(())
 }
@@ -86,13 +86,13 @@ fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
 }
 
 #[test]
-fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
+fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_space_and_leaves() -> Res {
     use memcp_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("triage-send");
     let brain = brain(&t)?;
     let (_, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
-    let work = brain.add_vault(users::OWNER, "owner", "work")?;
+    let work = brain.add_space_of_kind(users::OWNER, "owner", "work")?;
     let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "bridge-phone");
     n.tags = vec!["inbox".into()];
     let Remembered::Created(note) =
@@ -111,7 +111,7 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     assert_eq!(moved.text, note.text, "as it is");
     assert!(
         moved.tags.contains(&"inbox".to_string()),
-        "into the vault's inbox"
+        "into the space's inbox"
     );
     let left = facts::read_fact(&brain.open_space(&box_)?, &note.id)?.ok_or("kept")?;
     assert_eq!(left.status, "retired");
@@ -156,17 +156,17 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
     let waiting = memcp_core::triage::waiting(&brain, &box_, 20)?;
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(1));
     assert_eq!(waiting["files"].as_array().map(Vec::len), Some(1));
-    for vault in common::SPACES {
-        let conn = brain.open_space(&common::sp(vault))?;
+    for space in common::SPACES {
+        let conn = brain.open_space(&common::sp(space))?;
         let n: i64 = conn.query_row("SELECT count(*) FROM facts", [], |r| r.get(0))?;
-        assert_eq!(n, 0, "nothing reached {vault}");
+        assert_eq!(n, 0, "nothing reached {space}");
     }
     // A space that is named is still the one written to.
     let named = json!({ "text": "2026-11-03, a fact for home", "space": "home" });
     let r = tools::call(&brain, &all, "remember", &named)?;
     let id = r["fact"]["id"].as_str().ok_or("id")?.to_string();
     assert!(facts::read_fact(&brain.open_space(&common::sp("home"))?, &id)?.is_some());
-    // Several vaults and no right on « À trier »: still refused.
+    // Several spaces and no right on « À trier »: still refused.
     let two = key("two", "home:rw,work:rw")?;
     assert!(matches!(
         tools::call(&brain, &two, "remember", &note),

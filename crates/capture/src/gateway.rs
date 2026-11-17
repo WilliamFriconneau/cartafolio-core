@@ -433,7 +433,7 @@ impl Gateway {
 
 /// What an assistant sees of the tools when it starts offline and has never seen the memory's list.
 fn offline_tools() -> Value {
-    let space = json!({ "type": "string", "description": "The vault." });
+    let space = json!({ "type": "string", "description": "The space." });
     json!({ "tools": [
         { "name": "remember", "description": "Keeps a note. Offline, only with the tag `inbox`: kept here and sent when the network is back.",
           "inputSchema": { "type": "object", "properties": { "text": { "type": "string" }, "space": space,
@@ -458,7 +458,7 @@ fn flush_json(r: &Flush) -> Value {
 fn local_tools() -> Vec<Value> {
     vec![
         json!({ "name": "capture_text",
-            "description": "Puts a note into À trier, the person's box for everything that comes in (the memory sorts it into a vault): kept on this computer first, sent at once if the memory can be reached, else when it can. The date is added. Use it for a quick idea or a fact to file later; it is never rewritten.",
+            "description": "Puts a note into À trier, the person's box for everything that comes in (the memory sorts it into a space): kept on this computer first, sent at once if the memory can be reached, else when it can. The date is added. Use it for a quick idea or a fact to file later; it is never rewritten.",
             "inputSchema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"] } }),
         json!({ "name": "capture_file",
             "description": "Puts a file of this computer (a recording, a document) into the inbox: the file is read here, so give its full path, not its content. Only files inside the folders the person allowed, and never hidden ones. A recording that arrives without text is transcribed by the server.",

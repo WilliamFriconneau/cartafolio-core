@@ -16,7 +16,7 @@ fn bridge(args: &[&str], key: &str, stdin: Option<&str>) -> Output {
     cmd.args(args)
         .env("MEMCP_TOKEN", key)
         .env_remove("MEMCP_URL")
-        .env_remove("MEMCP_VAULT")
+        .env_remove("MEMCP_SPACE")
         .env_remove("MEMCP_OUTBOX")
         .env_remove("MEMCP_KEY_FILE")
         .env_remove("MEMCP_CAPTURE_DIRS")
@@ -158,7 +158,7 @@ fn a_refused_key_exits_with_one_and_wrong_use_with_two() {
     );
     assert_eq!(r.status.code(), Some(1), "{}", out(&r));
     assert!(out(&r).contains("REFUSED OR REVOKED") && out(&r).contains("waiting 1"));
-    // Wrong use: no address, a vault named (there is none to choose), no key; an address in clear is only warned about.
+    // Wrong use: no address, a space named (there is none to choose), no key; an address in clear is only warned about.
     let none = bridge(&["status"], "k", None);
     assert_eq!(none.status.code(), Some(2));
     assert!(err(&none).contains("missing --url"));
@@ -174,15 +174,15 @@ fn a_refused_key_exits_with_one_and_wrong_use_with_two() {
         "{}",
         err(&clear)
     );
-    let vault = bridge(
+    let space = bridge(
         &[
             "text", "x", "--url", &url, "--vault", "sam-me", "--outbox", o,
         ],
         "k",
         None,
     );
-    assert_eq!(vault.status.code(), Some(2));
-    assert!(err(&vault).contains("À trier"), "{}", err(&vault));
+    assert_eq!(space.status.code(), Some(2));
+    assert!(err(&space).contains("À trier"), "{}", err(&space));
     let nokey = bridge(
         &[
             "status",

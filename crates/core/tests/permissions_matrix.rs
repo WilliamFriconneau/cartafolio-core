@@ -290,7 +290,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
             );
             let scoped = kind.starts_with("path") || kind == "guide-path";
             if scoped {
-                // A vault reached by paths answers `recall` (inside the paths) and nothing else of this list.
+                // A space reached by paths answers `recall` (inside the paths) and nothing else of this list.
                 assert!(
                     *tool == "recall" && granted.is_ok(),
                     "{kind}: {tool}: {granted:?}"
@@ -473,7 +473,7 @@ fn a_connection_limited_to_a_path_sees_and_changes_only_that_path() -> Res {
         &json!({"space": "work", "text": "A note with no tag at all."}),
     )?;
     assert_eq!(inside["fact"]["tags"], json!(["sources/app"]));
-    // A fact of the vault outside its path cannot be retired, and is not said to exist.
+    // A fact of the space outside its path cannot be retired, and is not said to exist.
     let out = tools::call(
         &w.brain,
         &c,
@@ -491,7 +491,7 @@ fn a_connection_limited_to_a_path_sees_and_changes_only_that_path() -> Res {
         "retire",
         &json!({"id": w.app_fact, "reason": "x"}),
     )?;
-    // Another vault is refused outright.
+    // Another space is refused outright.
     let other = tools::call(
         &w.brain,
         &c,
@@ -499,7 +499,7 @@ fn a_connection_limited_to_a_path_sees_and_changes_only_that_path() -> Res {
         &json!({"space": "health", "text": "Not here.", "tags": ["sources/app"]}),
     );
     assert!(matches!(other, Err(ToolError::Denied(_))), "{other:?}");
-    // Stats show no counts for the vault, only that it is limited.
+    // Stats show no counts for the space, only that it is limited.
     let s = tools::call(&w.brain, &c, "stats", &json!({}))?;
     assert!(s.to_string().contains("restricted_to"), "{s}");
     Ok(())
@@ -640,7 +640,7 @@ fn peers_lists_only_the_peers_of_the_person_and_is_open_to_any_reader() -> Res {
     let w = world()?;
     let ctl = w.brain.open_control()?;
     let other = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
-    w.brain.add_vault(&other, "ann", "me")?;
+    w.brain.add_space_of_kind(&other, "ann", "me")?;
     access::connect_for(
         &ctl,
         &other,
@@ -672,7 +672,7 @@ fn peers_lists_only_the_peers_of_the_person_and_is_open_to_any_reader() -> Res {
 }
 
 #[test]
-fn guide_tools_are_given_to_a_whole_vault_writer_or_to_the_path_named_guide_and_to_no_one_else()
+fn guide_tools_are_given_to_a_whole_space_writer_or_to_the_path_named_guide_and_to_no_one_else()
 -> Res {
     let w = world()?;
     let whole = caller(&w, "g-whole", "work:rw", false)?;
@@ -764,7 +764,7 @@ fn rights_never_go_beyond_the_person_and_a_regrant_takes_effect_at_once() -> Res
     let w = world()?;
     let ctl = w.brain.open_control()?;
     let ann = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
-    w.brain.add_vault(&ann, "ann", "me")?;
+    w.brain.add_space_of_kind(&ann, "ann", "me")?;
     // Ann asks for `work` (Owner's space) and for her own: only her own is reached.
     let tok = access::connect_for(
         &ctl,

@@ -1,5 +1,5 @@
-//! The catalogue of vault kinds: a vault is made from a kind, named after its person, and the
-//! tools of a kind follow the vaults a caller reaches.
+//! The catalogue of space kinds: a space is made from a kind, named after its person, and the
+//! tools of a kind follow the spaces a caller reaches.
 
 mod common;
 
@@ -68,17 +68,17 @@ fn a_catalogue_file_replaces_the_default_and_its_errors_name_the_line() -> Res {
 }
 
 #[test]
-fn a_vault_is_named_after_its_person_and_its_kind() -> Res {
+fn a_space_is_named_after_its_person_and_its_kind() -> Res {
     assert_eq!(
-        catalogue::vault_name("sam", "health")?.as_str(),
+        catalogue::space_name("sam", "health")?.as_str(),
         "sam-health"
     );
-    let long = catalogue::vault_name(&"a".repeat(40), "hobbies")?;
+    let long = catalogue::space_name(&"a".repeat(40), "hobbies")?;
     assert!(
         long.as_str().len() <= 32 && long.as_str().ends_with("-hobbies"),
         "{long}"
     );
-    let odd = catalogue::vault_name("42 Élise", "me")?;
+    let odd = catalogue::space_name("42 Élise", "me")?;
     assert!(
         odd.as_str().starts_with('p') && odd.as_str().ends_with("-me"),
         "{odd}"
@@ -87,17 +87,17 @@ fn a_vault_is_named_after_its_person_and_its_kind() -> Res {
 }
 
 #[test]
-fn a_person_makes_their_vaults_from_the_catalogue_only() -> Res {
-    let (_t, b) = brain("cat-vault")?;
+fn a_person_makes_their_spaces_from_the_catalogue_only() -> Res {
+    let (_t, b) = brain("cat-space")?;
     let ctl = b.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
-    let v = b.add_vault(&sam.id, "sam", "health")?;
+    let v = b.add_space_of_kind(&sam.id, "sam", "health")?;
     assert_eq!(v.as_str(), "sam-health");
     assert_eq!(b.space_kind(&v)?, "health");
     assert!(users::is_space_owner(&ctl, &v, &sam.id)?);
     for (kind, why) in [("notes", "unknown kind"), ("custom", "unknown kind")] {
         let e = b
-            .add_vault(&sam.id, "sam", kind)
+            .add_space_of_kind(&sam.id, "sam", kind)
             .err()
             .map(|e| e.to_string());
         assert!(
@@ -105,7 +105,7 @@ fn a_person_makes_their_vaults_from_the_catalogue_only() -> Res {
             "{kind}"
         );
     }
-    let again = b.add_vault(&sam.id, "sam", "health");
+    let again = b.add_space_of_kind(&sam.id, "sam", "health");
     assert!(matches!(again, Err(CoreError::Invalid(m)) if m.contains("already has")));
     // A space that predates kinds is `custom`; a kind can be given to it, from the catalogue.
     let old = sp("legacy");
@@ -119,13 +119,13 @@ fn a_person_makes_their_vaults_from_the_catalogue_only() -> Res {
 }
 
 #[test]
-fn the_vault_of_a_kind_is_the_one_the_caller_owns() -> Res {
+fn the_space_of_a_kind_is_the_one_the_caller_owns() -> Res {
     let (_t, b) = brain("cat-resolve")?;
     let ctl = b.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
-    let sam_health = b.add_vault(&sam.id, "sam", "health")?;
-    let alex_health = b.add_vault(&alex.id, "alex", "health")?;
+    let sam_health = b.add_space_of_kind(&sam.id, "sam", "health")?;
+    let alex_health = b.add_space_of_kind(&alex.id, "alex", "health")?;
     let token = |user: &str, agent: &str, spec: &str| -> Result<access::Caller, Box<dyn Error>> {
         let r = Rights::parse(spec)?;
         let t = access::connect_for(&ctl, user, agent, &r, None, false, false)?;
@@ -142,16 +142,16 @@ fn the_vault_of_a_kind_is_the_one_the_caller_owns() -> Res {
         access::space_of_kind(&ctl, &a, "health")?,
         Some(alex_health.clone())
     );
-    // A connection that is not opened on a vault of that kind finds none: its tools are not offered.
+    // A connection that is not opened on a space of that kind finds none: its tools are not offered.
     let work_only = {
-        b.add_vault(&sam.id, "sam", "work")?;
+        b.add_space_of_kind(&sam.id, "sam", "work")?;
         token(&sam.id, "s3", "sam-work:rw")?
     };
     assert_eq!(access::space_of_kind(&ctl, &work_only, "health")?, None);
     assert_eq!(
         access::space_of_kind(&ctl, &s, "money")?,
         None,
-        "no vault of that kind at all"
+        "no space of that kind at all"
     );
     Ok(())
 }
@@ -172,25 +172,28 @@ fn a_database_from_before_kinds_gets_custom_for_every_space() -> Res {
 }
 
 #[test]
-fn one_vault_of_a_kind_per_person_even_when_the_kind_was_given_afterwards() -> Res {
+fn one_space_of_a_kind_per_person_even_when_the_kind_was_given_afterwards() -> Res {
     let (_t, b) = brain("cat-once")?;
     // `legacy` belongs to the bootstrap person; give it a kind after the fact.
     b.set_space_kind(&sp("legacy"), "work")?;
     let e = b
-        .add_vault(OWNER, "owner", "work")
+        .add_space_of_kind(OWNER, "owner", "work")
         .err()
         .map(|e| e.to_string());
     assert!(
-        e.is_some_and(|m| m.contains("already has a work vault (legacy)")),
-        "the existing vault counts"
+        e.is_some_and(|m| m.contains("already has a work space (legacy)")),
+        "the existing space counts"
     );
     // Another kind is fine, and so is the same kind for someone else.
     assert_eq!(
-        b.add_vault(OWNER, "owner", "hobbies")?.as_str(),
+        b.add_space_of_kind(OWNER, "owner", "hobbies")?.as_str(),
         "owner-hobbies"
     );
     let ctl = b.open_control()?;
     let kim = users::create_user(&ctl, OWNER, "kim", "Kim", false)?;
-    assert_eq!(b.add_vault(&kim.id, "kim", "work")?.as_str(), "kim-work");
+    assert_eq!(
+        b.add_space_of_kind(&kim.id, "kim", "work")?.as_str(),
+        "kim-work"
+    );
     Ok(())
 }

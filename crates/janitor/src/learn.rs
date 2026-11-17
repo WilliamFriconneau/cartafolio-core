@@ -1,12 +1,12 @@
 //! What the janitor learns from the model, so that it needs it less each time: which words of a note lead to which tags
-//! (and, in À trier, to which vault), vault by vault, each association with a score — how often it was seen and
+//! (and, in À trier, to which space), space by space, each association with a score — how often it was seen and
 //! how often it was right.
 //!
 //! - It learns only from the model's choices, never from its own: a mistake of its own cannot feed itself.
-//! - It files a note without the model when every tag it would give, and the vault, is sure: seen at least [`MIN_SEEN`]
+//! - It files a note without the model when every tag it would give, and the space, is sure: seen at least [`MIN_SEEN`]
 //!   times and right [`SURE`] of the time.
 //! - One time in [`CHECK_EVERY`] it asks the model anyway, and a disagreement lowers the score of the words that misled it.
-//! - Nothing of a vault is learned into another: each vault has its own words.
+//! - Nothing of a space is learned into another: each space has its own words.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -18,7 +18,7 @@ pub const MIN_SEEN: u64 = 5;
 pub const SURE: f64 = 0.9;
 /// One time in this many, a note the janitor could file alone is checked by the model.
 pub const CHECK_EVERY: u64 = 10;
-/// Words kept per vault, the most seen first, past which the rarest are forgotten.
+/// Words kept per space, the most seen first, past which the rarest are forgotten.
 const MAX_WORDS: usize = 5000;
 
 /// Words that say nothing of a subject.
@@ -80,14 +80,14 @@ pub fn words(text: &str) -> BTreeSet<String> {
         .collect()
 }
 
-/// What a vault has learned: `{word: {n, tags: {tag: c}, vaults: {vault: c}}}`.
+/// What a space has learned: `{word: {n, tags: {tag: c}, spaces: {space: c}}}`.
 pub struct Learned<'a> {
     pub data: &'a mut Value,
 }
 
 impl Learned<'_> {
-    /// The model chose `tags` (and `vault`, in À trier) for a note made of `words`.
-    pub fn learn(&mut self, words: &BTreeSet<String>, tags: &[String], vault: Option<&str>) {
+    /// The model chose `tags` (and `space`, in À trier) for a note made of `words`.
+    pub fn learn(&mut self, words: &BTreeSet<String>, tags: &[String], space: Option<&str>) {
         if !self.data.is_object() {
             *self.data = json!({});
         }
@@ -97,7 +97,7 @@ impl Learned<'_> {
             for t in tags {
                 e["tags"][t] = json!(e["tags"][t].as_u64().unwrap_or(0) + 1);
             }
-            if let Some(v) = vault {
+            if let Some(v) = space {
                 e["vaults"][v] = json!(e["vaults"][v].as_u64().unwrap_or(0) + 1);
             }
         }
@@ -121,11 +121,11 @@ impl Learned<'_> {
         }
     }
 
-    /// What its sure words say of a note: the tags (at most three), the vault if `with_vault`, each with its score.
-    /// `None` when nothing sure is known, or when the vault was asked for and none is sure.
-    pub fn guess(&self, words: &BTreeSet<String>, with_vault: bool) -> Option<Guess> {
+    /// What its sure words say of a note: the tags (at most three), the space if `with_space`, each with its score.
+    /// `None` when nothing sure is known, or when the space was asked for and none is sure.
+    pub fn guess(&self, words: &BTreeSet<String>, with_space: bool) -> Option<Guess> {
         let mut tags: BTreeMap<String, f64> = BTreeMap::new();
-        let mut vaults: BTreeMap<String, f64> = BTreeMap::new();
+        let mut spaces: BTreeMap<String, f64> = BTreeMap::new();
         let mut led_by: BTreeSet<String> = BTreeSet::new();
         let mut known = 0_usize;
         for w in words {
@@ -135,7 +135,7 @@ impl Learned<'_> {
                 continue;
             }
             known += 1;
-            for (key, out) in [("tags", &mut tags), ("vaults", &mut vaults)] {
+            for (key, out) in [("tags", &mut tags), ("vaults", &mut spaces)] {
                 for (t, c) in e[key].as_object().into_iter().flatten() {
                     let score = c.as_u64().unwrap_or(0) as f64 / n as f64;
                     if score >= SURE {
@@ -156,12 +156,12 @@ impl Learned<'_> {
         {
             return None;
         }
-        let vault = if with_vault {
-            // One sure vault, or no guess at all.
-            if vaults.len() != 1 {
+        let space = if with_space {
+            // One sure space, or no guess at all.
+            if spaces.len() != 1 {
                 return None;
             }
-            vaults.keys().next().cloned()
+            spaces.keys().next().cloned()
         } else {
             None
         };
@@ -170,7 +170,7 @@ impl Learned<'_> {
         ranked.truncate(3);
         Some(Guess {
             tags: ranked,
-            vault,
+            space,
             led_by: led_by.into_iter().collect(),
         })
     }
@@ -209,7 +209,7 @@ impl Learned<'_> {
 #[derive(Debug, Clone, PartialEq)]
 pub struct Guess {
     pub tags: Vec<(String, f64)>,
-    pub vault: Option<String>,
+    pub space: Option<String>,
     /// The words that led to it (lowered if the model disagrees).
     pub led_by: Vec<String>,
 }
@@ -235,7 +235,7 @@ mod tests {
         assert!(g.led_by.contains(&"zendure".to_string()));
         // A word seen once decides nothing.
         assert!(l.guess(&words("Une recette de crêpes"), false).is_none());
-        // In À trier a vault is needed too, and none was learned: no guess.
+        // In À trier a space is needed too, and none was learned: no guess.
         assert!(l.guess(&note, true).is_none());
         // One disagreement: right 5 times of 6, under the sure share, so it asks the model again.
         l.wrong(&g.led_by);

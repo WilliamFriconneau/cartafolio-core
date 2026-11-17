@@ -185,7 +185,7 @@ impl App {
                 404,
                 &json!({ "error": "no address here: use the address of your connection, /mcp/<its name>" }),
             ),
-            // An address that names a vault: a key used there reaches that vault and no other.
+            // An address that names a space: a key used there reaches that space and no other.
             // One that names a connection: only that connection's key is let in.
             // The synchronisation between peers, at the address of the peer's own connection.
             (_, p) if p.starts_with("/mcp/") && p.contains("/sync/") => {
@@ -243,7 +243,7 @@ impl App {
     // --- MCP -------------------------------------------------------------------------
 
     /// The bank statements of the money space this caller reaches, if any.
-    /// A key limited to paths of that vault gets none: the statements are not under a path, they are the vault.
+    /// A key limited to paths of that space gets none: the statements are not under a path, they are the space.
     fn ledger_for(&self, caller: &Caller) -> Option<memcp_finances::Ledger<'_>> {
         self.feature_space(caller, Feature::Money)
             .filter(|space| caller.read_paths(space).is_none())
@@ -289,18 +289,18 @@ impl App {
                 .with("WWW-Authenticate", &crate::oauth::challenge(self, address));
         };
         let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
-        // At an address that names a vault, the key is seen through that vault alone; one that
-        // does not reach it is told so, the same whether the vault exists or not. At an address
+        // At an address that names a space, the key is seen through that space alone; one that
+        // does not reach it is told so, the same whether the space exists or not. At an address
         // that names a connection, only that connection's own key is let in.
-        let vault = self
+        let space = self
             .brain
             .spaces()
             .ok()
             .and_then(|l| l.into_iter().find(|s| s.as_str() == address));
-        let caller = match vault {
+        let caller = match space {
             Some(v) if caller.can_read(&v) || caller.can_write(&v) => caller.only(&v),
             None if caller.agent == address => caller,
-            // The same answer whether a vault of that name exists or not: a key learns no other person's vault names.
+            // The same answer whether a space of that name exists or not: a key learns no other person's space names.
             _ => {
                 return Response::json(
                     403,
@@ -368,7 +368,7 @@ impl App {
     ) -> (u16, Value) {
         let server_info = json!({ "name": NAME, "version": VERSION });
         // What this connection is told: the general rules, the guides of what it reaches, and
-        // the indexes of those vaults (see the `guide` module).
+        // the indexes of those spaces (see the `guide` module).
         let instructions = || {
             guide::instructions(&self.brain, caller)
                 .unwrap_or_else(|_| access::INSTRUCTIONS.to_string())
@@ -556,7 +556,7 @@ pub fn large_body_allowed(
     if large { LARGE_MAX } else { SMALL_MAX }
 }
 
-/// The last part of `/mcp/<x>`: a vault's name or a connection's, both of the same shape.
+/// The last part of `/mcp/<x>`: a space's name or a connection's, both of the same shape.
 fn address_segment(raw: &str) -> Option<&str> {
     let a = raw.trim_end_matches('/');
     (Space::new(a).is_ok() || access::valid_agent(a)).then_some(a)

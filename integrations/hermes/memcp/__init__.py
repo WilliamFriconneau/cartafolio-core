@@ -3,7 +3,7 @@
 A memory provider plugin: the agent's memory is a MemCP connection, nothing else.
 
 - At start it reads the connection's instructions (the person's guides and the indexes of
-  the vaults it reaches) and puts them in the system prompt.
+  the spaces it reaches) and puts them in the system prompt.
 - Before each turn it recalls the facts that match the user's words and gives them to the
   model as context, marked as data.
 - It exposes the connection's own tools (recall, remember, supersede, ...) under the

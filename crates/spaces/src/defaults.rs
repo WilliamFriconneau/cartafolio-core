@@ -1,4 +1,4 @@
-//! The vaults proposed by « Commencer une mémoire », each with clear tags and words
+//! The spaces proposed by « Commencer une mémoire », each with clear tags and words
 //! (docs of the core plan, part 4). Changeable before the person confirms. Local by default;
 //! Santé and Argent are sensitive. No person's name is shipped.
 
@@ -167,7 +167,7 @@ const PRESETS: &[Preset] = &[
     },
 ];
 
-/// The default tree: « À trier » is the default space, then the vaults above, with their rules. `stamp`
+/// The default tree: « À trier » is the default space, then the spaces above, with their rules. `stamp`
 /// gives an increasing clock; ids of rules are `<space>/<kind>/<n>`, stable across devices.
 pub fn default_tree(mut stamp: impl FnMut() -> String) -> Tree {
     let mut tree = Tree::default();

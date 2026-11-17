@@ -9,7 +9,7 @@
 //! - Token: authorization code with PKCE S256, then refresh tokens that rotate.
 //!
 //! An access token is a normal MCP connection of the person
-//! (`oauth-<person>-<client>`). The consent page lists the vaults the person reaches
+//! (`oauth-<person>-<client>`). The consent page lists the spaces the person reaches
 //! with none ticked: the connection gets exactly what was ticked, nothing if nothing
 //! was, and never more than the
 //! person reaches. It is revoked like any other, and a refresh keeps its rights.
@@ -139,7 +139,7 @@ pub fn authorization_server(app: &App) -> Response {
 /// The `WWW-Authenticate` value that sends an MCP client to discovery.
 pub fn challenge(app: &App, address: &str) -> String {
     // The client follows the address given here, so the metadata of an address that names a
-    // vault or a connection says that resource and no other.
+    // space or a connection says that resource and no other.
     format!(
         "Bearer resource_metadata=\"{}/.well-known/oauth-protected-resource/mcp/{address}\"",
         app.public_url
@@ -147,10 +147,10 @@ pub fn challenge(app: &App, address: &str) -> String {
 }
 
 /// What an authorization request's `resource` (RFC 8707, the address the person gave their
-/// assistant) names after `/mcp/`: a vault, or the name of the connection to make. `None` for
+/// assistant) names after `/mcp/`: a space, or the name of the connection to make. `None` for
 /// the general address or no resource.
 enum Named {
-    Vault(Space),
+    Space(Space),
     Connection(String),
 }
 
@@ -163,7 +163,7 @@ fn resource_named(app: &App, resource: &str) -> Option<Named> {
         .ok()
         .and_then(|l| l.into_iter().find(|s| s.as_str() == seg))
     {
-        return Some(Named::Vault(v));
+        return Some(Named::Space(v));
     }
     access::valid_agent(seg).then(|| Named::Connection(seg.to_string()))
 }
@@ -369,10 +369,10 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
     // The page lists what the person reaches, with nothing ticked: a connection gets only
     // what was ticked, and nothing at all if nothing was.
     let reach = users::access_of(&ctl, &me.id).unwrap_or_default();
-    // A connector added with an address that names a vault is for that vault only.
+    // A connector added with an address that names a space is for that space only.
     let named = resource_named(app, get("resource"));
     let scoped = match &named {
-        Some(Named::Vault(v)) => Some(v.clone()),
+        Some(Named::Space(v)) => Some(v.clone()),
         _ => None,
     };
     // An address that names a connection makes a connection of that name: it must be free, or this
@@ -413,7 +413,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         return page(
             app,
             403,
-            "<p>You do not have access to this vault, so an assistant cannot be connected to it.</p>",
+            "<p>You do not have access to this space, so an assistant cannot be connected to it.</p>",
         );
     }
     let consent_page = |status: u16, note: &str| -> Response {
@@ -448,7 +448,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         .collect();
         let boxes: String = if let Some(v) = &scoped {
             format!(
-                "<p>This connector was added for the vault <b>{v}</b>. It will reach that vault and nothing else.</p><input type=hidden name=v_{v} value=1>"
+                "<p>This connector was added for the space <b>{v}</b>. It will reach that space and nothing else.</p><input type=hidden name=v_{v} value=1>"
             )
         } else {
             reach
@@ -466,13 +466,13 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
                 })
                 .collect()
         };
-        // One tick for all of it, the vaults made later included, offered where the connector was
-        // not added for one vault.
+        // One tick for all of it, the spaces made later included, offered where the connector was
+        // not added for one space.
         let called = connection_name.as_ref().map_or(String::new(), |n| {
             format!("<p>This connection will be called <b>{}</b>.</p>", esc(n))
         });
         let everything = if scoped.is_none() {
-            "<p><label><input type=checkbox name=all value=1> <b>All my vaults</b>, and the ones I make later</label></p><p class=mute>Or only some:</p>"
+            "<p><label><input type=checkbox name=all value=1> <b>All my spaces</b>, and the ones I make later</label></p><p class=mute>Or only some:</p>"
         } else {
             ""
         };
@@ -501,7 +501,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
     let chosen: Vec<String> = reach
         .iter()
         .filter(|(space, _)| match &scoped {
-            // The vault of the address, and no other, whatever else the form carries.
+            // The space of the address, and no other, whatever else the form carries.
             Some(v) => *space == v,
             None => q.contains_key(format!("v_{}", space.as_str()).as_str()),
         })
@@ -517,7 +517,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
     if get("decision") == "allow" && chosen.is_empty() && !everything {
         return consent_page(
             400,
-            "<p><b>Tick at least one vault.</b> Without one, this assistant gets nothing.</p>",
+            "<p><b>Tick at least one space.</b> Without one, this assistant gets nothing.</p>",
         );
     }
     let fresh = app
@@ -768,7 +768,7 @@ pub fn token(app: &App, req: &Request) -> Response {
                 return err(
                     400,
                     "invalid_grant",
-                    "this approval chose no vault: approve again and tick what it may reach",
+                    "this approval chose no space: approve again and tick what it may reach",
                 );
             }
             let computed = URL_SAFE_NO_PAD.encode(Sha256::digest(get("code_verifier").as_bytes()));

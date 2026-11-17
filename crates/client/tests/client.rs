@@ -277,7 +277,7 @@ fn engine(rights: &[(&str, &str)]) -> (String, Vec<String>, std::path::PathBuf) 
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .expect("user")
             .id;
-        brain.add_vault(&sam, "sam", "me").expect("vault");
+        brain.add_space_of_kind(&sam, "sam", "me").expect("vault");
     }
     let tokens: Vec<String> = {
         let ctl = brain.open_control().expect("control");
@@ -440,7 +440,7 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .expect("user")
             .id;
-        brain.add_vault(&sam, "sam", "me").expect("vault");
+        brain.add_space_of_kind(&sam, "sam", "me").expect("vault");
         pairing::create(&ctl, &sam, &["sam-me".into()], memcp_core::util::now()).expect("code")
     };
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");

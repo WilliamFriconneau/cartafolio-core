@@ -1,6 +1,6 @@
-//! People and the vaults they own.
+//! People and the spaces they own.
 //!
-//! A person reaches the vaults they own (`space_members`), and nothing of anyone else's: there are
+//! A person reaches the spaces they own (`space_members`), and nothing of anyone else's: there are
 //! no shares and no groups. Every connection belongs to a person and never goes beyond that
 //! person's access. Administrators manage people and see who has what, they do not read anyone's
 //! content through this module.

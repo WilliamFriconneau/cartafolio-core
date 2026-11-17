@@ -34,9 +34,9 @@ fn world() -> Result<World, Box<dyn Error>> {
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
-    brain.add_vault(&sam.id, "sam", "work")?;
-    brain.add_vault(&sam.id, "sam", "health")?;
-    brain.add_vault(&alex.id, "alex", "work")?;
+    brain.add_space_of_kind(&sam.id, "sam", "work")?;
+    brain.add_space_of_kind(&sam.id, "sam", "health")?;
+    brain.add_space_of_kind(&alex.id, "alex", "work")?;
 
     let caller = |user: &str, agent: &str, spec: &str| -> Result<access::Caller, Box<dyn Error>> {
         let r = Rights::parse(spec)?;
@@ -150,7 +150,7 @@ fn export_of(w: &World) -> Result<PathBuf, Box<dyn Error>> {
     )?)
 }
 
-/// Id, fingerprint, status and tags of every fact of a vault, and the history.
+/// Id, fingerprint, status and tags of every fact of a space, and the history.
 fn digest(brain: &Brain, space: &Space) -> Result<(Vec<String>, i64), Box<dyn Error>> {
     let c = brain.open_space(space)?;
     let mut st = c.prepare(
@@ -213,7 +213,7 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
     assert_eq!(
         names,
         ["sam-health", "sam-work"],
-        "not the vault Alex shared, not the legacy one"
+        "not the space Alex shared, not the legacy one"
     );
     assert_eq!(m["vaults"][1]["kind"], "work");
     assert_eq!(
@@ -221,7 +221,7 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
         json!({ "active": 4, "replaced": 1, "retired": 1 })
     );
     assert_eq!(m["vaults"][1]["files"], 1);
-    // What is in the directory: vaults, files, readable, guides, README, manifest. No control data.
+    // What is in the directory: spaces, files, readable, guides, README, manifest. No control data.
     let rels: Vec<String> = all_files(&dir)
         .iter()
         .filter_map(|p| {
@@ -243,7 +243,7 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
         rels.iter().all(|r| !r.contains("control")),
         "no control data: {rels:?}"
     );
-    // No key, and nothing from the vault of someone else, anywhere in any byte.
+    // No key, and nothing from the space of someone else, anywhere in any byte.
     for p in all_files(&dir) {
         let bytes = fs::read(&p)?;
         let text = String::from_utf8_lossy(&bytes);
@@ -352,7 +352,7 @@ fn an_export_is_taken_in_whole_by_another_installation() -> Res {
             .body,
         "Short sentences, no emojis."
     );
-    // Nothing of the old installation came: no connection, and Alex's vault is nowhere.
+    // Nothing of the old installation came: no connection, and Alex's space is nowhere.
     assert!(access::list(&ctl)?.is_empty());
     assert!(!brain.has_space(&sp("alex-work"))?);
     // And the memory works: a search finds the text, with its tag.
@@ -432,7 +432,7 @@ fn an_erased_recording_leaves_no_bytes_in_the_export_and_the_record_travels() ->
             .all(|p| p.file_name().and_then(|n| n.to_str()) != Some(rec.sha256.as_str())),
         "the recording is not in the export"
     );
-    // The record and its trace travel; another installation takes the vault in whole.
+    // The record and its trace travel; another installation takes the space in whole.
     let (_t, brain, kim) = elsewhere()?;
     export::adopt(&brain, &dir, &kim, None)?;
     assert!(files::erased(&brain, &work, &rec.id)?);
@@ -453,7 +453,7 @@ fn an_altered_export_is_caught_and_nothing_is_adopted() -> Res {
     let data = t.path().join("data");
     let before = all_files(&data).len();
 
-    // One byte of a vault changed.
+    // One byte of a space changed.
     let db = dir.join("vaults/sam-work.sqlite");
     let mut bytes = fs::read(&db)?;
     let last = bytes.len() - 1;
@@ -521,7 +521,7 @@ fn a_name_in_use_is_refused_up_front_and_a_prefix_gives_other_names() -> Res {
         "{e}"
     );
     assert_eq!(w.brain.spaces()?.len(), 4, "nothing was added");
-    // With a prefix, the vaults come as copies, under their new name, and work.
+    // With a prefix, the spaces come as copies, under their new name, and work.
     let ctl = w.brain.open_control()?;
     let kim = users::create_user(&ctl, OWNER, "kim", "Kim", false)?;
     let done = export::adopt(&w.brain, &dir, &kim, Some("copy"))?;
@@ -561,12 +561,12 @@ fn an_unknown_kind_becomes_custom_and_a_person_with_nothing_has_nothing_to_expor
     export::adopt(&brain, &dir, &kim, None)?;
     assert_eq!(brain.space_kind(&sp("sam-health"))?, "custom");
     assert_eq!(brain.space_kind(&sp("sam-work"))?, "work");
-    // Someone who owns no vault: refused, and so is a destination inside the data directory.
+    // Someone who owns no space: refused, and so is a destination inside the data directory.
     let (_t2, b2, nobody) = elsewhere()?;
     assert!(
         export::export_person(&b2, &nobody, &out_dir(&w), 1_900_000_001)
             .err()
-            .is_some_and(|e| e.to_string().contains("owns no vault"))
+            .is_some_and(|e| e.to_string().contains("owns no space"))
     );
     let inside = w.brain.dir().join("exports");
     assert!(

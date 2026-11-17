@@ -182,7 +182,7 @@ fn the_first_login_becomes_the_administrator_and_gets_a_directory_of_their_own()
     // Inside their own directory the person is a plain member: no page of another person's, no
     // people to manage there.
     assert_eq!(s["me"]["admin"], false, "{s}");
-    assert_eq!(s["spaces"], json!([]), "no vault until they make one");
+    assert_eq!(s["spaces"], json!([]), "no space until they make one");
     Ok(())
 }
 
@@ -236,7 +236,7 @@ fn a_key_reaches_its_own_person_and_nobody_else() -> Res {
     let m = two_people(&d)?;
     for p in ["alice", "lou"] {
         let app = m.person_app(p).ok_or("person")?;
-        app.brain.add_vault(users::OWNER, p, "health")?;
+        app.brain.add_space_of_kind(users::OWNER, p, "health")?;
     }
     let kw = key(&m, "alice", "w-claude", "all")?;
     let kl = key(&m, "lou", "l-claude", "all")?;
@@ -246,7 +246,7 @@ fn a_key_reaches_its_own_person_and_nobody_else() -> Res {
         json!({ "text": "Alice's knee clicks on stairs" }),
     )));
     assert_eq!(w["result"], "created", "{w}");
-    // Lou's key finds nothing of Alice's, and sees only Lou's vault.
+    // Lou's key finds nothing of Alice's, and sees only Lou's space.
     let found = tool_text(&m.handle(&mcp(&kl, "recall", json!({ "query": "knee stairs" }))));
     assert_eq!(found["results"], json!([]), "{found}");
     let stats = tool_text(&m.handle(&mcp(&kl, "stats", json!({}))));
@@ -280,7 +280,7 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
     let m = two_people(&d)?;
     for p in ["alice", "lou"] {
         let app = m.person_app(p).ok_or("person")?;
-        app.brain.add_vault(users::OWNER, p, "me")?;
+        app.brain.add_space_of_kind(users::OWNER, p, "me")?;
     }
     // The client registers once, at the manager.
     let reg = m.handle(&rq(
@@ -295,7 +295,7 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
         .ok_or("client")?
         .to_string();
     let q = authorize_path(&client);
-    // Lou, on the tailnet, gets the consent page of Lou's vaults and nobody else's.
+    // Lou, on the tailnet, gets the consent page of Lou's spaces and nobody else's.
     let page = m.handle(&tailnet("lou@example.org", "GET", &q, ""));
     assert_eq!(page.status, 200);
     let html = String::from_utf8(page.body.clone())?;
@@ -385,7 +385,9 @@ fn a_path_limited_key_reaches_its_person_through_the_manager_and_stays_limited()
     let d = Dir::new("path");
     let m = two_people(&d)?;
     let app = m.person_app("alice").ok_or("person")?;
-    let health = app.brain.add_vault(users::OWNER, "alice", "health")?;
+    let health = app
+        .brain
+        .add_space_of_kind(users::OWNER, "alice", "health")?;
     let k = key(&m, "alice", "bevel", &format!("{health}/sources/bevel:rw"))?;
     let r = tool_text(&m.handle(&mcp(
         &k,
@@ -407,7 +409,7 @@ fn the_administrator_sees_each_person_with_their_connections_and_can_unlink_an_a
     let d = Dir::new("people");
     let m = two_people(&d)?;
     let app = m.person_app("lou").ok_or("lou")?;
-    app.brain.add_vault(users::OWNER, "lou", "me")?;
+    app.brain.add_space_of_kind(users::OWNER, "lou", "me")?;
     key(&m, "lou", "lou-claude", "all")?;
     key(&m, "lou", "lou-code", "all")?;
     let st = m.handle(&ingress("ha-w", "alice", "GET", "/admin/api/state", ""));
@@ -623,9 +625,9 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     let m = two_people(&d)?;
     for p in ["alice", "lou"] {
         let app = m.person_app(p).ok_or("person")?;
-        app.brain.add_vault(users::OWNER, p, "health")?;
+        app.brain.add_space_of_kind(users::OWNER, p, "health")?;
     }
-    // Lou asks her page for a code: no vault to choose, everything goes to her À trier.
+    // Lou asks her page for a code: no space to choose, everything goes to her À trier.
     let r = m.handle(&ingress("ha-l", "lou", "POST", "/admin/api/pairing", "{}"));
     assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
     let made = r.body_json();
@@ -651,18 +653,18 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
         got["mcp_url"],
         format!("https://memory.example.net/mcp/{agent}")
     );
-    let vaults = got["vaults"].as_array().ok_or("vaults")?;
+    let spaces = got["vaults"].as_array().ok_or("vaults")?;
     assert!(
-        vaults
+        spaces
             .iter()
             .any(|v| v.as_str().unwrap_or("").starts_with("lou-a-trier")),
-        "{vaults:?}"
+        "{spaces:?}"
     );
     assert!(
-        vaults
+        spaces
             .iter()
             .all(|v| !v.as_str().unwrap_or("").starts_with("alice-")),
-        "{vaults:?}"
+        "{spaces:?}"
     );
     // A peer: it writes into Lou's À trier without naming it, reads Lou's spaces, and never reaches Alice.
     let mut req = mcp(key, "remember", json!({ "text": "Une note du Mac." }));

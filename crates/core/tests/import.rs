@@ -1,4 +1,4 @@
-//! Import of a Markdown folder. A fictitious vault generated in a temporary directory.
+//! Import of a Markdown folder. A fictitious space generated in a temporary directory.
 
 mod common;
 
@@ -14,7 +14,7 @@ use memcp_core::import::{self, ImportOptions, ImportRules, chunk, date_from_name
 use memcp_core::{Brain, Space};
 
 const RULES: &str = "
-# fictitious vault
+# fictitious space
 map Work = work
 map Health = health
 map Home = home
@@ -25,7 +25,7 @@ instructions = House rules
 
 struct Env {
     t: Temp,
-    vault: PathBuf,
+    space: PathBuf,
     brain: Brain,
     rules: ImportRules,
 }
@@ -33,7 +33,7 @@ struct Env {
 impl Drop for Env {
     fn drop(&mut self) {
         // A 000 file would get in the way of the removal.
-        let _ = chmod_all(&self.vault);
+        let _ = chmod_all(&self.space);
         let _ = &self.t;
     }
 }
@@ -60,26 +60,26 @@ fn chmod_all(dir: &Path) -> std::io::Result<()> {
 
 fn env() -> Result<Env, Box<dyn Error>> {
     let t = Temp::new("import");
-    let vault = t.path().join("vault");
-    fs::create_dir_all(&vault)?;
+    let space = t.path().join("vault");
+    fs::create_dir_all(&space)?;
     let brain = brain(&t)?;
     Ok(Env {
         t,
-        vault,
+        space,
         brain,
         rules: ImportRules::parse(RULES)?,
     })
 }
 
 fn put(e: &Env, rel: &str, content: &str) -> Result<(), Box<dyn Error>> {
-    let p = e.vault.join(rel);
+    let p = e.space.join(rel);
     fs::create_dir_all(p.parent().ok_or("parent")?)?;
     fs::write(p, content)?;
     Ok(())
 }
 
 fn import_with(e: &Env, opts: &ImportOptions) -> memcp_core::Result<import::Report> {
-    import::import(&e.brain, &e.vault, &e.rules, opts)
+    import::import(&e.brain, &e.space, &e.rules, opts)
 }
 
 fn run(e: &Env, dry: bool) -> Result<import::Report, Box<dyn Error>> {
@@ -164,7 +164,7 @@ fn rules_naming_a_missing_space_are_refused_before_reading() -> Res {
         yes: true,
         ..Default::default()
     };
-    assert!(import::import(&e.brain, &e.vault, &rules, &opts).is_err());
+    assert!(import::import(&e.brain, &e.space, &rules, &opts).is_err());
     Ok(())
 }
 
@@ -338,7 +338,7 @@ fn protected_files_are_never_read() -> Res {
     )?;
     // Unreadable: if the importer opened them, it would fail.
     for (f, _) in protected {
-        fs::set_permissions(e.vault.join(f), fs::Permissions::from_mode(0o000))?;
+        fs::set_permissions(e.space.join(f), fs::Permissions::from_mode(0o000))?;
     }
     let r = run(&e, false)?;
     assert_eq!(r.protected, 4, "{r}");
@@ -394,7 +394,7 @@ fn exclusions_instructions_symlinks_and_big_files_kept() -> Res {
         "General/Ok.md",
         "# Ok\n\nAn ordinary note, long enough to become a memory passage.\n",
     )?;
-    std::os::unix::fs::symlink("/etc/hostname", e.vault.join("General/Link.md"))?;
+    std::os::unix::fs::symlink("/etc/hostname", e.space.join("General/Link.md"))?;
     let r = run(&e, false)?;
     assert_eq!(r.excluded, 2, "{r}");
     assert_eq!(r.instructions, 2, "{r}");
@@ -481,8 +481,8 @@ fn a_moved_note_keeps_its_passages_and_a_deleted_one_retires_them() -> Res {
     let r1 = run(&e, false)?;
     let before = passages(&e, "personal")?;
     assert_eq!(before, i64::try_from(r1.created)?);
-    fs::create_dir_all(e.vault.join("Ideas"))?;
-    fs::rename(e.vault.join("General/Old.md"), e.vault.join("Ideas/New.md"))?;
+    fs::create_dir_all(e.space.join("Ideas"))?;
+    fs::rename(e.space.join("General/Old.md"), e.space.join("Ideas/New.md"))?;
     let r2 = run(&e, false)?;
     assert_eq!((r2.created, r2.retired), (0, 0), "{r2}");
     assert_eq!(r2.repointed, r1.created, "{r2}");
@@ -500,7 +500,7 @@ fn a_moved_note_keeps_its_passages_and_a_deleted_one_retires_them() -> Res {
     )?;
     assert_eq!(state, "missing");
 
-    fs::remove_file(e.vault.join("Ideas/New.md"))?;
+    fs::remove_file(e.space.join("Ideas/New.md"))?;
     let r3 = run(&e, false)?;
     assert_eq!(r3.missing_notes, 1, "{r3}");
     assert_eq!(passages(&e, "personal")?, 0);
@@ -524,8 +524,8 @@ fn a_note_that_becomes_protected_leaves_the_memory() -> Res {
     run(&e, false)?;
     assert_eq!(passages(&e, "personal")?, 1);
     fs::rename(
-        e.vault.join("General/Wifi.md"),
-        e.vault.join("General/Wifi password.md"),
+        e.space.join("General/Wifi.md"),
+        e.space.join("General/Wifi password.md"),
     )?;
     let r = run(&e, false)?;
     assert_eq!(r.protected, 1, "{r}");
@@ -555,7 +555,7 @@ fn the_only_scope_limits_the_import_and_the_vanished_notes_check() -> Res {
     assert_eq!(passages(&e, "personal")?, 0);
     // A full import then an import limited to Home does not touch what is out of scope.
     run(&e, false)?;
-    fs::remove_file(e.vault.join("General/B.md"))?;
+    fs::remove_file(e.space.join("General/B.md"))?;
     let r = import_with(&e, &only_home)?;
     assert_eq!(r.missing_notes, 0, "{r}");
     assert_eq!(passages(&e, "personal")?, 1, "B is out of scope");

@@ -1,14 +1,14 @@
 //! Export and adopt: a person's memory leaves as a directory and can be taken in anywhere.
 //!
-//! An export holds, for each vault the person **owns**: a consistent copy of its database,
+//! An export holds, for each space the person **owns**: a consistent copy of its database,
 //! its files, and a readable Markdown version of its facts with their history. It holds the
 //! person's instructions (every version), and a manifest with the fingerprint of every file.
 //! It never holds a key, a connection, a right or a sign-in link: those belong to an
-//! installation, not to a person's memory. A vault shared with the person by someone else
+//! installation, not to a person's memory. A space shared with the person by someone else
 //! is not theirs to take.
 //!
 //! Adopting an export checks every fingerprint first, refuses before it changes anything if
-//! a name is taken, checks the counts of each vault after copying it, and undoes everything
+//! a name is taken, checks the counts of each space after copying it, and undoes everything
 //! if any step fails.
 
 use std::collections::BTreeMap;
@@ -55,7 +55,7 @@ fn sha_of(bytes: &[u8]) -> String {
     hex(&Sha256::digest(bytes))
 }
 
-/// Statuses of the facts of a vault, as a JSON object (`{"active": 3, "replaced": 1}`).
+/// Statuses of the facts of a space, as a JSON object (`{"active": 3, "replaced": 1}`).
 fn fact_counts(conn: &Connection) -> Result<Value> {
     let mut st =
         conn.prepare("SELECT status, count(*) FROM facts GROUP BY status ORDER BY status")?;
@@ -72,7 +72,7 @@ fn count(conn: &Connection, sql: &str) -> Result<i64> {
     Ok(conn.query_row(sql, [], |r| r.get(0))?)
 }
 
-/// The vaults a person owns: name and kind.
+/// The spaces a person owns: name and kind.
 fn owned(ctl: &Connection, user_id: &str) -> Result<Vec<(Space, String)>> {
     let mut st = ctl.prepare(
         "SELECT s.name, s.kind FROM spaces s JOIN space_members m ON m.space = s.name
@@ -94,11 +94,11 @@ fn day(t: i64) -> String {
     util::iso(t).chars().take(10).collect()
 }
 
-/// The facts of a vault as a document a person can read without any program: what is in
+/// The facts of a space as a document a person can read without any program: what is in
 /// force, then what was replaced or retired, with the reason.
 fn readable(conn: &Connection, space: &Space, kind: &str, who: &User, at: i64) -> Result<String> {
     let mut out = format!(
-        "# {space} ({kind})\n\nThe memory of {} in this vault, exported on {}. A fact is never edited: a correction replaces the earlier text, which stays below.\n",
+        "# {space} ({kind})\n\nThe memory of {} in this space, exported on {}. A fact is never edited: a correction replaces the earlier text, which stays below.\n",
         if who.display.is_empty() {
             &who.name
         } else {
@@ -186,7 +186,7 @@ fn readable(conn: &Connection, space: &Space, kind: &str, who: &User, at: i64) -
         line.push('\n');
         out.push_str(&line);
     }
-    // The health record, when the vault has one.
+    // The health record, when the space has one.
     let has_record: bool = conn
         .query_row(
             "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'record'",
@@ -239,10 +239,10 @@ fn readable(conn: &Connection, space: &Space, kind: &str, who: &User, at: i64) -
     Ok(out)
 }
 
-/// Every version of the person's instructions and of those of their vaults, as JSON.
-fn guides_of(ctl: &Connection, who: &User, vaults: &[(Space, String)]) -> Result<Value> {
+/// Every version of the person's instructions and of those of their spaces, as JSON.
+fn guides_of(ctl: &Connection, who: &User, spaces: &[(Space, String)]) -> Result<Value> {
     let mut scopes = vec![guide::person_scope(&who.id)];
-    scopes.extend(vaults.iter().map(|(s, _)| guide::space_scope(s)));
+    scopes.extend(spaces.iter().map(|(s, _)| guide::space_scope(s)));
     let mut out = vec![];
     for scope in scopes {
         for g in guide::history(ctl, &scope)? {
@@ -272,10 +272,10 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
         )));
     }
     let ctl = brain.open_control()?;
-    let vaults = owned(&ctl, &who.id)?;
-    if vaults.is_empty() {
+    let spaces = owned(&ctl, &who.id)?;
+    if spaces.is_empty() {
         return Err(Error::Invalid(format!(
-            "{} owns no vault to export",
+            "{} owns no space to export",
             who.name
         )));
     }
@@ -289,7 +289,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
 
     let mut hashes: BTreeMap<String, String> = BTreeMap::new();
     let mut entries = vec![];
-    for (space, kind) in &vaults {
+    for (space, kind) in &spaces {
         let conn = brain.open_space(space)?;
         let rel = format!("vaults/{space}.sqlite");
         let target = root.join(&rel);
@@ -349,16 +349,16 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
         }));
     }
 
-    let g = serde_json::to_string_pretty(&guides_of(&ctl, who, &vaults)?).unwrap_or_default();
+    let g = serde_json::to_string_pretty(&guides_of(&ctl, who, &spaces)?).unwrap_or_default();
     write_private(&root.join("guides.json"), g.as_bytes())?;
     hashes.insert("guides.json".into(), sha_of(g.as_bytes()));
 
     let readme = "This is the memory of one person, taken out of MemCP.\n\n\
-        readable/   each vault as a Markdown document: the facts in force, then the history.\n\
-        vaults/     each vault as an SQLite database, complete, to be adopted by another MemCP.\n\
-        files/      the photos and documents of each vault, named by their fingerprint.\n\
+        readable/   each space as a Markdown document: the facts in force, then the history.\n\
+        vaults/     each space as an SQLite database, complete, to be adopted by another MemCP.\n\
+        files/      the photos and documents of each space, named by their fingerprint.\n\
         guides.json the person's standing instructions, every version.\n\
-        manifest.json the fingerprint of every file here, and what each vault holds.\n\n\
+        manifest.json the fingerprint of every file here, and what each space holds.\n\n\
         There is no key, connection or right in it: those belong to an installation.\n\
         To check it: memcp verify-export <this directory>. To take it in: memcp --data <dir> adopt <this directory> --user <person>.\n";
     write_private(&root.join("README.txt"), readme.as_bytes())?;
@@ -446,8 +446,8 @@ pub struct Adopted {
     pub files: i64,
 }
 
-/// Takes the vaults of an export into this installation as the property of `owner`. With a
-/// `prefix`, each vault is named `<prefix>-<name>`. Nothing is changed unless the whole export
+/// Takes the spaces of an export into this installation as the property of `owner`. With a
+/// `prefix`, each space is named `<prefix>-<name>`. Nothing is changed unless the whole export
 /// is taken in; a name already in use is refused up front.
 pub fn adopt(
     brain: &Brain,
@@ -459,9 +459,9 @@ pub fn adopt(
     if owner.disabled {
         return Err(Error::Invalid(format!("{} is disabled", owner.name)));
     }
-    let vaults = manifest["vaults"]
+    let spaces = manifest["vaults"]
         .as_array()
-        .ok_or_else(|| Error::Invalid("the manifest lists no vault".into()))?;
+        .ok_or_else(|| Error::Invalid("the manifest lists no space".into()))?;
     let ctl = brain.open_control()?;
     let catalogue = brain.catalogue()?;
 
@@ -473,7 +473,7 @@ pub fn adopt(
     }
     let mut plan = vec![];
     let mut taken = vec![];
-    for v in vaults {
+    for v in spaces {
         let orig = v["name"].as_str().unwrap_or_default().to_string();
         Space::new(&orig)?;
         let target = Space::new(&match prefix {
@@ -498,7 +498,7 @@ pub fn adopt(
     }
     if !taken.is_empty() {
         return Err(Error::Invalid(format!(
-            "already in use here: {}. Adopt with a prefix to give the vaults other names.",
+            "already in use here: {}. Adopt with a prefix to give the spaces other names.",
             taken.join(", ")
         )));
     }
@@ -586,7 +586,7 @@ pub fn adopt(
                 files,
             });
         }
-        // The instructions in force at the time of the export come back, for each vault, and
+        // The instructions in force at the time of the export come back, for each space, and
         // for the person if they have none yet.
         for g in guides.iter().filter(|g| g["current"] == true) {
             let scope = g["scope"].as_str().unwrap_or_default();

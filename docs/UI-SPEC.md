@@ -1,7 +1,7 @@
 # Interface specifications
 
 One memory, many machines. Every screen below shows the same memory, in the same words. Words that are
-not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that joins is a **peer** (a node).
+not used anywhere: *bridge*, *proxy*, *space* (say *space*). A machine that joins is a **peer** (a node).
 
 ## Principles
 

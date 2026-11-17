@@ -660,21 +660,21 @@ impl Open<'_> {
 }
 
 /// The safeguard: a first real run requires a recent `--dry-run` on the same scope.
-fn dry_run_key(vault: &Path, only: &Option<String>) -> String {
-    let id = format!("{}|{}", vault.display(), only.as_deref().unwrap_or(""));
+fn dry_run_key(space: &Path, only: &Option<String>) -> String {
+    let id = format!("{}|{}", space.display(), only.as_deref().unwrap_or(""));
     format!("import_dryrun:{}", &sha_hex(id.as_bytes())[..12])
 }
 
 pub fn import(
     brain: &Brain,
-    vault: &Path,
+    space: &Path,
     rules: &ImportRules,
     opts: &ImportOptions,
 ) -> Result<Report> {
-    if !vault.is_dir() {
+    if !space.is_dir() {
         return Err(Error::Invalid(format!(
             "{} is not a directory",
-            vault.display()
+            space.display()
         )));
     }
     for s in rules.spaces() {
@@ -685,7 +685,7 @@ pub fn import(
         }
     }
     let ctl = brain.open_control()?;
-    let key = dry_run_key(vault, &opts.only);
+    let key = dry_run_key(space, &opts.only);
     let now = util::now();
     if !opts.dry_run && !opts.yes {
         let last: Option<String> = ctl
@@ -702,7 +702,7 @@ pub fn import(
     }
 
     let mut files = vec![];
-    walk(vault, vault, &mut files);
+    walk(space, space, &mut files);
     let mut report = Report {
         dry_run: opts.dry_run,
         ..Default::default()

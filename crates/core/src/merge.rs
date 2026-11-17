@@ -539,12 +539,12 @@ pub fn plan(brain: &Brain, export_dir: &Path, user: &User, policy: Policy) -> Re
     let manifest = export::verify_export(export_dir)?;
     let ctl = brain.open_control()?;
     let mine = writable(brain, &ctl, user)?;
-    let vaults = manifest["vaults"]
+    let spaces = manifest["vaults"]
         .as_array()
-        .ok_or_else(|| Error::Invalid("the manifest lists no vault".into()))?;
+        .ok_or_else(|| Error::Invalid("the manifest lists no space".into()))?;
     let mut taken: BTreeSet<String> = BTreeSet::new();
     let mut lines = vec![];
-    for v in vaults {
+    for v in spaces {
         let source = v["name"].as_str().unwrap_or_default().to_string();
         Space::new(&source)?;
         let kind = kind_or_custom(brain, v["kind"].as_str().unwrap_or("custom"))?;

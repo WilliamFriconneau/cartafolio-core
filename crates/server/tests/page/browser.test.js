@@ -13,8 +13,8 @@ let PORT = 0, BASE = "";
 const freePort = () => new Promise(r => { const s = net.createServer().listen(0, "127.0.0.1", () => { const p = s.address().port; s.close(() => r(p)); }); });
 const run = (...a) => execFileSync(BIN, ["--data", D, ...a], { encoding: "utf8" });
 run("init", "--spaces", "legacy");
-run("vault", "add", "work", "--user", "owner");
-run("vault", "add", "health", "--user", "owner");
+run("space", "new", "work", "--user", "owner");
+run("space", "new", "health", "--user", "owner");
 const console_token = run("console-token", "owner").split("\n")[1].trim();
 let server = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -47,14 +47,14 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("signed in: the app shows", await page.locator("#app").isVisible());
   const rows = await page.locator("#spaces .vault").allInnerTexts();
   check("the page carries the project name", (await page.title()) === "MemCP" && (await page.locator("h1").first().innerText()) === "MemCP");
-  check("the vaults are listed with their kind", rows.some(r => r.includes("owner-work") && r.includes("work")) && rows.some(r => r.includes("owner-health") && r.includes("health")), rows.join(" | "));
+  check("the spaces are listed with their kind", rows.some(r => r.includes("owner-work") && r.includes("work")) && rows.some(r => r.includes("owner-health") && r.includes("health")), rows.join(" | "));
   check("no address for the whole memory is shown: each assistant has its own", (await page.locator("#mcp-url").count()) === 0 && (await page.locator("#open-wizard").isVisible()));
   check("the technical forms are folded away until asked for", !(await page.locator("#advanced").evaluate(d => d.open)) && !(await page.locator("#advanced form").first().isVisible()));
-  check("each vault is a card with its own connect button", (await page.locator("#spaces .vault button:has-text('Connect an assistant')").count()) === rows.length, String(rows.length));
+  check("each space is a card with its own connect button", (await page.locator("#spaces .vault button:has-text('Connect an assistant')").count()) === rows.length, String(rows.length));
   check("nothing is connected at the start and the page says so", (await page.locator("#connections").innerText()).includes("Nothing is connected"));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-main.png"), fullPage: true });
 
-  // a key for one vault: the wizard
+  // a key for one space: the wizard
   await page.click("#open-wizard");
   await page.click("#w-platforms button:has-text('Claude Code')");
   check("nothing is ticked at the start", (await page.locator("#w-access input[type=checkbox]:checked").count()) === 0);

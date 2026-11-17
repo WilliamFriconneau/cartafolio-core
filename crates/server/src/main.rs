@@ -16,8 +16,8 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   init [--spaces health,home,personal | --defaults] [--language en|fr]
                                          --defaults: personal, health, home, finances, hobbies and work
                                          creates the data directory, the control database and the spaces
-  catalogue                              lists the kinds of vault this installation offers
-  vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
+  catalogue                              lists the kinds of space this installation offers
+  space new KIND [--user PERSON]         creates a person's space of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
   vocabulary import FILE --space NAME --name NAME [--source TEXT]
@@ -38,16 +38,16 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
         [--days N] [--read-only] [--rotate] [--public-url URL]
                                          creates an MCP connection and shows its token once
-  open VAULT [--user PERSON] [--read-only] [--days N] [--public-url URL]
-                                         opens one vault to an assistant: a connection limited to it,
+  open SPACE [--user PERSON] [--read-only] [--days N] [--public-url URL]
+                                         opens one space to an assistant: a connection limited to it,
                                          token shown once
   mcp [--token-env NAME]                 the MCP server on standard input and output, for an assistant that
                                          runs a command: the key is read from MEMCP_TOKEN (or NAME)
-  export [--user PERSON] --to DIR        writes a person's memory to a directory: each vault they own (a copy,
+  export [--user PERSON] --to DIR        writes a person's memory to a directory: each space they own (a copy,
                                          its files, a readable Markdown version), their instructions, a
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
-  adopt DIR [--user PERSON] [--prefix P] takes the vaults of an export into this installation
+  adopt DIR [--user PERSON] [--prefix P] takes the spaces of an export into this installation
   merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
                                          reads another memory (an export) and writes a plan: for each of its spaces,
                                          the space it joins, copy or skip, and a preview; writes nothing here
@@ -215,7 +215,9 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ("space", Some("kind")) => {
             cli::space_kind(&data, arg(2, "the space")?, arg(3, "the kind")?)
         }
-        ("vault", Some("add")) => cli::vault_add(&data, arg(2, "the kind")?, flag("--user")),
+        ("space", Some("new")) | ("vault", Some("add")) => {
+            cli::space_add_kind(&data, arg(2, "the kind")?, flag("--user"))
+        }
         ("library", Some("add")) => {
             cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
         }
@@ -246,9 +248,9 @@ fn run(args: &[String]) -> Result<(), Failure> {
                 url: public,
             },
         ),
-        ("open", _) => cli::open_vault(
+        ("open", _) => cli::open_space(
             &data,
-            arg(1, "the vault")?,
+            arg(1, "the space")?,
             flag("--user"),
             sw("--read-only"),
             flag("--days").and_then(|d| d.parse().ok()),

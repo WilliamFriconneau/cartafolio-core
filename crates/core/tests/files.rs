@@ -418,7 +418,7 @@ fn bytes_that_another_record_or_space_still_holds_stay() -> Res {
     transcribed_at(&b, &personal, &transcript, 1_700_000_000)?;
     let now = memcp_core::util::now();
     let tag = ["inbox/audio".to_string()];
-    // The same recording under another name in the same vault, and in another vault.
+    // The same recording under another name in the same space, and in another space.
     let twin = files::put_tagged(&b, &personal, "bridge", "Copie.m4a", "", &m4a(200), &tag)?;
     let other = files::put_tagged(&b, &work, "bridge", "Mémo vocal.m4a", "", &m4a(200), &tag)?;
     transcribed_at(&b, &personal, &transcript, 1_700_000_000)?;
@@ -444,14 +444,14 @@ fn bytes_that_another_record_or_space_still_holds_stay() -> Res {
     );
     assert!(
         exists(&b, &work, &other.sha256),
-        "another vault keeps its own copy"
+        "another space keeps its own copy"
     );
     assert!(files::get(&b, &work, &other.id)?.is_some());
     Ok(())
 }
 
 #[test]
-fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> Res {
+fn the_tool_is_for_a_whole_space_with_write_rights_and_stays_in_its_spaces() -> Res {
     let t = Temp::new("files");
     let b = brain(&t)?;
     let personal = sp("personal");
@@ -494,7 +494,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
             tools::call(&b, &home, "file_erase", &args),
             Err(ToolError::Invalid(_))
         ),
-        "another vault: unknown file"
+        "another space: unknown file"
     );
     // Too early, said in plain words; the recording stays.
     let early = tools::call(&b, &worker, "file_erase", &args);
@@ -521,7 +521,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
 }
 
 #[test]
-fn the_transcription_may_have_been_sorted_into_another_vault() -> Res {
+fn the_transcription_may_have_been_sorted_into_another_space() -> Res {
     use memcp_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("files");
     let b = brain(&t)?;

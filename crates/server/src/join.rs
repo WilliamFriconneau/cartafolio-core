@@ -118,7 +118,7 @@ pub fn request(app: &App, req: &Request) -> Response {
             "agent": paired.agent,
             "key": paired.token,
             "mcp_url": format!("{}/mcp/{}", app.public_url, paired.agent),
-            "vaults": paired.vaults,
+            "vaults": paired.spaces,
         }));
     }
     joins.insert(
@@ -246,7 +246,7 @@ pub fn decide(
         "agent": paired.agent,
         "key": paired.token,
         "mcp_url": format!("{}/mcp/{}", app.public_url, paired.agent),
-        "vaults": paired.vaults,
+        "vaults": paired.spaces,
     }));
     Ok(json!({ "result": "approved", "connection": paired.agent }))
 }

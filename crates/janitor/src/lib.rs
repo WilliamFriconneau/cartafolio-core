@@ -1,14 +1,14 @@
 //! The janitor: the optional part of the memory that keeps its inboxes in order (it runs next to the memory, in the
 //! same Home Assistant app, when the person turns it on). It reads them like any other client, with a key of its own:
 //!
-//! 0. **What the devices put in « À trier » is sent to the inbox of a vault**, as it is, by a deterministic router that reads
-//!    the keywords of each space (`router`): no model is asked for a note. « À trier » belongs to no vault, and no vault is
+//! 0. **What the devices put in « À trier » is sent to the inbox of a space**, as it is, by a deterministic router that reads
+//!    the keywords of each space (`router`): no model is asked for a note. « À trier » belongs to no space, and no space is
 //!    a default. What the router cannot place stays there, for the person (who is told by a note). A model only proposes
 //!    keywords for the spaces (`keywords`), and the router runs again when they changed.
-//! 1. **Every note of an inbox is filed, in the vault of that inbox**: a model picks tags and a title, and the note's text
+//! 1. **Every note of an inbox is filed, in the space of that inbox**: a model picks tags and a title, and the note's text
 //!    is written there **as it is**. If no model answers, the note stays.
 //! 2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
-//!    vault, never a person's name.
+//!    space, never a person's name.
 //!
 //! Recordings are not its business: the bridge, where the speech model is, reads them and erases them. A model only ever
 //! picks a place or draws facts: it calls no tool and writes nothing.
@@ -43,7 +43,7 @@ pub struct Report {
     pub without_model: u32,
     /// Notes left in their inbox because no model answered.
     pub left: u32,
-    /// Notes of « À trier » sent to the inbox of a vault.
+    /// Notes of « À trier » sent to the inbox of a space.
     pub sent: u32,
     /// Notes left in « À trier »: the model was unsure, the person decides.
     pub unsure: u32,
@@ -58,9 +58,9 @@ pub struct Janitor {
     config: Config,
     client: Client,
     state: state::State,
-    /// The rules of each vault (its `rules` note), and the id of that note.
+    /// The rules of each space (its `rules` note), and the id of that note.
     rules: BTreeMap<String, router::Rules>,
-    /// The terms of the vocabularies of each vault (read after its rules, never written back into them).
+    /// The terms of the vocabularies of each space (read after its rules, never written back into them).
     vocab: BTreeMap<String, Vec<String>>,
     /// This pass holds leases on notes of « À trier » (given back at its end).
     claimed: bool,
@@ -103,18 +103,18 @@ fn is_library(fact: &Value) -> bool {
         .any(|t| *t == "library" || t.starts_with("library/"))
 }
 
-/// The spaces of `stats` that are « À trier », and the vaults.
+/// The spaces of `stats` that are « À trier », and the spaces.
 fn split_triage(stats: &Value) -> (Vec<String>, Vec<String>) {
     let mut triage = vec![];
-    let mut vaults = vec![];
+    let mut spaces = vec![];
     for (v, s) in stats.as_object().into_iter().flatten() {
         if s["kind"] == TRIAGE {
             triage.push(v.clone());
         } else {
-            vaults.push(v.clone());
+            spaces.push(v.clone());
         }
     }
-    (triage, vaults)
+    (triage, spaces)
 }
 
 /// Tries before a recording that cannot be read, or a note that cannot be written, is left alone (and said once).
@@ -145,27 +145,27 @@ impl Janitor {
         })
     }
 
-    /// The night's note of each inbox vault: what it learned there and how much it filed without the model, one fact
-    /// tagged `janitor/keywords`, replaced each night. It stays in its vault.
+    /// The night's note of each inbox space: what it learned there and how much it filed without the model, one fact
+    /// tagged `janitor/keywords`, replaced each night. It stays in its space.
     pub fn write_learning_notes(&mut self) -> Vec<String> {
         let mut problems = vec![];
         let (y, m, d, _, _) = time::civil(now(), self.config.utc_offset_minutes);
-        let vaults = if self.config.inbox_vaults.is_empty() {
+        let spaces = if self.config.inbox_vaults.is_empty() {
             match self.client.call("stats", json!({})) {
                 Ok(stats) => {
-                    let (triage, mut vaults) = split_triage(&stats);
-                    vaults.extend(triage);
-                    vaults
+                    let (triage, mut spaces) = split_triage(&stats);
+                    spaces.extend(triage);
+                    spaces
                 }
                 Err(e) => return vec![format!("the memory cannot be read: {e}")],
             }
         } else {
             self.config.inbox_vaults.clone()
         };
-        for vault in vaults {
-            let best = self.state.learned(&vault).best(20);
-            let alone = self.state.count(&format!("alone:{vault}"), 0);
-            let by_model = self.state.count(&format!("by_model:{vault}"), 0);
+        for space in spaces {
+            let best = self.state.learned(&space).best(20);
+            let alone = self.state.count(&format!("alone:{space}"), 0);
+            let by_model = self.state.count(&format!("by_model:{space}"), 0);
             if best.is_empty() && alone + by_model == 0 {
                 continue;
             }
@@ -179,7 +179,7 @@ impl Janitor {
                     best.join(" ; ")
                 }
             );
-            let written = match self.state.keywords_fact(&vault) {
+            let written = match self.state.keywords_fact(&space) {
                 Some(old) => self.client.call(
                     "supersede",
                     json!({ "id": old, "text": text, "tags": ["janitor/keywords"], "reason": "the janitor's note of the night" }),
@@ -189,28 +189,28 @@ impl Janitor {
             .or_else(|_| {
                 self.client.call(
                     "remember",
-                    json!({ "space": vault, "kind": "context", "text": text, "tags": ["janitor/keywords"] }),
+                    json!({ "space": space, "kind": "context", "text": text, "tags": ["janitor/keywords"] }),
                 )
             });
             match written {
                 Ok(r) => {
                     if let Some(id) = r["fact"]["id"].as_str() {
-                        self.state.set_keywords_fact(&vault, id);
+                        self.state.set_keywords_fact(&space, id);
                     }
                 }
                 Err(e) => problems.push(format!(
-                    "the night's note of {vault} cannot be written: {e}"
+                    "the night's note of {space} cannot be written: {e}"
                 )),
             }
         }
         problems
     }
 
-    /// A few facts already filed that share words with a note, in the vaults it may go to, with their tags: shown to the model
+    /// A few facts already filed that share words with a note, in the spaces it may go to, with their tags: shown to the model
     /// after the note, so that a small model files like the person's memory already does. Empty when nothing is close.
     fn similar(
         &mut self,
-        vaults: &[String],
+        spaces: &[String],
         words: &std::collections::BTreeSet<String>,
         own: &str,
     ) -> String {
@@ -227,7 +227,7 @@ impl Janitor {
             .collect::<Vec<_>>()
             .join(" ");
         let mut lines = vec![];
-        for v in vaults.iter().take(6) {
+        for v in spaces.iter().take(6) {
             let Ok(found) = self
                 .client
                 .call("recall", json!({ "space": v, "query": query, "limit": 3 }))
@@ -315,8 +315,8 @@ impl Janitor {
                 return report;
             }
         };
-        // « À trier » says so; every other space is a vault.
-        let (triage, vaults) = split_triage(&stats);
+        // « À trier » says so; every other space is a space.
+        let (triage, spaces) = split_triage(&stats);
         let tags: BTreeMap<String, Vec<String>> = stats
             .as_object()
             .into_iter()
@@ -331,14 +331,14 @@ impl Janitor {
                 )
             })
             .collect();
-        for vault in &self.config.inbox_vaults {
-            if !vaults.contains(vault) {
+        for space in &self.config.inbox_vaults {
+            if !spaces.contains(space) {
                 report.problems.push(format!(
-                    "the inbox vault {vault} is not one this key reaches"
+                    "the inbox space {space} is not one this key reaches"
                 ));
             }
         }
-        self.file_notes(&triage, &vaults, &tags, night, &mut report);
+        self.file_notes(&triage, &spaces, &tags, night, &mut report);
         if self.claimed {
             // What was not sorted goes back to the other sorters at once.
             let _ = self.client.call("triage_release", json!({}));
@@ -366,7 +366,7 @@ impl Janitor {
     fn file_notes(
         &mut self,
         triage: &[String],
-        vaults: &[String],
+        spaces: &[String],
         tags: &BTreeMap<String, Vec<String>>,
         night: bool,
         report: &mut Report,
@@ -376,20 +376,20 @@ impl Janitor {
         let mut budget = self.config.max_notes;
         let config = self.config.clone();
         let models = models::Models::new(&config);
-        let problems = self.load_rules(vaults);
+        let problems = self.load_rules(spaces);
         report.problems.extend(problems);
-        // « À trier » first: what it sends on is filed in its vault in the same pass.
+        // « À trier » first: what it sends on is filed in its space in the same pass.
         let before = budget;
         let mut waiting = BTreeMap::new();
         for t in triage {
-            let left = self.sort_triage(t, vaults, &mut budget, report);
+            let left = self.sort_triage(t, spaces, &mut budget, report);
             waiting.insert(t.clone(), left);
             if report.key_refused {
                 return;
             }
         }
         if waiting.values().any(|l| !l.is_empty()) || night {
-            let (added, problems) = self.improve_keywords(&models, &waiting, vaults, night);
+            let (added, problems) = self.improve_keywords(&models, &waiting, spaces, night);
             report.keywords_added += added;
             report.problems.extend(problems);
             if added > 0 {
@@ -398,7 +398,7 @@ impl Janitor {
                 budget = before.saturating_sub(report.sent as usize);
                 waiting.clear();
                 for t in triage {
-                    let left = self.sort_triage(t, vaults, &mut budget, report);
+                    let left = self.sort_triage(t, spaces, &mut budget, report);
                     waiting.insert(t.clone(), left);
                     if report.key_refused {
                         return;
@@ -408,20 +408,20 @@ impl Janitor {
         }
         self.leave_waiting_notes(&waiting, report);
         let inboxes = if self.config.inbox_vaults.is_empty() {
-            vaults.to_vec()
+            spaces.to_vec()
         } else {
             self.config.inbox_vaults.clone()
         };
-        for vault in inboxes {
-            if !vaults.contains(&vault) {
+        for space in inboxes {
+            if !spaces.contains(&space) {
                 continue;
             }
-            // A note stays in the vault whose inbox holds it: the model only picks tags and a title.
-            let allowed: Vec<String> = vec![vault.clone()];
-            let system = system_prompt(&allowed, tags, &vault, &today);
+            // A note stays in the space whose inbox holds it: the model only picks tags and a title.
+            let allowed: Vec<String> = vec![space.clone()];
+            let system = system_prompt(&allowed, tags, &space, &today);
             let listed = match self.client.call(
                 "recall",
-                json!({ "space": vault, "query": "", "tags": ["inbox"], "limit": 50 }),
+                json!({ "space": space, "query": "", "tags": ["inbox"], "limit": 50 }),
             ) {
                 Ok(l) => l,
                 Err(e) => {
@@ -433,10 +433,10 @@ impl Janitor {
                 let (Some(id), Some(text)) = (note["id"].as_str(), note["text"].as_str()) else {
                     continue;
                 };
-                // Only a note of this vault (not another vault's, shown here by `@`), still waiting, and a note:
+                // Only a note of this space (not another space's, shown here by `@`), still waiting, and a note:
                 // not a recording's or a document's own description.
                 if budget == 0
-                    || note["space"].as_str().is_some_and(|s| s != vault)
+                    || note["space"].as_str().is_some_and(|s| s != space)
                     || note["status"] != "active"
                     || note["type"].as_str() == Some("file")
                     || tags_of(note).iter().any(|g| g.starts_with("inbox/audio"))
@@ -446,27 +446,27 @@ impl Janitor {
                     continue;
                 }
                 budget -= 1;
-                // A piece of a note the bridge absorbed: its facts are drawn out, in this vault, and the piece leaves.
+                // A piece of a note the bridge absorbed: its facts are drawn out, in this space, and the piece leaves.
                 if tags_of(note).contains(&"inbox/absorb") {
-                    let vault_tags = tags.get(&vault).cloned().unwrap_or_default();
-                    self.extract_one(&models, note, id, text, &vault, &vault_tags, &today, report);
+                    let space_tags = tags.get(&space).cloned().unwrap_or_default();
+                    self.extract_one(&models, note, id, text, &space, &space_tags, &today, report);
                     if report.key_refused {
                         return;
                     }
                     continue;
                 }
                 // The person's rule first: a note marked #santé goes to the journal of health, whatever a model says.
-                if self.health_note(note, id, text, &vault, vaults, report) {
+                if self.health_note(note, id, text, &space, spaces, report) {
                     if report.key_refused {
                         return;
                     }
                     continue;
                 }
-                // The keywords: a note that clearly belongs to another vault goes to the inbox of that vault.
+                // The keywords: a note that clearly belongs to another space goes to the inbox of that space.
                 if let Some(to) = router::route(text, &tags_of(note), &self.routing_rules())
-                    .filter(|t| *t != vault && vaults.contains(t))
+                    .filter(|t| *t != space && spaces.contains(t))
                 {
-                    match self.send_one(note, id, text, &vault, &to, "the keywords") {
+                    match self.send_one(note, id, text, &space, &to, "the keywords") {
                         Ok(()) => report.sent += 1,
                         Err(e) => {
                             self.state.note_failed(id);
@@ -484,7 +484,7 @@ impl Janitor {
                 let guess = if learn::is_loop(text) {
                     None
                 } else {
-                    self.state.learned(&vault).guess(&note_words, false)
+                    self.state.learned(&space).guess(&note_words, false)
                 };
                 let check = guess.is_some()
                     && self
@@ -492,20 +492,20 @@ impl Janitor {
                         .count("checks", 1)
                         .is_multiple_of(learn::CHECK_EVERY);
                 let alone = guess.as_ref().filter(|_| !check).map(|g| Choice {
-                    vault: g.vault.clone().unwrap_or_else(|| vault.clone()),
+                    space: g.space.clone().unwrap_or_else(|| space.clone()),
                     tags: g.tags.iter().map(|(t, _)| t.clone()).collect(),
                     title: String::new(),
                 });
                 let (choice, by) = if let Some(c) = alone {
                     report.without_model += 1;
-                    self.state.count(&format!("alone:{vault}"), 1);
+                    self.state.count(&format!("alone:{space}"), 1);
                     (c, "what it learned")
                 } else {
                     let mut log = vec![];
                     // Notes like this one already filed, with their tags: examples the model sees (data, not orders).
                     let shown = format!("{text}{}", self.similar(&allowed, &note_words, id));
                     let Some((choice, by)) =
-                        models.route(&system, &shown, &allowed, &vault, &mut log)
+                        models.route(&system, &shown, &allowed, &space, &mut log)
                     else {
                         report.left += 1;
                         report
@@ -513,30 +513,30 @@ impl Janitor {
                             .extend(log.into_iter().map(|l| format!("{id}: {l}")));
                         continue;
                     };
-                    self.state.count(&format!("by_model:{vault}"), 1);
+                    self.state.count(&format!("by_model:{space}"), 1);
                     // Learned from the model only, never from itself; a checked guess that the model contradicts loses.
                     if let Some(g) = &guess {
                         let agreed = g.tags.iter().all(|(t, _)| choice.tags.contains(t))
-                            && g.vault.as_ref().is_none_or(|v| *v == choice.vault);
+                            && g.space.as_ref().is_none_or(|v| *v == choice.space);
                         if !agreed {
-                            self.state.learned(&vault).wrong(&g.led_by);
+                            self.state.learned(&space).wrong(&g.led_by);
                         }
                     }
                     if learn::worth_learning(text) {
                         self.state
-                            .learned(&vault)
+                            .learned(&space)
                             .learn(&note_words, &choice.tags, None);
                     }
                     self.state.saved();
                     (choice, by)
                 };
-                match self.file_one(note, id, text, &vault, &choice, by) {
+                match self.file_one(note, id, text, &space, &choice, by) {
                     Ok(_) => report.filed += 1,
                     Err(e) => {
                         self.state.note_failed(id);
                         self.fail(
                             report,
-                            &format!("{id} cannot be filed in {}", choice.vault),
+                            &format!("{id} cannot be filed in {}", choice.space),
                             &e,
                         );
                     }
@@ -549,17 +549,17 @@ impl Janitor {
     }
 
     /// The notes of one « À trier »: the health rule, the work rule, then the keyword router (see [`router`]) decide; each
-    /// note goes, as it is and still in the inbox, to the vault they name. A note they cannot place stays, for the keywords
+    /// note goes, as it is and still in the inbox, to the space they name. A note they cannot place stays, for the keywords
     /// to learn from and for the person. No model is asked here. Files and recordings are not sent.
     fn sort_triage(
         &mut self,
         triage: &str,
-        vaults: &[String],
+        spaces: &[String],
         budget: &mut usize,
         report: &mut Report,
     ) -> Vec<Unplaced> {
         let mut unplaced = vec![];
-        if vaults.is_empty() {
+        if spaces.is_empty() {
             return unplaced;
         }
         // The notes are claimed (a lease of ten minutes), so that another sorter, on a device, does not take the same
@@ -609,21 +609,21 @@ impl Janitor {
                 continue;
             }
             *budget -= 1;
-            if self.health_note(note, id, text, triage, vaults, report) {
+            if self.health_note(note, id, text, triage, spaces, report) {
                 if report.key_refused {
                     return unplaced;
                 }
                 continue;
             }
             // The person's rule for work: a meeting, or a note about their work, goes to `work`.
-            let (to, by) = if vaults.iter().any(|v| v == work_rule::WORK)
+            let (to, by) = if spaces.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(text, &self.config.work_words)
             {
                 (Some(work_rule::WORK.to_string()), "the person's work rule")
             } else {
                 (
                     router::route(text, &tags_of(note), &self.routing_rules())
-                        .filter(|t| t != triage && vaults.contains(t)),
+                        .filter(|t| t != triage && spaces.contains(t)),
                     "the keywords",
                 )
             };
@@ -656,11 +656,11 @@ impl Janitor {
         id: &str,
         text: &str,
         from: &str,
-        vaults: &[String],
+        spaces: &[String],
         report: &mut Report,
     ) -> bool {
         if from == health_rule::NEVER_FROM
-            || !vaults.iter().any(|v| v == health_rule::HEALTH)
+            || !spaces.iter().any(|v| v == health_rule::HEALTH)
             || !health_rule::applies(text)
         {
             return false;
@@ -678,7 +678,7 @@ impl Janitor {
             health_rule::day_of(local, wake)
         });
         let choice = Choice {
-            vault: health_rule::HEALTH.into(),
+            space: health_rule::HEALTH.into(),
             tags: vec![format!("journal/{date}"), health_rule::TAG.into()],
             title: String::new(),
         };
@@ -781,7 +781,7 @@ impl Janitor {
         );
     }
 
-    /// Draws the facts out of one absorbed piece and writes them in its own vault; then the piece leaves the inbox.
+    /// Draws the facts out of one absorbed piece and writes them in its own space; then the piece leaves the inbox.
     #[allow(clippy::too_many_arguments)]
     fn extract_one(
         &mut self,
@@ -789,14 +789,14 @@ impl Janitor {
         note: &Value,
         id: &str,
         text: &str,
-        vault: &str,
-        vault_tags: &[String],
+        space: &str,
+        space_tags: &[String],
         today: &str,
         report: &mut Report,
     ) {
         let _ = note;
         let mut log = vec![];
-        let system = models::extract_prompt(vault_tags, today);
+        let system = models::extract_prompt(space_tags, today);
         let Some((facts, by)) = models.extract(&system, text, &mut log) else {
             report.left += 1;
             report
@@ -814,7 +814,7 @@ impl Janitor {
         for f in &facts {
             let mut tags_out = f.tags.clone();
             tags_out.extend(["absorb".to_string(), "janitor".to_string()]);
-            let args = json!({ "space": vault, "kind": "fact", "text": format!("{}{source}", f.text), "tags": tags_out });
+            let args = json!({ "space": space, "kind": "fact", "text": format!("{}{source}", f.text), "tags": tags_out });
             let mut r = match self.client.call("remember", args.clone()) {
                 Ok(r) => r,
                 Err(e) => {
@@ -866,15 +866,15 @@ impl Janitor {
 
     /// Files one note where `choice` says, its text unchanged: the id of the fact that holds it now.
     ///
-    /// In its own vault the note is **replaced** by its filed version (`supersede`: one step, the history keeps the
-    /// raw note, and a crash between two calls cannot leave it twice). In another vault it is written there, then
+    /// In its own space the note is **replaced** by its filed version (`supersede`: one step, the history keeps the
+    /// raw note, and a crash between two calls cannot leave it twice). In another space it is written there, then
     /// retired from the inbox, and only once the write is certain: a fact id that is not the note's own.
     fn file_one(
         &mut self,
         note: &Value,
         id: &str,
         text: &str,
-        vault: &str,
+        space: &str,
         choice: &Choice,
         by: &str,
     ) -> Result<String, ClientError> {
@@ -882,7 +882,7 @@ impl Janitor {
         tags_out.push("janitor".into());
         let kind = note["kind"].as_str().unwrap_or("fact");
         let body = filed_text(&choice.title, text);
-        if choice.vault == vault {
+        if choice.space == space {
             let r = self.client.call(
                 "supersede",
                 json!({ "id": id, "text": body, "tags": tags_out, "kind": kind, "reason": format!("filed by the janitor ({by})") }),
@@ -892,7 +892,7 @@ impl Janitor {
                 .map(String::from)
                 .ok_or_else(|| ClientError::Unreadable(format!("supersede: {r}")));
         }
-        let args = json!({ "space": choice.vault, "kind": kind, "text": body, "tags": tags_out });
+        let args = json!({ "space": choice.space, "kind": kind, "text": body, "tags": tags_out });
         let mut r = self.client.call("remember", args.clone())?;
         if r["result"] == "needs_decision" {
             // A note is not a duplicate of what it resembles: both are kept.
@@ -916,7 +916,7 @@ impl Janitor {
             })?;
         self.client.call(
             "retire",
-            json!({ "id": id, "reason": format!("filed by the janitor ({by}) in {} as {new}", choice.vault) }),
+            json!({ "id": id, "reason": format!("filed by the janitor ({by}) in {} as {new}", choice.space) }),
         )?;
         Ok(new)
     }

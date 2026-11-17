@@ -247,8 +247,8 @@ fn a_read_only_opening_cannot_write() -> Res {
 }
 
 #[test]
-fn a_small_vault_is_not_buried_by_a_large_one() -> Res {
-    // Scores of two vaults do not compare: a word that is rare in a large vault scores far
+fn a_small_space_is_not_buried_by_a_large_one() -> Res {
+    // Scores of two spaces do not compare: a word that is rare in a large space scores far
     // higher there than the same word in a small one. A hit as good must not be pushed out.
     let h = home()?;
     let c = caller(&h, &token(&h, &h.sam, "sam-agent", "all")?)?;
@@ -284,9 +284,9 @@ fn a_small_vault_is_not_buried_by_a_large_one() -> Res {
     assert_eq!(spaces.len(), 3);
     assert!(
         spaces.contains(&"sam"),
-        "the small vault's hit is in the first three: {spaces:?}"
+        "the small space's hit is in the first three: {spaces:?}"
     );
-    // One vault asked alone keeps its own order and its own hits.
+    // One space asked alone keeps its own order and its own hits.
     let one = tools::call(
         &h.brain,
         &c,
@@ -405,7 +405,7 @@ fn a_flood_of_unknown_logins_is_not_kept() -> Res {
 }
 
 #[test]
-fn a_fact_that_concerns_another_vault_is_found_from_it_and_grants_nothing() -> Res {
+fn a_fact_that_concerns_another_space_is_found_from_it_and_grants_nothing() -> Res {
     let h = home()?;
     let all = caller(&h, &token(&h, &h.sam, "sam-agent", "all")?)?;
     let only_sam = caller(&h, &token(&h, &h.sam, "sam-narrow", "sam:rw")?)?;
@@ -492,10 +492,10 @@ fn a_token_cannot_be_granted_beyond_its_person() -> Res {
 }
 
 #[test]
-fn opening_a_vault_gives_a_connection_limited_to_it() -> Res {
+fn opening_a_space_gives_a_connection_limited_to_it() -> Res {
     let h = home()?;
     let (agent, t) = access::open_space_connection(&h.ctl, &h.alex, &sp("alex"), true, None)?;
-    assert!(agent.starts_with("alex-"), "named after the vault: {agent}");
+    assert!(agent.starts_with("alex-"), "named after the space: {agent}");
     let c = caller(&h, &t)?;
     assert!(c.can_write(&sp("alex")));
     assert!(!c.can_read(&sp("sam")));
@@ -512,7 +512,7 @@ fn opening_a_vault_gives_a_connection_limited_to_it() -> Res {
 }
 
 #[test]
-fn a_vault_cannot_be_opened_beyond_the_person() -> Res {
+fn a_space_cannot_be_opened_beyond_the_person() -> Res {
     let h = home()?;
     assert!(
         access::open_space_connection(&h.ctl, &h.alex, &sp("sam"), false, None).is_err(),

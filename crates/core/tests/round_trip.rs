@@ -55,8 +55,8 @@ fn memory() -> Result<Chain, Box<dyn Error>> {
     let t = Temp::new("round-trip");
     let a = Brain::init(&t.path().join("a"), &[], Language::English)?;
     let sam = users::create_user(&a.open_control()?, OWNER, "sam", "Sam", false)?;
-    a.add_vault(&sam.id, "sam", "work")?;
-    a.add_vault(&sam.id, "sam", "health")?;
+    a.add_space_of_kind(&sam.id, "sam", "work")?;
+    a.add_space_of_kind(&sam.id, "sam", "health")?;
     say(
         &a,
         "sam-work",

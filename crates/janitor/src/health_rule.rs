@@ -1,16 +1,16 @@
 //! The person's rule for health notes (2026-11-07), applied before any model: a note of an inbox that carries
-//! `#santé` or `#sante` goes to the vault `health`, filed under `journal/<date>` and `sante`, its words untouched.
+//! `#santé` or `#sante` goes to the space `health`, filed under `journal/<date>` and `sante`, its words untouched.
 //!
 //! - The date is the one written in the note, if any. Otherwise it is the day of its hour, and a note written before
 //!   noon and before the person woke up counts for the day before (a day starts when one wakes up).
 //! - Where it comes from (Obsidian, Notes, a dictation) stays in the text.
-//! - A note of the vault `work` is never taken.
+//! - A note of the space `work` is never taken.
 
 use serde_json::Value;
 
-/// The vault health notes go to.
+/// The space health notes go to.
 pub const HEALTH: &str = "health";
-/// The vault this rule never takes a note from.
+/// The space this rule never takes a note from.
 pub const NEVER_FROM: &str = "work";
 /// The tag every health note gets, beside its day.
 pub const TAG: &str = "sante";

@@ -94,7 +94,7 @@ fn node(name: &str, connections: &[(&str, &str)]) -> Node {
         let sam = users::create_user(&ctl, users::OWNER, "sam", "Sam", false)
             .unwrap()
             .id;
-        brain.add_vault(&sam, "sam", "me").unwrap();
+        brain.add_space_of_kind(&sam, "sam", "me").unwrap();
         connections
             .iter()
             .map(|(agent, rights)| {

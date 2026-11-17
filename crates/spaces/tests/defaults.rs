@@ -1,4 +1,4 @@
-//! The vaults proposed at « Commencer une mémoire », and hashtags as explicit keywords.
+//! The spaces proposed at « Commencer une mémoire », and hashtags as explicit keywords.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use memcp_spaces::*;
@@ -10,7 +10,7 @@ fn stamp() -> String {
 }
 
 #[test]
-fn the_default_vaults_have_clear_tags_and_health_and_money_are_sensitive() {
+fn the_default_spaces_have_clear_tags_and_health_and_money_are_sensitive() {
     let t = default_tree(stamp);
     let ids: Vec<&str> = t.spaces().iter().map(|s| s.id.as_str()).collect();
     assert_eq!(
@@ -55,7 +55,7 @@ fn a_hashtag_files_the_note_and_the_plain_word_does_not() {
         route(&t, "#sante tension 13/8", false),
         Routing::Spaces(vec!["sante".into()])
     );
-    // Two hashtags, two vaults; an unknown one breaks nothing.
+    // Two hashtags, two spaces; an unknown one breaks nothing.
     assert_eq!(
         route(&t, "#travail #loisirs dev du soir", false),
         Routing::Spaces(vec!["travail".into(), "loisirs".into()])

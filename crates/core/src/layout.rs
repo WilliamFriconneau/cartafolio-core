@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use rusqlite::{OptionalExtension, params};
 
 use crate::brain::Brain;
-use crate::catalogue::{CUSTOM, vault_name};
+use crate::catalogue::{CUSTOM, space_name};
 use crate::error::{Error, Result};
 use crate::space::Space;
 use crate::users::is_space_owner;
@@ -279,7 +279,7 @@ impl Brain {
             } else {
                 format!("{base}-{n}")
             };
-            let candidate = vault_name(person, word.trim_end_matches('-'))?;
+            let candidate = space_name(person, word.trim_end_matches('-'))?;
             if !self.has_space(&candidate)? {
                 space = Some(candidate);
                 break;

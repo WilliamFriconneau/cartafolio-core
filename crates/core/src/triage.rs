@@ -1,5 +1,5 @@
-//! « À trier »: the one box every capturing device of a person writes to. It belongs to no vault and is no vault: a
-//! device never chooses where a capture goes. The janitor sends each note to the inbox of a vault, then files it there;
+//! « À trier »: the one box every capturing device of a person writes to. It belongs to no space and is no space: a
+//! device never chooses where a capture goes. The janitor sends each note to the inbox of a space, then files it there;
 //! what it is unsure of, and the files, wait here until the person decides on their page.
 //!
 //! It is a space of the kind [`TRIAGE`], made the first time a device is paired, named after the person
@@ -31,7 +31,7 @@ pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
     if let Some(s) = of(brain, user_id)? {
         return Ok(s);
     }
-    let space = catalogue::vault_name(person, TRIAGE)?;
+    let space = catalogue::space_name(person, TRIAGE)?;
     brain.add_space_for(&space, user_id)?;
     brain.open_control()?.execute(
         "UPDATE spaces SET kind = ?2 WHERE name = ?1",
@@ -91,14 +91,14 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
     )
 }
 
-/// Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves
+/// Sends one note or one file of `from` (an « À trier ») to the inbox of the space `to`, as it is; then it leaves
 /// `from`, once the write is certain. The id of what holds it now.
 pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> Result<String> {
     if !is_triage(brain, from) {
         return Err(Error::Invalid(format!("{from} is not an « À trier »")));
     }
     if is_triage(brain, to) || !brain.has_space(to)? {
-        return Err(Error::Invalid(format!("{to} is not a vault")));
+        return Err(Error::Invalid(format!("{to} is not a space")));
     }
     let reason = |new: &str| format!("sent from À trier to the inbox of {to} ({new}) by {author}");
     if let Some(f) = files::info(brain, from, id)?.filter(|f| f.status == "active") {
@@ -138,7 +138,7 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         Remembered::Created(f) | Remembered::Duplicate(f) => f.id,
         // An inbox note is never held back by the ones it resembles.
         Remembered::NeedsDecision(_) => {
-            return Err(Error::Invalid("the vault did not take the note".into()));
+            return Err(Error::Invalid("the space did not take the note".into()));
         }
     };
     facts::retire(&src, author, id, &reason(&new_id))?;

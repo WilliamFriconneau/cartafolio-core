@@ -1,6 +1,6 @@
 # MemCP
 
-A durable memory for your AI assistants (Claude, Gemini, a local model), served over MCP. **One memory per person**: each person has a directory of their own, vaults of their own, and keys that never go beyond them. The add-on creates and administers the people; it stores no memory of its own.
+A durable memory for your AI assistants (Claude, Gemini, a local model), served over MCP. **One memory per person**: each person has a directory of their own, spaces of their own, and keys that never go beyond them. The add-on creates and administers the people; it stores no memory of its own.
 
 ## First start
 
@@ -18,7 +18,7 @@ A durable memory for your AI assistants (Claude, Gemini, a local model), served 
 
 ## People, and not losing a memory
 
-The administrator's page opens on **People**: each person, their role, whether they are linked to a Home Assistant account, how many vaults and live connections they have, and what you can do (make administrator or member, disable, unlink, console key). To add someone, give the **name of their Home Assistant login**: they are linked to it the first time they open Memory. Someone who opens Memory without being added is let in at once with a memory of their own (or waits for you, with `new_people: ask`).
+The administrator's page opens on **People**: each person, their role, whether they are linked to a Home Assistant account, how many spaces and live connections they have, and what you can do (make administrator or member, disable, unlink, console key). To add someone, give the **name of their Home Assistant login**: they are linked to it the first time they open Memory. Someone who opens Memory without being added is let in at once with a memory of their own (or waits for you, with `new_people: ask`).
 
 Deleting a Home Assistant account never deletes the person or their memory: it stays here, "linked" to an account that no longer exists. You can then **unlink** the person (their memory stays), and the next login of that name takes it up again. Disabling a person stops their keys at once and erases nothing.
 
@@ -32,7 +32,7 @@ The memory is not encrypted at rest: whoever can read the disk can read it. Prot
 
 ## Connecting an assistant
 
-The page asks the connection's name first: it is the end of its address, `http://<home-assistant>:8791/mcp/<name>`. It then shows the token once and the line to paste (or, for Kalios, a configuration to paste). Any MCP client with a bearer header works: that address, header `Authorization: Bearer <token>`. A key only works at its own connection's address (or at `/mcp/<vault>`, which is limited to that vault); the bare `/mcp` answers nothing. The key says whose memory it is.
+The page asks the connection's name first: it is the end of its address, `http://<home-assistant>:8791/mcp/<name>`. It then shows the token once and the line to paste (or, for Kalios, a configuration to paste). Any MCP client with a bearer header works: that address, header `Authorization: Bearer <token>`. A key only works at its own connection's address (or at `/mcp/<space>`, which is limited to that space); the bare `/mcp` answers nothing. The key says whose memory it is.
 
 Port 8791 carries tokens in clear: reach it through Tailscale or a TLS proxy, not from the internet.
 
@@ -42,17 +42,17 @@ The add-on uses cold backups: Home Assistant stops it for a few seconds while it
 
 ## One place for the memory
 
-The add-on holds the memory of each person, one vault per subject: the health record that apps deposit into, the bank statements, and the rest. It stores and finds what it is given; it fetches and proxies nothing. Mail, calendar and the house are a connector of their own, outside the add-on, added to an assistant next to this one. Nothing else has to run for the add-on, so Home Assistant can start alone with the whole memory.
+The add-on holds the memory of each person, one space per subject: the health record that apps deposit into, the bank statements, and the rest. It stores and finds what it is given; it fetches and proxies nothing. Mail, calendar and the house are a connector of their own, outside the add-on, added to an assistant next to this one. Nothing else has to run for the add-on, so Home Assistant can start alone with the whole memory.
 
-A health app deposits into a person's health vault, under its own path: see [HEALTH-SOURCES.md](https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/HEALTH-SOURCES.md) for what an app should send.
+A health app deposits into a person's health space, under its own path: see [HEALTH-SOURCES.md](https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/HEALTH-SOURCES.md) for what an app should send.
 
 ### Tailscale
 
-A vault has a kind (`memcp space kind NAME health`, or made from the catalogue with `vault add health`): the health record tools are offered to connections that reach a vault of that kind. `identity_trust`, `login_url` and `tailnet_users` serve the sign-in page of Claude on the web and the admin page for the tailnet, on port 8792. The server believes the `Tailscale-User-Login` header only from the one address in `identity_trust`, the machine running Tailscale serve; any other caller gets 403. `tailnet_users` maps a tailnet login to a person (`login=person`). Never publish port 8792 through Funnel.
+A space has a kind (`memcp space kind NAME health`, or made from the catalogue with `space new health`): the health record tools are offered to connections that reach a space of that kind. `identity_trust`, `login_url` and `tailnet_users` serve the sign-in page of Claude on the web and the admin page for the tailnet, on port 8792. The server believes the `Tailscale-User-Login` header only from the one address in `identity_trust`, the machine running Tailscale serve; any other caller gets 403. `tailnet_users` maps a tailnet login to a person (`login=person`). Never publish port 8792 through Funnel.
 
 ## Bank statements
 
-A vault of the money kind (`vault add money`, or `space kind finances money` for one that exists) carries the bank statement tools: `finances_import`, `finances_balances`, `finances_movements`, `finances_monthly` and `finances_rules`. Upload the bank's `.xlsx` export (a summary sheet and one sheet per account) from the Files section of the admin page, then ask an agent to import it: only the new movements are added, so an overlapping export is safe. The person's own rules (a monthly cap on a merchant, a merchant to watch, the words of an internal transfer) are set with `finances_rules` and stay in the space.
+A space of the money kind (`space new money`, or `space kind finances money` for one that exists) carries the bank statement tools: `finances_import`, `finances_balances`, `finances_movements`, `finances_monthly` and `finances_rules`. Upload the bank's `.xlsx` export (a summary sheet and one sheet per account) from the Files section of the admin page, then ask an agent to import it: only the new movements are added, so an overlapping export is safe. The person's own rules (a monthly cap on a merchant, a merchant to watch, the words of an internal transfer) are set with `finances_rules` and stay in the space.
 
 ## Moving from another app
 
@@ -77,21 +77,21 @@ A voice note waits as a recording under `inbox/audio` until something reads it. 
 Off by default. When it is on, it files the notes that wait in the inboxes of one person, never for nothing: once the writing
 into an inbox has calmed down (`janitor_quiet` seconds after the last write, 120 by default), when an assistant asks for it
 (the `tidy` tool, « range le coffre »), and once a night (`janitor_night`, 03:00 by default):
-what the devices sent to **À trier** (the person's one box for everything that comes in, which belongs to no vault) goes to
-the inbox of the right vault, or waits on the person's page when the janitor is unsure; each note of a vault's inbox is filed,
-its text unchanged, in that vault; and a piece of a note absorbed from a folder becomes a few short, dated facts. It reads recordings no more:
+what the devices sent to **À trier** (the person's one box for everything that comes in, which belongs to no space) goes to
+the inbox of the right space, or waits on the person's page when the janitor is unsure; each note of a space's inbox is filed,
+its text unchanged, in that space; and a piece of a note absorbed from a folder becomes a few short, dated facts. It reads recordings no more:
 the bridge, where the speech model is, transcribes them.
 
 | option | what |
 |---|---|
 | `janitor` | on or off |
 | `janitor_person` | whose inboxes (the person's name in Memory) |
-| `janitor_inboxes` | the vaults whose inbox it files (by default all of them; À trier is always read) |
-| `janitor_work_words` | your own words for work (a product, a company, a team): a capture that holds one goes to your `work` vault from À trier, before any model. A recording whose name says `reunion` or `meeting` goes there too. Empty by default |
+| `janitor_inboxes` | the spaces whose inbox it files (by default all of them; À trier is always read) |
+| `janitor_work_words` | your own words for work (a product, a company, a team): a capture that holds one goes to your `work` space from À trier, before any model. A recording whose name says `reunion` or `meeting` goes there too. Empty by default |
 | `janitor_api_url`, `janitor_api_model`, `janitor_api_key` | a service that speaks the OpenAI chat format (Mistral in the EU: `https://api.eu.mistral.ai/v1/chat/completions`, `mistral-small-2603`) |
 | `janitor_ollama_url`, `janitor_ollama_model` | a local model on the network (Ollama), tried after the API, or alone |
 
-It makes its own connection, `janitor`, reaching all the person's vaults, the first time it starts; its key stays in the
+It makes its own connection, `janitor`, reaching all the person's spaces, the first time it starts; its key stays in the
 app's data. With an API, what it reads leaves the house for that service: choose one whose terms you accept.
 
 ## Found without typing an address

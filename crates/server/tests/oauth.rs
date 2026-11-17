@@ -124,7 +124,7 @@ fn decide(e: &Env, q: &str, nonce: &str, decision: &str, headers: &[(&str, &str)
     decide_with(e, q, nonce, decision, headers, "&v_personal=1")
 }
 
-/// The approval with exactly these extra form fields (the ticked vaults and options).
+/// The approval with exactly these extra form fields (the ticked spaces and options).
 fn decide_with(
     e: &Env,
     q: &str,
@@ -506,7 +506,7 @@ fn the_admin_page_on_the_tailnet_knows_the_owner() -> Res {
     Ok(())
 }
 
-/// A `recall` through an access token, in one vault.
+/// A `recall` through an access token, in one space.
 fn recall(e: &Env, access: &str, space: &str) -> Value {
     let auth = format!("Bearer {access}");
     e.app
@@ -532,7 +532,7 @@ fn connection_of(e: &Env, client: &str) -> Result<access::ConnectionInfo, Box<dy
 }
 
 #[test]
-fn the_consent_page_lists_the_vaults_with_nothing_ticked() -> Res {
+fn the_consent_page_lists_the_spaces_with_nothing_ticked() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let page = e.app.handle(&rq(
@@ -561,7 +561,7 @@ fn nothing_ticked_grants_nothing() -> Res {
     let n = nonce(&e, &q)?;
     let r = decide_with(&e, &q, &n, "allow", &[], "");
     assert_eq!(r.status, 400);
-    assert!(String::from_utf8(r.body)?.contains("Tick at least one vault"));
+    assert!(String::from_utf8(r.body)?.contains("Tick at least one space"));
     let ctl = e.app.brain.open_control()?;
     let codes: i64 = ctl.query_row("SELECT count(*) FROM oauth_codes", [], |r| r.get(0))?;
     assert_eq!(codes, 0, "no code was issued");
@@ -583,7 +583,7 @@ fn only_what_was_ticked_is_granted() -> Res {
     assert_eq!(
         recall(&e, &access, "health")["result"]["isError"],
         true,
-        "the vault that was not ticked stays closed"
+        "the space that was not ticked stays closed"
     );
     Ok(())
 }
@@ -623,7 +623,7 @@ fn approving_again_replaces_the_rights_on_the_same_connection() -> Res {
 }
 
 #[test]
-fn a_refresh_keeps_the_ticked_vaults() -> Res {
+fn a_refresh_keeps_the_ticked_spaces() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let (_, r) = tokens(&e, &client)?;
@@ -639,7 +639,7 @@ fn a_refresh_keeps_the_ticked_vaults() -> Res {
 }
 
 #[test]
-fn a_code_that_chose_no_vault_is_refused() -> Res {
+fn a_code_that_chose_no_space_is_refused() -> Res {
     // A code issued before the choice existed has no rights: it grants nothing.
     let e = env()?;
     let client = register(&e)?;
@@ -667,7 +667,7 @@ fn a_code_that_chose_no_vault_is_refused() -> Res {
     assert!(
         r.body_json()["error_description"]
             .as_str()
-            .is_some_and(|d| d.contains("chose no vault"))
+            .is_some_and(|d| d.contains("chose no space"))
     );
     Ok(())
 }
@@ -694,24 +694,24 @@ fn page_of(e: &Env, q: &str) -> (u16, String) {
 }
 
 #[test]
-fn an_address_that_names_a_vault_gives_a_connector_for_that_vault_only() -> Res {
+fn an_address_that_names_a_space_gives_a_connector_for_that_space_only() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let q = authorize_query_for(&client, "https://memory.example.net/mcp/health");
     let (status, html) = page_of(&e, &q);
     assert_eq!(status, 200);
-    assert!(html.contains("added for the vault <b>health</b>"), "{html}");
+    assert!(html.contains("added for the space <b>health</b>"), "{html}");
     assert!(
         html.contains("name=v_health") && !html.contains("name=v_personal"),
-        "no other vault offered"
+        "no other space offered"
     );
     assert!(
         !html.contains("name=upstream"),
-        "no upstream tools for a connector of one vault"
+        "no upstream tools for a connector of one space"
     );
     assert!(html.contains("name=readonly"));
 
-    // The form is forged to ask for more: the server grants the vault of the address, no more.
+    // The form is forged to ask for more: the server grants the space of the address, no more.
     let n = nonce_from(&html)?;
     let r = decide_with(
         &e,
@@ -748,7 +748,7 @@ fn nonce_from(html: &str) -> Result<String, Box<dyn Error>> {
 }
 
 #[test]
-fn a_connector_of_one_vault_can_be_read_only_and_a_vault_not_reached_is_refused() -> Res {
+fn a_connector_of_one_space_can_be_read_only_and_a_space_not_reached_is_refused() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let q = authorize_query_for(&client, "https://memory.example.net/mcp/personal");
@@ -775,7 +775,7 @@ fn a_connector_of_one_vault_can_be_read_only_and_a_vault_not_reached_is_refused(
         ("personal:rw", true)
     );
 
-    // An address that is no vault's names the connection to make: the consent page says so.
+    // An address that is no space's names the connection to make: the consent page says so.
     let q = authorize_query_for(&client, "https://memory.example.net/mcp/nowhere");
     let (status, html) = page_of(&e, &q);
     assert_eq!(status, 200);
@@ -804,7 +804,7 @@ fn the_general_address_keeps_the_picker_with_nothing_ticked() -> Res {
             "{resource}: the picker"
         );
         assert!(
-            !html.contains("checked") && !html.contains("added for the vault"),
+            !html.contains("checked") && !html.contains("added for the space"),
             "{resource}"
         );
     }
@@ -812,12 +812,12 @@ fn the_general_address_keeps_the_picker_with_nothing_ticked() -> Res {
 }
 
 #[test]
-fn one_tick_gives_all_the_vaults_present_and_future() -> Res {
+fn one_tick_gives_all_the_spaces_present_and_future() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let (access, _) = tokens_with(&e, &client, "&all=1")?;
     let c = connection_of(&e, &client)?;
-    assert_eq!(c.rights, "all", "every vault, the ones made later too");
+    assert_eq!(c.rights, "all", "every space, the ones made later too");
     assert_eq!(recall(&e, &access, "personal")["result"]["isError"], false);
     assert_eq!(recall(&e, &access, "health")["result"]["isError"], false);
     // Read only still applies to it.
@@ -835,7 +835,7 @@ fn an_address_that_names_a_connection_makes_that_connection_with_what_was_ticked
     let (status, html) = page_of(&e, &q);
     assert_eq!(status, 200);
     assert!(html.contains("will be called <b>claudeai</b>"));
-    // Not a connector of one vault: the person ticks.
+    // Not a connector of one space: the person ticks.
     assert!(html.contains("name=all") && html.contains("name=v_health"));
     let n = nonce_from(&html)?;
     let r = decide_with(&e, &q, &n, "allow", &[], "&v_health=1");
@@ -874,14 +874,14 @@ fn an_address_that_names_a_connection_makes_that_connection_with_what_was_ticked
 }
 
 #[test]
-fn an_address_naming_a_connection_of_someone_else_or_a_vault_is_not_a_new_connection() -> Res {
+fn an_address_naming_a_connection_of_someone_else_or_a_space_is_not_a_new_connection() -> Res {
     let e = env()?;
     let client = register(&e)?;
     // A name already used by another person's connection: refused.
     {
         let ctl = e.app.brain.open_control()?;
         let other = users::create_user(&ctl, users::OWNER, "kim", "Kim", false)?.id;
-        e.app.brain.add_vault(&other, "kim", "work")?;
+        e.app.brain.add_space_of_kind(&other, "kim", "work")?;
         access::connect_for(
             &ctl,
             &other,
