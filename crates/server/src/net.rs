@@ -168,11 +168,20 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     let app = Arc::clone(app);
     std::thread::spawn(move || {
         let mut rq = rq;
+        let declared = rq.body_length();
         let mut body = Vec::new();
-        let _ = rq.as_reader().take(limit + 1).read_to_end(&mut body);
+        let read = rq.as_reader().take(limit + 1).read_to_end(&mut body);
         let too_big = body.len() as u64 > limit;
+        // A body that stopped before its end (the connection closed or failed, or fewer bytes than announced) is not a
+        // request: what came may be whole JSON and still not be what the client meant to send.
+        let cut = read.is_err() || declared.is_some_and(|n| body.len() < n);
         let resp = if too_big {
             http::Response::json(413, &serde_json::json!({ "error": "body too large" }))
+        } else if cut {
+            http::Response::json(
+                400,
+                &serde_json::json!({ "error": "the body did not come whole" }),
+            )
         } else {
             app.handle(&http::Request {
                 method,

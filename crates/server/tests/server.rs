@@ -1620,3 +1620,49 @@ fn bodies_that_never_come_without_a_key_do_not_turn_away_a_keyed_assistant() -> 
     drop(held);
     Ok(())
 }
+
+#[test]
+fn a_body_cut_short_is_not_taken_as_a_request() -> Res {
+    let dir = temp("cut-body");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let run = |args: &[&str]| -> Result<String, Box<dyn Error>> {
+        let o = std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(args)
+            .output()?;
+        Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    run(&["init", "--spaces", "personal"])?;
+    let out = run(&["connect", "keyed", "--grant", "personal:rw"])?;
+    let token = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("hcp_"))
+        .ok_or("token not shown")?
+        .to_string();
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // A whole JSON request, but the connection ends before the body it announced: the message is not complete.
+    let payload =
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "remember",
+        "arguments": { "space": "personal", "text": "Written by a request that never ended." } } })
+        .to_string();
+    let padded = format!("{payload:<1400}");
+    let mut s = TcpStream::connect(("127.0.0.1", port))?;
+    s.set_read_timeout(Some(Duration::from_secs(5)))?;
+    s.write_all(
+        format!(
+            "POST /mcp/keyed HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 1500\r\n\r\n{padded}"
+        )
+        .as_bytes(),
+    )?;
+    s.shutdown(std::net::Shutdown::Write)?;
+    let mut answer = String::new();
+    let _ = std::io::Read::read_to_string(&mut s, &mut answer);
+    assert!(!answer.contains("created"), "{answer}");
+    std::thread::sleep(Duration::from_millis(300));
+    let listed = run(&["note", "list", "personal"])?;
+    assert!(!listed.contains("never ended"), "{listed}");
+    Ok(())
+}
