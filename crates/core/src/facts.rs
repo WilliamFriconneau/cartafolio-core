@@ -280,6 +280,34 @@ pub fn normalize_tags(raw: &[String]) -> Result<Vec<String>> {
     Ok(out)
 }
 
+/// A keyword of a space's rules: no leading `#`, lower case, at most 40 characters. `None` when empty or too long.
+pub fn clean_keyword(raw: &str) -> Option<String> {
+    let k = raw.trim().trim_start_matches('#').to_lowercase();
+    (!k.is_empty() && k.chars().count() <= 40).then_some(k)
+}
+
+/// The tags (`tags` true, each normalised) or the keywords of a rules document, as a JSON array of strings: cleaned,
+/// sorted, without repeats, at most 100. The one place where a list of rules is cleaned.
+pub fn clean_rules_list(list: Option<&Value>, tags: bool) -> Vec<String> {
+    let mut out: Vec<String> = list
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|t| {
+            if tags {
+                normalize_tag(t).ok()
+            } else {
+                clean_keyword(t)
+            }
+        })
+        .collect();
+    out.sort();
+    out.dedup();
+    out.truncate(100);
+    out
+}
+
 fn tags_of(conn: &Connection, id: &str) -> Result<Vec<String>> {
     let mut st = conn.prepare("SELECT tag FROM fact_tags WHERE fact_id = ?1 ORDER BY tag")?;
     let rows = st.query_map([id], |r| r.get::<_, String>(0))?;

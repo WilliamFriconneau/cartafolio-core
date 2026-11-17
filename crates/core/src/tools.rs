@@ -1464,25 +1464,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 return Ok(json!({ "space": space_name, "id": found, "rules": current }));
             }
             let clean = |key: &str, tags: bool| -> Vec<String> {
-                let src = args.get(key).unwrap_or(&current[key]);
-                let mut v: Vec<String> = src
-                    .as_array()
-                    .into_iter()
-                    .flatten()
-                    .filter_map(Value::as_str)
-                    .filter_map(|t| {
-                        if tags {
-                            facts::normalize_tag(t).ok()
-                        } else {
-                            let k = t.trim().trim_start_matches('#').to_lowercase();
-                            (!k.is_empty() && k.chars().count() <= 40).then_some(k)
-                        }
-                    })
-                    .collect();
-                v.sort();
-                v.dedup();
-                v.truncate(100);
-                v
+                facts::clean_rules_list(Some(args.get(key).unwrap_or(&current[key])), tags)
             };
             let doc = json!({ "version": 1, "tags": clean("tags", true), "keywords": clean("keywords", false) }).to_string();
             let mut new = NewFact::agent(&doc, &caller.agent);

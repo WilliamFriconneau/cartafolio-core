@@ -140,14 +140,14 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
 /// space lists is *unique* and files a note here at once; a shared one only scores.
 fn rules_view(app: &App, ctl: &Connection, me: &User, space: &Space, conn: &Connection) -> Value {
     let mut rules = read_rules(conn).1;
-    let mine = clean_list(rules.get("keywords"), 100, false);
+    let mine = clean_list(rules.get("keywords"), false);
     let mut shared: Vec<String> = vec![];
     if let Ok(reach) = users::access_of(ctl, &me.id) {
         for other in reach.keys().filter(|s| *s != space) {
             let Ok(c) = app.brain.open_space(other) else {
                 continue;
             };
-            let theirs = clean_list(read_rules(&c).1.get("keywords"), 100, false);
+            let theirs = clean_list(read_rules(&c).1.get("keywords"), false);
             shared.extend(mine.iter().filter(|k| theirs.contains(k)).cloned());
         }
     }
@@ -169,8 +169,8 @@ fn rules_history(conn: &Connection) -> Vec<Value> {
     for f in &chain {
         let doc = serde_json::from_str::<Value>(f.text.trim()).unwrap_or(Value::Null);
         let now = (
-            clean_list(doc.get("keywords"), 100, false),
-            clean_list(doc.get("tags"), 100, true),
+            clean_list(doc.get("keywords"), false),
+            clean_list(doc.get("tags"), true),
         );
         let diff = |a: &[String], b: &[String]| -> (Vec<String>, Vec<String>) {
             (
@@ -791,25 +791,8 @@ fn read_rules(conn: &Connection) -> (Option<String>, Value) {
     (None, json!({ "version": 1, "tags": [], "keywords": [] }))
 }
 
-fn clean_list(v: Option<&Value>, max: usize, tags: bool) -> Vec<String> {
-    let mut out: Vec<String> = v
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-        .filter_map(Value::as_str)
-        .filter_map(|t| {
-            if tags {
-                facts::normalize_tag(t).ok()
-            } else {
-                let k = t.trim().trim_start_matches('#').to_lowercase();
-                (!k.is_empty() && k.chars().count() <= 40).then_some(k)
-            }
-        })
-        .collect();
-    out.sort();
-    out.dedup();
-    out.truncate(max);
-    out
+fn clean_list(v: Option<&Value>, tags: bool) -> Vec<String> {
+    facts::clean_rules_list(v, tags)
 }
 
 /// Writes the rules of a space (a new version of the note, the old one kept in the history).
@@ -861,12 +844,12 @@ pub fn space_write(
             let (_, old) = read_rules(&conn);
             let tags = body
                 .get("tags")
-                .map(|v| clean_list(Some(v), 100, true))
-                .unwrap_or_else(|| clean_list(old.get("tags"), 100, true));
+                .map(|v| clean_list(Some(v), true))
+                .unwrap_or_else(|| clean_list(old.get("tags"), true));
             let keywords = body
                 .get("keywords")
-                .map(|v| clean_list(Some(v), 100, false))
-                .unwrap_or_else(|| clean_list(old.get("keywords"), 100, false));
+                .map(|v| clean_list(Some(v), false))
+                .unwrap_or_else(|| clean_list(old.get("keywords"), false));
             write_rules(&conn, &space, &who, tags, keywords)?;
             Ok(json!({ "result": "ok" }))
         }
@@ -890,13 +873,13 @@ pub fn space_write(
             if !dry && moved.moved > 0 {
                 // What was moved is now the target's: a note with this tag is filed there from now on.
                 let (_, old) = read_rules(&to_conn);
-                let mut tags = clean_list(old.get("tags"), 100, true);
+                let mut tags = clean_list(old.get("tags"), true);
                 if let Ok(t) = facts::normalize_tag(tag) {
                     tags.push(t);
                 }
                 tags.sort();
                 tags.dedup();
-                let keywords = clean_list(old.get("keywords"), 100, false);
+                let keywords = clean_list(old.get("keywords"), false);
                 write_rules(&to_conn, &to, &who, tags, keywords)?;
             }
             Ok(json!({
