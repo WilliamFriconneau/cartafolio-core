@@ -353,3 +353,76 @@ fn a_hostile_schema_cannot_call_unsafe_functions_when_a_database_is_opened() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The pairing table was called `bridge_pairings`: a database made before the rename keeps every code, used or waiting,
+/// and the waiting code still opens a connection.
+#[test]
+fn pairings_made_under_the_old_table_name_are_kept_and_still_redeemed() {
+    let dir = temp("pairings-rename");
+    let brain = Brain::init(&dir, &[Space::new("work").unwrap()], Language::English).unwrap();
+    let path = dir.join("control.sqlite");
+    remove_db(&path);
+    let code = "ABCD2345";
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
+            .unwrap();
+        // The program as it was two releases ago (before the pairing table was renamed and the node id was added): the old table name.
+        migrate(&conn, &CONTROL_MIGRATIONS[..CONTROL_MIGRATIONS.len() - 2]).unwrap();
+        assert_eq!(version(&conn), CONTROL_MIGRATIONS.len() - 2);
+        conn.execute("INSERT INTO meta (k, v) VALUES ('kind', 'control')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO spaces (name, created_at) VALUES ('work', 1700000000)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO space_members (space, user_id, can_write, owner) VALUES ('work', 'owner', 1, 1)",
+            [],
+        )
+        .unwrap();
+        let rows = [
+            (crate::pairing::hash(code), None::<i64>),
+            (vec![9u8; 32], Some(1_700_000_100)),
+        ];
+        for (hash, used) in rows {
+            conn.execute(
+                "INSERT INTO bridge_pairings (hash, user_id, rights, created_at, expires_at, used_at, agent)
+                 VALUES (?1, 'owner', 'work/inbox:rw', 1700000000, 4000000000, ?2, ?3)",
+                params![hash, used, used.map(|_| "old-device")],
+            )
+            .unwrap();
+        }
+    }
+    let conn = brain.open_control().unwrap();
+    assert_eq!(version(&conn), CONTROL_MIGRATIONS.len());
+    let has = |name: &str| -> bool {
+        conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [name],
+            |r| r.get::<_, i64>(0),
+        )
+        .unwrap()
+            == 1
+    };
+    assert!(has("pairings") && !has("bridge_pairings"));
+    let rows: i64 = conn
+        .query_row("SELECT count(*) FROM pairings", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 2, "every row is kept");
+    let used: String = conn
+        .query_row(
+            "SELECT agent FROM pairings WHERE used_at IS NOT NULL",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(used, "old-device");
+    // The waiting code opens a connection, once.
+    let paired = crate::pairing::redeem(&conn, code, "phone", 1_800_000_000).unwrap();
+    assert_eq!(paired.spaces, vec!["work".to_string()]);
+    assert!(crate::pairing::redeem(&conn, code, "phone", 1_800_000_001).is_err());
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}

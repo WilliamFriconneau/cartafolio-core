@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased
+
+- **« À trier » is now called Inbox**, in English, French and Spanish: on the page, in the tool descriptions and the instructions given to assistants, in the janitor's notes, the command line and the docs. The box is stored as before (kind `a-trier`, space `<person>-a-trier`), so a box made by an earlier version is the same box: nothing is renamed or migrated, and the swarm still pairs the boxes of a person by kind, whatever their names. A spaces file whose default space is still labelled « À trier » is read as « Inbox ».
+- **Every node is equal, and the words say so:** the page, the consent page, the command line, `doctor` and the docs no longer call a node « the server », its page « administration » or « the admin page », or a device a « client » of another. The people section of the page is « People of this node ». The `/admin` path, `--console-admin` and `--admins` keep their names.
+- No « vault » left in what a person reads: the consent page, `doctor`, the command line and the janitor's notes say space. `memcp space make KIND` is the new name of `vault add KIND` and `import --folder DIR` of `import --vault DIR`; the old forms still work.
+
+## 20261117.0.17
+
+- **The swarm:** every node of a person is equal. A space or sub-space made on any node reaches the others with its label and parent; a rename, a move or an archive follows; the person's À trier is one box across the nodes, so a dictation captured on a device reaches every node, and a note filed from it by two janitors is one note. Peers that joined earlier reach the spaces made since.
+
+## 20261117.0.16
+
+- **A note sent out of À trier is tagged like one written in its space:** the tag of the space, then what the text says there (signs, levels and measures in a health space, the space's own keywords elsewhere). Notes dictated on a device, which wait in À trier first, now get their tags when the janitor or the person files them.
+
+## 20261117.0.15
+
+- **The node keeps answering:** a request declaring a huge body no longer aborts it, clients that declare a body and send nothing no longer hold its workers, and a burst of connections kept open no longer leaves later ones unread (the HTTP server tiny_http is kept in `vendor/` with these fixes).
+- **Rights and data kept through an archive:** a connection limited to paths comes back limited after a restore, and the last writes still in the write-ahead log are archived with the space.
+- **Files:** a file whose description reads like a note already there gets a note of its own instead of taking that one over.
+- **Facts are at most 1 MiB**, the most a peer takes in a sync; a sync pass reports the events it could not read.
+- **Janitor:** no panic on a long recording name with accents; the hour of waking is read from any app's day note.
+- Tools, errors and the instructions given to assistants say *space*, not *vault*.
+
 ## 20261117.0.14
 
 - Automatic tags in the core: every write gets the tag of its space and the tags proper to it (signs, levels and measures in a health space); `tags_suggest`, `tags_set`; the node learns from corrections (docs/AUTOTAG.md, docs/CHANGELOG-API.md).

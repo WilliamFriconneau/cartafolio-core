@@ -252,7 +252,7 @@ fn setup_makes_a_private_memory_a_page_key_and_one_address_for_an_assistant() ->
     fs::write(&conf, s)?;
     let c = conf.to_str().ok_or("path")?;
     let doctor = memcp(&["--config", c, "doctor"])?;
-    assert!(doctor.contains("the server answers on"), "{doctor}");
+    assert!(doctor.contains("this node answers on"), "{doctor}");
     assert!(doctor.contains("backup: none"), "{doctor}");
     for _ in 0..3 {
         memcp(&["--config", c, "backup"])?;

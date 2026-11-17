@@ -8,8 +8,8 @@
 **Use it**
 - [CORE-API.md](CORE-API.md): the map of the core by module, and the error vocabulary.
 - [TOOLS.md](TOOLS.md): the MCP tools an assistant gets, one section each. [REFERENCE.md](REFERENCE.md): commands and settings.
-- [DESKTOP.md](DESKTOP.md), [CAPTURE.md](CAPTURE.md): the apps on a computer and the capture program.
-- [LINUX.md](LINUX.md): install, first run, upgrade, backup, firewall and TLS on a Linux server; [PARITY.md](PARITY.md): the add-on options and their `memcp.toml` counterparts.
+- [DESKTOP.md](DESKTOP.md), [INTAKE.md](INTAKE.md): the apps on a computer, and what the node does with what comes into it (voice notes, watched folders, absorbed folders); [CHANGELOG-API.md](CHANGELOG-API.md): what changed on the wire, for the apps.
+- [LINUX.md](LINUX.md): install, first run, upgrade, backup, firewall and TLS on a Linux machine; [PARITY.md](PARITY.md): the add-on options and their `memcp.toml` counterparts.
 - [TAILSCALE.md](TAILSCALE.md), [DISCOVERY.md](DISCOVERY.md): reaching a node.
 - [PLATFORMS.md](PLATFORMS.md): one app on every platform, what each adds (iPad, Watch, CarPlay, Windows, Linux GTK4).
 - [ASSIST.md](ASSIST.md): the memory in a voice assistant (Home Assistant Assist, Siri), and the integrations block of the page (plan).
@@ -22,4 +22,4 @@
 - [CRUD.md](CRUD.md): what can be created, read, changed and removed (spaces, nodes, connections, people, notes).
 
 **Project**
-- [CONFORMITY.md](CONFORMITY.md): how a Linux server meets these documents. [FIVE-S.md](FIVE-S.md): the 5S pass of the code, rerun before a release. [reviews/](reviews/): security and code reviews. [CHANGELOG.md](../CHANGELOG.md): what each version changed.
+- [CONFORMITY.md](CONFORMITY.md): how a node on Linux and Home Assistant meets these documents. [FIVE-S.md](FIVE-S.md): the 5S pass of the code, rerun before a release. [reviews/](reviews/): security and code reviews. [CHANGELOG.md](../CHANGELOG.md): what each version changed.

@@ -20,7 +20,10 @@ mod space;
 mod sync;
 pub mod ui;
 
-pub use config::{ConfigError, SPACES_FORMAT, load_spaces, parse_spaces, save_spaces, spaces_text};
+pub use config::{
+    ConfigError, FORMER_DEFAULT_LABEL, SPACES_FORMAT, load_spaces, parse_spaces, save_spaces,
+    spaces_text,
+};
 pub use connector::{ConnectorConfig, ConnectorKind, Mode};
 pub use defaults::default_tree;
 pub use ids::{Hlc, new_id, now_ms, uuid_v7_at};

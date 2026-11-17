@@ -661,7 +661,7 @@ fn readable_spaces(
         .spaces()
         .map_err(fail)?
         .into_iter()
-        // À trier too: the journal is every note of every space (docs/UI-SPEC.md), what waits to be filed included.
+        // Inbox too: the journal is every note of every space (docs/UI-SPEC.md), what waits to be filed included.
         .filter(|s| reach.contains_key(s))
         .collect())
 }

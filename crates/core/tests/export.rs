@@ -196,6 +196,39 @@ fn an_export_made_before_the_rename_is_still_read() -> Res {
     Ok(())
 }
 
+/// An export made before spaces were called spaces: the manifest lists `vaults`, the databases are in `vaults/`, and the
+/// fingerprints are keyed by those paths. It verifies, and it is taken in whole.
+#[test]
+fn an_export_in_the_old_shape_with_vaults_is_verified_and_taken_in() -> Res {
+    let w = world()?;
+    let dir = export_of(&w)?;
+    let current = export::verify_export(&dir)?;
+    assert!(current["spaces"].is_array() && current["vaults"].is_null());
+    fs::rename(dir.join("spaces"), dir.join("vaults"))?;
+    let path = dir.join("manifest.json");
+    let mut m: Value = serde_json::from_str(&fs::read_to_string(&path)?)?;
+    let spaces = m["spaces"].take();
+    m.as_object_mut().ok_or("manifest")?.remove("spaces");
+    m["vaults"] = spaces;
+    let hashes = m["hashes"].as_object().ok_or("hashes")?.clone();
+    let renamed: serde_json::Map<String, Value> = hashes
+        .into_iter()
+        .map(|(k, v)| (k.replacen("spaces/", "vaults/", 1), v))
+        .collect();
+    m["hashes"] = Value::Object(renamed);
+    fs::write(&path, serde_json::to_string_pretty(&m)?)?;
+    let old = export::verify_export(&dir)?;
+    assert_eq!(
+        export::manifest_spaces(&old).map(Vec::len),
+        export::manifest_spaces(&current).map(Vec::len)
+    );
+    let (_t, brain, kim) = elsewhere()?;
+    let adopted = export::adopt(&brain, &dir, &kim, None)?;
+    assert_eq!(adopted.len(), 2, "both spaces of the old export arrive");
+    assert!(brain.has_space(&sp("sam-work"))?);
+    Ok(())
+}
+
 #[cfg(unix)]
 #[test]
 fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
@@ -204,9 +237,9 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
     let m = export::verify_export(&dir)?;
     assert_eq!(m["format"], FORMAT);
     assert_eq!(m["person"]["name"], "sam");
-    let names: Vec<&str> = m["vaults"]
+    let names: Vec<&str> = m["spaces"]
         .as_array()
-        .ok_or("vaults")?
+        .ok_or("spaces")?
         .iter()
         .filter_map(|v| v["name"].as_str())
         .collect();
@@ -215,12 +248,12 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
         ["sam-health", "sam-work"],
         "not the vault Alex shared, not the legacy one"
     );
-    assert_eq!(m["vaults"][1]["kind"], "work");
+    assert_eq!(m["spaces"][1]["kind"], "work");
     assert_eq!(
-        m["vaults"][1]["facts"],
+        m["spaces"][1]["facts"],
         json!({ "active": 4, "replaced": 1, "retired": 1 })
     );
-    assert_eq!(m["vaults"][1]["files"], 1);
+    assert_eq!(m["spaces"][1]["files"], 1);
     // What is in the directory: vaults, files, readable, guides, README, manifest. No control data.
     let rels: Vec<String> = all_files(&dir)
         .iter()
@@ -234,7 +267,7 @@ fn an_export_holds_only_what_the_person_owns_and_no_key() -> Res {
         "manifest.json",
         "README.txt",
         "guides.json",
-        "vaults/sam-work.sqlite",
+        "spaces/sam-work.sqlite",
         "readable/sam-health.md",
     ] {
         assert!(rels.iter().any(|r| r == want), "{want} in {rels:?}");
@@ -390,7 +423,7 @@ fn an_erased_recording_leaves_no_bytes_in_the_export_and_the_record_travels() ->
     let rec = files::put_tagged(
         &w.brain,
         &work,
-        "bridge",
+        "device",
         "Mémo.m4a",
         "",
         &memo,
@@ -454,7 +487,7 @@ fn an_altered_export_is_caught_and_nothing_is_adopted() -> Res {
     let before = all_files(&data).len();
 
     // One byte of a vault changed.
-    let db = dir.join("vaults/sam-work.sqlite");
+    let db = dir.join("spaces/sam-work.sqlite");
     let mut bytes = fs::read(&db)?;
     let last = bytes.len() - 1;
     bytes[last] ^= 0xff;
@@ -464,7 +497,7 @@ fn an_altered_export_is_caught_and_nothing_is_adopted() -> Res {
         .map(|e| e.to_string())
         .unwrap_or_default();
     assert!(
-        e.contains("vaults/sam-work.sqlite") && e.contains("altered"),
+        e.contains("spaces/sam-work.sqlite") && e.contains("altered"),
         "{e}"
     );
     assert!(export::adopt(&brain, &dir, &kim, None).is_err());
@@ -555,7 +588,7 @@ fn an_unknown_kind_becomes_custom_and_a_person_with_nothing_has_nothing_to_expor
     let w = world()?;
     let dir = export_of(&w)?;
     let mut m: Value = serde_json::from_str(&fs::read_to_string(dir.join("manifest.json"))?)?;
-    m["vaults"][0]["kind"] = json!("alien");
+    m["spaces"][0]["kind"] = json!("alien");
     fs::write(dir.join("manifest.json"), m.to_string())?;
     let (_t, brain, kim) = elsewhere()?;
     export::adopt(&brain, &dir, &kim, None)?;
@@ -566,7 +599,7 @@ fn an_unknown_kind_becomes_custom_and_a_person_with_nothing_has_nothing_to_expor
     assert!(
         export::export_person(&b2, &nobody, &out_dir(&w), 1_900_000_001)
             .err()
-            .is_some_and(|e| e.to_string().contains("owns no vault"))
+            .is_some_and(|e| e.to_string().contains("owns no space"))
     );
     let inside = w.brain.dir().join("exports");
     assert!(

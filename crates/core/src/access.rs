@@ -124,7 +124,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                     || paths.iter().any(|(s, _, _)| *s == space)
                 {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 whole.push((space, grant));
@@ -137,7 +137,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                 }
                 if whole.iter().any(|(s, _)| *s == space) {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 if paths.iter().any(|(s, p, _)| *s == space && *p == path) {
@@ -172,7 +172,8 @@ with the candidates: `supersede` if it is the same thing corrected, otherwise ca
 /// An anti-flood ceiling, not a pace: 100 calls a second per connection. A runaway loop or a stolen key
 /// meets it; no app that sends its history, even one record per call, does.
 pub const DEFAULT_RATE_PER_MIN: i64 = 6000;
-/// No limit on the length of a fact by default.
+/// No limit of a connection's own on the length of a fact by default (every fact is at most
+/// [`crate::facts::MAX_TEXT_BYTES`]).
 pub const DEFAULT_MAX_TEXT: i64 = i64::MAX;
 
 /// Who is calling, and what it may do. Built from the connection, never from arguments.
@@ -351,7 +352,7 @@ fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
         .optional()?;
     if is_vault.is_some() {
         return Err(Error::Invalid(format!(
-            "{name} is the name of a vault: a connection needs another name"
+            "{name} is the name of a space: a connection needs another name"
         )));
     }
     Ok(())
@@ -810,6 +811,12 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         },
     )?;
     let reach = crate::users::access_of(ctl, &user_id)?;
+    // A machine of the person reaches every space of theirs, present and future: every node is equal.
+    let all = if all == 0 && ro == 0 && is_machine(ctl, &agent, id)? {
+        1
+    } else {
+        all
+    };
     let grants: BTreeMap<Space, Grant> = if all != 0 {
         reach
     } else {
@@ -873,6 +880,31 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         rate_per_min: rate.unwrap_or(DEFAULT_RATE_PER_MIN),
         max_text: max_text.unwrap_or(DEFAULT_MAX_TEXT),
     })
+}
+
+/// Whether the connection `id` is a machine of the person that joined before a peer reached every space by itself
+/// (`pairing::create_for_peer` now gives `all`): named `peer-…`, limited by no path, and holding read and write on the
+/// person's Inbox and on at least one other space, as a join gave it. A device paired to capture holds the box
+/// alone and stays limited to it.
+fn is_machine(ctl: &Connection, agent: &str, id: &str) -> Result<bool> {
+    if !agent.starts_with(crate::sync::PEER_PREFIX) {
+        return Ok(false);
+    }
+    let paths: i64 = ctl.query_row(
+        "SELECT count(*) FROM grant_paths WHERE connection_id = ?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    if paths > 0 {
+        return Ok(false);
+    }
+    let (total, writes, boxes): (i64, i64, i64) = ctl.query_row(
+        "SELECT count(*), coalesce(sum(g.can_write != 0), 0), coalesce(sum(s.kind = ?2), 0)
+         FROM grants g LEFT JOIN spaces s ON s.name = g.space WHERE g.connection_id = ?1",
+        params![id, crate::catalogue::TRIAGE],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    Ok(total >= 2 && writes == total && boxes >= 1)
 }
 
 /// Records that `caller` was just used (time and address), at most once a minute per connection

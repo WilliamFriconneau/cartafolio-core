@@ -1,31 +1,32 @@
 #!/bin/sh
-# MemCP on a Mac: the node (`memcp serve`) and the bridge (`memcp-capture`) as background tasks of your user, started at
-# login and again after a crash, with their logs. Nothing runs as root and nothing is put outside your home folder.
+# MemCP on a Mac: the node (`memcp serve`) as a background task of your user, started at login and again after a crash,
+# with its log. The node reads the voice notes and watches the folders itself, as `memcp.toml` says. Nothing runs as
+# root and nothing is put outside your home folder.
 #
 #   sh install-mac.sh               install or update (asks a few questions)
 #   sh install-mac.sh --uninstall   stop and remove the programs and the tasks; your memory is kept
 #
 # What goes where:
-#   ~/Library/Application Support/MemCP/bin      memcp, memcp-capture, memcp-janitor
+#   ~/Library/Application Support/MemCP/bin      memcp, memcp-janitor
 #   ~/Library/Application Support/MemCP/data     the memory (a folder of databases: back it up, it is yours)
-#   ~/Library/Application Support/MemCP/bridge   the bridge's settings and what waits to be sent
-#   ~/Library/Logs/MemCP                         node.log, bridge.log, transcribe.log
-#   ~/Library/LaunchAgents/org.memcp.*.plist     the tasks (launchd agents of your user)
-#   Keychain, service memcp-capture               the keys of the bridge and of this Mac (never written in a file)
+#   ~/Library/Application Support/MemCP/memcp.toml  the node's settings: voice notes, watched folders (mode 600)
+#   ~/Library/Logs/MemCP                         node.log
+#   ~/Library/LaunchAgents/org.memcp.node.plist  the task (a launchd agent of your user)
+#   Keychain, service memcp                      the keys of the assistants' connection and of this Mac (never in a file)
 #
 # Options (or the same words as environment variables, in capitals, prefixed MEMCP_):
 #   --yes                take every default, ask nothing
 #   --version vX.Y.Z     a release other than the latest
-#   --from DIR           take memcp, memcp-capture and memcp-janitor from DIR (a build of your own) instead of a release
+#   --from DIR           take memcp and memcp-janitor from DIR (a build of your own) instead of a release
 #   --language en|fr     the language of search and of the page (default en)
 #   --spaces LIST        the first vaults (default personal,work,health)
 #   --port N             the node's port on the loopback (default 8791)
-#   --bridge-port N      the bridge's port on the loopback, for assistants (default 8792)
+#   --bridge-port N      no longer used (the node serves the assistants itself); accepted, so that a script keeps working
 #   --whisper-model FILE voice notes read on this Mac by whisper.cpp (`brew install whisper-cpp ffmpeg`) with this model
 #   --speech-api URL     or by a speech service of the OpenAI kind (key in MEMCP_SPEECH_API_KEY): the recordings leave
 #                        this Mac for it
 #   --no-agents          install the programs and the memory, start nothing
-#   --uninstall          remove the tasks, the programs and the bridge's key; the memory and the logs are kept
+#   --uninstall          remove the task, the programs and the keys of the Keychain; the memory and the logs are kept
 #   --purge              with --uninstall: also delete the memory and the logs (asks first, unless --yes)
 #   --help
 set -eu
@@ -42,7 +43,8 @@ FROM="${MEMCP_FROM:-}"
 LANGUAGE="${MEMCP_LANGUAGE:-en}"
 SPACES="${MEMCP_SPACES:-personal,work,health}"
 PORT="${MEMCP_PORT:-8791}"
-BRIDGE_PORT="${MEMCP_BRIDGE_PORT:-8792}"
+# `MEMCP_BRIDGE_PORT` and `--bridge-port` are the old names of a setting that is gone: read, said, and ignored.
+OLD_BRIDGE_PORT="${MEMCP_BRIDGE_PORT:-}"
 WHISPER_MODEL="${MEMCP_WHISPER_MODEL:-}"
 SPEECH_API="${MEMCP_SPEECH_API:-}"
 AGENTS_ON="${MEMCP_AGENTS_ON:-1}"
@@ -58,7 +60,7 @@ while [ $# -gt 0 ]; do
     --language) LANGUAGE="$2"; shift ;;
     --spaces) SPACES="$2"; shift ;;
     --port) PORT="$2"; shift ;;
-    --bridge-port) BRIDGE_PORT="$2"; shift ;;
+    --bridge-port) OLD_BRIDGE_PORT="$2"; shift ;;
     --whisper-model) WHISPER_MODEL="$2"; shift ;;
     --speech-api) SPEECH_API="$2"; shift ;;
     --no-agents) AGENTS_ON=0 ;;
@@ -72,11 +74,16 @@ done
 
 BIN="$ROOT/bin"
 DATA="$ROOT/data"
-BRIDGE="$ROOT/bridge"
+SETTINGS="$ROOT/memcp.toml"
 NODE_URL="http://127.0.0.1:$PORT"
-CONNECTION=desktop-bridge
-BRIDGE_URL="$NODE_URL/mcp/$CONNECTION"
-LABELS="org.memcp.node org.memcp.bridge org.memcp.transcribe"
+# The connection of the assistants of this Mac. An installation made before the rename has `desktop-bridge`: it is kept.
+CONNECTION=desktop
+OLD_CONNECTION=desktop-bridge
+SERVICE=memcp
+OLD_SERVICE=memcp-capture
+LABELS="org.memcp.node"
+# The tasks of an earlier version: stopped and removed at every install and uninstall.
+OLD_LABELS="org.memcp.bridge org.memcp.transcribe"
 DOMAIN="gui/$(id -u)"
 
 say()  { printf '%s\n' "$*"; }
@@ -97,7 +104,7 @@ confirm() {
 [ "$(uname -s)" = Darwin ] || die "this installer is for macOS; on Linux use install.sh, on Windows packaging/windows/install.ps1"
 
 stop_agents() {
-  for label in $LABELS; do
+  for label in $LABELS $OLD_LABELS; do
     launchctl bootout "$DOMAIN/$label" 2>/dev/null || true
   done
 }
@@ -106,11 +113,14 @@ stop_agents() {
 if [ "$ACTION" = uninstall ]; then
   step "Removing MemCP from this Mac"
   stop_agents
-  for label in $LABELS; do rm -f "$AGENTS/$label.plist"; done
-  security delete-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1 || true
-  security delete-generic-password -s memcp-capture -a "$NODE_URL/mcp/this-mac" >/dev/null 2>&1 || true
-  rm -rf "$BIN" "$BRIDGE"
-  say "the tasks, the programs and the bridge's key are removed."
+  for label in $LABELS $OLD_LABELS; do rm -f "$AGENTS/$label.plist"; done
+  for service in $SERVICE $OLD_SERVICE; do
+    for name in $CONNECTION $OLD_CONNECTION this-mac; do
+      security delete-generic-password -s "$service" -a "$NODE_URL/mcp/$name" >/dev/null 2>&1 || true
+    done
+  done
+  rm -rf "$BIN" "$SETTINGS" "$ROOT/speech.key" "$ROOT/bridge"
+  say "the task, the programs and the keys are removed."
   if [ "$PURGE" = 1 ]; then
     if [ "$YES" = 1 ] || confirm "Delete the memory in $DATA and the logs? This cannot be undone" n; then
       rm -rf "$DATA" "$LOGS"
@@ -131,22 +141,18 @@ say "A durable memory for your AI assistants, kept on this Mac."
 # --- choices -------------------------------------------------------------------------------------------------
 step "1/5  Choices"
 ask "Language of search and of the page (en or fr)?" "$LANGUAGE"; LANGUAGE="$ANSWER"
-ask "First vaults, comma separated (a vault is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
+ask "First spaces, comma separated (a space is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
 ask "Port of the node on this Mac?" "$PORT"; PORT="$ANSWER"
-ask "Port of the bridge on this Mac, for assistants?" "$BRIDGE_PORT"; BRIDGE_PORT="$ANSWER"
-for p in "$PORT" "$BRIDGE_PORT"; do
-  case "$p" in ''|*[!0-9]*) die "a port must be a number" ;; esac
-done
-[ "$PORT" != "$BRIDGE_PORT" ] || die "the node and the bridge need two ports"
+case "$PORT" in ''|*[!0-9]*) die "a port must be a number" ;; esac
+[ -z "$OLD_BRIDGE_PORT" ] || say "note: --bridge-port / MEMCP_BRIDGE_PORT is no longer used: the assistants reach the node on port $PORT."
 NODE_URL="http://127.0.0.1:$PORT"
-BRIDGE_URL="$NODE_URL/mcp/$CONNECTION"
 
 # --- the programs --------------------------------------------------------------------------------------------
 step "2/5  Programs"
 umask 077
-mkdir -p "$BIN" "$DATA" "$BRIDGE" "$LOGS"
-chmod 700 "$ROOT" "$DATA" "$BRIDGE"
-PROGRAMS="memcp memcp-capture memcp-janitor"
+mkdir -p "$BIN" "$DATA" "$LOGS"
+chmod 700 "$ROOT" "$DATA"
+PROGRAMS="memcp memcp-janitor"
 if [ -n "$FROM" ]; then
   for prog in $PROGRAMS; do
     [ -x "$FROM/$prog" ] || die "$FROM/$prog is missing"
@@ -188,10 +194,57 @@ else
   "$BIN/memcp" --data "$DATA" init --spaces "$SPACES" --language "$LANGUAGE"
 fi
 
+# --- the node's settings -------------------------------------------------------------------------------------
+# The node reads the voice notes and watches the folders itself, as memcp.toml says (docs/LINUX.md). The `bridge.conf`
+# an earlier version wrote held the voice settings: they pass into memcp.toml once, and its folder is kept aside.
+OLD_CONF="$ROOT/bridge/bridge.conf"
+OLD_SPEECH_KEY=
+if [ -f "$OLD_CONF" ] && [ ! -e "$SETTINGS" ]; then
+  conf_value() { sed -n "s/^$1 = //p" "$OLD_CONF" | head -1; }
+  [ -n "$WHISPER_MODEL" ] || WHISPER_MODEL=$(conf_value whisper_model)
+  [ -n "$SPEECH_API" ] || SPEECH_API=$(conf_value whisper_api_url)
+  OLD_SPEECH_KEY=$(conf_value whisper_api_key)
+  say "the voice settings of the earlier bridge.conf are carried over into $SETTINGS"
+fi
+if [ -d "$ROOT/bridge" ]; then
+  mv "$ROOT/bridge" "$ROOT/bridge.migrated"
+  say "the folder of the earlier version is kept as $ROOT/bridge.migrated (what it held is in the node now); delete it when you like."
+fi
+if [ ! -e "$SETTINGS" ] || [ -n "$WHISPER_MODEL$SPEECH_API" ]; then
+  {
+    echo "# The node's settings, written by install-mac.sh. Every option: \`memcp config example\`."
+    # What the person added by hand stays; the voice lines are written again.
+    if [ -f "$SETTINGS" ]; then grep -v '^transcribe' "$SETTINGS" || true; fi
+    if [ -n "$WHISPER_MODEL" ] || [ -n "$SPEECH_API" ]; then
+      echo "transcribe = true"
+      echo "transcribe_language = \"$LANGUAGE\""
+    fi
+    if [ -n "$WHISPER_MODEL" ]; then
+      [ -f "$WHISPER_MODEL" ] || die "no model at $WHISPER_MODEL"
+      echo "transcribe_model = \"$WHISPER_MODEL\""
+      for c in whisper-cli ffmpeg; do
+        p=$(command -v "$c" || true)
+        [ -n "$p" ] || die "$c is needed for --whisper-model: brew install whisper-cpp ffmpeg"
+        [ "$c" = whisper-cli ] && echo "transcribe_cmd = \"$p\"" || echo "transcribe_ffmpeg = \"$p\""
+      done
+    elif [ -n "$SPEECH_API" ]; then
+      echo "transcribe_api_url = \"$SPEECH_API\""
+      SPEECH_KEY="${MEMCP_SPEECH_API_KEY:-$OLD_SPEECH_KEY}"
+      if [ -n "$SPEECH_KEY" ]; then
+        printf '%s' "$SPEECH_KEY" > "$ROOT/speech.key"
+        chmod 600 "$ROOT/speech.key"
+        echo "transcribe_api_key_file = \"$ROOT/speech.key\""
+      fi
+    fi
+  } > "$SETTINGS.new"
+  mv "$SETTINGS.new" "$SETTINGS"
+fi
+chmod 600 "$SETTINGS"
+
 # --- the node, running ---------------------------------------------------------------------------------------
-step "4/5  The node and the bridge's key"
-plist() { # label, interval (0: always on), program arguments...
-  label=$1; interval=$2; shift 2
+step "4/5  The node and its keys"
+plist() { # label, program arguments...
+  label=$1; shift
   {
     cat <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -209,14 +262,8 @@ EOF
     cat <<EOF
   </array>
   <key>RunAtLoad</key><true/>
-EOF
-    if [ "$interval" = 0 ]; then
-      echo "  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>"
-      echo "  <key>ThrottleInterval</key><integer>10</integer>"
-    else
-      echo "  <key>StartInterval</key><integer>$interval</integer>"
-    fi
-    cat <<EOF
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ThrottleInterval</key><integer>10</integer>
   <key>ProcessType</key><string>Background</string>
   <key>Umask</key><integer>63</integer>
   <key>StandardOutPath</key><string>$LOGS/${label#org.memcp.}.log</string>
@@ -227,18 +274,19 @@ EOF
   } > "$AGENTS/$label.plist"
 }
 stop_agents
+for label in $OLD_LABELS; do rm -f "$AGENTS/$label.plist"; done
 # Another program on the node's port would answer in its place.
 if curl -fs -o /dev/null "$NODE_URL/health" 2>/dev/null || lsof -nP -iTCP:"$PORT" -sTCP:LISTEN >/dev/null 2>&1; then
   die "port $PORT is taken by another program (lsof -nP -iTCP:$PORT); choose another with --port"
 fi
 mkdir -p "$AGENTS"
-plist org.memcp.node 0 "$BIN/memcp" --data "$DATA" serve --listen "127.0.0.1:$PORT"
+plist org.memcp.node "$BIN/memcp" --data "$DATA" --config "$SETTINGS" serve --listen "127.0.0.1:$PORT"
 # The node runs from here on: as its task, or for the time of the install only (--no-agents).
 NODE_PID=
 if [ "$AGENTS_ON" = 1 ]; then
   launchctl bootstrap "$DOMAIN" "$AGENTS/org.memcp.node.plist"
 else
-  "$BIN/memcp" --data "$DATA" serve --listen "127.0.0.1:$PORT" >>"$LOGS/node.log" 2>&1 &
+  "$BIN/memcp" --data "$DATA" --config "$SETTINGS" serve --listen "127.0.0.1:$PORT" >>"$LOGS/node.log" 2>&1 &
   NODE_PID=$!
 fi
 i=0
@@ -249,10 +297,23 @@ done
 
 CONSOLE=$("$BIN/memcp" --data "$DATA" console-token owner 2>/dev/null | grep -o 'hcpc_[A-Za-z0-9_]*' | head -1 || true)
 [ -n "$CONSOLE" ] || die "no console key could be made"
-# This Mac joins its own memory as a device, as a phone does: that makes the person's « À trier », where every capture
-# goes. The device's key (it writes only to À trier, reads nothing) is kept in the Keychain under its address.
+
+keychain_has() { security find-generic-password -s "$1" -a "$2" >/dev/null 2>&1; }
+# A key kept by an earlier version under its old service name moves to the new one.
+keychain_move() {
+  if keychain_has "$OLD_SERVICE" "$1" && ! keychain_has "$SERVICE" "$1"; then
+    v=$(security find-generic-password -s "$OLD_SERVICE" -a "$1" -w 2>/dev/null || true)
+    if [ -n "$v" ] && security add-generic-password -U -s "$SERVICE" -a "$1" -l "MemCP" -w "$v"; then
+      security delete-generic-password -s "$OLD_SERVICE" -a "$1" >/dev/null 2>&1 || true
+    fi
+    v=
+  fi
+}
+for name in $CONNECTION $OLD_CONNECTION this-mac; do keychain_move "$NODE_URL/mcp/$name"; done
+# This Mac joins its own memory as a device, as a phone does: that makes the person's Inbox, where every capture
+# goes. The device's key (it writes only to the Inbox, reads nothing) is kept in the Keychain under its address.
 DEVICE_ACCOUNT="$NODE_URL/mcp/this-mac"
-if ! security find-generic-password -s memcp-capture -a "$DEVICE_ACCOUNT" >/dev/null 2>&1; then
+if ! keychain_has "$SERVICE" "$DEVICE_ACCOUNT"; then
   CODE=$(curl -fsS -X POST -H "Authorization: Bearer $CONSOLE" -H "X-Requested-With: memcp" \
     -H "Content-Type: application/json" -d '{}' "$NODE_URL/admin/api/pairing" |
     sed -n 's/.*"code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -261,65 +322,34 @@ if ! security find-generic-password -s memcp-capture -a "$DEVICE_ACCOUNT" >/dev/
     -d "{\"code\":\"$CODE\",\"device\":\"this-mac\"}" "$NODE_URL/pair") || die "the pairing of this Mac failed"
   DEVICE_KEY=$(printf '%s' "$PAIRED" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$DEVICE_KEY" ] || die "no key in the pairing's answer"
-  security add-generic-password -U -s memcp-capture -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
+  security add-generic-password -U -s "$SERVICE" -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
   DEVICE_KEY=
-  say "this Mac is paired with its memory: its captures go to À trier."
+  say "this Mac is paired with its memory: its captures go to the Inbox."
 fi
 
-# The bridge's own connection: the memory's tools for the assistants on this Mac, and the voice notes to read.
-if security find-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1; then
-  say "the bridge already has its key in the Keychain."
+# The connection of the assistants on this Mac. A connection made by an earlier version keeps its name.
+if keychain_has "$SERVICE" "$NODE_URL/mcp/$OLD_CONNECTION"; then CONNECTION=$OLD_CONNECTION; fi
+CONNECTION_URL="$NODE_URL/mcp/$CONNECTION"
+if keychain_has "$SERVICE" "$CONNECTION_URL"; then
+  say "the assistants' connection already has its key in the Keychain."
 else
   OUT=$("$BIN/memcp" --data "$DATA" connect "$CONNECTION" --all --public-url "$NODE_URL" 2>&1 ||
         "$BIN/memcp" --data "$DATA" connect "$CONNECTION" --all --rotate --public-url "$NODE_URL" 2>&1) ||
-    die "no key could be made for the bridge: $OUT"
+    die "no key could be made for the assistants' connection: $OUT"
   KEY=$(printf '%s\n' "$OUT" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$KEY" ] || die "no key in the node's answer"
-  security add-generic-password -U -s memcp-capture -a "$BRIDGE_URL" -l "MemCP bridge" -w "$KEY"
+  security add-generic-password -U -s "$SERVICE" -a "$CONNECTION_URL" -l "MemCP, assistants of this Mac" -w "$KEY"
   KEY=
-  say "a key for the bridge is in the Keychain (service memcp-capture)."
+  say "a key for the assistants of this Mac is in the Keychain (service $SERVICE)."
 fi
-# The bridge's settings: the address only; the key stays in the Keychain.
-{
-  echo "# Written by install-mac.sh; the key is in the Keychain (service memcp-capture, account the url)."
-  echo "url = $BRIDGE_URL"
-  echo "outbox = $BRIDGE/outbox"
-  if [ -n "$WHISPER_MODEL" ] || [ -n "$SPEECH_API" ]; then
-    # The recordings of the person's À trier (`<person>-a-trier`, where the devices put them).
-    echo "transcribe = owner-a-trier"
-    echo "whisper_lang = $LANGUAGE"
-  fi
-  if [ -n "$WHISPER_MODEL" ]; then
-    [ -f "$WHISPER_MODEL" ] || die "no model at $WHISPER_MODEL"
-    echo "whisper_model = $WHISPER_MODEL"
-    for c in whisper-cli ffmpeg; do
-      p=$(command -v "$c" || true)
-      [ -n "$p" ] || die "$c is needed for --whisper-model: brew install whisper-cpp ffmpeg"
-      [ "$c" = whisper-cli ] && echo "whisper_cmd = $p" || echo "ffmpeg_cmd = $p"
-    done
-  elif [ -n "$SPEECH_API" ]; then
-    echo "whisper_api_url = $SPEECH_API"
-    [ -z "${MEMCP_SPEECH_API_KEY:-}" ] || echo "whisper_api_key = $MEMCP_SPEECH_API_KEY"
-  fi
-} > "$BRIDGE/bridge.conf"
-chmod 600 "$BRIDGE/bridge.conf"
 
-# --- the tasks -----------------------------------------------------------------------------------------------
+# --- run it --------------------------------------------------------------------------------------------------
 step "5/5  Run it"
-plist org.memcp.bridge 0 "$BIN/memcp-capture" gateway --config "$BRIDGE/bridge.conf" --listen "127.0.0.1:$BRIDGE_PORT"
-if [ -n "$WHISPER_MODEL" ] || [ -n "$SPEECH_API" ]; then
-  plist org.memcp.transcribe 300 "$BIN/memcp-capture" transcribe --config "$BRIDGE/bridge.conf"
-else
-  rm -f "$AGENTS/org.memcp.transcribe.plist"
-fi
 if [ "$AGENTS_ON" = 1 ]; then
-  for label in org.memcp.bridge org.memcp.transcribe; do
-    [ -f "$AGENTS/$label.plist" ] && launchctl bootstrap "$DOMAIN" "$AGENTS/$label.plist"
-  done
-  say "the node answers on $NODE_URL, the bridge on 127.0.0.1:$BRIDGE_PORT; they start again at login."
+  say "the node answers on $NODE_URL; it starts again at login."
 else
   [ -z "$NODE_PID" ] || kill "$NODE_PID" 2>/dev/null || true
-  say "nothing left running (--no-agents). Start them with:"
+  say "nothing left running (--no-agents). Start it with:"
   say "  launchctl bootstrap $DOMAIN $AGENTS/org.memcp.node.plist"
 fi
 
@@ -332,11 +362,14 @@ EOF
 [ -z "$TOKEN" ] || printf 'Its console key (shown once; it opens the page, never the memory):\n  %s\n' "$TOKEN"
 cat <<EOF
 
-An assistant that runs a command reaches the memory through the bridge, knowing neither its address nor its key:
-  $BIN/memcp-capture connect 127.0.0.1:$BRIDGE_PORT
+An assistant of this Mac reaches the memory at $CONNECTION_URL. Its key is in the Keychain; read it only when you
+configure the assistant:
+  security find-generic-password -s $SERVICE -a "$CONNECTION_URL" -w
 For Claude Code:
-  claude mcp add memcp -- "$BIN/memcp-capture" connect 127.0.0.1:$BRIDGE_PORT
+  claude mcp add --transport http memcp $CONNECTION_URL --header "Authorization: Bearer \$(security find-generic-password -s $SERVICE -a $CONNECTION_URL -w)"
 
+Voice notes and watched folders are set in $SETTINGS (\`memcp config example\` lists the options);
+restart the node after a change: launchctl kickstart -k $DOMAIN/org.memcp.node
 Logs:     $LOGS
 Update:   run this installer again; your memory is left alone.
 Remove:   sh install-mac.sh --uninstall   (the memory is kept; add --purge to delete it)

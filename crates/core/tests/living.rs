@@ -76,7 +76,11 @@ fn a_board_follows_its_delta_and_keeps_every_card_apart() -> Res {
         "living_set",
         &json!({ "space": s, "page": "next", "covers": 1 }),
     )?;
-    assert_eq!(back["covers"], last);
+    // The move above read up to the moment it wrote, so covers may be a second past `last`; it is never behind.
+    assert!(
+        back["covers"].as_i64().ok_or("covers")? >= last,
+        "covers went back: {back}"
+    );
     // Cards are no notes of anyone's delta; each board has its own pass.
     let ideas = tools::call(
         &b,

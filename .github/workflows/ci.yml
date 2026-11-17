@@ -20,6 +20,7 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib
 
   e2e:
     # Real processes: the programs of the project talk to each other on loopback ports (scripts/e2e.sh).
@@ -82,7 +83,7 @@ jobs:
           [ "$crate" = "$addon" ] && [ "$addon" = "$arg" ]
 
   portable:
-    # The server and the bridge must build on the systems they are for: macOS and Windows as well as Linux.
+    # The node must build on the systems they are for: macOS and Windows as well as Linux.
     strategy:
       fail-fast: false
       matrix:
@@ -105,7 +106,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Build
-        run: cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-capture
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor
       - name: Smoke test (setup, serve, discovery, a connection, remember and recall, the page, doctor, backup)
         run: scripts/linux-smoke.sh target/release/memcp
       - name: The example memcp.toml is the documented one
@@ -113,11 +114,11 @@ jobs:
           target/release/memcp config example | diff - packaging/linux/memcp.toml
       - name: Units
         run: |
-          sudo install -m 755 target/release/memcp target/release/memcp-janitor target/release/memcp-capture /usr/bin/
+          sudo install -m 755 target/release/memcp target/release/memcp-janitor /usr/bin/
           sudo useradd --system --no-create-home memcp || true
           systemd-analyze verify packaging/linux/memcp.service packaging/linux/memcp-backup.service \
-            packaging/linux/memcp-janitor.service packaging/linux/memcp-transcribe.service \
-            packaging/linux/memcp-backup.timer packaging/linux/memcp-transcribe.timer
+            packaging/linux/memcp-janitor.service \
+            packaging/linux/memcp-backup.timer
       - name: Debian package
         run: |
           packaging/linux/build-deb.sh

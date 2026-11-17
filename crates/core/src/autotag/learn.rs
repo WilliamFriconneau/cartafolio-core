@@ -4,7 +4,7 @@
 //!
 //! - A person adds a tag to a note, or removes one: each word of the note counts for the added tags (`t`), against the
 //!   removed ones (`x`).
-//! - A person sends a note of « À trier » to a space: each word counts for that space (`routes`).
+//! - A person sends a note of Inbox to a space: each word counts for that space (`routes`).
 //! - Per space, and bounded: [`MAX_WORDS`] words per space, [`MAX_TAGS_PER_WORD`] tags per word. The least seen are
 //!   forgotten first.
 //! - The memory's own plumbing (inbox, sources, janitor…) is never learned, and neither is what the janitor did.

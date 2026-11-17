@@ -1,5 +1,5 @@
 //! What the janitor learns from the model, so that it needs it less each time: which words of a note lead to which tags
-//! (and, in À trier, to which vault), vault by vault, each association with a score — how often it was seen and
+//! (and, in Inbox, to which vault), vault by vault, each association with a score — how often it was seen and
 //! how often it was right.
 //!
 //! - It learns only from the model's choices, never from its own: a mistake of its own cannot feed itself.
@@ -209,7 +209,7 @@ pub struct Learned<'a> {
 }
 
 impl Learned<'_> {
-    /// The model chose `tags` (and `vault`, in À trier) for a note made of `words`.
+    /// The model chose `tags` (and `vault`, in Inbox) for a note made of `words`.
     pub fn learn(&mut self, words: &BTreeSet<String>, tags: &[String], vault: Option<&str>) {
         if !self.data.is_object() {
             *self.data = json!({});
@@ -358,7 +358,7 @@ mod tests {
         assert!(g.led_by.contains(&"zendure".to_string()));
         // A word seen once decides nothing.
         assert!(l.guess(&words("Une recette de crêpes"), false).is_none());
-        // In À trier a vault is needed too, and none was learned: no guess.
+        // In Inbox a vault is needed too, and none was learned: no guess.
         assert!(l.guess(&note, true).is_none());
         // One disagreement: right 5 times of 6, under the sure share, so it asks the model again.
         l.wrong(&g.led_by);

@@ -19,9 +19,8 @@ const freePort = () => new Promise(r => { const s = net.createServer().listen(0,
 let failed = 0;
 const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL ") + name + (cond ? "" : "  " + extra)); if (!cond) failed++; };
 
-// Stand-ins for the programs the node starts: memcp-capture discover (one node found) and memcp-sync --join (three words).
+// Stand-ins for what the node cannot do without a network: the nodes found (MEMCP_DISCOVER_FOUND) and memcp-sync --join (three words).
 const FAKES = fs.mkdtempSync(path.join(os.tmpdir(), "memcp-fakes-"));
-fs.writeFileSync(path.join(FAKES, "bridge"), "#!/bin/sh\nprintf 'kitchen\\thttp://192.168.1.5:8791\\t1.0\\tlan\\n'\n", { mode: 0o755 });
 fs.writeFileSync(path.join(FAKES, "sync"), "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = --status-file ] && F=$2; shift; done\nprintf '{\"state\":\"waiting\",\"check\":\"amber-delta-moss\"}' > \"$F\"\n", { mode: 0o755 });
 async function node(prepare) {
   const D = fs.mkdtempSync(path.join(os.tmpdir(), "memcp-ob-"));
@@ -30,7 +29,7 @@ async function node(prepare) {
   const claim = run("console-token", "owner").split("\n")[1].trim();
   prepare && prepare(run);
   const port = await freePort();
-  const proc = spawn(BIN, ["--data", D, "serve", "--listen", `127.0.0.1:${port}`, "--public-url", "https://memory.example.net"], { stdio: "ignore", env: { ...process.env, MEMCP_BRIDGE_BIN: path.join(FAKES, "bridge"), MEMCP_SYNC_BIN: path.join(FAKES, "sync") } });
+  const proc = spawn(BIN, ["--data", D, "serve", "--listen", `127.0.0.1:${port}`, "--public-url", "https://memory.example.net"], { stdio: "ignore", env: { ...process.env, MEMCP_DISCOVER_FOUND: "kitchen\thttp://192.168.1.5:8791\t1.0\tlan", MEMCP_SYNC_BIN: path.join(FAKES, "sync") } });
   await sleep(1200);
   return { base: `http://127.0.0.1:${port}`, token: claim, stop: () => proc.kill(), run };
 }
@@ -54,7 +53,7 @@ const section = async (page, h) => { await page.evaluate(h => { location.hash = 
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name), fullPage: true }); };
 const wide = page => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
 const location_hash = url => (url.includes("#") ? "#" + url.split("#")[1] : "");
-const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
+const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
 
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ["--no-sandbox"], headless: true });

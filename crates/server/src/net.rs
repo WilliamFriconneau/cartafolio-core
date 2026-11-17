@@ -123,7 +123,8 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         if limit <= SMALL_MAX {
             app.oversize(ip.as_deref().unwrap_or("?"));
         }
-        let _ = rq.respond(
+        refuse(
+            rq,
             tiny_http::Response::from_string(r#"{"error":"body too large"}"#).with_status_code(413),
         );
         return;
@@ -137,7 +138,7 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         if let Ok(h) = tiny_http::Header::from_bytes(&b"Retry-After"[..], &b"1"[..]) {
             busy.add_header(h);
         }
-        let _ = rq.respond(busy);
+        refuse(rq, busy);
         return;
     }
     let app = Arc::clone(app);
@@ -162,6 +163,18 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         };
         send(rq, resp);
         give_place(&who);
+    });
+}
+
+/// Answers a request turned away before its body is read, from a thread of its own: once answered, the request reads
+/// what is left of the body it declared (so that the connection can carry the next one), and a client that never sends
+/// it must hold only that thread, never a worker. Two such connections used to stop a node with two workers.
+fn refuse<R: std::io::Read + Send + 'static>(
+    rq: tiny_http::Request,
+    response: tiny_http::Response<R>,
+) {
+    std::thread::spawn(move || {
+        let _ = rq.respond(response);
     });
 }
 
@@ -221,7 +234,9 @@ fn serve_server<H: Handler>(
                 .map_err(|e| (1, format!("cannot listen on {identity}: {e}")))?,
         );
         let trusted = *trusted;
-        eprintln!("consent and admin pages for the tailnet on http://{identity}");
+        eprintln!(
+            "the consent page and the page of this node for the tailnet on http://{identity}"
+        );
         for _ in 0..2 {
             let (srv, app) = (Arc::clone(&srv), Arc::clone(&app));
             ingress_workers.push(std::thread::spawn(move || {
@@ -247,7 +262,7 @@ fn serve_server<H: Handler>(
                 .map_err(|e| (1, format!("cannot listen on {ingress}: {e}")))?,
         );
         let trusted = *trusted;
-        eprintln!("admin page through ingress on http://{ingress} (trusted proxy {trusted})");
+        eprintln!("the page through ingress on http://{ingress} (trusted proxy {trusted})");
         for _ in 0..2 {
             let (srv, app) = (Arc::clone(&srv), Arc::clone(&app));
             ingress_workers.push(std::thread::spawn(move || {

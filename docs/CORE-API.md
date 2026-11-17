@@ -2,9 +2,9 @@
 
 What `memcp-core` offers, by module. Every public item has a doc comment (`cargo doc -p memcp-core --open`); this page is the map. The crate has no network and no model: it opens files in a data directory (0700; files 0600), one SQLite file per space plus `control.sqlite`.
 
-**Invariants.** Facts are append-only: a fact is never deleted or edited; `supersede` marks the old one `replaced`, `retire` marks it `retired`, both keep the text and a history event. The only erasures are `files::erase` (a voice recording once its transcript exists) and, on a replica that chose a window, `sync::prune_window` (local, never synchronised). The author of a write is the connection's name, never an argument. A function that takes a `Caller` or goes through `tools::call` checks rights; the lower-level functions take an open connection and trust the caller: only the server and the tools may reach them.
+**Invariants.** Facts are append-only: a fact is never deleted or edited; `supersede` marks the old one `replaced`, `retire` marks it `retired`, both keep the text and a history event. The only erasures are `files::erase` (a voice recording once its transcript exists) and, on a replica that chose a window, `sync::prune_window` (local, never synchronised). The author of a write is the connection's name, never an argument. A function that takes a `Caller` or goes through `tools::call` checks rights; the lower-level functions take an open connection and trust the caller: only the node's HTTP server and the tools may reach them.
 
-**Rights.** A connection holds `read` or `write` per space (`write` includes `read`), or `all`; it can be limited to tag paths inside a vault, and forced read-only. Rights never go beyond the person's own access. Column "Rights" below says what a caller needs; "Errors" lists the kinds of the [error vocabulary](#error-vocabulary).
+**Rights.** A connection holds `read` or `write` per space (`write` includes `read`), or `all`; it can be limited to tag paths inside a space, and forced read-only. Rights never go beyond the person's own access. Column "Rights" below says what a caller needs; "Errors" lists the kinds of the [error vocabulary](#error-vocabulary).
 
 The "Errors" column shows the documented `Error` variants (`Invalid`, `UnknownFact`...); any function that opens a file or a database can also fail with `Io`/`Sqlite` (kind `internal`).
 
@@ -15,7 +15,7 @@ Rights: None in the module: the tools check the connection's right (`remember`, 
 | Function | Purpose | Errors |
 |---|---|---|
 | `read_fact` | Reads one fact by id, whatever its status, tags included | `Error::Sqlite`/`Io` on storage failure |
-| `inbox` | How many active notes wait in the inbox, and when the oldest was written | `Error::Sqlite`/`Io` on storage failure |
+| `inbox` | How many active notes of the space wait with the `inbox` tag (or `inbox/…`), and when the oldest was written | `Error::Sqlite`/`Io` on storage failure |
 | `normalize_tag` | A tag in its one accepted form, or an error that says what is accepted (an assistant reads it and tries again) | `Error::Invalid` (says what is accepted) |
 | `normalize_tags` | The tags of a fact, each normalised, without repeats, in order | `Error::Invalid` on the first bad tag |
 | `tag_counts` | The tags in use on active facts, with how many facts each covers | `Error::Sqlite`/`Io` on storage failure |
@@ -49,24 +49,24 @@ Rights: Tools: `file_put`, `file_retire`, `file_erase` need write; `file_get`, `
 
 ## `access`: Connections, rights and tokens
 
-Rights: `connect*`, `regrant`, `revoke`, `rename`, `renew`, `set_*`: the owner of the connection or an administrator (the server checks). `authenticate*`: anyone holding a token.
+Rights: `connect*`, `regrant`, `revoke`, `rename`, `renew`, `set_*`: the owner of the connection or an administrator (the node checks). `authenticate*`: anyone holding a token.
 
 | Function | Purpose | Errors |
 |---|---|---|
-| `parse_spec` | Parses `health:rw,work:r`, and `health/sources/bevel:rw` for a grant limited to a tag path inside a vault | `Error::Invalid` for a malformed value |
+| `parse_spec` | Parses `health:rw,work:r`, and `health/sources/bevel:rw` for a grant limited to a tag path inside a space | `Error::Invalid` for a malformed value |
 | `hash_token` | SHA-256 of a token: the only form in which a token is stored and compared | none (pure) |
 | `valid_agent` | Whether `name` is a valid connection name: 1 to 40 lowercase letters, digits or dashes, not starting with a dash | none (pure) |
 | `space_of_kind` | The space of a kind that this caller can read: the one its person owns if there is one, else the first by name | `Error::Sqlite`/`Io` on storage failure |
 | `open_space_connection` | Opens one space to an assistant: a connection limited to that space, with no nothing else, named after the space | `Error::Sqlite`/`Io` on storage failure |
 | `connect` | `connect_for` the bootstrap administrator | `Error::Sqlite`/`Io` on storage failure |
-| `connect_for` | Creates a connection named `agent` for the person `user_id` and returns its token (shown once; only its hash is kept) | `Error::Invalid` for a bad name, a name that is a vault's name or another person's, no space requested, a grant on a space the person does not reach (a connection never goes beyond its person), an unknown or disabled person, or ... |
+| `connect_for` | Creates a connection named `agent` for the person `user_id` and returns its token (shown once; only its hash is kept) | `Error::Invalid` for a bad name, a name that is a space's name or another person's, no space requested, a grant on a space the person does not reach (a connection never goes beyond its person), an unknown or disabled person, or ... |
 | `renew` | A new token for an active connection of this person, rights and read-only setting unchanged | `Error::Sqlite`/`Io` on storage failure |
 | `owner_of` | The person an active connection belongs to | `Error::Sqlite`/`Io` on storage failure |
 | `rename` | Gives a connection another name, one a person can read in a list | `Error::Sqlite`/`Io` on storage failure |
-| `regrant` | Changes the rights of an active connection without touching its token: the connected client has nothing to redo | `Error::Sqlite`/`Io` on storage failure |
+| `regrant` | Changes the rights of an active connection without touching its token: the assistant or device connected has nothing to redo | `Error::Sqlite`/`Io` on storage failure |
 | `authenticate` | Identifies the caller by its token | `Error::Sqlite`/`Io` on storage failure |
-| `authenticate_console` | The person behind a console token (admin page), or `None` | `Error::Sqlite`/`Io` on storage failure |
-| `console_token` | Creates (or renews) the console token of a person: it opens the admin page, never MCP | `Error::Sqlite`/`Io` on storage failure |
+| `authenticate_console` | The person behind a console token (the node page), or `None` | `Error::Sqlite`/`Io` on storage failure |
+| `console_token` | Creates (or renews) the console token of a person: it opens the node page, never MCP | `Error::Sqlite`/`Io` on storage failure |
 | `touch` | Records that `caller` was just used (time and address), at most once a minute per connection (fewer writes on the disk) | `Error::Sqlite`/`Io` on storage failure |
 | `revoke` | Revokes every active key of the connection `agent` and its OAuth refresh tokens; it can never be brought back (make a new connection) | `Error::Sqlite`/`Io` on storage failure |
 | `set_no_person_guide` | Whether the person's own guide is left out of what `agent` is told when it connects | `Error::Sqlite`/`Io` on storage failure |
@@ -75,7 +75,7 @@ Rights: `connect*`, `regrant`, `revoke`, `rename`, `renew`, `set_*`: the owner o
 | `list` | Every connection (consoles excluded), oldest first | `Error::Sqlite`/`Io` on storage failure |
 | `auth_event` | A refused authentication or tool call, for the control audit | none (pure) |
 
-## `users`: People and the vaults they own
+## `users`: People and the spaces they own
 
 Rights: Administrators create and disable people; a person manages their own display, heir and recovery key.
 
@@ -118,21 +118,23 @@ Rights: `definitions` and `call` filter by the connection's rights; see TOOLS.md
 | `definitions` | The tools this connection sees, filtered by its rights: nothing needing write is listed for a read-only connection, and a connection with no readable space gets none | none (pure) |
 | `call` | Runs a tool | `Error::Sqlite`/`Io` on storage failure |
 
-## `triage`: The « À trier » box of a person
+## `triage`: The Inbox of a person
+
+Its label is « Inbox »; it is a space of kind `a-trier` named `<person>-a-trier` (`alice-a-trier`), the name it always had, so a box made by an earlier version is the same box.
 
 Rights: Owner of the box (page) or a connection holding write on it.
 
 | Function | Purpose | Errors |
 |---|---|---|
-| `of` | The person's « À trier », if it was made | `Error::Sqlite`/`Io` on storage failure |
-| `ensure` | The person's « À trier », made now if they have none | `Error::Sqlite`/`Io` on storage failure |
-| `is_triage` | Whether `space` is an « À trier » | `Error::Sqlite`/`Io` on storage failure |
-| `waiting` | What waits in an « À trier »: its notes (a recording's own description apart: the bridge reads the recording and puts its text here) and its files, newest first | `Error::Sqlite`/`Io` on storage failure |
-| `send` | Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves `from`, once the write is certain | `Error::Sqlite`/`Io` on storage failure |
+| `of` | The person's Inbox, if it was made | `Error::Sqlite`/`Io` on storage failure |
+| `ensure` | The person's Inbox, made now if they have none | `Error::Sqlite`/`Io` on storage failure |
+| `is_triage` | Whether `space` is an Inbox (kind `a-trier`) | `Error::Sqlite`/`Io` on storage failure |
+| `waiting` | What waits in an Inbox: its notes (a recording's own description apart: the node reads the recording and puts its text here) and its files, newest first | `Error::Sqlite`/`Io` on storage failure |
+| `send` | Sends one note or one file of `from` (an Inbox) to the space `to`, tagged `inbox`, as it is; then it leaves `from`, once the write is certain | `Error::Sqlite`/`Io` on storage failure |
 
 ## `sync`: Peer synchronisation: the log, applying events, cursors, the window
 
-Rights: A connection named `peer-...` (the server checks); pruning is local and only on a replica with a window.
+Rights: A connection named `peer-...` (the node checks); pruning is local and only on a replica with a window.
 
 | Function | Purpose | Errors |
 |---|---|---|
@@ -176,7 +178,7 @@ Rights: The owner of the objects (an administrator for `people`).
 | `Brain::create_space_with` | Creates a space of a kind, with a label, a parent and keywords | `Error::Invalid` for an unknown kind or a malformed value |
 | `Brain::space_info` | Reads one of a person's spaces: label, kind, parent, counts, rules | `Error::Invalid` for a space that is not theirs |
 | `Brain::update_space` | Changes label, parent, position, kind, keywords and tags | `Error::Invalid` for a malformed value |
-| `Brain::delete_space` | Deletes a space with a choice (into another, or archive), with a dry run; never destroys | `Error::Invalid` for a space that is not theirs, « À trier », a bad choice |
+| `Brain::delete_space` | Deletes a space with a choice (into another, or archive), with a dry run; never destroys | `Error::Invalid` for a space that is not theirs, the Inbox, a bad choice |
 | `Brain::archived_spaces`, `Brain::restore_space` | Lists the archive; brings an archived space back | `Error::Invalid` for an unknown archive or a name in use |
 | `rules::read`, `rules::write`, `rules::edit` | The keywords and tags of a space, one new version of the `rules` note per change | `Error::Invalid` for a malformed tag |
 | `peers::list`, `peers::get`, `peers::update`, `peers::set_paused`, `peers::revoke`, `peers::forget` | A person's machines: read, rename and note, pause and resume, revoke, forget | `Error::Invalid` for a machine that is not theirs or still in use |
@@ -228,14 +230,14 @@ Rights: The person makes the code on their page; the device holds the code (ten 
 |---|---|---|
 | `normalize` | A code as the person may type it: lower case, with a dash or spaces | none (pure) |
 | `display` | `ABCD-EFGH`, the way it is shown | none (pure) |
-| `rights_for` | The rights a bridge gets for the vaults ticked: the inbox of each, nothing else | `Error::Invalid` for a malformed value |
-| `create` | A new code for `user_id`, valid `CODE_TTL` seconds from `now`, for the inboxes of `vaults` | `Error::Sqlite`/`Io` on storage failure |
-| `create_for_triage` | A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as the server does | none (pure) |
+| `rights_for` | The rights a device gets for the spaces ticked: writing with the `inbox` tag in each, nothing else | `Error::Invalid` for a malformed value |
+| `create` | A new code for `user_id`, valid `CODE_TTL` seconds from `now`, for the `inbox` tag of the spaces `vaults` | `Error::Sqlite`/`Io` on storage failure |
+| `create_for_peer` | A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as this node does | none (pure) |
 | `standing` | Where the code `code` made by `user_id` stands at time `now` | `Error::Sqlite`/`Io` on storage failure |
 | `holds` | Whether this control database holds `code`, unused and not expired (the manager finds the person this way) | `Error::Sqlite`/`Io` on storage failure |
 | `redeem` | Exchanges `code` for a new connection, once | `Error::Sqlite`/`Io` on storage failure |
 
-## `export`: Exporting and adopting whole vaults
+## `export`: Exporting and adopting whole spaces
 
 Rights: Export: the owner or an administrator. Adopt: an administrator.
 
@@ -243,7 +245,7 @@ Rights: Export: the owner or an administrator. Adopt: an administrator.
 |---|---|---|
 | `export_person` | Writes the export of a person into `<to>/memcp-export-<person>-<time>/` and returns that directory | `Error::Sqlite`/`Io` on storage failure |
 | `verify_export` | Checks an export: the manifest, the fingerprint of every file, and that nothing else is there | `Error::Invalid` for a malformed value |
-| `adopt` | Takes the vaults of an export into this installation as the property of `owner` | none (pure) |
+| `adopt` | Takes the spaces of an export into this installation as the property of `owner` | none (pure) |
 
 ## `guide`: Guides and indexes written for assistants
 
@@ -252,20 +254,20 @@ Rights: Guides: written only by a person on the page, no tool can; app guides: p
 | Function | Purpose | Errors |
 |---|---|---|
 | `person_scope` | The scope of a person's own guide: `person:<id>` | none (pure) |
-| `space_scope` | The scope of a vault's guide: `space:<name>` | none (pure) |
+| `space_scope` | The scope of a space's guide: `space:<name>` | none (pure) |
 | `current` | The text now in force for a scope, if any | `Error::Sqlite`/`Io` on storage failure |
 | `history` | Every text this scope has had, newest first (the one in force first, if there is one) | `Error::Sqlite`/`Io` on storage failure |
 | `set` | Writes the guide of a scope | `Error::Sqlite`/`Io` on storage failure |
 | `clear` | Takes the guide of a scope out of force | `Error::Sqlite`/`Io` on storage failure |
-| `instructions` | What a connection is told when it connects: the general rules, then the guide of the person and of each vault it reaches (instructions, written by a person), then the index of each of those vaults (data, written by assistants) | `Error::Sqlite`/`Io` on storage failure |
-| `propose_app_guide` | An app proposes (or replaces) its guide for a vault | `Error::Sqlite`/`Io` on storage failure |
-| `app_guides` | The guides the apps proposed in one vault, with where each stands for this person | `Error::Sqlite`/`Io` on storage failure |
+| `instructions` | What a connection is told when it connects: the general rules, then the guide of the person and of each space it reaches (instructions, written by a person), then the index of each of those spaces (data, written by assistants) | `Error::Sqlite`/`Io` on storage failure |
+| `propose_app_guide` | An app proposes (or replaces) its guide for a space | `Error::Sqlite`/`Io` on storage failure |
+| `app_guides` | The guides the apps proposed in one space, with where each stands for this person | `Error::Sqlite`/`Io` on storage failure |
 | `approve_app_guide` | Approves a guide as it reads now | none (pure) |
 | `withdraw_app_guide` | Takes an approval back: the guide is data again | `Error::Sqlite`/`Io` on storage failure |
 
 ## `origin`: Records an app deposits under its own ids
 
-Rights: Write on the vault (or the app's path).
+Rights: Write on the space (or the app's path).
 
 | Function | Purpose | Errors |
 |---|---|---|
@@ -284,9 +286,9 @@ Rights: An administrator, from the command line.
 | `date_from_name` | Date of a note dated by its name (`2026-10-30.md`, `2026-10-30 Meeting.md`), in Unix seconds at UTC midnight: a journal or daily note holds from that day on | none (pure) |
 | `chunk` | Cuts a note into passages | none (pure) |
 | `looks_secret` | True if the text looks like a secret: private key, `password: value`, `Bearer` token, long alphanumeric run mixing letters and digits | none (pure) |
-| `import` | Reads a folder of notes into passages (facts of kind `passage`, source `note`), routed to spaces by `rules` | `Error::Invalid` if `vault` is not a folder, a space in the rules does not exist, or a real first run has no recent dry run. |
+| `import` | Reads a folder of notes into passages (facts of kind `passage`, source `note`), routed to spaces by `rules` | `Error::Invalid` if `vault` (the folder of notes) is not a folder, a space in the rules does not exist, or a real first run has no recent dry run. |
 
-## `catalogue`: The kinds of vault an installation offers
+## `catalogue`: The kinds of space an installation offers
 
 Rights: None (pure).
 
@@ -294,7 +296,7 @@ Rights: None (pure).
 |---|---|---|
 | `default_catalogue` | What a person needs to keep track of: themselves, their health, the people around them, their home and daily life, their money, their work, their passions | none (pure) |
 | `parse` | A catalogue from text | `Error::Invalid` for a malformed value |
-| `vault_name` | The name of the vault of `kind` that a person owns: `<person>-<kind>`, the person's name shortened to fit the 32 characters of a space name | `Error::Invalid` for a malformed value |
+| `vault_name` | The name of the space of `kind` that a person owns: `<person>-<kind>`, the person's name shortened to fit the 32 characters of a space name | `Error::Invalid` for a malformed value |
 
 ## `brain`: The data directory and the control database
 
@@ -309,15 +311,15 @@ Rights: Whoever can open the directory (it is 0700).
 | `language` | The search language set in the configuration (English if absent) | `Error::Invalid` for a malformed value |
 | `spaces` | Registered spaces, in name order | `Error::Invalid` for a malformed value |
 | `has_space` | Whether `space` is registered in the control database | `Error::Invalid` for a malformed value |
-| `catalogue` | The kinds of vault this installation offers: its `catalogue.txt` if it has one, the default for a person's life otherwise | `Error::Invalid` for a malformed value |
+| `catalogue` | The kinds of space this installation offers: its `catalogue.txt` if it has one, the default for a person's life otherwise | `Error::Invalid` for a malformed value |
 | `space_kind` | The kind of a space (`custom` when it was made without one) | `Error::Invalid` for a malformed value |
 | `set_space_kind` | Gives a space a kind of the catalogue (or back to `custom`) | `Error::Invalid` for a malformed value |
-| `add_vault` | Creates a person's vault of a kind of the catalogue, named after the person and the kind | `Error::Invalid` for a malformed value |
+| `add_vault` | Creates a person's space of a kind of the catalogue, named after the person and the kind | `Error::Invalid` for a malformed value |
 | `add_space` | Creates a new space owned by the bootstrap administrator | `Error::Invalid` for a malformed value |
 | `add_space_for` | Creates a new space (its file and its registration) owned by `user_id`, who gets read and write access | `Error::Invalid` for a malformed value |
 | `open_space` | Opens a space file, applies missing migrations and checks that the file declares this space (a file stored under the wrong name is refused) | `Error::Sqlite`/`Io` on storage failure |
 | `open_control` | Opens the control database (tokens, rights, spaces, authentication audit) | `Error::Sqlite`/`Io` on storage failure |
-| `backup` | Consistent copy of every database (`VACUUM INTO`, safe while the server writes) and of the configuration into `root/backup-YYYY-MM-DDTHHMMSS/`, then keeps only the `keep` most recent ones | `Error::Invalid` for a malformed value |
+| `backup` | Consistent copy of every database (`VACUUM INTO`, safe while the node writes) and of the configuration into `root/backup-YYYY-MM-DDTHHMMSS/`, then keeps only the `keep` most recent ones | `Error::Invalid` for a malformed value |
 
 ## `text`: Normalising, stemming, hashing
 
@@ -358,12 +360,12 @@ Every failure has exactly one kind (`ErrorKind`). `Error::kind()` and `ToolError
 | Kind (`code`) | HTTP | MCP text (`isError: true`) | Raised by |
 |---|---|---|---|
 | `invalid` | 400 | the message itself, in words an assistant can act on (`"text" (text) is required`, `unknown fact`) | `Error::Invalid`, `ToolError::Invalid` |
-| `unauthorized` | 401 | none: refused before MCP (`refused`) | the server, on a missing, revoked or expired key |
+| `unauthorized` | 401 | none: refused before MCP (`refused`) | the node, on a missing, revoked or expired key |
 | `denied` | 403 | `no read right on <space>`, `no write right on <space>`, `this connection writes only under <paths>` | `ToolError::Denied` |
 | `not_found` | 404 | the message (`unknown fact: <id>`, `unknown space: <name>`); through MCP an unknown fact is reported as `invalid` `unknown fact`, so that a fact of a space you cannot read is not told apart from a missing one | `Error::UnknownFact`, `Error::UnknownSpace` |
 | `conflict` | 409 | the message (`<dir> is already initialised, nothing was changed`) | `Error::AlreadyInitialized` |
-| `too_large` | 413 | none: the server refuses the body | the server |
-| `limited` | 429 | `text too long for this connection (n > max characters)`; HTTP: `too many attempts` with `Retry-After` | `ToolError::Limited`, the server's rate limit |
+| `too_large` | 413 | none: the node refuses the body | the node |
+| `limited` | 429 | `text too long for this connection (n > max characters)`; HTTP: `too many attempts` with `Retry-After` | `ToolError::Limited`, the node's rate limit |
 | `internal` | 500 | `internal error: <detail>` | `Error::Io`, `Error::Sqlite`, `Error::Schema`, `Error::DirectoryTooOpen`, `ToolError::Internal` |
 | `unavailable` | 503 | the message (`<dir> is not initialised (run \`memcp init\`)`) | `Error::NotInitialized` |
 | `unknown_tool` | 200 | JSON-RPC error `-32602`, `Unknown tool: <name>` (a hidden tool answers like a missing one) | `ToolError::Unknown` |

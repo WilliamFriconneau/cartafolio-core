@@ -1,6 +1,6 @@
 # Over Tailscale
 
-[Tailscale](https://tailscale.com) gives every machine of a person a private address and a name on a network of their own (a *tailnet*), with encrypted connections between them. MemCP is built to sit behind it: a node reaches its peers, an assistant reaches a node, and the person reaches the admin page, without opening a port to the internet.
+[Tailscale](https://tailscale.com) gives every machine of a person a private address and a name on a network of their own (a *tailnet*), with encrypted connections between them. MemCP is built to sit behind it: a node reaches its peers, an assistant reaches a node, and the person reaches the page of a node, without opening a port to the internet.
 
 What follows was checked against Tailscale's documentation of `tailscale serve` (page last validated 26 January 2026, for client 1.52 and later; read the page again for your version) and against what the code does. Where a statement rests on the code only, it says so.
 
@@ -10,7 +10,7 @@ What follows was checked against Tailscale's documentation of `tailscale serve` 
 |---|---|---|
 | An assistant on one of your machines → a node | MCP over HTTPS, address `https://<machine>.<tailnet>.ts.net/mcp/<connection>` | your tailnet only |
 | A node ↔ its peers (synchronisation, backup) | one encrypted connection per pair, over the tailnet (FEDERATION.md) | your tailnet only |
-| You → the admin page of a node | the identity listener behind `tailscale serve` | your tailnet only |
+| You → the page of a node | the identity listener behind `tailscale serve` | your tailnet only |
 | Claude on the web or the phone → a node (OAuth) | the MCP address must be public: `tailscale funnel` on that address only | the internet, on the MCP address only |
 
 ## Serving a node to the tailnet
@@ -27,9 +27,9 @@ tailscale serve status                            # what is served, and where
 - The certificate is provisioned by Tailscale: the tokens travel encrypted, which they do not on a plain `http://` address. This is why a node never listens on another interface without `--allow-remote`, and why the Home Assistant add-on's open port (8791) is meant to be reached through Tailscale or a TLS proxy only.
 - Serve only supports `http://127.0.0.1` targets for a proxy: the node must be on the loopback of the machine that runs `tailscale serve`.
 
-## The admin page and who you are
+## The node page and who you are
 
-The admin page is not on the listener that faces the network. Behind `tailscale serve`, MemCP can know who is asking from the login header that Serve adds (`Tailscale-User-Login`; this is what the code reads, and Tailscale's page for Serve does not list the headers, so check their documentation for your version):
+The node page is not on the listener that faces the network. Behind `tailscale serve`, MemCP can know who is asking from the login header that Serve adds (`Tailscale-User-Login`; this is what the code reads, and Tailscale's page for Serve does not list the headers, so check their documentation for your version):
 
 ```sh
 memcp serve --identity-listen 127.0.0.1:8792 --login-url https://<machine>.<tailnet>.ts.net:8792 \
@@ -51,7 +51,7 @@ tailscale funnel --bg --https=443 http://127.0.0.1:8791
 
 (`funnel` takes the same form as `serve`; I read the page of `serve` only, so check Tailscale's Funnel page for the flags of your version, and for the ports and the rules it asks for.)
 
-The consent page stays on the identity listener, private. Each approval makes an ordinary connection named `oauth-<person>-<client>`, with the rights you ticked and nothing else, which you can revoke on the page. A public address attracts probing: keep the keys limited to one space at a time and read-only first, and keep the admin page off the public address (it is, by default).
+The consent page stays on the identity listener, private. Each approval makes an ordinary connection named `oauth-<person>-<client>`, with the rights you ticked and nothing else, which you can revoke on the page. A public address attracts probing: keep the keys limited to one space at a time and read-only first, and keep the node page off the public address (it is, by default).
 
 ## Between nodes
 

@@ -7,10 +7,10 @@
 
 # The data directory: one SQLite file per space, the control database, the
 # files. Private to its owner (0700). Back it up with `memcp backup`, never by
-# copying it while the server runs.
+# copying it while the node runs.
 # data = "/var/lib/memcp"
 
-# The address the server listens on. The loopback by default: put a TLS proxy
+# The address this node listens on. The loopback by default: put a TLS proxy
 # or Tailscale serve in front (docs/LINUX.md).
 # listen = "127.0.0.1:8791"
 
@@ -19,15 +19,15 @@
 # through, or with a proxy on the same machine.
 # allow_remote = false
 
-# Worker threads of the server (1 to 1024).
+# Worker threads of this node's HTTP server (1 to 1024).
 # threads = 4
 
 # Announce this node on the local network (mDNS) so that another machine finds
 # it without typing an address.
 # advertise = false
 
-# Web origins a browser page may call this server from (a list of URLs).
-# Empty: none.
+# Web origins a browser page may call this node from (a list of URLs). Empty:
+# none.
 # allow_origin = []
 
 # Serve the node page (`/admin`) on `listen` with a console token. On by
@@ -123,16 +123,17 @@
 
 # --- Voice notes -------------------------------------------------
 
-# Read voice notes (`memcp-transcribe.timer`): a recording waiting in an inbox
-# becomes text through the speech service below. The recording leaves this
-# machine for it.
+# Read voice notes: the node turns a recording waiting in an inbox into text,
+# by the speech model on this machine (`transcribe_model`) or by the speech
+# service below. With a service, the recording leaves this machine for it.
 # transcribe = false
 
-# The person whose recordings are read. Empty: `janitor_person`.
+# The person whose recordings are read. Empty: `intake_person`, then
+# `janitor_person`.
 # transcribe_person = ""
 
-# The spaces whose recordings are read, comma separated. Empty: the person's
-# to-sort space.
+# The spaces whose recordings are read, comma separated, or `all`. Empty:
+# every space the person writes to, one made later included.
 # transcribe_spaces = ""
 
 # An OpenAI-compatible speech service (`.../v1/audio/transcriptions`).
@@ -146,6 +147,67 @@
 
 # The language of the recordings (`en`, `fr`...). Empty: the model finds it.
 # transcribe_language = ""
+
+# Seconds between two passes over the recordings waiting in the inboxes.
+# transcribe_every = 60
+
+# A whisper.cpp speech model (a `ggml-*.bin` file) on this machine: the
+# recordings are read here and leave nowhere. Needs `whisper-cli` and
+# `ffmpeg`.
+# transcribe_model = ""
+
+# The whisper.cpp program that reads a recording with `transcribe_model`.
+# transcribe_cmd = "whisper-cli"
+
+# The `ffmpeg` program that makes a recording readable by the speech model.
+# transcribe_ffmpeg = "ffmpeg"
+
+# Threads the speech model uses.
+# transcribe_threads = 8
+
+# A Markdown table of terms and their wrong spellings, to help the speech
+# model and to correct what it wrote.
+# transcribe_lexicon = ""
+
+# --- Folders -----------------------------------------------------
+
+# The person whose memory the voice notes, the watched folders and the
+# absorbed folders work for. Empty: `transcribe_person`, then
+# `janitor_person`, then the first administrator.
+# intake_person = ""
+
+# Folders watched, each as `FOLDER -> SPACE`: a file added to the folder
+# becomes a note (Markdown, text), a recording (audio) or a file of that
+# space's inbox. Without `-> SPACE`, it goes to the person's to-sort box. The
+# files stay where they are. A folder is taken in whole on the first look: use
+# one made for it.
+# watch = []
+
+# Seconds between two looks at the watched folders.
+# watch_every = 10
+
+# Folders of notes kept up to date on this machine, each as `FOLDER -> SPACE`:
+# what is new in them goes to that space's inbox, cut at the headings, and the
+# janitor draws facts from it. The first pass only takes stock.
+# absorb = []
+
+# Folders of an absorbed folder that are never read (relative names).
+# absorb_exclude = []
+
+# Words that keep a file of an absorbed folder closed when its name holds one.
+# absorb_protect = []
+
+# A Markdown table `Name | Post`: a name is never sent from an absorbed
+# folder, its post is.
+# absorb_roles = ""
+
+# Minutes between two passes over the absorbed folders.
+# absorb_every = 15
+
+# Proposals put down as files, each as `SPACE TAG -> FOLDER`: a fact of the
+# space tagged `TAG` (`proposals/pro`) is written once as a file in the
+# folder.
+# deliver = []
 
 # --- Backups -----------------------------------------------------
 

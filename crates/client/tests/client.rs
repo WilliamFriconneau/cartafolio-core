@@ -315,7 +315,7 @@ fn engine(rights: &[(&str, &str)]) -> (String, Vec<String>, std::path::PathBuf) 
 fn against_the_real_engine_a_feed_and_a_recording_are_kept_under_the_keys_own_paths() {
     let (base, tokens, dir) = engine(&[
         ("healthapp", "sam-me/sources/healthapp:rw"),
-        ("bridge", "sam-me/inbox:rw"),
+        ("device", "sam-me/inbox:rw"),
     ]);
     // An app's feed: 1030 records in three calls, and the same again changes nothing.
     let mut feed = Client::new(&format!("{base}/healthapp"), &tokens[0]);
@@ -328,7 +328,7 @@ fn against_the_real_engine_a_feed_and_a_recording_are_kept_under_the_keys_own_pa
     let again = feed.deposit("sam-me", &records).expect("second send");
     assert!(again.results.iter().all(|r| r["result"] == "unchanged"));
     // The inbox key: a note, and a recording of about 5 MB, then the refusal outside its path.
-    let mut intake = Client::new(&format!("{base}/bridge"), &tokens[1]);
+    let mut intake = Client::new(&format!("{base}/device"), &tokens[1]);
     intake
         .call(
             "remember",
@@ -364,7 +364,7 @@ fn against_the_real_engine_a_feed_and_a_recording_are_kept_under_the_keys_own_pa
     // The note, and the describing fact of the recording (its name holds the word).
     assert_eq!(found["results"].as_array().map(Vec::len), Some(2));
     // A wrong key is refused at once.
-    let mut wrong = Client::new(&format!("{base}/bridge"), "hcp_wrong");
+    let mut wrong = Client::new(&format!("{base}/device"), "hcp_wrong");
     assert!(matches!(
         wrong.call("stats", json!({})),
         Err(Error::Refused)
@@ -402,8 +402,8 @@ fn the_key_only_travels_in_clear_on_the_own_network() {
 
 #[test]
 fn a_recording_is_read_back_byte_for_byte() {
-    let (base, tokens, dir) = engine(&[("bridge", "sam-me:rw")]);
-    let mut c = Client::new(&format!("{base}/bridge"), &tokens[0]);
+    let (base, tokens, dir) = engine(&[("device", "sam-me:rw")]);
+    let mut c = Client::new(&format!("{base}/device"), &tokens[0]);
     let mut m4a = vec![0, 0, 0, 0x20];
     m4a.extend_from_slice(b"ftypM4A \0\0\0\0");
     m4a.resize(3 * 1024 * 1024, 9);
@@ -469,9 +469,9 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
     let p = memcp_client::pair(&server, &code.to_lowercase(), "Sam's laptop").expect("paired");
     // A peer: every space of the person, read and write.
     assert!(
-        p.vaults.iter().any(|v| v.starts_with("sam-me")),
+        p.spaces.iter().any(|v| v.starts_with("sam-me")),
         "{:?}",
-        p.vaults
+        p.spaces
     );
     assert!(p.agent.starts_with("peer-"), "{}", p.agent);
     assert!(p.url.ends_with(&format!("/mcp/{}", p.agent)));
@@ -560,4 +560,19 @@ fn a_program_may_take_an_address_in_clear_when_it_says_so() {
         !matches!(far.call("stats", json!({})), Err(Error::Tool(_))),
         "taken when the program says so"
     );
+}
+
+#[test]
+fn many_tries_never_overflow_the_wait() {
+    // Nothing listens on port 1: every try fails at once, and the doubled wait passes what a duration holds.
+    let mut c = Client::new("http://127.0.0.1:1/mcp/x", "hcp_fictional");
+    c.retry = memcp_client::Retry {
+        tries: 90,
+        first: Duration::from_millis(1),
+        longest: Duration::from_millis(1),
+    };
+    assert!(matches!(
+        c.call("recall", json!({})),
+        Err(Error::Unreachable(_))
+    ));
 }

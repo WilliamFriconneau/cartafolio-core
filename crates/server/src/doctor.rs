@@ -143,7 +143,7 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ),
     (
         "connection-all",
-        "reaches every vault",
+        "reaches every space",
         "a connection that reaches everything",
     ),
     (
@@ -163,8 +163,8 @@ pub const CHECKS: &[(&str, &str, &str)] = &[
     ),
     (
         "server-answers",
-        "the server answers",
-        "something answers on the listen address like this server",
+        "this node answers",
+        "something answers on the listen address like this node",
     ),
     (
         "settings",
@@ -339,19 +339,19 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
     if names.is_empty() && role != Role::Registry {
         r.add(
             Level::Warn,
-            "no vault yet: create one with `vault add KIND`, or on the page",
+            "no space yet: create one with `space make KIND`, or on the page",
         );
     }
     for name in names {
         let path = data.join(format!("{name}.sqlite"));
         if !path.exists() {
-            r.add(Level::Fail, format!("vault {name}: its file is missing"));
+            r.add(Level::Fail, format!("space {name}: its file is missing"));
             continue;
         }
         let c = match read_only(&path) {
             Ok(c) => c,
             Err(e) => {
-                r.add(Level::Fail, format!("vault {name}: cannot be opened ({e})"));
+                r.add(Level::Fail, format!("space {name}: cannot be opened ({e})"));
                 continue;
             }
         };
@@ -367,21 +367,21 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
         if q != "ok" {
             r.add(
                 Level::Fail,
-                format!("vault {name}: failed its integrity check: {q}"),
+                format!("space {name}: failed its integrity check: {q}"),
             );
         } else if v > SPACE_SCHEMA_VERSION {
             r.add(
                 Level::Fail,
                 format!(
-                    "vault {name}: version {v} is newer than this program ({SPACE_SCHEMA_VERSION})"
+                    "space {name}: version {v} is newer than this program ({SPACE_SCHEMA_VERSION})"
                 ),
             );
         } else if v < SPACE_SCHEMA_VERSION {
-            r.add(Level::Warn, format!("vault {name}: version {v}, migrates to {SPACE_SCHEMA_VERSION} at the next start ({facts} facts; take a backup first)"));
+            r.add(Level::Warn, format!("space {name}: version {v}, migrates to {SPACE_SCHEMA_VERSION} at the next start ({facts} facts; take a backup first)"));
         } else {
             r.add(
                 Level::Ok,
-                format!("vault {name}: version {v}, {facts} facts, integrity ok"),
+                format!("space {name}: version {v}, {facts} facts, integrity ok"),
             );
         }
         let inbox: i64 = c
@@ -395,7 +395,7 @@ fn vaults(r: &mut Report, data: &Path, ctl: &Connection, role: Role) {
         if inbox > 0 {
             r.add(
                 Level::Info,
-                format!("vault {name}: {inbox} quick note(s) wait in the inbox to be sorted"),
+                format!("space {name}: {inbox} quick note(s) wait in the inbox to be sorted (tag `inbox`)"),
             );
         }
     }
@@ -412,7 +412,7 @@ fn people(r: &mut Report, ctl: &Connection, role: Role) {
     } else if admins == 0 {
         r.add(
             Level::Fail,
-            "no administrator: nobody can open the admin page",
+            "no administrator: nobody can open the page of this node",
         );
     } else {
         r.add(
@@ -446,7 +446,7 @@ fn connections(r: &mut Report, ctl: &Connection) {
         if c.rights == "all" {
             r.add(
                 Level::Warn,
-                format!("connection {} reaches every vault of its person. Prefer one limited to the vaults it needs (`regrant {} --grant vault:rw`)", c.agent, c.agent),
+                format!("connection {} reaches every space of its person. Prefer one limited to the spaces it needs (`regrant {} --grant SPACE:rw`)", c.agent, c.agent),
             );
         }
         let idle = c.last_used_at.map_or(t - c.created_at, |u| t - u);
@@ -494,7 +494,7 @@ fn address(r: &mut Report, url: &str) {
     .iter()
     .any(|h| lower.contains(h))
     {
-        r.add(Level::Warn, "the public address only works on your own network: Claude on the web calls your server from the internet");
+        r.add(Level::Warn, "the public address only works on your own network: Claude on the web calls your node from the internet");
     }
     if lower.contains(".ts.net") {
         r.add(
@@ -519,7 +519,7 @@ fn listener(r: &mut Report, addr: &str) {
     match TcpStream::connect_timeout(&sock, Duration::from_secs(2)) {
         Err(e) => r.add(
             Level::Warn,
-            format!("nothing answers on {addr} ({e}): the server is not running there"),
+            format!("nothing answers on {addr} ({e}): this node is not running there"),
         ),
         Ok(mut s) => {
             let _ = s.set_read_timeout(Some(Duration::from_secs(2)));
@@ -530,11 +530,11 @@ fn listener(r: &mut Report, addr: &str) {
             let mut body = String::new();
             let _ = s.read_to_string(&mut body);
             if body.starts_with("HTTP/1.1 200") || body.starts_with("HTTP/1.0 200") {
-                r.add(Level::Ok, format!("the server answers on {addr}"));
+                r.add(Level::Ok, format!("this node answers on {addr}"));
             } else {
                 r.add(
                     Level::Warn,
-                    format!("{addr} answers, but not like this server's /health"),
+                    format!("{addr} answers, but not like this node's /health"),
                 );
             }
         }

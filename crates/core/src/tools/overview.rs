@@ -76,7 +76,7 @@ pub(super) fn spaces(
         };
         let conn = brain.open_space(&s)?;
         let mut facts = facts::counts(&conn)?["active"].as_u64().unwrap_or(0);
-        // « À trier » counts what waits for a decision, not every note it holds (the janitor's own notes, the recordings
+        // Inbox counts what waits for a decision, not every note it holds (the janitor's own notes, the recordings
         // already transcribed or given up on are not waiting for anybody); the ones given up on are counted apart.
         let mut failed = None;
         if kind == crate::catalogue::TRIAGE && caller.read_paths(&s).is_none() {

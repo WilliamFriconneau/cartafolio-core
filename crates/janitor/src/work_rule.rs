@@ -4,7 +4,7 @@
 //! - A recording whose file name says `reunion` or `meeting` (a meeting captured by the browser, a call…) is a meeting.
 //! - A note that holds one of the person's own work words (`work_words` in the janitor's settings: a product, a
 //!   company, a team) is work. The list is the person's: none is built in.
-//! - Only « À trier » is concerned: the note is sent to the inbox of `work`, which files it as it files any note.
+//! - Only Inbox is concerned: the note is sent to the inbox of `work`, which files it as it files any note.
 //! - A health note (`#santé`) is never taken: the health rule comes first.
 
 /// The vault work notes go to.
@@ -26,7 +26,11 @@ pub fn applies(text: &str, work_words: &[String]) -> bool {
 fn audio_name(lower: &str) -> Option<&str> {
     let at = lower.find("audio ")? + "audio ".len();
     let rest = &lower[at..];
-    let end = rest.find(".m4a").map_or(rest.len().min(120), |e| e + 4);
+    let mut end = rest.find(".m4a").map_or(rest.len().min(120), |e| e + 4);
+    // 120 bytes may fall inside an accented letter.
+    while !rest.is_char_boundary(end) {
+        end -= 1;
+    }
     Some(&rest[..end])
 }
 
@@ -36,6 +40,14 @@ mod tests {
 
     fn words() -> Vec<String> {
         vec!["acme".into(), "project x".into()]
+    }
+
+    #[test]
+    fn a_long_name_with_accents_and_no_extension_is_read_without_a_panic() {
+        // Byte 120 after « audio » falls inside « é ».
+        let text = format!("audio {}é then the note", "a".repeat(119));
+        assert!(!applies(&text, &[]));
+        assert!(applies(&format!("{text} about acme"), &words()));
     }
 
     #[test]

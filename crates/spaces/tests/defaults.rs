@@ -30,7 +30,7 @@ fn the_default_vaults_have_clear_tags_and_health_and_money_are_sensitive() {
             t.get("notes").unwrap().name.as_str(),
             t.get("notes").unwrap().path.as_str()
         ),
-        ("À trier", "a-trier")
+        ("Inbox", "a-trier")
     );
 }
 

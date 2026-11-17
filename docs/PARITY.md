@@ -1,6 +1,6 @@
 # Configuration parity: Home Assistant app and Linux
 
-Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a counterpart on Linux, in `memcp.toml` and, where it changes how the server starts, on the command line (a flag wins over the file). The table is kept true by a test (`crates/server/tests/parity.rs`): it fails when an add-on option has no `memcp.toml` key, when this table forgets one, or when the example file `packaging/linux/memcp.toml` is out of date. The options themselves are described once, in `crates/server/src/config.rs`, which also writes the documented file (`memcp config example`).
+Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a counterpart on Linux, in `memcp.toml` and, where it changes how the node starts, on the command line (a flag wins over the file). The table is kept true by a test (`crates/server/tests/parity.rs`): it fails when an add-on option has no `memcp.toml` key, when this table forgets one, or when the example file `packaging/linux/memcp.toml` is out of date. The options themselves are described once, in `crates/server/src/config.rs`, which also writes the documented file (`memcp config example`).
 
 | Add-on option | `memcp.toml` | Command line | Note |
 |---|---|---|---|
@@ -23,17 +23,19 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 | `janitor_api_key` | `janitor_api_key_file` | `prepare janitor` | The key is a file (mode 0600), never a line of `memcp.toml`. |
 | `janitor_ollama_url` | `janitor_ollama_url` | `prepare janitor` | |
 | `janitor_ollama_model` | `janitor_ollama_model` | `prepare janitor` | |
-| `transcribe` | `transcribe` | `prepare transcribe` | Run every minute by `memcp-transcribe.timer`. |
-| `transcribe_person` | `transcribe_person` | `prepare transcribe` | |
-| `transcribe_spaces` | `transcribe_spaces` | `prepare transcribe` | |
-| `transcribe_api_url` | `transcribe_api_url` | `prepare transcribe` | |
-| `transcribe_api_model` | `transcribe_api_model` | `prepare transcribe` | |
-| `transcribe_api_key` | `transcribe_api_key_file` | `prepare transcribe` | A file, as for the janitor. |
-| `transcribe_language` | `transcribe_language` | `prepare transcribe` | |
+| `transcribe` | `transcribe` | | A task of the node itself (`memcp serve`, `memcp-manager serve`); `memcp transcribe` is one pass by hand. |
+| `transcribe_person` | `transcribe_person` | | |
+| `transcribe_spaces` | `transcribe_spaces` | | |
+| `transcribe_api_url` | `transcribe_api_url` | | |
+| `transcribe_api_model` | `transcribe_api_model` | | |
+| `transcribe_api_key` | `transcribe_api_key_file` | | A file, as for the janitor. |
+| `intake_person` | `intake_person` | `intake --user`, `transcribe --user`, `watch --user` | The person the voice notes and the watched folders work for. Empty: `transcribe_person`, then `janitor_person`, then the first administrator. |
+| `watch` | `watch` | `watch` | A list of `FOLDER -> SPACE`. In the app the folders are under `/share` or `/media`. |
+| `transcribe_language` | `transcribe_language` | | |
 
 ## What only Linux has
 
-`data`, `listen`, `allow_remote`, `threads`, `advertise`, `allow_origin`, `console_admin`, `oauth_redirect`, `identity_listen`, `backup_dir` and `backup_keep` have no add-on option: the add-on fixes them (its data folder, its ports, Home Assistant's own backups). Each is a flag of the same name (`--data`, `--listen`, `--allow-remote`, `--threads`, `--advertise`, `--allow-origin`, `--console-admin`, `--oauth-redirect`, `--identity-listen`, `backup --to`, `backup --keep`).
+`data`, `listen`, `allow_remote`, `threads`, `advertise`, `allow_origin`, `console_admin`, `oauth_redirect`, `identity_listen`, `backup_dir`, `backup_keep`, and the intake options that need a program of the machine (`transcribe_model`, `transcribe_cmd`, `transcribe_ffmpeg`, `transcribe_threads`, `transcribe_lexicon`, `transcribe_every`, `watch_every`, `absorb`, `absorb_exclude`, `absorb_protect`, `absorb_roles`, `absorb_every`, `deliver`) have no add-on option: the add-on fixes them (its data folder, its ports, Home Assistant's own backups). Each is a flag of the same name (`--data`, `--listen`, `--allow-remote`, `--threads`, `--advertise`, `--allow-origin`, `--console-admin`, `--oauth-redirect`, `--identity-listen`, `backup --to`, `backup --keep`).
 
 ## What only the add-on has
 

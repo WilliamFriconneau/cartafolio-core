@@ -1166,7 +1166,7 @@ fn doctor_reads_an_installation_and_changes_nothing() -> Res {
         "the public address ends with a slash",
         "the public address is not HTTPS",
         "only works on your own network",
-        "connection wide-key reaches every vault",
+        "connection wide-key reaches every space",
         "nothing answers on 127.0.0.1:1",
     ] {
         assert!(text.contains(want), "missing {want:?} in:\n{text}");
@@ -1284,6 +1284,86 @@ fn a_slow_or_keyless_big_body_holds_no_worker() -> Res {
         started.elapsed()
     );
     drop(slow);
+    Ok(())
+}
+
+#[test]
+fn a_refused_body_holds_no_worker_and_no_memory() -> Res {
+    let dir = temp("refused");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    let (child, port) = serve_on_a_free_port(bin, &dir, &["--threads", "1"])?;
+    let mut srv = Child(child, dir.clone());
+    // A body declared bigger than any memory: refused, and the node is still there (it used to ask the allocator for
+    // the declared size while throwing the unread body away, and abort).
+    let (head, _) = http(
+        port,
+        "POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Length: 999999999999999\r\nConnection: close\r\n\r\nab",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 413"), "{head}");
+    std::thread::sleep(Duration::from_millis(200));
+    assert!(srv.0.try_wait()?.is_none(), "the node stopped");
+    // Clients refused for their declared size that then send nothing: the one worker still answers.
+    let mut held = vec![];
+    for _ in 0..3 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Length: 5000000\r\n\r\nab")?;
+        held.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let started = std::time::Instant::now();
+    let (head, _) = http(
+        port,
+        "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    assert!(
+        started.elapsed() < Duration::from_secs(3),
+        "{:?}",
+        started.elapsed()
+    );
+    drop(held);
+    Ok(())
+}
+
+#[test]
+fn a_burst_of_open_connections_leaves_none_unread() -> Res {
+    let dir = temp("burst");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // Many connections opened at once and kept open, each starting a request it does not finish (a keep-alive client,
+    // a slow body). Each is read by a thread of its own: a request on a connection opened in the same burst is answered.
+    let mut idle = vec![];
+    for _ in 0..48 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"GET /health HTTP/1.1\r\nHost: x\r\n")?;
+        idle.push(s);
+    }
+    let mut last = TcpStream::connect(("127.0.0.1", port))?;
+    last.set_read_timeout(Some(Duration::from_secs(5)))?;
+    last.write_all(b"GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")?;
+    let mut out = String::new();
+    last.read_to_string(&mut out)?;
+    assert!(out.starts_with("HTTP/1.1 200"), "{out:?}");
+    drop(idle);
     Ok(())
 }
 

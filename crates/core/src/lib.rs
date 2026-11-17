@@ -67,6 +67,7 @@ pub mod people;
 pub mod rules;
 mod schema;
 mod space;
+pub mod swarm;
 pub mod sync;
 pub mod text;
 pub mod tools;

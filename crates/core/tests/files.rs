@@ -226,7 +226,7 @@ fn memo_and_transcript(
     let memo = files::put_tagged(
         b,
         space,
-        "bridge",
+        "device",
         "Mémo vocal.m4a",
         "dictée du matin",
         &m4a(200),
@@ -359,7 +359,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
     let photo = files::put_tagged(
         &b,
         &personal,
-        "bridge",
+        "device",
         "meter.png",
         "",
         PNG,
@@ -376,7 +376,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
     let kept = files::put_tagged(
         &b,
         &personal,
-        "bridge",
+        "device",
         "Discours.m4a",
         "à garder",
         &m4a(300),
@@ -416,8 +416,8 @@ fn bytes_that_another_record_or_space_still_holds_stay() -> Res {
     let now = memcp_core::util::now();
     let tag = ["inbox/audio".to_string()];
     // The same recording under another name in the same vault, and in another vault.
-    let twin = files::put_tagged(&b, &personal, "bridge", "Copie.m4a", "", &m4a(200), &tag)?;
-    let other = files::put_tagged(&b, &work, "bridge", "Mémo vocal.m4a", "", &m4a(200), &tag)?;
+    let twin = files::put_tagged(&b, &personal, "device", "Copie.m4a", "", &m4a(200), &tag)?;
+    let other = files::put_tagged(&b, &work, "device", "Mémo vocal.m4a", "", &m4a(200), &tag)?;
     transcribed_at(&b, &personal, &transcript, 1_700_000_000)?;
     assert_eq!(twin.sha256, memo.sha256);
     assert_ne!(twin.id, memo.id);
@@ -462,7 +462,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
         access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or_else(|| "refused".into())
     };
     let worker = mk("worker", "personal:rw", false)?;
-    let scoped = mk("bridge", "personal/inbox:rw", false)?;
+    let scoped = mk("device", "personal/inbox:rw", false)?;
     let reader = mk("reader", "personal:r", false)?;
     let home = mk("home-agent", "home:rw", false)?;
     let args = json!({ "id": memo.id, "transcript": transcript });
@@ -619,4 +619,50 @@ fn what_a_browser_records_is_a_recording() {
     mp4.extend_from_slice(&[0; 12]);
     assert_eq!(sniff(&mp4, "dictation.m4a"), Some("audio/mp4"));
     assert_eq!(sniff(&mp4, "movie.mp4"), None);
+}
+
+#[test]
+fn two_files_of_one_name_keep_a_description_each() -> Res {
+    let t = Temp::new("files");
+    let b = brain(&t)?;
+    let first = files::put_tagged(&b, &sp("home"), "owner", "photo.txt", "", b"one", &[])?;
+    let second = files::put_tagged(&b, &sp("home"), "owner", "photo.txt", "", b"two", &[])?;
+    assert_ne!(first.id, second.id);
+    assert!(first.fact_id.is_some() && second.fact_id.is_some());
+    assert_ne!(first.fact_id, second.fact_id, "each file its own note");
+    // The first file is still the one its note points to.
+    let conn = b.open_space(&sp("home"))?;
+    let fields: String = conn.query_row(
+        "SELECT fields FROM facts WHERE id = ?1",
+        [first.fact_id.as_deref().unwrap_or_default()],
+        |r| r.get(0),
+    )?;
+    assert!(fields.contains(&first.id), "{fields}");
+    Ok(())
+}
+
+#[test]
+fn a_file_never_takes_over_a_note_written_before() -> Res {
+    let t = Temp::new("files");
+    let b = brain(&t)?;
+    let conn = b.open_space(&sp("home"))?;
+    let mut n = memcp_core::facts::NewFact::agent("File: plan.txt", "tester");
+    n.tags = vec!["notes".into()];
+    let memcp_core::facts::Remembered::Created(note) =
+        memcp_core::facts::remember(&conn, &sp("home"), "tester", n, &[])?
+    else {
+        return Err("not created".into());
+    };
+    let file = files::put_tagged(&b, &sp("home"), "owner", "plan.txt", "", b"plan", &[])?;
+    assert_ne!(file.fact_id.as_deref(), Some(note.id.as_str()));
+    let kind: Option<String> =
+        conn.query_row("SELECT type FROM facts WHERE id = ?1", [&note.id], |r| {
+            r.get(0)
+        })?;
+    assert_ne!(
+        kind.as_deref(),
+        Some("file"),
+        "the note written before stays a note"
+    );
+    Ok(())
 }

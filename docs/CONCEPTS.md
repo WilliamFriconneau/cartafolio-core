@@ -36,21 +36,26 @@ boundary of rights: an assistant opened on Work cannot read Health.
 ## Sorting: the router and its keywords
 
 **What.** Each space has tags and keywords (its `rules`). A note naming a word that belongs to one space goes there at
-once; ordinary words score; nothing decisive leaves it in *À trier*. Deterministic: the same note always goes to the same
-place, on every machine.
+once; ordinary words score; nothing decisive leaves it in the person's *Inbox*. Deterministic: the same note always goes
+to the same place, on every machine.
+
+**The Inbox.** Its label is « Inbox » (the same word in French and Spanish). It is stored as a space of kind `a-trier`
+named `<person>-a-trier` (`alice-a-trier`), the name it always had: a box made by an earlier version is the same box,
+nothing is renamed or migrated, and the swarm pairs the boxes of a person by kind whatever their names. Not to be
+confused with the `inbox` tag of a space: notes tagged `inbox` in a space wait for the janitor to file them there.
 
 **Why not a model per note.** A model at the moment a note arrives is slow, costly, and changes its mind; a list of words
 can be read, corrected and shared.
 
 **Case.** « Rappeler Atlas pour le devis » → *Atlas* is a word of Work › Clients › Atlas → filed there. « Acheter du
-pain » → nothing decisive → *À trier*, until a keyword (*courses*) is added to Home.
+pain » → nothing decisive → *Inbox*, until a keyword (*courses*) is added to Home.
 
 **Voice commands are keywords too.** « J'ai une idée pour le projet Atlas » → *idée* sends it to the idea box, *Atlas* to
 the space. « Il faut… », « à faire » → *What's next*. « Problème », « risque » → *Targets*.
 
 ## The janitor
 
-**What.** The part that keeps the keywords: it looks at what stays in *À trier* and what the person refiled by hand,
+**What.** The part that keeps the keywords: it looks at what stays in *Inbox* and what the person refiled by hand,
 proposes keywords (a model on the machine may help), then runs the router again.
 
 **Case.** Twelve notes about *pain*, *lait*, *courses* stayed unsorted; the person filed four in Home → the janitor
@@ -91,7 +96,7 @@ The lean method of a workshop, applied to what one keeps:
 
 | S | In a workshop | In the memory |
 |---|---|---|
-| Sort (*seiri*) | throw away what is useless | À trier empties; what is wrong is retired (kept in history, out of the way) |
+| Sort (*seiri*) | throw away what is useless | Inbox empties; what is wrong is retired (kept in history, out of the way) |
 | Set in order (*seiton*) | a place for everything | spaces and their keywords: each trace has one place |
 | Shine (*seiso*) | clean | the janitor merges near-duplicates, the boards follow their delta |
 | Standardise (*seiketsu*) | the same way everywhere | four boards in every space, the same rules format, the same screens on every machine |
@@ -104,7 +109,7 @@ They exchange events (a trace added, replaced, retired) and resume where they st
 work together as long as they speak the same exchange protocol; an older one that meets a newer protocol stops and says
 *update this machine*, never guesses. Updates start with the Home Assistant node, then the computers, then the phones.
 
-**Case.** The Mac is closed for a week; the iPhone and the server kept writing. The Mac opens, asks each space for the
+**Case.** The Mac is closed for a week; the iPhone and the node that is always on kept writing. The Mac opens, asks each space for the
 events after its cursor, applies them, sends its own: the same memory everywhere, nothing written twice.
 
 ## Local first

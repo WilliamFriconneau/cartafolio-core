@@ -1,5 +1,5 @@
-//! Pairing a bridge: the person asks their page for a code, types it into the app on a device, and the
-//! app exchanges it once for a connection of its own, limited to the person's « À trier » (see [`crate::triage`]).
+//! Pairing a device: the person asks their page for a code, types it into the app on a device, and the
+//! app exchanges it once for a connection of its own, limited to the person's Inbox (see [`crate::triage`]).
 //!
 //! The code is short so that it can be typed (eight characters from an alphabet without look-alikes,
 //! about 40 bits). That is enough because it lives ten minutes, works once, and the route that takes it
@@ -24,8 +24,8 @@ pub struct Paired {
     pub agent: String,
     /// The bearer token of that connection. Shown once: only its hash is stored.
     pub token: String,
-    /// The vaults whose inbox the connection writes to.
-    pub vaults: Vec<String>,
+    /// The spaces whose inbox the connection writes to.
+    pub spaces: Vec<String>,
 }
 
 /// A code as the person may type it: lower case, with a dash or spaces.
@@ -36,7 +36,7 @@ pub fn normalize(code: &str) -> String {
         .collect()
 }
 
-fn hash(code: &str) -> Vec<u8> {
+pub(crate) fn hash(code: &str) -> Vec<u8> {
     Sha256::digest(format!("pairing:{}", normalize(code)).as_bytes()).to_vec()
 }
 
@@ -60,23 +60,15 @@ pub fn create_for_peer(
 ) -> Result<(String, String)> {
     let triage = crate::triage::ensure(brain, user_id, person)?;
     let ctl = brain.open_control()?;
-    let spaces: Vec<String> = brain
-        .layout(user_id)?
-        .iter()
-        .map(|p| p.space.as_str().to_string())
-        .collect();
-    let spec: Vec<String> = spaces.iter().map(|v| format!("{v}:rw")).collect();
-    let code = create_with(&ctl, user_id, Rights::parse(&spec.join(","))?, now)?;
+    // Every space of the person, present and future: a space made later on either node is the peer's too.
+    let code = create_with(&ctl, user_id, Rights::parse("all")?, now)?;
     Ok((code, triage.as_str().to_string()))
 }
 
 fn create_with(ctl: &Connection, user_id: &str, rights: Rights, now: i64) -> Result<String> {
     access::check_within(ctl, user_id, &rights)?;
     // Old codes of anyone, used or expired, go: they are worth nothing.
-    ctl.execute(
-        "DELETE FROM bridge_pairings WHERE expires_at < ?1 - 86400",
-        [now],
-    )?;
+    ctl.execute("DELETE FROM pairings WHERE expires_at < ?1 - 86400", [now])?;
     // Each character equally likely: a byte of 248 or more (not a multiple of 31) is drawn again.
     let mut code = String::with_capacity(CODE_LEN);
     while code.len() < CODE_LEN {
@@ -87,7 +79,7 @@ fn create_with(ctl: &Connection, user_id: &str, rights: Rights, now: i64) -> Res
         }
     }
     ctl.execute(
-        "INSERT INTO bridge_pairings (hash, user_id, rights, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
+        "INSERT INTO pairings (hash, user_id, rights, created_at, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)",
         params![hash(&code), user_id, rights.label(), now, now + CODE_TTL],
     )?;
     access::auth_event(ctl, None, None, "pairing_code", "");
@@ -112,7 +104,7 @@ pub enum Standing {
 pub fn standing(ctl: &Connection, user_id: &str, code: &str, now: i64) -> Standing {
     let row: Option<(Option<i64>, i64, Option<String>)> = ctl
         .query_row(
-            "SELECT used_at, expires_at, agent FROM bridge_pairings WHERE hash = ?1 AND user_id = ?2",
+            "SELECT used_at, expires_at, agent FROM pairings WHERE hash = ?1 AND user_id = ?2",
             params![hash(code), user_id],
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
@@ -131,7 +123,7 @@ pub fn standing(ctl: &Connection, user_id: &str, code: &str, now: i64) -> Standi
 /// Read-only: nothing is consumed and no attempt is recorded.
 pub fn holds(ctl: &Connection, code: &str, now: i64) -> bool {
     ctl.query_row(
-        "SELECT 1 FROM bridge_pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
+        "SELECT 1 FROM pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
         params![hash(code), now],
         |_| Ok(()),
     )
@@ -170,7 +162,7 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
     let refused = || Error::Invalid("this code is unknown, used or expired".into());
     let row: Option<(String, String)> = ctl
         .query_row(
-            "SELECT user_id, rights FROM bridge_pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
+            "SELECT user_id, rights FROM pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
             params![hash(code), now],
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
@@ -181,7 +173,7 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
     // Claimed first, in one statement: two devices racing with the same code, one wins.
     let agent = agent_name(device);
     let claimed = ctl.execute(
-        "UPDATE bridge_pairings SET used_at = ?2, agent = ?3 WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
+        "UPDATE pairings SET used_at = ?2, agent = ?3 WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",
         params![hash(code), now, agent],
     )?;
     if claimed != 1 {
@@ -192,22 +184,28 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
     let token = match made {
         Ok(t) => t,
         Err(e) => {
-            // The person's vaults changed since the code was made: the code can be tried again.
+            // The person's spaces changed since the code was made: the code can be tried again.
             ctl.execute(
-                "UPDATE bridge_pairings SET used_at = NULL, agent = NULL WHERE hash = ?1",
+                "UPDATE pairings SET used_at = NULL, agent = NULL WHERE hash = ?1",
                 [hash(code)],
             )?;
             return Err(e);
         }
     };
-    let mut vaults: Vec<String> = spec
-        .split(',')
-        .filter_map(|g| g.split('/').next().map(str::to_string))
-        .collect();
-    vaults.dedup();
+    let mut spaces: Vec<String> = if spec == "all" {
+        crate::users::access_of(ctl, &user_id)?
+            .into_keys()
+            .map(|s| s.as_str().to_string())
+            .collect()
+    } else {
+        spec.split(',')
+            .filter_map(|g| g.split('/').next().map(str::to_string))
+            .collect()
+    };
+    spaces.dedup();
     Ok(Paired {
         agent,
         token,
-        vaults,
+        spaces,
     })
 }

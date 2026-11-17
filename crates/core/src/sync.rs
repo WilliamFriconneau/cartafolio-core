@@ -429,6 +429,13 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
     }
 }
 
+/// The layout of this space is already in its log: a space made here from a peer's word takes its layout from the
+/// peer's events, and must not record it again under a stamp of its own (that later stamp would win over a rename made
+/// meanwhile at the origin).
+pub(crate) fn mark_layout_logged(conn: &Connection) -> Result<()> {
+    meta_set(conn, "sync_layout_logged", "1")
+}
+
 /// The layout the person already gave this space, as events, once.
 fn ensure_layout_log(brain: &Brain, space: &Space, conn: &Connection) -> Result<()> {
     if meta_get(conn, "sync_layout_logged")?.is_some() {
@@ -1228,8 +1235,8 @@ fn window_gate(
     Ok(None)
 }
 
-/// The biggest text of one fact a peer may send, and how many tags it may carry.
-const MAX_EVENT_TEXT: usize = 1 << 20;
+/// The biggest text of one fact a peer may send (the biggest any node writes), and how many tags it may carry.
+const MAX_EVENT_TEXT: usize = crate::facts::MAX_TEXT_BYTES;
 const MAX_EVENT_TAGS: usize = 64;
 
 /// What every event must look like before anything is read from it: short plain identifiers for who and when, and
@@ -1590,7 +1597,7 @@ impl PeerStatus {
 /// Makes the space on this node when a peer has it and this node does not (the first join is a full copy).
 pub fn ensure_space(brain: &Brain, space: &Space, kind: &str) -> Result<()> {
     use crate::catalogue::{CUSTOM, TRIAGE};
-    // « À trier » is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here: a node that lost
+    // Inbox is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here: a node that lost
     // the kind could not tell its own box from any space, nor pair a device for it.
     let set = |brain: &Brain| -> Result<()> {
         if kind == TRIAGE {

@@ -191,7 +191,7 @@ pub fn register(app: &App, req: &Request) -> Response {
         return err(
             400,
             "invalid_redirect_uri",
-            "redirect address not on this server's allow list",
+            "redirect address not on this node's allow list",
         );
     }
     let now = util::now();
@@ -391,7 +391,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
             );
         }
         // A console key is never handed to a connector; and a connection made another way (an app's key, a key by hand,
-        // a bridge) is not taken over by signing in at its address: that would cut the app off and give its rights away.
+        // a device) is not taken over by signing in at its address: that would cut the app off and give its rights away.
         let made_by_signing_in = ctl
             .query_row(
                 "SELECT 1 FROM oauth_refresh WHERE agent = ?1 AND user_id = ?2 LIMIT 1",
@@ -413,7 +413,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         return page(
             app,
             403,
-            "<p>You do not have access to this vault, so an assistant cannot be connected to it.</p>",
+            "<p>You do not have access to this space, so an assistant cannot be connected to it.</p>",
         );
     }
     let consent_page = |status: u16, note: &str| -> Response {
@@ -448,7 +448,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         .collect();
         let boxes: String = if let Some(v) = &scoped {
             format!(
-                "<p>This connector was added for the vault <b>{v}</b>. It will reach that vault and nothing else.</p><input type=hidden name=v_{v} value=1>"
+                "<p>This connector was added for the space <b>{v}</b>. It will reach that space and nothing else.</p><input type=hidden name=v_{v} value=1>"
             )
         } else {
             reach
@@ -472,7 +472,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
             format!("<p>This connection will be called <b>{}</b>.</p>", esc(n))
         });
         let everything = if scoped.is_none() {
-            "<p><label><input type=checkbox name=all value=1> <b>All my vaults</b>, and the ones I make later</label></p><p class=mute>Or only some:</p>"
+            "<p><label><input type=checkbox name=all value=1> <b>All my spaces</b>, and the ones I make later</label></p><p class=mute>Or only some:</p>"
         } else {
             ""
         };
@@ -484,7 +484,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
                  {called}<form method=post>{hidden}{everything}{boxes}\
                  <p><label><input type=checkbox name=readonly value=1> read only</label></p>\
                  <input type=hidden name=decision value=allow><button>Allow</button></form>\
-                 <p class=mute>Signed in as {}. You can revoke it any time from the admin page.</p>",
+                 <p class=mute>Signed in as {}. You can revoke it any time from the page of your memory.</p>",
                 esc(&name),
                 esc(&name),
                 esc(if me.display.is_empty() {
@@ -517,7 +517,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
     if get("decision") == "allow" && chosen.is_empty() && !everything {
         return consent_page(
             400,
-            "<p><b>Tick at least one vault.</b> Without one, this assistant gets nothing.</p>",
+            "<p><b>Tick at least one space.</b> Without one, this assistant gets nothing.</p>",
         );
     }
     let fresh = app
@@ -783,7 +783,7 @@ fn exchange(app: &App, req: &Request) -> Response {
                 return err(
                     400,
                     "invalid_grant",
-                    "this approval chose no vault: approve again and tick what it may reach",
+                    "this approval chose no space: approve again and tick what it may reach",
                 );
             }
             let computed = URL_SAFE_NO_PAD.encode(Sha256::digest(get("code_verifier").as_bytes()));

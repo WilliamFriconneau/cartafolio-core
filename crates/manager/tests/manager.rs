@@ -418,7 +418,7 @@ fn the_administrator_sees_each_person_with_their_connections_and_can_unlink_an_a
         .ok_or("lou listed")?
         .clone();
     assert_eq!(lou["connections"], 2, "{lou}");
-    assert_eq!(lou["vaults"], 1, "{lou}");
+    assert_eq!(lou["spaces"], 1, "{lou}");
     assert_eq!(lou["home_assistant"], true);
     // Unlinking cuts the account, not the memory.
     let r = m.handle(&ingress(
@@ -435,7 +435,7 @@ fn the_administrator_sees_each_person_with_their_connections_and_can_unlink_an_a
         .and_then(|p| p.iter().find(|x| x["name"] == "lou").cloned())
         .ok_or("lou still listed")?;
     assert_eq!(lou["home_assistant"], false);
-    assert_eq!(lou["vaults"], 1, "the memory stays");
+    assert_eq!(lou["spaces"], 1, "the memory stays");
     // A member cannot do it.
     let denied = m.handle(&ingress(
         "ha-l",
@@ -625,7 +625,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
         let app = m.person_app(p).ok_or("person")?;
         app.brain.add_vault(users::OWNER, p, "health")?;
     }
-    // Lou asks her page for a code: no vault to choose, everything goes to her À trier.
+    // Lou asks her page for a code: no vault to choose, everything goes to her Inbox.
     let r = m.handle(&ingress("ha-l", "lou", "POST", "/admin/api/pairing", "{}"));
     assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
     let made = r.body_json();
@@ -651,7 +651,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
         got["mcp_url"],
         format!("https://memory.example.net/mcp/{agent}")
     );
-    let vaults = got["vaults"].as_array().ok_or("vaults")?;
+    let vaults = got["spaces"].as_array().ok_or("spaces")?;
     assert!(
         vaults
             .iter()
@@ -664,7 +664,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
             .all(|v| !v.as_str().unwrap_or("").starts_with("alice-")),
         "{vaults:?}"
     );
-    // A peer: it writes into Lou's À trier without naming it, reads Lou's spaces, and never reaches Alice.
+    // A peer: it writes into Lou's Inbox without naming it, reads Lou's spaces, and never reaches Alice.
     let mut req = mcp(key, "remember", json!({ "text": "Une note du Mac." }));
     req.path = format!("/mcp/{agent}");
     let w = tool_text(&m.handle(&req));

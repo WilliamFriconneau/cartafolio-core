@@ -4,7 +4,7 @@
 //   cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 //   CHROMIUM=/usr/bin/chromium node french.test.js
 //
-// The page is loaded in French and walked through its main views and dialogs (home, administration, triage, a
+// The page is loaded in French and walked through its main views and dialogs (home, the people of the node, the Inbox, a
 // space and its tabs, the wizard for each assistant, the guide editor, the add-a-node window, the confirmation and
 // the secret windows, empty states, toasts and errors). Two things fail the test:
 //   1. an element that still holds one of the English sentences in ENGLISH below (the list to keep up to date: when a
@@ -32,7 +32,7 @@ const ENGLISH = [
   "Pick an assistant first", "Nothing is ticked beforehand", "On the consent page", "Open claude.ai", "Add a custom connector",
   "In a terminal, run this command", "Told to every assistant", "no instructions yet", "Your heir is", "A recovery key exists",
   "You have no recovery key", "have not opened", "Attach a waiting account", "was refused in the last", "keys were refused",
-  "The latest events", "Photos and documents", "What each space received", "The capture apps", "Not a decision to make",
+  "The latest events", "Photos and documents", "What each space received", "Not a decision to make",
   "An app that may propose", "Drag a space onto another", "Type the address", "Compare the three words", "has joined this memory",
   "What it captures is filed", "Check that the", "Welcome. Keep your memory", "Your memory is ready", "Start a memory",
   "Select all", "Send to", "Everything", "waiting for you", "never used", "Revoke", "Instructions for the space",
@@ -69,8 +69,8 @@ function enrich(j) {
   j.activity = [{ at: "2026-11-01T12:00:00+00:00", who: "claude-code", ip: "10.0.0.5", event: "revoke", detail: "" }, { at: "2026-11-01T11:00:00+00:00", who: "", ip: "203.0.113.9", event: "mcp_refused", detail: "" }];
   j.safety = { heir: null, candidates: [{ id: "u2", name: "sam", display: "Sam" }], wait_days: 30, has_key: false, heir_of: [{ id: "u3", name: "alex", display: "Alex", idle_days: 40, eligible: true }], waiting: [] };
   j.installation = { me: me.id, admin: true, requests: [{ ha_user: "ha1", name: "kim", display: "Kim", first_seen: "2026-11-02T10:00:00Z", status: "pending" }],
-    users: [{ id: me.id, name: me.name, display: me.display, admin: true, disabled: false, vaults: 3, connections: 1, vault_names: ["owner-health"] },
-      { id: "u2", name: "sam", display: "Sam", admin: false, disabled: false, home_assistant: true, vaults: 1, connections: 0, vault_names: [] }] };
+    users: [{ id: me.id, name: me.name, display: me.display, admin: true, disabled: false, spaces: 3, connections: 1, space_names: ["owner-health"] },
+      { id: "u2", name: "sam", display: "Sam", admin: false, disabled: false, home_assistant: true, spaces: 1, connections: 0, space_names: [] }] };
   return j;
 }
 
@@ -141,7 +141,7 @@ async function leftovers(page, rootSel) {
   await scan("the triage view with nothing matching");
   await page.fill("#tr-filter", "");
   await page.evaluate(() => { location.hash = "#admin"; }); await sleep(400);
-  await scan("the administration view");
+  await scan("the people of this node");
   await page.evaluate(() => { location.hash = "#space/owner-work"; }); await page.waitForSelector("#space-tabs button"); await sleep(400);
   for (const tab of await page.locator("#space-tabs button").allInnerTexts()) {
     await page.locator("#space-tabs button", { hasText: tab }).first().click(); await sleep(500);

@@ -31,6 +31,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V20,
     CONTROL_V21,
     CONTROL_V22,
+    CONTROL_V23,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -194,7 +195,7 @@ CREATE TABLE grants (
 
 CREATE TABLE auth_audit (ts INTEGER NOT NULL, agent TEXT, ip TEXT, event TEXT NOT NULL, detail TEXT) STRICT;
 
--- A device (phone app, sensor bridge) that pushes documents into one space.
+-- A device (phone app, sensor gateway) that pushes documents into one space.
 CREATE TABLE devices (
   id TEXT PRIMARY KEY, name TEXT NOT NULL UNIQUE, space TEXT NOT NULL REFERENCES spaces(name),
   state TEXT NOT NULL CHECK (state IN ('active','revoked')),
@@ -395,7 +396,7 @@ const CONTROL_V12: &str = r"
 ALTER TABLE oauth_codes ADD COLUMN agent TEXT NOT NULL DEFAULT '';
 ";
 
-/// A bridge paired for « all my vaults »: it writes to the inbox of each, and of the ones the person makes later.
+/// A device paired for « all my spaces »: it writes to the inbox of each, and of the ones the person makes later.
 const CONTROL_V15: &str = r"
 ALTER TABLE connections ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE bridge_pairings ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;
@@ -406,7 +407,7 @@ const CONTROL_V14: &str = r"
 ALTER TABLE connections ADD COLUMN no_person_guide INTEGER NOT NULL DEFAULT 0;
 ";
 
-/// Pairing a bridge: a short code shown on the person's page, exchanged once by a device for a
+/// Pairing a device (the table was called `bridge_pairings` until `CONTROL_V22`): a short code shown on the person's page, exchanged once by a device for a
 /// connection of its own. Only the hash of the code is kept; the rights are a spec (`Rights::parse`).
 const CONTROL_V13: &str = r"
 CREATE TABLE bridge_pairings (
@@ -608,10 +609,16 @@ CREATE TABLE peer_meta (
 ) STRICT, WITHOUT ROWID;
 ";
 
+/// The pairing table loses its old name: `bridge_pairings` becomes `pairings`, every row kept (codes waiting, codes used
+/// and the connection each made).
+const CONTROL_V22: &str = r"
+ALTER TABLE bridge_pairings RENAME TO pairings;
+";
+
 /// The node's identity in the peer directory (a short id each node makes once and tells its peers), and the requests to
 /// join that a peer told this node about (so that the person can answer them from here; the answer travels back with
 /// the next exchange with that peer).
-const CONTROL_V22: &str = r"
+const CONTROL_V23: &str = r"
 ALTER TABLE peer_directory ADD COLUMN node_id TEXT NOT NULL DEFAULT '';
 CREATE TABLE IF NOT EXISTS remote_joins (
   node       TEXT NOT NULL,

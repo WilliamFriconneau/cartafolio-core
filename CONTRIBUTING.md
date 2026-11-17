@@ -18,7 +18,7 @@ These must pass. The add-on binaries are built with `ha-addon/build.sh` (needs `
 - **No secret in the code.** Secrets come from options, files or the environment.
 - **A rule that can be written as a test is a test**, in the crate it belongs to.
 - **Rights stay explicit and simple.** A change that widens what an agent can read or do needs a clear reason in its description.
-- **Memory only.** The server stores and finds what it is given. It never fetches, proxies or sends anything for an assistant, and agents never decide health facts on their own.
+- **Memory only.** A node stores and finds what it is given. It never fetches, proxies or sends anything for an assistant, and agents never decide health facts on their own.
 
 ## Licence of your contribution
 

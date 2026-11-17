@@ -4,7 +4,11 @@
 //!   (what the apps show live).
 //! - `GET  /mcp/<connection>/sync/peers`: this node's peer directory (`{node, peers: [{name, last_seen, version, ...}]}`).
 //! - `POST /mcp/<connection>/sync/peers` `{node: {name}, peers: [...]}`: the peer's directory, merged here.
-//! - `GET  /mcp/<connection>/sync/spaces`: the spaces this key reaches, with their kind and the head of their log.
+//! - `GET  /mcp/<connection>/sync/spaces`: the spaces this key reaches, with their kind, layout, the time the copy began
+//!   and the head of their log; which one is the person's Inbox; the archives this node knows of; whether it takes
+//!   offers.
+//! - `POST /mcp/<connection>/sync/spaces` `{space, kind, label, parent, position, since}`: a space of the person that the
+//!   peer has and this node lacks (see `memcp_core::swarm`); or `{space, archived_at}`: the peer archived it.
 //! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L]`: the events of a space after the asker's cursor, never
 //!   the ones it sent itself.
 //! - `POST /mcp/<connection>/sync/events?space=S` `{events: [...]}`: events from the peer, applied here idempotently.
@@ -12,7 +16,7 @@
 //! Only the connection's own key is let in, and only on the spaces it reaches (read for pulling, write for pushing). The
 //! engine is `memcp_core::sync`; nothing here decides what a merge does.
 
-use memcp_core::{Space, access, directory, sync};
+use memcp_core::{Space, access, directory, swarm, sync};
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -106,26 +110,76 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         }
         ("GET", "spaces") => {
             let mut out = Vec::new();
+            // The person's own box: the one a peer pairs with its own (see `memcp_core::swarm`).
+            let triage = memcp_core::triage::of(brain, &caller.user_id)
+                .ok()
+                .flatten();
             for s in brain.spaces().unwrap_or_default() {
                 if !caller.can_read(&s) || !whole(&s) {
                     continue;
                 }
-                let kind = ctl
+                type Layout = (String, Option<String>, Option<String>, i64);
+                let (kind, label, parent, position): Layout = ctl
                     .query_row(
-                        "SELECT kind FROM spaces WHERE name = ?1",
+                        "SELECT kind, label, parent, position FROM spaces WHERE name = ?1",
                         [s.as_str()],
-                        |r| r.get::<_, String>(0),
+                        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
                     )
-                    .unwrap_or_else(|_| "custom".into());
+                    .unwrap_or_else(|_| ("custom".into(), None, None, 0));
                 let head = sync::head(brain, &s).unwrap_or(0);
-                out.push(json!({ "space": s.as_str(), "kind": kind, "head": head, "writable": caller.can_write(&s) }));
+                out.push(json!({
+                    "space": s.as_str(), "kind": kind, "head": head, "writable": caller.can_write(&s),
+                    "label": label, "parent": parent, "position": position,
+                    "since": swarm::since(brain, &s).unwrap_or(0),
+                    "triage": triage.as_ref() == Some(&s),
+                }));
             }
+            let archived: Vec<Value> = swarm::tombstones(brain, &caller.user_id)
+                .unwrap_or_default()
+                .into_iter()
+                .map(|(s, at)| json!({ "space": s.as_str(), "archived_at": at }))
+                .collect();
             // The exchange's protocol and this node's version: machines of different versions keep in step as long as
             // they speak the same protocol; a newer protocol is refused by an older node, which says so and waits.
             Response::json(
                 200,
-                &json!({ "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out }),
+                &json!({
+                    "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out,
+                    "offers": takes_offers(&caller), "archived": archived,
+                }),
             )
+        }
+        // A space of the person that the peer has and this node lacks, or one the peer archived.
+        ("POST", "spaces") => {
+            if !takes_offers(&caller) {
+                return refused(
+                    403,
+                    "only a peer of the person that reaches all their spaces offers a space",
+                );
+            }
+            let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
+                return refused(400, "JSON expected: {\"space\": ..., \"since\": ...}");
+            };
+            if let Some(at) = body.get("archived_at").and_then(Value::as_i64) {
+                let Ok(space) = Space::new(body["space"].as_str().unwrap_or_default()) else {
+                    return refused(400, "space: a space name");
+                };
+                return match swarm::archive_here(brain, &caller.user_id, &space, at) {
+                    Ok(done) => Response::json(
+                        200,
+                        &json!({ "result": if done { "archived" } else { "kept" }, "space": space.as_str() }),
+                    ),
+                    Err(e) => refused(400, &e.to_string()),
+                };
+            }
+            let offer = match swarm::Offer::from_json(&body) {
+                Ok(o) => o,
+                Err(e) => return refused(400, &e.to_string()),
+            };
+            match swarm::accept(brain, &caller.user_id, &offer) {
+                Ok(answer) => Response::json(200, &answer.to_json()),
+                Err(e) => refused(409, &e.to_string()),
+            }
         }
         ("GET", "events") => {
             let space = match space() {
@@ -229,6 +283,15 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         }
         _ => refused(404, "not found"),
     }
+}
+
+/// Whether the caller may offer spaces and archives: a machine of the person (`peer-…`) that reaches every space of
+/// theirs, whole, and may write.
+fn takes_offers(caller: &access::Caller) -> bool {
+    caller.agent.starts_with(sync::PEER_PREFIX)
+        && caller.all_spaces
+        && !caller.read_only_forced
+        && !caller.is_scoped()
 }
 
 /// What `GET /sync/status` answers: every peer of the memory (direct ones with their progress, and the nodes of the

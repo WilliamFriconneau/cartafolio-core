@@ -76,7 +76,7 @@ let server = null;
   await l.page.waitForSelector("#app:not([hidden])", { timeout: 5000 });
   check("a person added by name is signed in without waiting", (await l.page.locator("#who").innerText()).includes("Lou"));
   check("a member never sees the people", !(await l.page.locator("#people-section").isVisible()));
-  check("and starts on an empty memory that says what to do", (await l.page.locator("#spaces").innerText()).includes("No vault yet"));
+  check("and starts on an empty memory that says what to do", (await l.page.locator("#spaces").innerText()).includes("No space yet"));
   // Lou makes a recovery key, then loses the account: a new one takes the memory back with the key.
   await l.page.locator("#safety summary").click();
   check("a person has the safety panel, with an heir to pick", (await l.page.locator("#heir-select option").count()) >= 2);

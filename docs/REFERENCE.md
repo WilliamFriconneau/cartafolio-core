@@ -53,7 +53,7 @@ How each machine works, with its own tools (details and the choice of a local mo
 ```mermaid
 flowchart LR
   CAP["Capture<br/>voice, note, file, meeting"] --> N["The node of this machine"]
-  N --> RT["Router by keywords<br/>files at once, or leaves it in À trier"]
+  N --> RT["Router by keywords<br/>files at once, or leaves it in Inbox"]
   J["Janitor"] -- "improves the keywords<br/>with a local model" --> RU["Each space's rules<br/>tags, keywords, signs"]
   RU --> RT
   J -- "runs the sorting again" --> RT
@@ -63,8 +63,8 @@ flowchart LR
 
 ## Principles
 
-- **The human decides.** Every assistant gets explicit rights on explicit spaces (`health:rw,work:r`). Nothing is shared between people: each has a memory of their own. Administrators manage access; nobody reads memory content on the admin page.
-- **Agents write, you decide.** Every fact says who wrote it and when; a correction replaces and keeps the old one; nothing is erased, with one narrow exception: the recording of a voice memo, once its transcription is written. Quick notes wait in an inbox until sorted, and what apps deposit is kept apart from the sorted memory.
+- **The human decides.** Every assistant gets explicit rights on explicit spaces (`health:rw,work:r`). Nothing is shared between people: each has a memory of their own. Administrators manage access; nobody reads memory content on the node page.
+- **Agents write, you decide.** Every fact says who wrote it and when; a correction replaces and keeps the old one; nothing is erased, with one narrow exception: the recording of a voice memo, once its transcription is written. Quick notes wait in the person's Inbox, or tagged `inbox` in a space, until filed, and what apps deposit is kept apart from the sorted memory.
 - **Facts, not chat logs.** Short, dated, sourced facts. Correcting a fact replaces it and keeps the old version in the history. A near-duplicate is not written until the agent decides. Nothing is deleted silently.
 - **What comes back is data, never an instruction.** Everything an agent reads from the memory is flagged as third-party data, so that a sentence hidden in a document is not obeyed.
 - **No model inside the memory.** The memory itself calls no AI model and no external service; search is lexical (SQLite FTS5, English or French stemming). The janitor beside it may ask a model on the same machine to propose keywords, never a remote one by default ([LOCAL-TOOLS.md](LOCAL-TOOLS.md)).
@@ -75,19 +75,19 @@ flowchart LR
 
 - **Spaces**: `health`, `work`, `home`, `finances`… each its own SQLite file.
 - **Kinds**: a space is made from a kind of the catalogue (`memcp catalogue` lists them: me, health, people, home, money, work, hobbies; a `catalogue.txt` in the data directory replaces them), named after its person, never freely. The health and money kinds carry their own tools, offered only to a connection that reaches a space of that kind.
-- **Instructions and index**: each person can write standing instructions, for themselves and for each space they own, on the admin page (never through a tool: an assistant cannot plant one). A connection is told the instructions and the index of the spaces it reaches, and only those, when it connects. The index is a fact tagged `index` that an assistant keeps up to date; it is told as data, never as an instruction.
+- **Instructions and index**: each person can write standing instructions, for themselves and for each space they own, on the node page (never through a tool: an assistant cannot plant one). A connection is told the instructions and the index of the spaces it reaches, and only those, when it connects. The index is a fact tagged `index` that an assistant keeps up to date; it is told as data, never as an instruction.
 - **Export and adopt**: `memcp export --to DIR` writes a person's memory (each space they own as a database, its files, a readable Markdown version, their instructions, a manifest of fingerprints; no key or right). `verify-export DIR` checks it, `adopt DIR --user PERSON` takes it into another installation. The page has "export my data" for each person's own.
 - **Tags**: a fact can be filed under up to eight hierarchical tags (`work/dev/ci`) and tagged `@space` to be found from another space you can read. `stats` lists the tags in use so an assistant reuses them.
 - **One memory per person**: a manager (`memcp-manager`) creates and administers the people, each with a directory, spaces and keys of their own; nothing is shared between people, and a key never goes beyond its person. The engine (`memcp`) is the same memory for one person on its own, with no manager.
 - **Bank statements** (finances space): import the `.xlsx` export of your bank, then read balances, movements and a monthly statement. Your own rules (a cap on a merchant, a merchant to watch) live in the space, not in the code. Account numbers are never returned in clear.
-- **Memory only.** The server stores and finds what it is given. It never fetches, proxies or sends anything for an assistant: mail, calendar and the house belong in a connector of their own, next to this one.
-- **The desktop bridge** (`crates/capture`, the `memcp-capture` program, and `crates/capture-ffi`, its Swift interface) keeps what a person captures (a note, a file, a recording, a meeting) until a node has it, and offers the memory's tools to an assistant that runs a command; see [docs/CAPTURE.md](CAPTURE.md).
-- **Bridges are nodes.** A small node on a laptop or a PC keeps what a person captures (a note, a file, a recording) until another node has it, and offers the memory's tools to an assistant that runs a command. The memory keeps `memcp-client`, the client those programs are built on (`crates/client`).
-- **Sources, a dossier and an inbox.** A health app deposits its raw records under `sources/<app>` with its own record ids (no copy of its own, a cursor to resume from, an optional standard code such as `loinc:8867-4`); an expert reader writes the sorted entry in the `dossier`; quick notes wait in the `inbox`. A plain `recall` leaves the raw layers out and every assistant is told how much there is. See [docs/HEALTH-SOURCES.md](HEALTH-SOURCES.md).
+- **Memory only.** A node stores and finds what it is given. It never fetches, proxies or sends anything for an assistant: mail, calendar and the house belong in a connector of their own, next to this one.
+- **The intake** (`memcp-server`, module `intake`, and `crates/capture-ffi`, its Swift interface) is the node's own work on what comes into it: it reads the voice notes, watches folders and absorbs notes folders, as set in `memcp.toml`; see [docs/INTAKE.md](INTAKE.md).
+- **A laptop, a PC or a phone is a node.** It keeps what a person captures (a note, a file, a recording) and synchronises with the other nodes; an assistant reaches it at its address. The memory keeps `memcp-client`, the library the programs that reach a node are built on (`crates/client`).
+- **Sources, a dossier and the `inbox` tag.** A health app deposits its raw records under `sources/<app>` with its own record ids (no copy of its own, a cursor to resume from, an optional standard code such as `loinc:8867-4`); an expert reader writes the sorted entry in the `dossier`; quick notes wait under the `inbox` tag. A plain `recall` leaves the raw layers out and every assistant is told how much there is. See [docs/HEALTH-SOURCES.md](HEALTH-SOURCES.md).
 - **A guide written by an app.** A key given the path `guide` (`health/guide:rw`) can propose how what is written for its app should look (its paths, its format): a proposal kept apart from the facts, that the person reads and approves on their page, as it reads, before any assistant is told it. Form only; a change waits for the person again.
 - **Files**: photos, documents and recordings (m4a, mp3, wav, ogg, flac; any size) kept in a space, type checked by content, stored once, found through their note.
 - **Import** a Markdown folder (an Obsidian space, for instance), routed to spaces by a small rules file. Protected file names are never read; passages that look like secrets are left out.
-- **Backups**: `backup` makes a consistent copy of every database while the server runs.
+- **Backups**: `backup` makes a consistent copy of every database while the node runs.
 
 
 ## Connect a local assistant (no network)
@@ -105,7 +105,7 @@ memcp --data ~/memory open work          # prints the key once, and this line fo
     "env": { "MEMCP_TOKEN": "hcp_…" } } } }
 ```
 
-It is the same server as over HTTP, with the same rights, the same instructions and the same tools. The key is checked on every request, so revoking it stops the server at once. Nothing but protocol is ever written to standard output. The shape of that configuration (a `command`, `args` and `env`) is what desktop assistants usually ask for; where the file lives depends on the assistant.
+It is the same memory as over HTTP, with the same rights, the same instructions and the same tools. The key is checked on every request, so revoking it stops the program at once. Nothing but protocol is ever written to standard output. The shape of that configuration (a `command`, `args` and `env`) is what desktop assistants usually ask for; where the file lives depends on the assistant.
 
 
 ## Connect an assistant
@@ -166,7 +166,7 @@ Put the identity listener behind `tailscale serve` (never Funnel): the page know
 
 ## Is it healthy?
 
-`memcp --data DIR doctor [--public-url URL] [--listen ADDR]` reads the installation and says, in plain words, what is fine and what deserves a look: file permissions, database versions and integrity, people, connections that reach everything or are no longer used, quick notes waiting in the inbox, the public address, whether the server answers. It also reads `memcp.toml` and the age of the newest backup. It writes nothing and starts no migration, so it is safe on a live installation and before an update. Every check is listed in [LINUX.md](LINUX.md#what-memcp-doctor-checks). The settings file and the commands `setup`, `config` and `prepare` are in [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md).
+`memcp --data DIR doctor [--public-url URL] [--listen ADDR]` reads the installation and says, in plain words, what is fine and what deserves a look: file permissions, database versions and integrity, people, connections that reach everything or are no longer used, notes tagged `inbox` waiting to be filed, the public address, whether the node answers. It also reads `memcp.toml` and the age of the newest backup. It writes nothing and starts no migration, so it is safe on a live installation and before an update. Every check is listed in [LINUX.md](LINUX.md#what-memcp-doctor-checks). The settings file and the commands `setup`, `config` and `prepare` are in [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md).
 
 
 ## A health app deposits its data
@@ -180,7 +180,7 @@ A health app (a tracker, a workout log, a journal) is a source like any other: i
 memcp --data ~/memory space add money           # or: space kind NAME money, for an existing space
 ```
 
-Upload the bank's `.xlsx` export (a summary sheet and one sheet per account) in the Files section of the admin page, then ask an agent to run `finances_import`: only the new movements are added, so an overlapping export is safe. `finances_rules` stores your own rules in the space.
+Upload the bank's `.xlsx` export (a summary sheet and one sheet per account) in the Files section of the node page, then ask an agent to run `finances_import`: only the new movements are added, so an overlapping export is safe. `finances_rules` stores your own rules in the space.
 
 
 ## Import a Markdown folder
@@ -212,7 +212,7 @@ memcp --data ~/memory/people/alex connections                 # one person's own
 
 ## Another MCP server behind the same endpoint
 
-Nothing is proxied: the server has no upstream. Tools for mail, calendar or the house are a separate MCP server added to the assistant as a second connector.
+Nothing is proxied: a node has no upstream. Tools for mail, calendar or the house are a separate MCP server added to the assistant as a second connector.
 
 
 

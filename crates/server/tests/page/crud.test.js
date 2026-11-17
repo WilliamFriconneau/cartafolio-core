@@ -153,7 +153,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const again = await api("facts?space=owner-work");
   check("a removed note comes back as a new active note", again.facts.some(x => x.text.includes("Pay the garage")));
 
-  // ---- a vocabulary is removed from the side panel (people are on the administration page, covered by the HTTP tests)
+  // ---- a vocabulary is removed from the side panel (the people of a node are covered by the HTTP tests)
   await page.evaluate(() => { location.hash = ""; });
   await openAll();
   await page.locator("#ftree .frow", { hasText: "health" }).click();

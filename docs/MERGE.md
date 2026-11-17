@@ -4,7 +4,7 @@ Status: planned (design). Nothing here is built yet, except `adopt`, which it ex
 
 ## What it is for
 
-Two memories exist: yours on the server, one on your laptop, one inherited from an older install.
+Two memories exist: yours on the node that is always on, one on your laptop, one inherited from an older install.
 You want one. The way a person merges two folders: for each space on one side, say which space on the
 other side it joins, whether it is renamed, and what happens when the same note is on both sides.
 

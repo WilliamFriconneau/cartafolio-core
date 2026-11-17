@@ -337,7 +337,7 @@ pub fn for_note(
 }
 
 /// Adds to `tags` what the node finds in `text` for `space`: the tag of the space, then the tags proper to it, and the
-/// fields as tags. Never removes a tag the caller gave. Nothing is added to « À trier », or to a write that carries a
+/// fields as tags. Never removes a tag the caller gave. Nothing is added to Inbox, or to a write that carries a
 /// plumbing tag (rules, index, a living card, the janitor's own notes). Returns the tags added.
 pub fn add_to(
     brain: &crate::Brain,

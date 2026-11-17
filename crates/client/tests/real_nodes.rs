@@ -1,6 +1,6 @@
 #![cfg(all(feature = "sync", target_os = "linux"))]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! End to end with REAL PROCESSES: the programs `memcp`, `memcp-manager`, `memcp-sync` and `memcp-capture` are started
+//! End to end with REAL PROCESSES: the programs `memcp`, `memcp-manager` and `memcp-sync` are started
 //! on ephemeral loopback ports, in temporary directories, and driven the way a person and their devices drive them
 //! (the command line, the admin API with a console token, the MCP address, the join of a new node). Nothing of the node
 //! is replaced by a mock; the tests read the stores of the nodes directly only to check what the processes did.
@@ -39,7 +39,7 @@ fn exe(name: &str) -> PathBuf {
         return path;
     }
     BUILD.call_once(|| {
-        let all = ["memcp", "memcp-manager", "memcp-capture"];
+        let all = ["memcp", "memcp-manager"];
         if all.iter().all(|n| {
             bin_dir()
                 .join(format!("{n}{}", std::env::consts::EXE_SUFFIX))
@@ -49,15 +49,7 @@ fn exe(name: &str) -> PathBuf {
         }
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let status = Command::new(cargo)
-            .args([
-                "build",
-                "-p",
-                "memcp-server",
-                "-p",
-                "memcp-manager",
-                "-p",
-                "memcp-capture",
-            ])
+            .args(["build", "-p", "memcp-server", "-p", "memcp-manager"])
             .status()
             .unwrap();
         assert!(status.success(), "the programs could not be built");
@@ -180,6 +172,8 @@ struct Node {
     console: Option<String>,
     /// Variables of the environment of the served node (the tests that need a short wait for a request to expire).
     env: Vec<(String, String)>,
+    /// The `memcp.toml` the node and its commands read (`MEMCP_CONFIG`), when the test has one.
+    config: Option<PathBuf>,
 }
 
 impl Node {
@@ -192,6 +186,7 @@ impl Node {
             server: Proc(None),
             console: None,
             env: Vec::new(),
+            config: None,
         };
         let mut args = vec!["init"];
         if defaults {
@@ -204,6 +199,9 @@ impl Node {
     fn command(&self, args: &[&str]) -> Command {
         let mut c = Command::new(exe("memcp"));
         c.arg("--data").arg(&self.data).args(args);
+        if let Some(config) = &self.config {
+            c.env("MEMCP_CONFIG", config);
+        }
         c
     }
 
@@ -247,8 +245,7 @@ impl Node {
                 "8",
             ]);
             cmd.envs(self.env.clone())
-                .env("MEMCP_SYNC_BIN", exe("memcp-sync"))
-                .env("MEMCP_BRIDGE_BIN", exe("memcp-capture"));
+                .env("MEMCP_SYNC_BIN", exe("memcp-sync"));
             self.server = Proc::spawn(cmd);
             let end = Instant::now() + Duration::from_secs(20);
             loop {
@@ -742,32 +739,9 @@ fn a_third_node_joining_only_the_second_is_listed_by_the_first() {
     b.serve();
     let a_peer = join_by_sync(&root, &mut a, &b, "beta");
     b.sync_ok(&a_peer);
-    // C joins B with the bridge program, not A.
+    // C joins B, not A.
     let c = Node::init(&root, "gamma", false);
-    let config = root.path("gamma.conf");
-    let mut cmd = Command::new(exe("memcp-capture"));
-    cmd.args(["join", &b.base(), "--name", "gamma", "--config"])
-        .arg(&config);
-    let mut joining = Proc::spawn(cmd);
-    approve(&mut b, "gamma");
-    assert!(
-        joining
-            .wait(30)
-            .expect("the bridge did not finish")
-            .success()
-    );
-    let conf = std::fs::read_to_string(&config).unwrap();
-    let value = |k: &str| {
-        conf.lines()
-            .find_map(|l| l.strip_prefix(&format!("{k} = ")))
-            .unwrap()
-            .to_string()
-    };
-    let c_peer = Peering {
-        address: value("url"),
-        key: value("key"),
-        name: "peer-beta".into(),
-    };
+    let c_peer = join_by_sync(&root, &mut b, &c, "gamma");
     assert!(c_peer.address.starts_with(&b.base()));
     c.sync_ok(&c_peer);
     assert_eq!(
@@ -909,14 +883,14 @@ fn peer_connection(p: &Peering) -> String {
     p.address.rsplit('/').next().unwrap().to_string()
 }
 
-// --- (g) the lease of À trier between two sorters ----------------------------------------------------------------
+// --- (g) the lease of Inbox between two sorters ----------------------------------------------------------------
 
 #[test]
 fn two_sorters_share_a_trie_box_by_lease_over_http() {
     let root = Root::new("g");
     let mut a = Node::init(&root, "alpha", true);
     a.serve();
-    // A device pairs with the code of the page and drops three notes with the bridge program, into À trier.
+    // A device pairs with the code of the page and drops three notes, into Inbox.
     let (status, pairing) = a.admin_post("/pairing", &json!({}));
     assert_eq!(status, 200, "{pairing}");
     let triage = pairing["triage"].as_str().unwrap().to_string();
@@ -931,37 +905,19 @@ fn two_sorters_share_a_trie_box_by_lease_over_http() {
         .unwrap();
     let (status, paired) = read_json(&mut r);
     assert_eq!(status, 200, "{paired}");
-    let config = root.path("phone.conf");
-    {
-        let mut f = std::fs::File::create(&config).unwrap();
-        writeln!(
-            f,
-            "url = {}\nkey = {}",
-            paired["mcp_url"].as_str().unwrap(),
-            paired["key"].as_str().unwrap()
-        )
-        .unwrap();
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            f.set_permissions(std::fs::Permissions::from_mode(0o600))
-                .unwrap();
-        }
-    }
+    // The device holds its own connection, which writes to Inbox only.
+    let mut device = Client::new(
+        paired["mcp_url"].as_str().unwrap(),
+        paired["key"].as_str().unwrap(),
+    );
     for i in 0..3 {
-        let out = Command::new(exe("memcp-capture"))
-            .arg("--config")
-            .arg(&config)
-            .arg("--outbox")
-            .arg(root.path("outbox"))
-            .args(["text", &words(800 + i, 7)])
-            .output()
+        let r = device
+            .call(
+                "remember",
+                json!({ "text": words(800 + i, 7), "tags": ["inbox"] }),
+            )
             .unwrap();
-        assert!(
-            out.status.success(),
-            "{}",
-            String::from_utf8_lossy(&out.stderr)
-        );
+        assert!(r.to_string().contains("created"), "{r}");
     }
     assert_eq!(a.count_in(&triage), 3);
     // Two sorters (two connections) claim notes: never the same one.
@@ -1110,6 +1066,7 @@ fn backup_export_adopt_and_merge_make_the_same_memory_again() {
         server: Proc(None),
         console: None,
         env: Vec::new(),
+        config: None,
     };
     assert_eq!(restored.fingerprint(), a.fingerprint());
     let doctor = restored.cli(&["doctor"]);
@@ -1136,7 +1093,7 @@ fn backup_export_adopt_and_merge_make_the_same_memory_again() {
     let broken = root.path("exports-broken");
     a.cli(&["export", "--to", broken.to_str().unwrap()]);
     let altered = only_entry(&broken);
-    let vault = std::fs::read_dir(altered.join("vaults"))
+    let vault = std::fs::read_dir(altered.join("spaces"))
         .unwrap()
         .flatten()
         .next()
@@ -1629,4 +1586,498 @@ fn a_revoked_node_is_refused_and_the_revocation_reaches_a_third_node() {
     let peering = peering_of(&b.data);
     let (code, said) = b.sync(&peering, &[]);
     assert_eq!(code, 1, "{said}");
+}
+
+// --- (j) the node's own intake: voice notes and watched folders ---------------------------------------------------
+
+/// A `memcp.toml` of the test: the settings the node reads (`MEMCP_CONFIG`).
+fn write_config(root: &Root, name: &str, body: &str) -> PathBuf {
+    let p = root.path(name);
+    std::fs::write(&p, body).unwrap();
+    p
+}
+
+/// A file as a watched folder expects it: old enough to have been written for a while.
+fn dropped(dir: &Path, name: &str, bytes: &[u8]) -> PathBuf {
+    let p = dir.join(name);
+    std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+    std::fs::write(&p, bytes).unwrap();
+    let f = std::fs::File::options().write(true).open(&p).unwrap();
+    f.set_modified(std::time::SystemTime::now() - Duration::from_secs(60))
+        .unwrap();
+    p
+}
+
+/// A recording as the memory keeps it: the audio of a test *is* the text it says.
+fn recording(text: &str) -> Vec<u8> {
+    let mut b = b"RIFF\0\0\0\0WAVE".to_vec();
+    b.extend_from_slice(text.as_bytes());
+    b
+}
+
+fn has_note(node: &Node, space: &str, needle: &str) -> bool {
+    node.notes()
+        .get(space)
+        .is_some_and(|l| l.iter().any(|(_, t)| t.contains(needle)))
+}
+
+/// A speech service of the OpenAI kind on the loopback: answers every request with `said`, and counts them with the
+/// authorisation header each carried.
+struct Speech {
+    url: String,
+    seen: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+}
+
+fn speech_service(said: &'static str) -> Speech {
+    let server = tiny_http::Server::http("127.0.0.1:0").unwrap();
+    let port = server.server_addr().to_ip().unwrap().port();
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(vec![]));
+    let log = std::sync::Arc::clone(&seen);
+    std::thread::spawn(move || {
+        for mut request in server.incoming_requests() {
+            let auth = request
+                .headers()
+                .iter()
+                .find(|h| h.field.equiv("Authorization"))
+                .map(|h| h.value.to_string())
+                .unwrap_or_default();
+            let mut body = vec![];
+            std::io::Read::read_to_end(request.as_reader(), &mut body).unwrap();
+            let has_audio = body.windows(4).any(|w| w == b"WAVE");
+            log.lock()
+                .unwrap()
+                .push(format!("{auth} audio={has_audio}"));
+            let mut response =
+                tiny_http::Response::from_string(json!({ "text": said }).to_string());
+            response.add_header(
+                tiny_http::Header::from_bytes(&b"Content-Type"[..], &b"application/json"[..])
+                    .unwrap(),
+            );
+            let _ = request.respond(response);
+        }
+    });
+    Speech {
+        url: format!("http://127.0.0.1:{port}/v1/audio/transcriptions"),
+        seen,
+    }
+}
+
+#[test]
+fn a_node_reads_a_voice_note_by_a_speech_service_with_no_other_program() {
+    let root = Root::new("voice-api");
+    let service = speech_service("penser aux semis de mars et appeler le jardinier");
+    let key = root.path("speech.key");
+    std::fs::write(&key, "sk-test-123\n").unwrap();
+    let mut a = Node::init(&root, "alpha", true);
+    a.config = Some(write_config(
+        &root,
+        "memcp.toml",
+        &format!(
+            "transcribe = true\ntranscribe_every = 5\ntranscribe_api_url = \"{}\"\ntranscribe_api_key_file = \"{}\"\ntranscribe_language = \"fr\"\n",
+            service.url,
+            key.display()
+        ),
+    ));
+    // The settings are valid: the node says so, and nothing else runs next to it.
+    assert!(a.cli(&["config", "check"]).contains("ok"));
+    a.serve();
+    let mut claude = a.client("claude", "all");
+    claude
+        .file_put(
+            "personal",
+            "2026-11-02-13h34-jardin.wav",
+            "dictée",
+            &["inbox/audio"],
+            &recording("silence du fichier, lu par le service"),
+        )
+        .unwrap();
+    until(60, "the node to read the recording by itself", || {
+        has_note(&a, "personal", "semis de mars")
+    });
+    let notes = a.notes();
+    let note = notes["personal"]
+        .iter()
+        .find(|(_, t)| t.contains("semis de mars"))
+        .unwrap();
+    assert!(
+        note.1.starts_with("Dictée du 2026-11-02 à 13h34") && note.1.contains("jardin.wav"),
+        "{note:?}"
+    );
+    // The service got the recording with the key, once; the node never reads it twice.
+    std::thread::sleep(Duration::from_secs(7));
+    let seen = service.seen.lock().unwrap().clone();
+    assert_eq!(seen, ["Bearer sk-test-123 audio=true"], "{seen:?}");
+    // `memcp intake status` (a command on the same data) says nothing waits for a text.
+    assert!(
+        a.cli(&["intake", "status"])
+            .contains("no recording waits for a text")
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn a_node_reads_a_voice_note_with_the_speech_model_of_the_machine() {
+    use std::os::unix::fs::PermissionsExt;
+    let root = Root::new("voice-local");
+    let tool = |name: &str, body: &str| {
+        let p = root.path(name);
+        std::fs::write(&p, body).unwrap();
+        std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+        p
+    };
+    // `ffmpeg` and `whisper-cli` are two scripts: the recording is its own text.
+    let ffmpeg = tool(
+        "ffmpeg",
+        "#!/bin/sh\nin=\"\"; prev=\"\"; last=\"\"\nfor a in \"$@\"; do [ \"$prev\" = \"-i\" ] && in=\"$a\"; [ \"$a\" = \"volumedetect\" ] && vol=1; prev=\"$a\"; last=\"$a\"; done\nif [ -n \"$vol\" ]; then echo \"max_volume: -12.0 dB\" >&2; exit 0; fi\ncp \"$in\" \"$last\"\n",
+    );
+    let whisper = tool(
+        "whisper-cli",
+        "#!/bin/sh\nwav=\"\"; base=\"\"; prev=\"\"\nfor a in \"$@\"; do [ \"$prev\" = \"-f\" ] && wav=\"$a\"; [ \"$prev\" = \"-of\" ] && base=\"$a\"; prev=\"$a\"; done\ntail -c +13 \"$wav\" > \"$base.txt\"\n",
+    );
+    let mut a = Node::init(&root, "alpha", true);
+    a.config = Some(write_config(
+        &root,
+        "memcp.toml",
+        &format!(
+            "transcribe = true\ntranscribe_every = 5\ntranscribe_model = \"/models/ggml-small.bin\"\ntranscribe_cmd = \"{}\"\ntranscribe_ffmpeg = \"{}\"\n",
+            whisper.display(),
+            ffmpeg.display()
+        ),
+    ));
+    a.serve();
+    let mut claude = a.client("claude", "all");
+    claude
+        .file_put(
+            "work",
+            "2026-11-03-09h05-point.wav",
+            "dictée",
+            &["inbox/audio"],
+            &recording("relancer le fournisseur de peinture"),
+        )
+        .unwrap();
+    until(60, "the node to read the recording on this machine", || {
+        has_note(&a, "work", "fournisseur de peinture")
+    });
+}
+
+#[test]
+fn a_node_takes_what_is_added_to_a_watched_folder_and_never_twice() {
+    let root = Root::new("watch");
+    let drop = root.path("Drop");
+    std::fs::create_dir_all(&drop).unwrap();
+    dropped(
+        &drop,
+        "idee.md",
+        "# Idée\nUn bac à compost au fond du jardin.\n".as_bytes(),
+    );
+    let mut a = Node::init(&root, "alpha", true);
+    a.config = Some(write_config(
+        &root,
+        "memcp.toml",
+        &format!(
+            "watch = [\"{} -> personal\"]\nwatch_every = 1\n",
+            drop.display()
+        ),
+    ));
+    assert!(a.cli(&["config", "check"]).contains("ok"));
+    a.serve();
+    // What was in the folder when the node started, and what is added while it runs.
+    until(30, "the first note", || {
+        has_note(&a, "personal", "bac à compost")
+    });
+    dropped(&drop, "liste.txt", "acheter du lin\n".as_bytes());
+    dropped(&drop, "sous-dossier/dictee.wav", &recording("bonjour"));
+    dropped(&drop, "plan.pdf", b"%PDF-1.4 not really");
+    dropped(&drop, ".hidden", b"never");
+    dropped(&drop, "partiel.crdownload", b"never");
+    until(30, "the second note", || {
+        has_note(&a, "personal", "acheter du lin")
+    });
+    let mut claude = a.client("claude", "all");
+    until(30, "the recording and the file", || {
+        let files = claude
+            .call("file_list", json!({ "space": "personal", "limit": 50 }))
+            .unwrap();
+        let names: Vec<String> = files["files"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(|f| f["name"].as_str().map(String::from))
+            .collect();
+        names.iter().any(|n| n.ends_with("-dictee.wav")) && names.iter().any(|n| n == "plan.pdf")
+    });
+    let files = claude
+        .call("file_list", json!({ "space": "personal", "limit": 50 }))
+        .unwrap();
+    assert_eq!(files["files"].as_array().unwrap().len(), 2, "{files}");
+    let before = a.count();
+    // A restart takes nothing again; the files are where they were.
+    a.stop();
+    a.serve();
+    std::thread::sleep(Duration::from_secs(4));
+    assert_eq!(a.count(), before);
+    assert!(drop.join("idee.md").is_file() && drop.join("sous-dossier/dictee.wav").is_file());
+    let files = a
+        .client("claude2", "all")
+        .call("file_list", json!({ "space": "personal", "limit": 50 }))
+        .unwrap();
+    assert_eq!(files["files"].as_array().unwrap().len(), 2, "{files}");
+}
+
+#[test]
+fn the_intake_commands_do_one_pass_by_hand_on_the_same_settings() {
+    let root = Root::new("intake-cli");
+    let drop = root.path("Drop");
+    dropped(&drop, "a-faire.md", "rappeler le plombier\n".as_bytes());
+    let a = Node::init(&root, "alpha", true);
+    let with = |body: &str| {
+        let conf = write_config(&root, "memcp.toml", body);
+        move |n: &Node, args: &[&str]| {
+            let mut c = n.command(args);
+            c.env("MEMCP_CONFIG", &conf).stdin(Stdio::null());
+            c.output().unwrap()
+        }
+    };
+    // `memcp watch --once`: one look, the folder goes to the to-sort box without a space.
+    let run = with(&format!("watch = [\"{}\"]\n", drop.display()));
+    let out = run(&a, &["watch", "--once"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(
+        String::from_utf8_lossy(&out.stdout).contains("1 note(s), 0 file(s)"),
+        "{}",
+        String::from_utf8_lossy(&out.stdout)
+    );
+    let again = run(&a, &["watch", "--once"]);
+    assert!(String::from_utf8_lossy(&again.stdout).contains("0 note(s), 0 file(s)"));
+    let triage = a
+        .brain()
+        .spaces()
+        .unwrap()
+        .into_iter()
+        .find(|s| s.as_str().ends_with("a-trier"))
+        .unwrap();
+    assert!(has_note(&a, triage.as_str(), "plombier"));
+    // `memcp intake text` and `send`: into a space of the person's choice.
+    let out = run(
+        &a,
+        &[
+            "intake", "text", "Penser", "aux", "tomates", "--space", "home",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(has_note(&a, "home", "Penser aux tomates"));
+    let report = root.path("rapport.txt");
+    std::fs::write(&report, "chiffres du mois\n").unwrap();
+    let out = run(
+        &a,
+        &[
+            "intake",
+            "send",
+            report.to_str().unwrap(),
+            "--space",
+            "work",
+        ],
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(has_note(&a, "work", "chiffres du mois"));
+    // `memcp transcribe` with no speech model nor service says what to set, and does not pretend.
+    let out = run(&a, &["transcribe"]);
+    assert_eq!(out.status.code(), Some(78));
+    assert!(String::from_utf8_lossy(&out.stderr).contains("transcribe_api_url"));
+    // `memcp intake absorb` with a folder of notes: the first pass only takes stock, a later change is sent.
+    let notes = root.path("Notes");
+    dropped(
+        &notes,
+        "Projet.md",
+        "# Choix\nOn prend le devis A.\n".as_bytes(),
+    );
+    let run = with(&format!("absorb = [\"{} -> work\"]\n", notes.display()));
+    let out = run(&a, &["intake", "absorb"]);
+    assert!(String::from_utf8_lossy(&out.stdout).contains("0 passage(s) sent"));
+    dropped(
+        &notes,
+        "Projet.md",
+        "# Choix\nOn prend le devis A.\n\n# Suite\nFinalement le devis B.\n".as_bytes(),
+    );
+    let out = run(&a, &["intake", "absorb"]);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(has_note(&a, "work", "devis B"));
+}
+
+#[test]
+fn the_manager_runs_the_intake_for_the_person_the_settings_name() {
+    let root = Root::new("manager-intake");
+    let data = root.path("managed");
+    let drop = root.path("Drop");
+    std::fs::create_dir_all(&drop).unwrap();
+    let manager = |args: &[&str]| {
+        Command::new(exe("memcp-manager"))
+            .arg("--data")
+            .arg(&data)
+            .args(args)
+            .stdin(Stdio::null())
+            .output()
+            .unwrap()
+    };
+    assert!(
+        manager(&["person", "add", "sam", "--admin"])
+            .status
+            .success()
+    );
+    let conf = write_config(
+        &root,
+        "memcp.toml",
+        &format!(
+            "intake_person = \"sam\"\nwatch = [\"{}\"]\nwatch_every = 1\n",
+            drop.display()
+        ),
+    );
+    let port = TcpListener::bind("127.0.0.1:0")
+        .unwrap()
+        .local_addr()
+        .unwrap()
+        .port();
+    let mut cmd = Command::new(exe("memcp-manager"));
+    cmd.arg("--data")
+        .arg(&data)
+        .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
+        .args(["--public-url", &format!("http://127.0.0.1:{port}")])
+        .env("MEMCP_CONFIG", &conf);
+    let mut server = Proc::spawn(cmd);
+    until(20, "the manager to answer", || {
+        assert!(server.alive(), "the manager stopped");
+        http()
+            .get(&format!("http://127.0.0.1:{port}/.well-known/memcp"))
+            .call()
+            .is_ok_and(|r| r.status().as_u16() == 200)
+    });
+    dropped(&drop, "vite.md", "faire réviser la voiture\n".as_bytes());
+    let mine = data.join("people").join("sam");
+    until(30, "the manager to take the note", || {
+        let brain = Brain::open(&mine).unwrap();
+        brain.spaces().unwrap().iter().any(|s| {
+            let conn = brain.open_space(s).unwrap();
+            conn.query_row(
+                "SELECT count(*) FROM facts WHERE status = 'active' AND text LIKE '%réviser la voiture%'",
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+            .unwrap()
+                > 0
+        })
+    });
+}
+
+// --- (s) the swarm: what is made on one node is on every node ------------------------------------------------------
+
+/// `(label, parent)` of `space` in the tree of the node's person, read from its store.
+fn place_of(n: &Node, space: &str) -> Option<(String, Option<String>)> {
+    n.brain()
+        .layout("owner")
+        .unwrap()
+        .into_iter()
+        .find(|p| p.space.as_str() == space)
+        .map(|p| (p.label, p.parent.map(|s| s.as_str().to_string())))
+}
+
+#[test]
+fn a_sub_space_made_on_one_node_and_a_dictation_on_another_reach_all_three() {
+    let root = Root::new("s");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let mut c = Node::init(&root, "gamma", false);
+    c.serve();
+    // Each node has its own Inbox before it joins: the page makes it the first time it is opened.
+    let box_of = |n: &mut Node| -> String {
+        let (status, v) = n.admin_get("/state");
+        assert_eq!(status, 200, "{v}");
+        v["triage"]["space"].as_str().unwrap().to_string()
+    };
+    let boxes = [box_of(&mut a), box_of(&mut b), box_of(&mut c)];
+    // B joins A, C joins B: a chain, A never hears of C directly.
+    let ab = join_by_sync(&root, &mut a, &b, "beta");
+    b.sync_ok(&ab);
+    let bc = join_by_sync(&root, &mut b, &c, "gamma");
+    c.sync_ok(&bc);
+
+    // On C, a sub-space « Pompiers » under « hobbies », made on its page.
+    let (status, made) = c.admin_post(
+        "/spaces/create",
+        &json!({ "label": "Pompiers", "parent": "hobbies" }),
+    );
+    assert_eq!(status, 200, "{made}");
+    let pompiers = made["space"]["space"].as_str().unwrap().to_string();
+    let mut cc = c.client("claude", "all");
+    remember(&mut cc, &pompiers, &words(9100, 6));
+
+    // On B, a phone paired with B's page leaves a dictation in Inbox.
+    let (status, pairing) = b.admin_post("/pairing", &json!({}));
+    assert_eq!(status, 200, "{pairing}");
+    let mut r = http()
+        .post(&format!("{}/pair", b.base()))
+        .header("Content-Type", "application/json")
+        .send(
+            json!({ "code": pairing["code"], "device": "phone" })
+                .to_string()
+                .as_bytes(),
+        )
+        .unwrap();
+    let (status, paired) = read_json(&mut r);
+    assert_eq!(status, 200, "{paired}");
+    let mut phone = Client::new(
+        paired["mcp_url"].as_str().unwrap(),
+        paired["key"].as_str().unwrap(),
+    );
+    let dictation = words(9200, 7);
+    let said = phone
+        .call("remember", json!({ "text": dictation, "tags": ["inbox"] }))
+        .unwrap();
+    assert!(said.to_string().contains("created"), "{said}");
+
+    // Passes along the chain, each node with the one it joined.
+    c.sync_ok(&bc);
+    b.sync_ok(&ab);
+    c.sync_ok(&bc);
+    for n in [&a, &b, &c] {
+        assert_eq!(
+            place_of(n, &pompiers),
+            Some(("Pompiers".to_string(), Some("hobbies".to_string()))),
+            "{}",
+            n.name
+        );
+        assert_eq!(n.count_in(&pompiers), 1, "{}", n.name);
+    }
+    for (n, own) in [&a, &b, &c].into_iter().zip(&boxes) {
+        let texts: Vec<String> = n
+            .notes()
+            .get(own)
+            .cloned()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|(_, t)| t)
+            .collect();
+        assert!(
+            texts.iter().any(|t| t.contains(dictation.trim())),
+            "{}: {own} holds {texts:?}",
+            n.name
+        );
+    }
 }

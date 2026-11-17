@@ -1,4 +1,4 @@
-# Migrating from HemCP
+# Migrating from the private version
 
 MemCP is the name this project took when it became public; before that it was developed privately as HemCP, up to version 0.22.7. Nothing in the data changed shape because of the name: the same databases, the same keys, the same addresses (`/mcp/<connection>`). The program opens them as they are and brings them up to date by itself (a database is migrated the first time it is opened, which is why the first start after an update takes a moment, and why a copy is the first step).
 
@@ -17,7 +17,7 @@ A database that was opened by the new version has been migrated, and an older ve
 
 ## From a plain installation
 
-Stop the server, copy the data directory, start the new `memcp` on the copy first (`memcp --data COPY doctor` reads it and says what it finds, and writes nothing), and switch only when it looks right. Environment variables and files that carried the old name (`HEMCP_*`, `~/.config/hemcp`) now carry the new one: rename them, and the key variable is `MEMCP_TOKEN`; the keys themselves, which start with `hcp_`, are unchanged.
+Stop the node, copy the data directory, start the new `memcp` on the copy first (`memcp --data COPY doctor` reads it and says what it finds, and writes nothing), and switch only when it looks right. Environment variables and files that carried the old name (`HEMCP_*`, `~/.config/hemcp`) now carry the new one: rename them, and the key variable is `MEMCP_TOKEN`; the keys themselves, which start with `hcp_`, are unchanged.
 
 ## What is new in 0.23
 

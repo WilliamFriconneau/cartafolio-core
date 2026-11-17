@@ -17,7 +17,7 @@ struct Preset {
 const PRESETS: &[Preset] = &[
     Preset {
         id: "a-trier",
-        name: "À trier",
+        name: "Inbox",
         sensitive: false,
         tags: &[],
         unique: &[],
@@ -167,13 +167,13 @@ const PRESETS: &[Preset] = &[
     },
 ];
 
-/// The default tree: « À trier » is the default space, then the vaults above, with their rules. `stamp`
+/// The default tree: Inbox is the default space, then the vaults above, with their rules. `stamp`
 /// gives an increasing clock; ids of rules are `<space>/<kind>/<n>`, stable across devices.
 pub fn default_tree(mut stamp: impl FnMut() -> String) -> Tree {
     let mut tree = Tree::default();
     for p in PRESETS {
         let mut s = Space::default_notes(p.name);
-        // « À trier » is the core's default space: what nothing decided goes there.
+        // Inbox is the core's default space: what nothing decided goes there.
         let id = if p.id == "a-trier" {
             DEFAULT_SPACE
         } else {

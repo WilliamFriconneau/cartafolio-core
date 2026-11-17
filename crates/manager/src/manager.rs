@@ -311,7 +311,7 @@ impl Manager {
                 .map(|s| s.len())
                 .unwrap_or(0);
             println!(
-                "{:<20} {:<7} {:<24} {} vault(s){}",
+                "{:<20} {:<7} {:<24} {} space(s){}",
                 u.name,
                 if u.admin { "admin" } else { "member" },
                 u.ha_user.as_deref().unwrap_or("(no Home Assistant login)"),
@@ -463,9 +463,9 @@ impl Manager {
                                 let mut x = x.clone();
                                 let name = x["name"].as_str().unwrap_or_default().to_string();
                                 if let Some(app) = self.person_app(&name) {
-                                    x["vaults"] = json!(app.brain.spaces().map_or(0, |s| s.len()));
+                                    x["spaces"] = json!(app.brain.spaces().map_or(0, |s| s.len()));
                                     // Their names only, to draw the tiles: never what a vault holds.
-                                    x["vault_names"] = json!(
+                                    x["space_names"] = json!(
                                         app.brain
                                             .spaces()
                                             .map(|s| s

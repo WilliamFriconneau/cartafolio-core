@@ -1,5 +1,5 @@
 name: MemCP
-version: "20261117.0.14"
+version: "20261117.0.17"
 slug: memcp
 description: Durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/memcp-core
@@ -20,12 +20,15 @@ ports:
   8792/tcp: 8792
 ports_description:
   8791/tcp: MCP and OAuth (tokens travel in clear on this port; put Tailscale or a TLS proxy in front)
-  8792/tcp: Consent and admin pages for the tailnet (answers only the address set in identity_trust)
+  8792/tcp: The consent page and the page of this node, for the tailnet (answers only the address set in identity_trust)
 # The databases are copied while the add-on is stopped: a consistent backup.
 backup: cold
 # The app's own configuration folder: where the data of another installation is left to be taken in once.
 map:
   - addon_config:rw
+  # Folders the node can watch (`watch`): what is added to them becomes notes and files.
+  - share:rw
+  - media:rw
 hassio_api: false
 homeassistant_api: false
 options:
@@ -55,6 +58,8 @@ options:
   transcribe_api_model: "whisper-1"
   transcribe_api_key: ""
   transcribe_language: ""
+  intake_person: ""
+  watch: []
 schema:
   node_name: str?
   language: list(en|fr)
@@ -86,3 +91,6 @@ schema:
   transcribe_api_model: str?
   transcribe_api_key: password?
   transcribe_language: str?
+  intake_person: str?
+  watch:
+    - str

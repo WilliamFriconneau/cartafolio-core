@@ -1,4 +1,4 @@
-//! `triage_claim`: a sorter outside the memory reserves notes of « À trier »; another one does not get the same.
+//! `triage_claim`: a sorter outside the memory reserves notes of Inbox; another one does not get the same.
 
 mod common;
 

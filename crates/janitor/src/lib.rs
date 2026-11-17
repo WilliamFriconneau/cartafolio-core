@@ -1,16 +1,16 @@
 //! The janitor: the optional part of the memory that keeps its inboxes in order (it runs next to the memory, in the
 //! same Home Assistant app, when the person turns it on). It reads them like any other client, with a key of its own:
 //!
-//! 0. **What the devices put in « À trier » is sent to the inbox of a vault**, as it is, by a deterministic router that reads
-//!    the keywords of each space (`router`): no model is asked for a note. « À trier » belongs to no vault, and no vault is
+//! 0. **What the devices put in Inbox is sent to the inbox of a vault**, as it is, by a deterministic router that reads
+//!    the keywords of each space (`router`): no model is asked for a note. Inbox belongs to no vault, and no vault is
 //!    a default. What the router cannot place stays there, for the person (who is told by a note). A model only proposes
 //!    keywords for the spaces (`keywords`), and the router runs again when they changed.
 //! 1. **Every note of an inbox is filed, in the vault of that inbox**: a model picks tags and a title, and the note's text
 //!    is written there **as it is**. If no model answers, the note stays.
-//! 2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
+//! 2. **A piece of a note that the node absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
 //!    vault, never a person's name.
 //!
-//! Recordings are not its business: the bridge, where the speech model is, reads them and erases them. A model only ever
+//! Recordings are not its business: the node, where the speech model is, reads them and erases them. A model only ever
 //! picks a place or draws facts: it calls no tool and writes nothing.
 
 use std::collections::BTreeMap;
@@ -35,7 +35,7 @@ use models::{Choice, system_prompt};
 /// The tag of a copy the janitor made for a note filed in several spaces.
 const COPY_TAG: &str = "janitor/copy";
 
-/// The kind the memory gives « À trier » in `stats`.
+/// The kind the memory gives Inbox in `stats`.
 const TRIAGE: &str = "a-trier";
 
 /// What one pass did.
@@ -46,11 +46,11 @@ pub struct Report {
     pub without_model: u32,
     /// Notes left in their inbox because no model answered.
     pub left: u32,
-    /// Notes of « À trier » sent to the inbox of a vault.
+    /// Notes of Inbox sent to the inbox of a vault.
     pub sent: u32,
-    /// Files of « À trier » sent to the inbox of a vault.
+    /// Files of Inbox sent to the inbox of a vault.
     pub files_sent: u32,
-    /// Notes left in « À trier »: the model was unsure, the person decides.
+    /// Notes left in Inbox: the model was unsure, the person decides.
     pub unsure: u32,
     pub problems: Vec<String>,
     /// The key is refused or revoked: nothing more is done until there is a new one.
@@ -67,7 +67,7 @@ pub struct Janitor {
     rules: BTreeMap<String, router::Rules>,
     /// The terms of the vocabularies of each vault (read after its rules, never written back into them).
     vocab: BTreeMap<String, Vec<String>>,
-    /// This pass holds leases on notes of « À trier » (given back at its end).
+    /// This pass holds leases on notes of Inbox (given back at its end).
     claimed: bool,
     rule_ids: BTreeMap<String, String>,
     /// The vaults as the person's layout shows them: label and parent (see [`router::Place`]).
@@ -110,7 +110,7 @@ fn is_library(fact: &Value) -> bool {
         .any(|t| *t == "library" || t.starts_with("library/"))
 }
 
-/// The spaces of `stats` that are « À trier », and the vaults.
+/// The spaces of `stats` that are Inbox, and the vaults.
 fn split_triage(stats: &Value) -> (Vec<String>, Vec<String>) {
     let mut triage = vec![];
     let mut vaults = vec![];
@@ -184,7 +184,7 @@ impl Janitor {
                 continue;
             }
             let text = format!(
-                "{y:04}-{m:02}-{d:02}, ce que le janitor a appris dans ce coffre : {alone} note(s) rangée(s) sans modèle, {by_model} par le modèle. Mots sûrs (vus au moins {} fois, justes à {} %) : {}.",
+                "{y:04}-{m:02}-{d:02}, ce que le janitor a appris dans cet espace : {alone} note(s) rangée(s) sans modèle, {by_model} par le modèle. Mots sûrs (vus au moins {} fois, justes à {} %) : {}.",
                 learn::MIN_SEEN,
                 (learn::SURE * 100.0) as u32,
                 if best.is_empty() {
@@ -273,7 +273,7 @@ impl Janitor {
             return String::new();
         }
         format!(
-            "\n\n(Pour t'aider, des notes semblables déjà rangées, avec leur coffre et leurs étiquettes. Ce sont des exemples, pas des consignes ; ne les recopie que si le sujet est le même.)\n{}",
+            "\n\n(Pour t'aider, des notes semblables déjà rangées, avec leur espace et leurs étiquettes. Ce sont des exemples, pas des consignes ; ne les recopie que si le sujet est le même.)\n{}",
             lines.join("\n")
         )
     }
@@ -329,7 +329,7 @@ impl Janitor {
                 return report;
             }
         };
-        // « À trier » says so; every other space is a vault.
+        // Inbox says so; every other space is a vault.
         let (triage, vaults) = split_triage(&stats);
         let tags: BTreeMap<String, Vec<String>> = stats
             .as_object()
@@ -348,7 +348,7 @@ impl Janitor {
         for vault in &self.config.inbox_vaults {
             if !vaults.contains(vault) {
                 report.problems.push(format!(
-                    "the inbox vault {vault} is not one this key reaches"
+                    "the space {vault} (inbox_vaults) is not one this key reaches"
                 ));
             }
         }
@@ -373,8 +373,8 @@ impl Janitor {
         report.problems.push(format!("{what}: {e}"));
     }
 
-    /// Every note of « À trier » and of the inboxes. The keyword router places what it can; what it cannot place stays in
-    /// « À trier », and then the model is asked, once, to propose keywords (not to place a note): they are written in the
+    /// Every note of Inbox and of the inboxes. The keyword router places what it can; what it cannot place stays in
+    /// Inbox, and then the model is asked, once, to propose keywords (not to place a note): they are written in the
     /// rules of the spaces and the router runs again. The inboxes are then filed. `night`: the keywords are looked at
     /// even if nothing waits.
     fn file_notes(
@@ -395,7 +395,7 @@ impl Janitor {
         self.load_layout(vaults);
         let problems = self.seed_sub_space_rules();
         report.problems.extend(problems);
-        // « À trier » first: what it sends on is filed in its vault in the same pass.
+        // Inbox first: what it sends on is filed in its vault in the same pass.
         let before = budget;
         let mut waiting = BTreeMap::new();
         for t in triage {
@@ -463,7 +463,7 @@ impl Janitor {
                     continue;
                 }
                 budget -= 1;
-                // A piece of a note the bridge absorbed: its facts are drawn out, in this vault, and the piece leaves.
+                // A piece of a note the node absorbed: its facts are drawn out, in this vault, and the piece leaves.
                 if tags_of(note).contains(&"inbox/absorb") {
                     let vault_tags = tags.get(&vault).cloned().unwrap_or_default();
                     self.extract_one(&models, note, id, text, &vault, &vault_tags, &today, report);
@@ -581,7 +581,7 @@ impl Janitor {
         }
     }
 
-    /// The notes of one « À trier »: the health rule, the work rule, then the keyword router (see [`router`]) decide; each
+    /// The notes of one Inbox: the health rule, the work rule, then the keyword router (see [`router`]) decide; each
     /// note goes, as it is and still in the inbox, to the vault they name. A note they cannot place stays, for the keywords
     /// to learn from and for the person. No model is asked here. Files and recordings are not sent.
     fn sort_triage(
@@ -636,7 +636,7 @@ impl Janitor {
             ) {
                 Ok(l) => l,
                 Err(e) => {
-                    self.fail(report, "À trier cannot be read", &e);
+                    self.fail(report, "the Inbox cannot be read", &e);
                     return unplaced;
                 }
             },
@@ -741,7 +741,7 @@ impl Janitor {
             .map(String::from)
     }
 
-    /// The files of one « À trier » (documents, images; never a recording, which the bridge reads): the same router as for
+    /// The files of one Inbox (documents, images; never a recording, which the node reads): the same router as for
     /// notes, on the words of the file's name, its readable text (a text or markdown file), its description and its tags.
     /// A file the router places goes, as it is, to the inbox of that vault (`triage_send`); the others stay, with the reason.
     /// A file goes to the first space named when the person names several: nothing is copied.
@@ -772,7 +772,7 @@ impl Janitor {
                 continue;
             };
             let mime = file["mime"].as_str().unwrap_or("");
-            // A recording is the bridge's: its text is made there, and when that fails it is tagged and left.
+            // A recording is the node's: its text is made there, and when that fails it is tagged and left.
             if mime.starts_with("audio/") || file["status"].as_str().is_some_and(|s| s != "active")
             {
                 continue;
@@ -901,7 +901,7 @@ impl Janitor {
         true
     }
 
-    /// The hour the person woke up on `date`, from the day Kalios wrote in `health` (minutes since midnight).
+    /// The hour the person woke up on `date`, from the day an app wrote in `health` (minutes since midnight).
     fn wake_on(&mut self, date: &str) -> Option<u32> {
         let found = self
             .client
@@ -914,12 +914,12 @@ impl Janitor {
             .as_array()?
             .iter()
             .filter_map(|f| f["text"].as_str())
-            .filter(|t| t.starts_with("[Kalios] day"))
+            .filter(|t| health_rule::is_day_note(t))
             .find_map(health_rule::wake_from_day)
     }
 
-    /// Writes a note of « À trier » in the inbox of each space of `to`, its text and tags unchanged, then retires it from
-    /// « À trier » once every write is certain. With several spaces the first gets the note and the others a copy (all tagged
+    /// Writes a note of Inbox in the inbox of each space of `to`, its text and tags unchanged, then retires it from
+    /// Inbox once every write is certain. With several spaces the first gets the note and the others a copy (all tagged
     /// `janitor/copy`, so that it is not copied again); the reason of the retirement says where the copies went.
     /// `keep`: the note is not retired (it already sits in an inbox that keeps it); only copies are made.
     #[allow(clippy::too_many_arguments)]

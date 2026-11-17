@@ -63,6 +63,8 @@ pub struct App {
     pub(crate) children: Mutex<Vec<std::process::Child>>,
     /// The peers whose sync was started (by name).
     pub(crate) synced: Mutex<std::collections::HashSet<String>>,
+    /// This node's id, read once (`GET /.well-known/memcp` is answered often and must not open the control database).
+    node_id: std::sync::OnceLock<String>,
 }
 
 fn bearer(req: &Request) -> Option<String> {
@@ -117,6 +119,7 @@ impl App {
             tickets: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
             synced: Mutex::new(std::collections::HashSet::new()),
+            node_id: std::sync::OnceLock::new(),
         }
     }
 
@@ -169,9 +172,9 @@ impl App {
             ("POST", "/pair") => crate::pair::exchange(self, req),
             ("GET", "/.well-known/memcp") => Response::json(
                 200,
-                &match memcp_core::directory::node_id(&self.brain) {
-                    Ok(id) => crate::discovery::well_known_with_id(&self.node_name, &id),
-                    Err(_) => crate::discovery::well_known(&self.node_name),
+                &match self.own_node_id() {
+                    Some(id) => crate::discovery::well_known_with_id(&self.node_name, id),
+                    None => crate::discovery::well_known(&self.node_name),
                 },
             ),
             ("POST", "/join") => crate::join::request(self, req),
@@ -561,9 +564,19 @@ impl App {
             .is_some()
     }
 
-    /// The code of a bridge's pairing request.
+    /// The code of a device's pairing request.
     pub fn holds_pairing_code(&self, body: &[u8]) -> bool {
         crate::pair::holds(self, body)
+    }
+
+    /// This node's id (`ABCD-EFGH-IJKL`), read from the control database the first time only.
+    pub fn own_node_id(&self) -> Option<&str> {
+        if self.node_id.get().is_none()
+            && let Ok(id) = memcp_core::directory::node_id(&self.brain)
+        {
+            let _ = self.node_id.set(id);
+        }
+        self.node_id.get().map(String::as_str)
     }
 
     /// The invitation ticket of a `POST /join` body, still valid here (each person's installation keeps its own).

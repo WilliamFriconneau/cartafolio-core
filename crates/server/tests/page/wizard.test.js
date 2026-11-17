@@ -21,7 +21,7 @@ const mockFetch = async (url, opts = {}) => {
     const b = JSON.parse(opts.body);
     world.pairCall = b;
     if (b.code !== "ABCDEFGH") return { ok: false, status: 400, json: async () => ({ error: "this code is unknown, used or expired" }) };
-    return { ok: true, status: 200, json: async () => ({ agent: "this-page-1", key: "hcp_paired_key", mcp_url: "https://memory.example.net/mcp/this-page-1", vaults: ["sam-a-trier"] }) };
+    return { ok: true, status: 200, json: async () => ({ agent: "this-page-1", key: "hcp_paired_key", mcp_url: "https://memory.example.net/mcp/this-page-1", spaces: ["sam-a-trier"] }) };
   }
   const path = String(url).split("admin/api/")[1];
   calls.push([opts.method || "GET", path, opts.body]);
@@ -98,13 +98,15 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("a countdown runs", /^\d+:\d\d$/.test(text("#pair-left")), text("#pair-left"));
   $("#pair-dlg").removeAttribute("open");
 
-  // --- À trier: what waits, shown as text, sent to the vault the person chooses
-  check("À trier shows what waits on the home page", !$("#triage-tile").hidden && text("#triage-count") === "1");
+  // --- Inbox: what waits, shown as text, sent to the space the person chooses
+  check("Inbox shows what waits on the home page", !$("#triage-tile").hidden && text("#triage-count") === "1");
+  check("the tile is called Inbox", /^Inbox\b/.test(text("#triage-tile h3")), text("#triage-tile h3"));
   w.location.hash = "#triage";
   await sleep(50);
-  check("the À trier view lists what waits", !$("#view-triage").hidden && $$("#tr-list .trrow").length === 1);
+  check("the Inbox view lists what waits", !$("#view-triage").hidden && $$("#tr-list .trrow").length === 1);
+  check("the view is called Inbox", text("#view-triage h2") === "Inbox", text("#view-triage h2"));
   check("a capture is text, never markup", $("#tr-list b") === null && text("#tr-list").includes("<b>rappeler</b>"));
-  check("À trier is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("a-trier")));
+  check("Inbox is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("a-trier")));
   check("nothing picked: send is disabled", $("#tr-send").disabled);
   click($("#tr-list .trrow"));
   check("a row picked, still no space chosen: send stays disabled", $("#tr-send").disabled && text("#tr-count").includes("1 selected"));
@@ -175,6 +177,14 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   click($$("#connections button").find(b => b.textContent === "tell my instructions"));
   await sleep(200);
   check("and it can be told them again", world.connections.find(c => c.agent === "claudeai").person_guide === true);
+
+  // --- a connection made under an older name keeps it (its address is that name); the page shows it without the old prefix
+  world.connections.push({ agent: "bridge-laptop", user: "u1", rights: "work:rw", upstream: "none", read_only: false, revoked: false, created_at: "x", last_used_at: null, expires_at: "t3" });
+  await w.load();
+  const old = $$("#connections h3").find(h => h.title === "bridge-laptop");
+  check("an old connection is shown without its old prefix and keeps its real name as a hint", !!old && old.textContent.startsWith("laptop") && !/bridge/i.test(text("#connections")), text("#connections"));
+  world.connections.splice(world.connections.findIndex(c => c.agent === "bridge-laptop"), 1);
+  await w.load();
 
   // --- key platform: tick vaults, create, steps with the key, wait for the first call
   click($$("#spaces button").find(b => b.textContent === "Read-only"));

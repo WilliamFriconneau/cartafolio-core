@@ -296,7 +296,7 @@ fn open_source(brain: &Brain, export: &Path, name: &str) -> Result<Source> {
         std::process::id(),
         util::random_base32(6)
     ));
-    fs::copy(export.join(format!("vaults/{name}.sqlite")), &tmp)?;
+    fs::copy(export::space_file(export, name), &tmp)?;
     crate::fsx::set_private_file(&tmp)?;
     let source = Source {
         conn: brain::open_db(&tmp)?,
@@ -553,9 +553,8 @@ pub fn plan(brain: &Brain, export_dir: &Path, user: &User, policy: Policy) -> Re
     let manifest = export::verify_export(export_dir)?;
     let ctl = brain.open_control()?;
     let mine = writable(brain, &ctl, user)?;
-    let vaults = manifest["vaults"]
-        .as_array()
-        .ok_or_else(|| Error::Invalid("the manifest lists no vault".into()))?;
+    let vaults = export::manifest_spaces(&manifest)
+        .ok_or_else(|| Error::Invalid("the manifest lists no space".into()))?;
     let mut taken: BTreeSet<String> = BTreeSet::new();
     let mut lines = vec![];
     for v in vaults {
@@ -722,8 +721,7 @@ fn resolve<'a>(
     manifest: &Value,
     plan: &'a Plan,
 ) -> Result<Vec<Resolved<'a>>> {
-    let known: Vec<&str> = manifest["vaults"]
-        .as_array()
+    let known: Vec<&str> = export::manifest_spaces(manifest)
         .map(|a| a.iter().filter_map(|v| v["name"].as_str()).collect())
         .unwrap_or_default();
     let mut sources = BTreeSet::new();
