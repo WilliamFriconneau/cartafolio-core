@@ -650,7 +650,7 @@ pub fn connections(brain: &Brain, user: &str) -> Result<Vec<Value>> {
     let mut st = ctl.prepare(
         "SELECT agent, last_used_at, last_ip FROM connections
          WHERE console = 0 AND revoked_at IS NULL AND internal = 0
-           AND coalesce(user_id, 'owner') = ?1 AND agent NOT LIKE 'peer-%'
+           AND coalesce(user_id, 'owner') = ?1 AND kind != 'peer'
          ORDER BY agent",
     )?;
     let rows = st.query_map([user], |r| {

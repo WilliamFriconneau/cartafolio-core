@@ -110,13 +110,11 @@ fn server(name: &str) -> Server {
             .unwrap()
             .id;
         brain.add_vault(&sam, "sam", "me").unwrap();
-        access::connect_for(
+        access::connect_peer(
             &ctl,
             &sam,
             "peer-box-0001",
             &Rights::parse("sam-me:rw").unwrap(),
-            None,
-            false,
             false,
         )
         .unwrap()

@@ -36,7 +36,8 @@ fn node(tag: &str, name: &str) -> (Brain, std::path::PathBuf) {
     (brain, dir)
 }
 
-/// Serves `dir` over HTTP, with one connection per entry of `connections`; returns each one's address and key.
+/// Serves `dir` over HTTP, with one machine of the person per entry of `connections` (every space of theirs, as a join
+/// gives); returns each one's address and key.
 fn serve(dir: &std::path::Path, connections: &[&str]) -> Vec<(String, String)> {
     let brain = Brain::open(dir).unwrap();
     let ctl = brain.open_control().unwrap();
@@ -44,16 +45,7 @@ fn serve(dir: &std::path::Path, connections: &[&str]) -> Vec<(String, String)> {
     let keys: Vec<String> = connections
         .iter()
         .map(|c| {
-            access::connect_for(
-                &ctl,
-                &sam,
-                c,
-                &Rights::parse("sam-me:rw").unwrap(),
-                None,
-                false,
-                false,
-            )
-            .unwrap()
+            access::connect_peer(&ctl, &sam, c, &Rights::parse("all").unwrap(), false).unwrap()
         })
         .collect();
     let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();

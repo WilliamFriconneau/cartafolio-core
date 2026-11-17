@@ -134,15 +134,19 @@ fn tool_text(r: &Response) -> Value {
 fn key(m: &Manager, person: &str, agent: &str, rights: &str) -> Result<String, Box<dyn Error>> {
     let app = m.person_app(person).ok_or("no such person")?;
     let ctl = app.brain.open_control()?;
-    let token = access::connect_for(
-        &ctl,
-        users::OWNER,
-        agent,
-        &Rights::parse(rights)?,
-        None,
-        false,
-        false,
-    )?;
+    let token = (if agent.starts_with("peer-") {
+        access::connect_peer(&ctl, users::OWNER, agent, &Rights::parse(rights)?, false)
+    } else {
+        access::connect_for(
+            &ctl,
+            users::OWNER,
+            agent,
+            &Rights::parse(rights)?,
+            None,
+            false,
+            false,
+        )
+    })?;
     note(agent, &token);
     Ok(token)
 }

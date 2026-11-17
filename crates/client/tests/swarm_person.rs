@@ -123,13 +123,11 @@ fn home() -> Home {
 /// A peer connection on the home node for `user`, as a join makes it: its address and key.
 fn join(h: &Home, user: &str, machine: &str) -> (String, String) {
     let agent = format!("peer-{machine}-0001");
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &h.brain.open_control().unwrap(),
         user,
         &agent,
         &Rights::parse("all").unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();
@@ -302,13 +300,11 @@ fn only_a_peer_of_the_person_offers_a_space_and_another_persons_key_stays_in_the
     // A device paired to capture (the box alone) may not offer spaces.
     let agent = "peer-phone-0001";
     let grant = format!("{}:rw", h.triage);
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &h.brain.open_control().unwrap(),
         &h.robin,
         agent,
         &Rights::parse(&grant).unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();

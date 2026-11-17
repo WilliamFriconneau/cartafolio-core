@@ -286,7 +286,12 @@ fn engine(rights: &[(&str, &str)]) -> (String, Vec<String>, std::path::PathBuf) 
             .iter()
             .map(|(agent, spec)| {
                 let r = Rights::parse(spec).expect("rights");
-                access::connect_for(&ctl, &sam, agent, &r, None, false, false).expect("connect")
+                (if agent.starts_with("peer-") {
+                    access::connect_peer(&ctl, &sam, agent, &r, false)
+                } else {
+                    access::connect_for(&ctl, &sam, agent, &r, None, false, false)
+                })
+                .expect("connect")
             })
             .collect()
     };

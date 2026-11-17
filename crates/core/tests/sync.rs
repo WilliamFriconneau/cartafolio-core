@@ -327,13 +327,11 @@ fn status_reports_direction_progress_and_goes_idle() -> Res {
     let a = node(&t, "a")?;
     let s = sp("notes");
     let conn = a.open_control()?;
-    memcp_core::access::connect_for(
+    memcp_core::access::connect_peer(
         &conn,
         OWNER,
         "peer-laptop-ab12",
         &memcp_core::access::Rights::parse("notes:rw")?,
-        None,
-        false,
         false,
     )?;
     let idle = sync::status(&a, 1000)?;

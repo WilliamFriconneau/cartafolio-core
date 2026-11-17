@@ -360,6 +360,8 @@ pub(crate) fn living(
         no_person_guide: true,
         rate_per_min: memcp_core::access::DEFAULT_RATE_PER_MIN,
         max_text: memcp_core::access::DEFAULT_MAX_TEXT,
+        kind: memcp_core::access::Kind::Console,
+        local: false,
     };
     memcp_core::tools::call(&app.brain, &caller, tool, args).map_err(|e| err(400, &e.to_string()))
 }

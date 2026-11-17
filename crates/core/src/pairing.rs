@@ -180,7 +180,7 @@ pub fn redeem(ctl: &Connection, code: &str, device: &str, now: i64) -> Result<Pa
         return Err(refused());
     }
     let made = Rights::parse(&spec)
-        .and_then(|rights| access::connect_for(ctl, &user_id, &agent, &rights, None, false, false));
+        .and_then(|rights| access::connect_peer(ctl, &user_id, &agent, &rights, false));
     let token = match made {
         Ok(t) => t,
         Err(e) => {

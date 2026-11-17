@@ -33,6 +33,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V22,
     CONTROL_V23,
     CONTROL_V24,
+    CONTROL_V25,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -691,4 +692,27 @@ CREATE TABLE folder_state (
   err TEXT,
   PRIMARY KEY (space, rel)
 ) STRICT, WITHOUT ROWID;
+";
+
+/// What made each connection (`access::Kind`), so that no power hangs on a name anyone may choose. Existing rows are
+/// read conservatively: `console` for the admin page's keys; `oauth` for the connections an OAuth consent made (they
+/// hold a refresh token, whose row follows a rename); `peer` only for the connections a pairing code or a join request
+/// made, which the node recorded itself: the code's row names the connection it made (`pairings.agent`), and the audit
+/// says `paired` or `joined` with its name, followed through every later `rename` (`detail` holds the old name). Every
+/// other row, whatever its name, is an `assistant`: a machine the node cannot prove joins again.
+const CONTROL_V25: &str = r"
+ALTER TABLE connections ADD COLUMN kind TEXT NOT NULL DEFAULT 'assistant'
+  CHECK (kind IN ('assistant','oauth','peer','console'));
+UPDATE connections SET kind = 'console' WHERE console = 1;
+UPDATE connections SET kind = 'oauth'
+  WHERE console = 0 AND agent IN (SELECT agent FROM oauth_refresh);
+WITH RECURSIVE made(agent) AS (
+  SELECT agent FROM pairings WHERE used_at IS NOT NULL AND agent IS NOT NULL
+  UNION
+  SELECT agent FROM auth_audit WHERE event IN ('paired', 'joined') AND agent IS NOT NULL
+  UNION
+  SELECT a.agent FROM auth_audit a JOIN made m ON a.event = 'rename' AND a.detail = m.agent
+)
+UPDATE connections SET kind = 'peer'
+  WHERE kind = 'assistant' AND agent IN (SELECT agent FROM made);
 ";
