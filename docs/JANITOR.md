@@ -82,6 +82,20 @@ least three times less common in any other space is added to that space's keywor
 After the keywords changed, the router runs again on À trier and on the inboxes in the same pass (the rerun), so what a new
 keyword places leaves À trier at once.
 
+## Tags come from the node
+
+The janitor no longer has to give a note its first tags: the node does it **when the note is written**, with the same keywords,
+vocabularies and a small built-in set of health patterns (see [AUTOTAG.md](AUTOTAG.md)): the tag of the space first, then the
+tags proper to it. A note the janitor files with `supersede` or `remember` carries its own tags, and the node adds the tag
+of the space it lands in, never removing the janitor's. The janitor's choices, and what it sends with `triage_send`, are
+never learned from.
+
+**The node learns from the person.** When the person puts a tag on a note, takes one off (the page, or an assistant that
+corrects with `tags_set`), the words of the note are counted for the tags added and against the tags removed, per space; when
+the person sends a note of À trier to a space, its words are counted for that space. Two corrections make a word sure; the store
+is bounded (2000 words per space). The tool `tags_suggest` says, in `route`, where the person usually sends notes like a given
+text: the router uses it for a note it cannot place by keywords, and sends it only when one space is sure.
+
 ## Models
 
 The model is asked for two things only: the tags and title of a note already in its vault's inbox (1), the facts of an

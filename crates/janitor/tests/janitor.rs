@@ -529,6 +529,31 @@ fn a_unique_keyword_routes_and_an_ambiguity_stays_in_a_trier() {
 }
 
 #[test]
+fn a_note_no_keyword_places_goes_where_the_person_taught_the_node() {
+    let r = rig("taught");
+    let mut o = owner(&r);
+    // The person sent two notes like this one to work: the node learned it (a file beside its databases).
+    let store = memcp_core::autotag::Store::open(&r.dir.join("engine"));
+    for text in [
+        "Contrat assurance auto renouvelé",
+        "Assurance auto contrat échéance",
+    ] {
+        store.learn_route(text, "sam-work");
+    }
+    drop_note(&r, "Assurance auto contrat à relire");
+    drop_note(&r, "Rien de connu ici.");
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!((report.sent, report.unsure), (1, 1), "{report:?}");
+    assert_eq!(
+        texts(&mut o, "sam-work", &["janitor"], "assurance").len(),
+        1
+    );
+    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
 fn the_model_proposes_keywords_written_as_a_new_rules_version_and_the_router_runs_again() {
     let r = rig("propose");
     let mut o = owner(&r);
