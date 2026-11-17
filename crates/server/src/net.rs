@@ -125,7 +125,12 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     let query = query.to_string();
     let who = ip.clone().unwrap_or_else(|| "?".into());
     if !take_place(&who) {
-        let _ = rq.respond(tiny_http::Response::empty(503));
+        // Busy, not broken: say when to come back, so that a client waits instead of hammering.
+        let mut busy = tiny_http::Response::empty(503);
+        if let Ok(h) = tiny_http::Header::from_bytes(&b"Retry-After"[..], &b"1"[..]) {
+            busy.add_header(h);
+        }
+        let _ = rq.respond(busy);
         return;
     }
     let app = Arc::clone(app);
