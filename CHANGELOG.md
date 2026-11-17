@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.5
+
+- The add-on uses the host network and advertises the node (mDNS), so the apps on the same network find it without an address; option `node_name`. memcp-sync ships in the image.
+- More tests: permissions of every tool, migrations from every older schema, concurrent writers, peers in the ways that go wrong, À trier leases.
+- `rules_set` with rules a space already has is no longer an error.
+
 ## 20261117.0.4
 
 - Vocabularies: a list of terms (signs, symptoms, project words) imported into a space (`memcp vocabulary import|list|remove`, MCP `vocabulary_terms`); the janitor reads them after the keywords of the space.
