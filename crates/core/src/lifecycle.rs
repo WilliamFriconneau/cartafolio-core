@@ -613,6 +613,8 @@ impl Brain {
             "DELETE FROM pairing_codes WHERE space = ?1",
             "DELETE FROM devices WHERE space = ?1",
             "DELETE FROM sync_state WHERE space = ?1",
+            "DELETE FROM folder_state WHERE space = ?1",
+            "DELETE FROM space_folders WHERE space = ?1",
             "DELETE FROM space_members WHERE space = ?1",
             "DELETE FROM spaces WHERE name = ?1",
         ] {
