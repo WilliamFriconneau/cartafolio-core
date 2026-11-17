@@ -158,7 +158,7 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         return Err(Error::Invalid(format!("{from} is not an « À trier »")));
     }
     if is_triage(brain, to) || !brain.has_space(to)? {
-        return Err(Error::Invalid(format!("{to} is not a vault")));
+        return Err(Error::Invalid(format!("{to} is not a space")));
     }
     let reason = |new: &str| format!("sent from À trier to the inbox of {to} ({new}) by {author}");
     if let Some(f) = files::info(brain, from, id)?.filter(|f| f.status == "active") {
@@ -204,7 +204,7 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         Remembered::Created(f) | Remembered::Duplicate(f) => f.id,
         // An inbox note is never held back by the ones it resembles.
         Remembered::NeedsDecision(_) => {
-            return Err(Error::Invalid("the vault did not take the note".into()));
+            return Err(Error::Invalid("the space did not take the note".into()));
         }
     };
     facts::retire(&src, author, id, &reason(&new_id))?;

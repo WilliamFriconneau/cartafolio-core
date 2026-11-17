@@ -542,7 +542,7 @@ fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
     let owner = caller(&w, "claude", "sam-health:rw")?;
     let told = memcp_core::guide::instructions(&w.brain, &owner)?;
     assert!(
-        told.contains("PROPOSALS of the vault \"sam-health\"")
+        told.contains("PROPOSALS of the space \"sam-health\"")
             && told.contains("`healthapp` (tag `proposals/healthapp`)"),
         "{told}"
     );

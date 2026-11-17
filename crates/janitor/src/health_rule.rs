@@ -125,6 +125,15 @@ fn day_before(y: i64, m: u32, d: u32) -> String {
     format!("{py:04}-{pm:02}-{last:02}")
 }
 
+/// Whether a note is the day an app writes in the health space, `[<app>] day <date>: {json}`, whatever the app is called
+/// (the iPhone app still signs it with its former name).
+pub fn is_day_note(text: &str) -> bool {
+    text.starts_with('[')
+        && text
+            .split_once("] day ")
+            .is_some_and(|(app, _)| !app.contains(']'))
+}
+
 /// The hour of waking written by HealthApp in its day (`[HealthApp] day <date>: {..., "night": {"end": "...T07:12..."}}`),
 /// in minutes since midnight.
 pub fn wake_from_day(text: &str) -> Option<u32> {
@@ -235,6 +244,10 @@ mod tests {
         let day = r#"[HealthApp] day 2026-11-07: {"date":"2026-11-07","night":{"start":"2026-11-06T23:40:00+01:00","end":"2026-11-07T07:12:00+01:00"}}"#;
         assert_eq!(wake_from_day(day), Some(432));
         assert_eq!(wake_from_day("[HealthApp] day 2026-11-07: {}"), None);
+        assert!(is_day_note(day));
+        assert!(is_day_note("[Other app] day 2026-11-07: {}"));
+        assert!(!is_day_note("Slept badly, [HealthApp] day 2026-11-07"));
+        assert!(!is_day_note("[a] note [b] day 2026-11-07: {}"));
     }
 
     #[test]

@@ -124,7 +124,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                     || paths.iter().any(|(s, _, _)| *s == space)
                 {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 whole.push((space, grant));
@@ -137,7 +137,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                 }
                 if whole.iter().any(|(s, _)| *s == space) {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 if paths.iter().any(|(s, p, _)| *s == space && *p == path) {
@@ -172,7 +172,8 @@ with the candidates: `supersede` if it is the same thing corrected, otherwise ca
 /// An anti-flood ceiling, not a pace: 100 calls a second per connection. A runaway loop or a stolen key
 /// meets it; no app that sends its history, even one record per call, does.
 pub const DEFAULT_RATE_PER_MIN: i64 = 6000;
-/// No limit on the length of a fact by default.
+/// No limit of a connection's own on the length of a fact by default (every fact is at most
+/// [`crate::facts::MAX_TEXT_BYTES`]).
 pub const DEFAULT_MAX_TEXT: i64 = i64::MAX;
 
 /// Who is calling, and what it may do. Built from the connection, never from arguments.
@@ -351,7 +352,7 @@ fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
         .optional()?;
     if is_vault.is_some() {
         return Err(Error::Invalid(format!(
-            "{name} is the name of a vault: a connection needs another name"
+            "{name} is the name of a space: a connection needs another name"
         )));
     }
     Ok(())

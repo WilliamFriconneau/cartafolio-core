@@ -181,7 +181,7 @@ fn one_vault_of_a_kind_per_person_even_when_the_kind_was_given_afterwards() -> R
         .err()
         .map(|e| e.to_string());
     assert!(
-        e.is_some_and(|m| m.contains("already has a work vault (legacy)")),
+        e.is_some_and(|m| m.contains("already has a work space (legacy)")),
         "the existing vault counts"
     );
     // Another kind is fine, and so is the same kind for someone else.

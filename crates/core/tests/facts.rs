@@ -421,3 +421,28 @@ fn the_report_finds_each_close_pair_once_and_changes_nothing() -> Res {
     assert_eq!(facts::active_digests(&b.conn)?.len(), 3, "nothing changed");
     Ok(())
 }
+
+#[test]
+fn a_text_longer_than_a_peer_takes_is_refused_when_written() -> Res {
+    let b = base()?;
+    let most = "a".repeat(facts::MAX_TEXT_BYTES);
+    create(&b, &most)?;
+    let longer = format!("b{most}");
+    assert!(matches!(
+        remember(&b, &longer, &[]),
+        Err(memcp_core::Error::Invalid(_))
+    ));
+    let short = create(&b, "Fed the cat")?;
+    assert!(matches!(
+        facts::supersede(
+            &b.conn,
+            &b.space,
+            "owner",
+            &short.id,
+            NewFact::agent(&longer, "agent:test"),
+            None
+        ),
+        Err(memcp_core::Error::Invalid(_))
+    ));
+    Ok(())
+}

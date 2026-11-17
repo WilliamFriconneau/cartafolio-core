@@ -189,3 +189,41 @@ fn a_note_written_after_a_large_copy_leaves_on_the_next_pass() {
             .any(|t| t.contains("after the large copy"))
     );
 }
+
+/// A peer that answers one space with one event no node can read.
+fn odd_peer() -> String {
+    let server = tiny_http::Server::http("127.0.0.1:0").expect("listen");
+    let port = server.server_addr().to_ip().expect("ip").port();
+    std::thread::spawn(move || {
+        for rq in server.incoming_requests() {
+            let url = rq.url().to_string();
+            let body = if url.starts_with("/sync/spaces") {
+                serde_json::json!({ "protocol": memcp_core::sync::PROTOCOL,
+                    "spaces": [{ "space": "sam-me", "kind": "custom", "writable": false }] })
+            } else if url.starts_with("/sync/events") {
+                serde_json::json!({ "events": [{ "nothing": "of an event" }], "next": 1, "head": 1, "more": false })
+            } else {
+                let _ = rq.respond(tiny_http::Response::empty(404));
+                continue;
+            };
+            let _ = rq.respond(tiny_http::Response::from_string(body.to_string()));
+        }
+    });
+    format!("http://127.0.0.1:{port}")
+}
+
+#[test]
+fn an_event_that_cannot_be_read_is_reported() {
+    let dir = temp("odd");
+    let brain = Brain::init(&dir, &[], Language::English).expect("init");
+    let peer = Peer::new(&odd_peer(), "hcp_fictional", "odd");
+    let pass = peer.sync_once(&brain, NOW).expect("pass");
+    assert!(
+        pass.problems
+            .iter()
+            .any(|p| p.contains("1 unreadable event")),
+        "{:?}",
+        pass.problems
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

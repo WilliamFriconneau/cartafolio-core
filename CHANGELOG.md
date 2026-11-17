@@ -1,5 +1,14 @@
 # Changelog
 
+## Next
+
+- **The node keeps answering:** a request declaring a huge body no longer aborts it, clients that declare a body and send nothing no longer hold its workers, and a burst of connections kept open no longer leaves later ones unread (the HTTP server tiny_http is kept in `vendor/` with these fixes).
+- **Rights and data kept through an archive:** a connection limited to paths comes back limited after a restore, and the last writes still in the write-ahead log are archived with the space.
+- **Files:** a file whose description reads like a note already there gets a note of its own instead of taking that one over.
+- **Facts are at most 1 MiB**, the most a peer takes in a sync; a sync pass reports the events it could not read.
+- **Janitor:** no panic on a long recording name with accents; the hour of waking is read from any app's day note.
+- Tools, errors and the instructions given to assistants say *space*, not *vault*.
+
 ## 20261117.0.14
 
 - Automatic tags in the core: every write gets the tag of its space and the tags proper to it (signs, levels and measures in a health space); `tags_suggest`, `tags_set`; the node learns from corrections (docs/AUTOTAG.md, docs/CHANGELOG-API.md).

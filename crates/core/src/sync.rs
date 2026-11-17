@@ -1228,8 +1228,8 @@ fn window_gate(
     Ok(None)
 }
 
-/// The biggest text of one fact a peer may send, and how many tags it may carry.
-const MAX_EVENT_TEXT: usize = 1 << 20;
+/// The biggest text of one fact a peer may send (the biggest any node writes), and how many tags it may carry.
+const MAX_EVENT_TEXT: usize = crate::facts::MAX_TEXT_BYTES;
 const MAX_EVENT_TAGS: usize = 64;
 
 /// What every event must look like before anything is read from it: short plain identifiers for who and when, and

@@ -26,7 +26,11 @@ pub fn applies(text: &str, work_words: &[String]) -> bool {
 fn audio_name(lower: &str) -> Option<&str> {
     let at = lower.find("audio ")? + "audio ".len();
     let rest = &lower[at..];
-    let end = rest.find(".m4a").map_or(rest.len().min(120), |e| e + 4);
+    let mut end = rest.find(".m4a").map_or(rest.len().min(120), |e| e + 4);
+    // 120 bytes may fall inside an accented letter.
+    while !rest.is_char_boundary(end) {
+        end -= 1;
+    }
     Some(&rest[..end])
 }
 
@@ -36,6 +40,14 @@ mod tests {
 
     fn words() -> Vec<String> {
         vec!["acme".into(), "project x".into()]
+    }
+
+    #[test]
+    fn a_long_name_with_accents_and_no_extension_is_read_without_a_panic() {
+        // Byte 120 after « audio » falls inside « é ».
+        let text = format!("audio {}é then the note", "a".repeat(119));
+        assert!(!applies(&text, &[]));
+        assert!(applies(&format!("{text} about acme"), &words()));
     }
 
     #[test]

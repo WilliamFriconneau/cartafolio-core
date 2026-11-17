@@ -167,6 +167,14 @@ impl Peer {
                 .iter()
                 .filter_map(|v| Event::from_json(v).ok())
                 .collect();
+            // An event this node cannot read is passed over like one it refuses, never in silence.
+            if events.len() < raw.len() {
+                pass.problems.push(format!(
+                    "{}: pull: {} unreadable event(s) passed over",
+                    space.as_str(),
+                    raw.len() - events.len()
+                ));
+            }
             let done = sync::apply_window(brain, space, &events, &self.name, cutoff)
                 .map_err(|e| e.to_string())?;
             pass.pulled += done.applied;

@@ -324,6 +324,7 @@ pub fn deposit(
     new.tags = facts::normalize_tags(&new.tags)?;
     facts::check_kind(&new.kind)?;
     let text = facts::check_text(&new.text)?;
+    facts::check_size(&text)?;
     if let Some(old) = held(conn, o)? {
         if crate::text::text_hash(&old.text) == crate::text::text_hash(&text) {
             return Ok(Deposit::Unchanged(old));
@@ -334,6 +335,7 @@ pub fn deposit(
                 Some(merged) if merged == old.text => return Ok(Deposit::Unchanged(old)),
                 Some(merged) => {
                     let merged = facts::check_text(&merged)?;
+                    facts::check_size(&merged)?;
                     (
                         merged.clone(),
                         NewFact {

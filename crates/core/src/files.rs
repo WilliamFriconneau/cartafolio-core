@@ -345,9 +345,19 @@ pub fn put_tagged(
     fact.kind = "context".into();
     fact.tags = tags.to_vec();
     let mut decided: Vec<String> = vec![];
+    let mut fingerprinted = false;
     let fact_id = loop {
         match facts::remember(&conn, space, author, fact.clone(), &decided)? {
-            Remembered::Created(f) | Remembered::Duplicate(f) => break Some(f.id),
+            Remembered::Created(f) => break Some(f.id),
+            // A note of the same words is already there: another file of this name, or a note someone wrote. It is
+            // never taken over (its file link and its tags stay its own): this file gets its own note, told apart by
+            // the start of its fingerprint.
+            Remembered::Duplicate(_) if !fingerprinted => {
+                fingerprinted = true;
+                // The same mark a merge gives a file whose note is taken.
+                fact.text = format!("{text} [{}]", sha.get(..8).unwrap_or(&sha));
+            }
+            Remembered::Duplicate(_) => break None,
             Remembered::NeedsDecision(c) if decided.is_empty() => {
                 decided = c.into_iter().map(|c| c.id).collect()
             }
@@ -608,7 +618,7 @@ pub fn erase_at(
         .optional()?;
     let Some((status, kind, at, text)) = written else {
         return Err(Error::Invalid(
-            "the transcript is not a fact of a vault you can read".into(),
+            "the transcript is not a fact of a space you can read".into(),
         ));
     };
     if status != "active" || kind.as_deref() == Some("file") {

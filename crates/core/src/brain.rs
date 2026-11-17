@@ -202,13 +202,13 @@ impl Brain {
             .optional()?;
         if let Some(name) = owned {
             return Err(Error::Invalid(format!(
-                "{person} already has a {kind} vault ({name})"
+                "{person} already has a {kind} space ({name})"
             )));
         }
         let space = crate::catalogue::vault_name(person, kind)?;
         if self.has_space(&space)? {
             return Err(Error::Invalid(format!(
-                "{person} already has a {kind} vault ({space})"
+                "{person} already has a {kind} space ({space})"
             )));
         }
         self.add_space_for(&space, user_id)?;
@@ -270,7 +270,7 @@ impl Brain {
             .optional()?;
         if used.is_some() {
             return Err(Error::Invalid(format!(
-                "{space} is the name of a connection: a vault needs another name"
+                "{space} is the name of a connection: a space needs another name"
             )));
         }
         let mut created = Vec::new();

@@ -311,7 +311,7 @@ impl Manager {
                 .map(|s| s.len())
                 .unwrap_or(0);
             println!(
-                "{:<20} {:<7} {:<24} {} vault(s){}",
+                "{:<20} {:<7} {:<24} {} space(s){}",
                 u.name,
                 if u.admin { "admin" } else { "member" },
                 u.ha_user.as_deref().unwrap_or("(no Home Assistant login)"),

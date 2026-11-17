@@ -901,7 +901,7 @@ impl Janitor {
         true
     }
 
-    /// The hour the person woke up on `date`, from the day Kalios wrote in `health` (minutes since midnight).
+    /// The hour the person woke up on `date`, from the day an app wrote in `health` (minutes since midnight).
     fn wake_on(&mut self, date: &str) -> Option<u32> {
         let found = self
             .client
@@ -914,7 +914,7 @@ impl Janitor {
             .as_array()?
             .iter()
             .filter_map(|f| f["text"].as_str())
-            .filter(|t| t.starts_with("[Kalios] day"))
+            .filter(|t| health_rule::is_day_note(t))
             .find_map(health_rule::wake_from_day)
     }
 

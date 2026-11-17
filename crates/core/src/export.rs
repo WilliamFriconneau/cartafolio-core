@@ -120,7 +120,7 @@ fn day(t: i64) -> String {
 /// force, then what was replaced or retired, with the reason.
 fn readable(conn: &Connection, space: &Space, kind: &str, who: &User, at: i64) -> Result<String> {
     let mut out = format!(
-        "# {space} ({kind})\n\nThe memory of {} in this vault, exported on {}. A fact is never edited: a correction replaces the earlier text, which stays below.\n",
+        "# {space} ({kind})\n\nThe memory of {} in this space, exported on {}. A fact is never edited: a correction replaces the earlier text, which stays below.\n",
         if who.display.is_empty() {
             &who.name
         } else {
@@ -297,7 +297,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
     let vaults = owned(&ctl, &who.id)?;
     if vaults.is_empty() {
         return Err(Error::Invalid(format!(
-            "{} owns no vault to export",
+            "{} owns no space to export",
             who.name
         )));
     }
@@ -579,7 +579,7 @@ pub fn adopt(
     }
     if !taken.is_empty() {
         return Err(Error::Invalid(format!(
-            "already in use here: {}. Adopt with a prefix to give the vaults other names.",
+            "already in use here: {}. Adopt with a prefix to give the spaces other names.",
             taken.join(", ")
         )));
     }
