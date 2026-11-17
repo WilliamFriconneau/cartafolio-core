@@ -216,6 +216,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                     Err(r) => r,
                 }
             }
+            "/journal" => crate::explore::journal(app, &ctl, &me, req, now),
+            "/links" => crate::explore::graph(app, &ctl, &me, req),
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
@@ -288,7 +290,7 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
 
 /// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
 /// the person acts with their own rights (the spaces they own), as the connection `page`.
-fn living(
+pub(crate) fn living(
     app: &App,
     ctl: &Connection,
     me: &User,
@@ -929,7 +931,10 @@ fn vault_stats(app: &App, space: &Space) -> Value {
         .ok()
         .flatten();
     json!({
-        "facts": count("SELECT count(*) FROM facts WHERE status = 'active'"),
+        "facts": count(&format!(
+            "SELECT count(*) FROM facts WHERE status = 'active' AND {}",
+            crate::explore::NOT_FURNITURE
+        )),
         "files": count("SELECT count(*) FROM files WHERE status = 'active'"),
         "last_write": last.map(iso),
     })
@@ -962,10 +967,11 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
             }
             let mut counts = vec![0_i64; TIMELINE_BUCKETS as usize];
             let conn = app.brain.open_space(&s)?;
-            let mut st = conn.prepare(
+            let mut st = conn.prepare(&format!(
                 "SELECT (created_at - ?1) / ?2, count(*) FROM facts
-                 WHERE created_at >= ?1 GROUP BY 1",
-            )?;
+                     WHERE created_at >= ?1 AND {} GROUP BY 1",
+                crate::explore::NOT_FURNITURE
+            ))?;
             let rows = st.query_map([from, width], |r| {
                 Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
             })?;

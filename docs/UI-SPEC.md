@@ -13,7 +13,11 @@ not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that join
 6. **Each machine lists its own connections** (assistants and peers), with last activity.
 7. **Parity.** Every function and option exists on the node page, the desktop apps and, where the screen allows it,
    the phone. What a small screen cannot show it says so and offers the page.
-8. Folders: a space that has children is a **folder** (no count, no "connections reach it"); only leaf spaces are
+8. Nesting: the top level shows top-level spaces only. A folder tile opens (`#folder/NAME`) to show its children under a
+   breadcrumb (`Your spaces > Perso > Health`); a sub-space opens with the same breadcrumb and its keywords under its
+   title. A tile dropped on a folder, a breadcrumb or another tile moves it there (layout only).
+9. One count: every number of notes is the notes the journal lists (the rules and dashboard notes are not notes).
+10. Folders: a space that has children is a **folder** (no count, no "connections reach it"); only leaf spaces are
    opened. Labels, never technical names.
 
 ## Layout (node page, Mac, Windows, Linux)
@@ -50,7 +54,10 @@ not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that join
   A peer not seen for 90 days is dimmed (`gone`). A revoked peer is not listed.
 - Join banner: when a machine asks to join, a banner shows its name and the three words; one button to allow, one
   to refuse. The same request appears as a notification on the desktop apps.
-- Space view: Journal (by day), Dashboard (sections from the `dashboard` note), Notes (tags and keywords of the
+- Journal and Graph of the whole memory (`#journal`, `#graph`): every space the person reads, by day with the space and
+  tags of each note, filtered by space, tag or words; the graph draws spaces, tags and keywords (the name of a space is
+  a tag too), pans, zooms, and a click on a node filters the journal (or the notes of a space).
+- Space view: Journal (by day), Graph, Dashboard (sections from the `dashboard` note), Notes (tags and keywords of the
   level, filter), Tree (tags). Record a voice note, attach a file, write a note. A correction keeps the old text
   in history.
 - Settings: language, public address, assistants and their rights (per space, read or write), instructions,
@@ -88,7 +95,8 @@ not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that join
 | Machines, live sync | `GET /sync/status` (`node`, `peers`: name, version, last_seen, learned_from, behind, gone, exposures, only_local, and for direct peers direction, spaces, done, total, percent, last_activity; `connections`: name, kind cloud or local, via, last_used_at) |
 | Space tree | MCP `spaces` (name, label, parent, position, kind, writable, facts) |
 | Tags | MCP `stats` (tags with counts) |
-| Graph | MCP `links` (planned) |
+| Graph (all spaces or one) | `GET /admin/api/links[?space=]`: the `links` tool as the signed-in person, plus the keywords of each space |
+| Journal of every space | `GET /admin/api/journal[?space=&tag=&q=&before=&before_id=]`: notes of every space the person reads, newest first |
 | Library | MCP `library_search`, `library_raise` (planned) |
 | Waiting notes | `triage_claim`, `triage_release` |
 | Keywords of a space | the `rules` note (tag `rules`); MCP `rules_get` / `rules_set` (planned) |
