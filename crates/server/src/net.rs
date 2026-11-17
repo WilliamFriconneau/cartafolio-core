@@ -25,6 +25,10 @@ pub trait Handler: Send + Sync + 'static {
     ) -> u64 {
         SMALL_MAX
     }
+
+    /// A request from `ip` declared a body bigger than it may bring. Asking for a large body is what a valid key
+    /// earns, so a refusal here is a failed attempt like any other and is counted.
+    fn oversize(&self, _ip: &str) {}
 }
 
 /// What a request with no key of this installation may send: JSON, a form.
@@ -74,8 +78,8 @@ pub struct Listeners {
     pub threads: usize,
 }
 
-/// 34 MB: room for a 24 MB recording in base64 inside a request.
-const READ_MAX: u64 = 1024 * 1024 * 1024;
+/// 34 MiB: room for a 24 MB recording in base64 inside a request, and not a byte more: a body is held in memory.
+const READ_MAX: u64 = 34 * 1024 * 1024;
 
 /// Which listener a request came in on.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -116,6 +120,9 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
         .min(READ_MAX);
     // A declared size over the limit is refused before a byte is read.
     if rq.body_length().is_some_and(|n| n as u64 > limit) {
+        if limit <= SMALL_MAX {
+            app.oversize(ip.as_deref().unwrap_or("?"));
+        }
         let _ = rq.respond(
             tiny_http::Response::from_string(r#"{"error":"body too large"}"#).with_status_code(413),
         );
@@ -158,9 +165,19 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     });
 }
 
+/// Whether a header may be written as it is: no line break or other control character (a value that came from a
+/// stored file name or type must never be able to end the header and start another, or a second response).
+pub fn header_is_safe(name: &str, value: &str) -> bool {
+    let plain = |s: &str| !s.chars().any(|c| c.is_control() && c != '\t');
+    !name.is_empty() && plain(name) && plain(value)
+}
+
 fn send(rq: tiny_http::Request, resp: http::Response) {
     let mut out = tiny_http::Response::from_data(resp.body).with_status_code(resp.status);
     for (k, v) in resp.headers {
+        if !header_is_safe(&k, &v) {
+            continue;
+        }
         if let Ok(h) = tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes()) {
             out.add_header(h);
         }

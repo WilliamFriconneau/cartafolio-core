@@ -23,6 +23,7 @@ pub const SUPPORTED: [&str; 4] = ["2026-07-28", "2025-11-25", "2025-06-18", "202
 const MCP_BODY_MAX: usize = 34 * 1024 * 1024;
 const FAIL_WINDOW: i64 = 900;
 const MAX_FAILS_PER_IP: usize = 10;
+const MAX_FAILS_HELD: usize = 5000;
 
 pub struct App {
     pub brain: Brain,
@@ -208,19 +209,39 @@ impl App {
 
     // --- brute-force guard (MCP) -----------------------------------------------------
 
+    /// Who a failure is counted against: an IPv6 client holds a whole /64, so the address is cut to it (otherwise one
+    /// machine tries a different address for every guess).
+    fn guard_key(who: &str) -> String {
+        match who.parse::<std::net::Ipv6Addr>() {
+            Ok(a) => {
+                let s = a.segments();
+                format!("{:x}:{:x}:{:x}:{:x}::/64", s[0], s[1], s[2], s[3])
+            }
+            Err(_) => who.to_string(),
+        }
+    }
+
+    /// Failures held at the moment (bounded).
+    pub fn failures_held(&self) -> usize {
+        self.fails.lock().unwrap_or_else(|e| e.into_inner()).len()
+    }
+
     pub fn blocked(&self, now: i64, who: &str) -> bool {
+        let who = Self::guard_key(who);
         let mut q = self.fails.lock().unwrap_or_else(|e| e.into_inner());
         while q.front().is_some_and(|(t, _)| now - t > FAIL_WINDOW) {
             q.pop_front();
         }
-        q.iter().filter(|(_, w)| w == who).count() >= MAX_FAILS_PER_IP
+        q.iter().filter(|(_, w)| *w == who).count() >= MAX_FAILS_PER_IP
     }
 
     pub fn fail(&self, now: i64, who: &str) {
-        self.fails
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push_back((now, who.to_string()));
+        let mut q = self.fails.lock().unwrap_or_else(|e| e.into_inner());
+        // A flood from many addresses cannot grow the list, nor slow every check, without bound.
+        if q.len() >= MAX_FAILS_HELD {
+            q.pop_front();
+        }
+        q.push_back((now, Self::guard_key(who)));
     }
 
     pub fn rate_ok(&self, now: i64, key: &str, per_min: i64) -> bool {
@@ -510,6 +531,10 @@ impl App {
 impl crate::net::Handler for App {
     fn handle(&self, req: &Request) -> Response {
         App::handle(self, req)
+    }
+
+    fn oversize(&self, ip: &str) {
+        self.fail(util::now(), ip);
     }
 
     fn body_limit(

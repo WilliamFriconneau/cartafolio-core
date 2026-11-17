@@ -48,6 +48,11 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
     // Serving a request is activity: this node's own entry in the peer directory says so.
     let _ = directory::touch_self(brain, now);
+    if !app.rate_ok(now, &format!("sync:{}", caller.id), caller.rate_per_min) {
+        return refused(429, "rate limit exceeded").with("Retry-After", "60");
+    }
+    // The log is the whole vault: a vault reached only through tag paths is not the peer's to copy or to write.
+    let whole = |s: &Space| caller.read_paths(s).is_none();
     let space = || -> Result<Space, Response> {
         let name = req.query.get("space").map(String::as_str).unwrap_or("");
         Space::new(name).map_err(|_| refused(400, "space: a space name"))
@@ -82,7 +87,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         ("GET", "spaces") => {
             let mut out = Vec::new();
             for s in brain.spaces().unwrap_or_default() {
-                if !caller.can_read(&s) {
+                if !caller.can_read(&s) || !whole(&s) {
                     continue;
                 }
                 let kind = ctl
@@ -107,7 +112,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 Ok(s) => s,
                 Err(r) => return r,
             };
-            if !caller.can_read(&space) {
+            if !caller.can_read(&space) || !whole(&space) {
                 return refused(403, "this key does not read this space");
             }
             let after = req
@@ -152,7 +157,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 Ok(s) => s,
                 Err(r) => return r,
             };
-            if !caller.can_write(&space) {
+            if !caller.can_write(&space) || !whole(&space) {
                 return refused(403, "this key does not write this space");
             }
             let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {

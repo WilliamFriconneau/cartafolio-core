@@ -701,7 +701,22 @@ pub fn copy_client(from: &App, to: &App, client_id: &str) -> bool {
     .is_ok()
 }
 
+/// `POST /oauth/token`, guarded like the key routes: a code or a refresh token that is refused is a guess, counted
+/// per address, and an address that keeps guessing is held off.
 pub fn token(app: &App, req: &Request) -> Response {
+    let now = util::now();
+    let who = req.ip.clone().unwrap_or_else(|| "?".into());
+    if app.blocked(now, &who) {
+        return err(429, "slow_down", "too many attempts").with("Retry-After", "900");
+    }
+    let r = exchange(app, req);
+    if r.status == 400 || r.status == 401 {
+        app.fail(now, &who);
+    }
+    r
+}
+
+fn exchange(app: &App, req: &Request) -> Response {
     let f = form(&req.body);
     let get = |k: &str| f.get(k).map(String::as_str).unwrap_or("");
     let Ok(ctl) = app.brain.open_control() else {

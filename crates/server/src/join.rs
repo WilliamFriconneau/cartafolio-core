@@ -56,14 +56,11 @@ fn clean_device(raw: &str) -> String {
     if d.is_empty() { "a device".into() } else { d }
 }
 
-fn phrase() -> String {
-    let pick = |c: char| {
-        let n = c.to_ascii_lowercase() as usize;
-        WORDS[n % WORDS.len()]
-    };
-    util::random_base32(3)
-        .chars()
-        .map(pick)
+/// Three words, each one of 64 chosen evenly (a random byte modulo 64 has no bias: 256 is a multiple of it).
+pub fn phrase() -> String {
+    util::random_bytes::<3>()
+        .iter()
+        .map(|b| WORDS[usize::from(*b) % WORDS.len()])
         .collect::<Vec<_>>()
         .join("-")
 }

@@ -552,6 +552,10 @@ impl Manager {
 }
 
 impl Handler for Manager {
+    fn oversize(&self, ip: &str) {
+        self.registry.fail(memcp_core::util::now(), ip);
+    }
+
     fn body_limit(
         &self,
         method: &str,
