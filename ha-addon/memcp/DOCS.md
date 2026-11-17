@@ -96,4 +96,4 @@ app's data. With an API, what it reads leaves the house for that service: choose
 
 ## Found without typing an address
 
-The app uses the host network, so that the node advertises itself on the local network (service `_memcp._tcp`). An app on the same network finds it by itself and asks to join; the person answers on the page after comparing three words. `node_name` is the name shown to the apps. A phone or computer on another network (another VLAN, another site) does not see the advertisement: use the tailnet address or type the address.
+The node can advertise itself on the local network (service `_memcp._tcp`) only on the host network, and the host network of this app clashes with the ingress port of Home Assistant on some installations, so it is not set. The apps find the node by its address (local or tailnet) or by the page. `node_name` is the name shown to the apps.

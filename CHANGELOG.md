@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.7
+
+- The add-on is no longer on the host network: its ingress port clashed with another process on the host and the node did not start. Advertising on the network is left for later.
+
 ## 20261117.0.6
 
 - The bridge is now the capture program: crates `memcp-capture` and `memcp-capture-ffi`, binary `memcp-capture` (the commands are the same).
