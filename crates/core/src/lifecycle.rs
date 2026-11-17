@@ -621,8 +621,13 @@ impl Brain {
             serde_json::to_string_pretty(&manifest).unwrap_or_default(),
         )?;
         fs::rename(&db, live.join(space.file_name()))?;
+        // The log goes with the file: a connection still reading keeps the checkpoint above from folding the last
+        // writes in, and removing the log lost them.
         for ext in ["-wal", "-shm"] {
-            let _ = fs::remove_file(format!("{}{ext}", db.display()));
+            let side = PathBuf::from(format!("{}{ext}", db.display()));
+            if side.exists() {
+                fs::rename(&side, live.join(format!("{}{ext}", space.file_name())))?;
+            }
         }
         if blobs.is_dir() {
             fs::rename(&blobs, live.join("files"))?;
@@ -750,6 +755,15 @@ impl Brain {
             live.join(space.file_name()),
             self.dir().join(space.file_name()),
         )?;
+        for ext in ["-wal", "-shm"] {
+            let side = live.join(format!("{}{ext}", space.file_name()));
+            if side.exists() {
+                fs::rename(
+                    &side,
+                    self.dir().join(format!("{}{ext}", space.file_name())),
+                )?;
+            }
+        }
         let blobs = live.join("files");
         if blobs.is_dir() {
             fs::create_dir_all(self.dir().join("files"))?;

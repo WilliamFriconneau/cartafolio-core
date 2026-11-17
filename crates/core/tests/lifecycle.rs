@@ -327,6 +327,33 @@ fn a_connection_limited_to_paths_comes_back_limited_after_a_restore() -> Res {
     Ok(())
 }
 
+/// A reader still open on the space keeps the last writes in the write-ahead log, out of the file: archiving and
+/// restoring keeps them.
+#[cfg(unix)]
+#[test]
+fn an_archive_keeps_writes_still_in_the_log() -> Res {
+    let t = Temp::new("life");
+    let b = brain(&t)?;
+    note(&b, "health", "Slept well", &["sleep"])?;
+    let reader = b.open_space(&sp("health"))?;
+    reader.execute_batch("BEGIN")?;
+    let _: i64 = reader.query_row("SELECT count(*) FROM facts", [], |r| r.get(0))?;
+    note(&b, "health", "Walked an hour", &["walk"])?;
+    b.delete_space(
+        OWNER,
+        &sp("health"),
+        &Disposition::Archive,
+        &Children::Grandparent,
+        false,
+        2_000,
+    )?;
+    drop(reader);
+    let list = b.archived_spaces(OWNER)?;
+    b.restore_space(OWNER, &list[0].name, false)?;
+    assert_eq!(active(&b, "health")?, 2, "both notes");
+    Ok(())
+}
+
 #[test]
 fn children_go_to_the_grandparent_by_default_and_one_cannot_delete_what_is_not_theirs() -> Res {
     let t = Temp::new("life");
