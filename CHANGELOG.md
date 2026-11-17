@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.22
+
+- **What a peer could not keep is never taken as kept.** When a node refuses an event, or leaves it out of its window, the sender now knows it and keeps that event, so nothing is lost when the phone trims its 30 days. An event that waits for one that never comes no longer stops a space for ever. A space of another person with the same name is never mixed with yours, a merge reaches the other nodes as it is, and a file is at most 24 MB.
+- **A machine is what made it, not its name.** Only a key made by a pairing code, a join you allowed or the node's own command line can sync, invite or answer a device; an assistant's key is refused there whatever it is called, and the name `peer-…` is kept for machines. A device joins with a single-use ticket that lasts at most ten minutes, too many waiting requests from one address are turned away, an OAuth consent never takes over another connection, and a space's folder can be set only from the machine itself and never in a folder of the system or of keys.
+- **Your devices keep syncing after the update.** A machine already in step stays a machine: the node recognises it by what made it or, when that proof is gone, by its past syncs as a machine with full rights. A connection the node cannot recognise this way has to join again.
+
 ## 20261117.0.21
 
 - **A device joined to the swarm shares its person's Inbox and spaces**, whatever the person is called on each node: the sync works for the person who owns the spaces of this node, not for a fixed internal user. What a pass could not do is kept and shown (`last_pass` in the sync status).
