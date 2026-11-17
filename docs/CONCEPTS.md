@@ -21,7 +21,7 @@ passé » then knows which appointment it was.
   card in Work's idea box.
 - After a meeting: the recording, its transcript, its summary, three actions → four traces tied together, the actions as
   cards in *What's next*.
-- An app sends `[Kalios] charge 2025-11-16: {"load": 45.8, …}` → a structured trace, shown as its values, counted by the
+- An app sends `[HealthApp] charge 2025-11-16: {"load": 45.8, …}` → a structured trace, shown as its values, counted by the
   dashboards, never read as an instruction.
 
 ## A space

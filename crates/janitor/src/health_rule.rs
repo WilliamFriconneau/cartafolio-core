@@ -125,7 +125,7 @@ fn day_before(y: i64, m: u32, d: u32) -> String {
     format!("{py:04}-{pm:02}-{last:02}")
 }
 
-/// The hour of waking written by Kalios in its day (`[Kalios] day <date>: {..., "night": {"end": "...T07:12..."}}`),
+/// The hour of waking written by HealthApp in its day (`[HealthApp] day <date>: {..., "night": {"end": "...T07:12..."}}`),
 /// in minutes since midnight.
 pub fn wake_from_day(text: &str) -> Option<u32> {
     let at = text.find('{')?;
@@ -231,10 +231,10 @@ mod tests {
     }
 
     #[test]
-    fn the_hour_of_waking_is_read_from_the_kalios_day() {
-        let day = r#"[Kalios] day 2026-11-07: {"date":"2026-11-07","night":{"start":"2026-11-06T23:40:00+01:00","end":"2026-11-07T07:12:00+01:00"}}"#;
+    fn the_hour_of_waking_is_read_from_the_healthapp_day() {
+        let day = r#"[HealthApp] day 2026-11-07: {"date":"2026-11-07","night":{"start":"2026-11-06T23:40:00+01:00","end":"2026-11-07T07:12:00+01:00"}}"#;
         assert_eq!(wake_from_day(day), Some(432));
-        assert_eq!(wake_from_day("[Kalios] day 2026-11-07: {}"), None);
+        assert_eq!(wake_from_day("[HealthApp] day 2026-11-07: {}"), None);
     }
 
     #[test]

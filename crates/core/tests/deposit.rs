@@ -46,7 +46,7 @@ fn call(w: &World, c: &access::Caller, args: Value) -> Result<Value, ToolError> 
 }
 
 fn record(i: usize, text: &str) -> Value {
-    json!({ "text": text, "origin": { "app": "kalios", "id": format!("note/e{i}"), "at": "2026-11-02" } })
+    json!({ "text": text, "origin": { "app": "healthapp", "id": format!("note/e{i}"), "at": "2026-11-02" } })
 }
 
 fn results(v: &Value) -> Vec<String> {
@@ -63,20 +63,20 @@ fn results(v: &Value) -> Vec<String> {
 #[test]
 fn a_batch_is_deposited_in_one_call_and_resumes_by_id() -> Res {
     let w = world()?;
-    let c = caller(&w, "kalios", "sam-health/sources/kalios:rw")?;
+    let c = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
     let batch: Vec<Value> = (0..40)
-        .map(|i| record(i, &format!("[Kalios] note e{i}: sommeil {i}")))
+        .map(|i| record(i, &format!("[HealthApp] note e{i}: sommeil {i}")))
         .collect();
     let r = call(&w, &c, json!({ "records": batch }))?;
     assert_eq!(results(&r), vec!["created"; 40]);
     assert_eq!(r["failed"], 0);
-    assert_eq!(r["cursors"][0]["app"], "kalios");
+    assert_eq!(r["cursors"][0]["app"], "healthapp");
     assert_eq!(r["cursors"][0]["facts"], 40);
     // The same batch again changes nothing; one changed record replaces its earlier version.
     let mut again: Vec<Value> = (0..40)
-        .map(|i| record(i, &format!("[Kalios] note e{i}: sommeil {i}")))
+        .map(|i| record(i, &format!("[HealthApp] note e{i}: sommeil {i}")))
         .collect();
-    again[7] = record(7, "[Kalios] note e7: sommeil corrigé");
+    again[7] = record(7, "[HealthApp] note e7: sommeil corrigé");
     let r = call(&w, &c, json!({ "records": again }))?;
     let got = results(&r);
     assert_eq!(got[7], "updated", "{r}");
@@ -86,7 +86,7 @@ fn a_batch_is_deposited_in_one_call_and_resumes_by_id() -> Res {
         &w.brain,
         &c,
         "recall",
-        &json!({ "query": "corrigé", "tags": ["sources/kalios"] }),
+        &json!({ "query": "corrigé", "tags": ["sources/healthapp"] }),
     )?;
     assert_eq!(found["results"].as_array().map(Vec::len), Some(1));
     Ok(())
@@ -95,17 +95,17 @@ fn a_batch_is_deposited_in_one_call_and_resumes_by_id() -> Res {
 #[test]
 fn a_bad_record_is_told_by_its_place_and_stops_nothing() -> Res {
     let w = world()?;
-    let c = caller(&w, "kalios", "sam-health/sources/kalios:rw")?;
+    let c = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
     let r = call(
         &w,
         &c,
         json!({ "records": [
-            record(0, "[Kalios] bon"),
+            record(0, "[HealthApp] bon"),
             { "text": "sans origine" },
             "pas un objet",
             record(3, ""),
-            { "text": "dossier hors chemin", "origin": { "app": "kalios", "id": "d1", "layer": "dossier" } },
-            record(5, "[Kalios] autre bon"),
+            { "text": "dossier hors chemin", "origin": { "app": "healthapp", "id": "d1", "layer": "dossier" } },
+            record(5, "[HealthApp] autre bon"),
         ] }),
     )?;
     let got = results(&r);
@@ -130,7 +130,7 @@ fn a_bad_record_is_told_by_its_place_and_stops_nothing() -> Res {
 #[test]
 fn the_number_of_records_and_the_rights_are_bounded() -> Res {
     let w = world()?;
-    let c = caller(&w, "kalios", "sam-health/sources/kalios:rw")?;
+    let c = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
     assert!(call(&w, &c, json!({ "records": [] })).is_err());
     assert!(call(&w, &c, json!({})).is_err());
     let many: Vec<Value> = (0..1200).map(|i| record(i, &format!("note {i}"))).collect();
