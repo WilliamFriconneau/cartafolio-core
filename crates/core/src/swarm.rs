@@ -23,6 +23,14 @@ use crate::users::is_space_owner;
 
 const ARCHIVED: &str = "swarm_archived:";
 const RESTORED: &str = "swarm_restored:";
+/// How far ahead of this node's clock the time of an archive may be, in seconds: a peer's clock drifts, and a time
+/// further ahead would win over every copy made or brought back until then.
+const SKEW: i64 = 300;
+
+/// The time of an archive as this node keeps it: never further ahead than its clock allows.
+fn bounded(at: i64) -> i64 {
+    at.min(crate::util::now().saturating_add(SKEW))
+}
 
 fn meta(ctl: &Connection, k: &str) -> Result<Option<String>> {
     Ok(ctl
@@ -43,9 +51,21 @@ fn meta_del(ctl: &Connection, k: &str) -> Result<()> {
     Ok(())
 }
 
+/// A mark kept before archive times were bounded may lie further ahead: it is brought back within bounds, once, so it
+/// stops winning over every copy brought back.
+fn settle_marks(ctl: &Connection) -> Result<()> {
+    ctl.execute(
+        "UPDATE meta SET v = json_set(v, '$.at', ?1)
+         WHERE k LIKE 'swarm_archived:%' AND json_valid(v) AND json_extract(v, '$.at') > ?1",
+        [crate::util::now().saturating_add(SKEW)],
+    )?;
+    Ok(())
+}
+
 /// When `space` was archived on this node or on a node it heard from, and by whose decision: `(owner, at)`.
 pub fn archived_at(brain: &Brain, space: &Space) -> Result<Option<(String, i64)>> {
     let ctl = brain.open_control()?;
+    settle_marks(&ctl)?;
     Ok(meta(&ctl, &format!("{ARCHIVED}{space}"))?.and_then(|v| {
         let v: Value = serde_json::from_str(&v).ok()?;
         Some((v["owner"].as_str()?.to_string(), v["at"].as_i64()?))
@@ -54,6 +74,7 @@ pub fn archived_at(brain: &Brain, space: &Space) -> Result<Option<(String, i64)>
 
 /// Keeps the mark of an archive (the newest one wins), so it travels to the other nodes.
 pub(crate) fn note_archived(brain: &Brain, space: &Space, owner: &str, at: i64) -> Result<()> {
+    let at = bounded(at);
     if archived_at(brain, space)?.is_some_and(|(_, was)| was >= at) {
         return Ok(());
     }
@@ -66,8 +87,14 @@ pub(crate) fn note_archived(brain: &Brain, space: &Space, owner: &str, at: i64) 
     meta_del(&ctl, &format!("{RESTORED}{space}"))
 }
 
-/// A space brought back from its archive: the mark goes, and the copy counts as begun now.
+/// A space brought back from its archive: the mark goes, and the copy counts as begun now, or just after the archive
+/// it comes back from if that one is stamped later (a clock ahead): a space brought back always wins over the archives
+/// this node knew of.
 pub(crate) fn note_restored(brain: &Brain, space: &Space, at: i64) -> Result<()> {
+    let at = match archived_at(brain, space)? {
+        Some((_, archived)) => at.max(archived.saturating_add(1)),
+        None => at,
+    };
     let ctl = brain.open_control()?;
     meta_del(&ctl, &format!("{ARCHIVED}{space}"))?;
     meta_set(&ctl, &format!("{RESTORED}{space}"), &at.to_string())
@@ -94,6 +121,7 @@ pub fn since(brain: &Brain, space: &Space) -> Result<i64> {
 /// The archives of `owner`'s spaces this node knows of: `(space, at)`, by name.
 pub fn tombstones(brain: &Brain, owner: &str) -> Result<Vec<(Space, i64)>> {
     let ctl = brain.open_control()?;
+    settle_marks(&ctl)?;
     let mut st = ctl.prepare("SELECT k, v FROM meta WHERE k LIKE 'swarm_archived:%' ORDER BY k")?;
     let rows: Vec<(String, String)> = st
         .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -360,6 +388,8 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
 /// never erased), when the copy is `user`'s and began before then. Inbox is never archived. When the space is not
 /// here the mark is kept, so it travels on to the next node. `true` when this node archived it now.
 pub fn archive_here(brain: &Brain, user: &str, space: &Space, at: i64) -> Result<bool> {
+    // The time comes from a peer: bounded before it is compared or kept.
+    let at = bounded(at);
     if !brain.has_space(space)? {
         note_archived(brain, space, user, at)?;
         return Ok(false);
