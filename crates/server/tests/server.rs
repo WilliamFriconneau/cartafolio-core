@@ -1757,3 +1757,40 @@ fn a_connection_that_falls_silent_or_drips_gives_its_place_back() -> Res {
     );
     Ok(())
 }
+
+#[test]
+fn an_endless_request_line_or_header_is_cut_short() -> Res {
+    let dir = temp("endless-line");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // Without a line break the server used to keep every byte, until the memory ran out.
+    for start in [&b"GET /"[..], &b"GET / HTTP/1.1\r\nX-Long: "[..]] {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(start)?;
+        let chunk = vec![b'a'; 1 << 20];
+        let mut sent = 0usize;
+        for _ in 0..64 {
+            if s.write_all(&chunk).is_err() {
+                break;
+            }
+            sent += 1;
+        }
+        assert!(sent < 64, "64 MiB taken in one line");
+    }
+    let (head, _) = http(
+        port,
+        "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    Ok(())
+}
