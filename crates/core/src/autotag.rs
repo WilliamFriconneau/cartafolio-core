@@ -147,6 +147,31 @@ pub fn fields_of(tags: &[String]) -> BTreeMap<String, String> {
     out
 }
 
+/// The fields held by a list of tags as JSON, for what the tools return: a scalar field is its value as said, a name held
+/// more than once (and always `caller` and `callee`, see [`crate::call`]) is a list, in the order of the tags.
+pub fn fields_json(tags: &[String]) -> Value {
+    let mut by_name: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for t in tags {
+        let Some((name, value)) = t
+            .strip_prefix(FIELD_PREFIX)
+            .and_then(|rest| rest.split_once('/'))
+        else {
+            continue;
+        };
+        let value = crate::call::value_back(name, &value.replace('_', "."));
+        by_name.entry(name.to_string()).or_default().push(value);
+    }
+    let mut out = serde_json::Map::new();
+    for (name, mut values) in by_name {
+        if values.len() == 1 && !crate::call::LIST_FIELDS.contains(&name.as_str()) {
+            out.insert(name, Value::String(values.remove(0)));
+        } else {
+            out.insert(name, json!(values));
+        }
+    }
+    Value::Object(out)
+}
+
 /// Whether a tag is structural (the memory's own plumbing): it is never learned from and a write that carries one is left
 /// as it is.
 pub fn is_structural(tag: &str) -> bool {
@@ -162,6 +187,9 @@ pub fn is_structural(tag: &str) -> bool {
         || tag.starts_with("proposals/")
         || tag.starts_with("code/")
         || tag.starts_with(FIELD_PREFIX)
+        || tag.starts_with(crate::call::PERSON_PREFIX)
+        || tag == "appel"
+        || tag.starts_with("appel/")
         || tag.starts_with('@')
 }
 
@@ -355,7 +383,15 @@ pub fn add_to(
         if tags.len() >= crate::facts::MAX_TAGS {
             break;
         }
-        if !tags.contains(&t) {
+        // A field the caller already gave (a call's participants, say) is not given a second value by the tagger.
+        let given = t
+            .strip_prefix(FIELD_PREFIX)
+            .and_then(|r| r.split_once('/'))
+            .is_some_and(|(name, _)| {
+                let p = format!("{FIELD_PREFIX}{name}/");
+                tags.iter().any(|x| x.starts_with(&p))
+            });
+        if !given && !tags.contains(&t) {
             tags.push(t.clone());
             added.push(t);
         }

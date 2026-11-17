@@ -68,7 +68,7 @@ fn fact_row(f: &facts::Fact) -> Value {
         "text": f.text,
         "extract": extract(&f.text, 160),
         "tags": f.tags,
-        "fields": memcp_core::autotag::fields_of(&f.tags),
+        "fields": memcp_core::autotag::fields_json(&f.tags),
         "author": f.author,
         "created_at": f.created_at,
         "created": iso(f.created_at),

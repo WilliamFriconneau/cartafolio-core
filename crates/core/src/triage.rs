@@ -193,6 +193,7 @@ pub fn send(
             brain,
             author,
             &format!("{} {}", f.note, f.name.replace(['-', '_', '.'], " ")),
+            &tags,
             to,
         );
         return Ok(new.id);
@@ -228,7 +229,7 @@ pub fn send(
         }
     };
     facts::retire(&src, author, id, &reason(&new_id))?;
-    learn_route(brain, author, &fact.text, to);
+    learn_route(brain, author, &fact.text, &fact.tags, to);
     Ok(new_id)
 }
 
@@ -241,8 +242,11 @@ pub fn filed_id(id: &str, to: &Space) -> String {
 
 /// The person chose where a note of Inbox goes: the node learns it (the words of the note lead to that space).
 /// What the janitor sends is its own choice, never learned from.
-fn learn_route(brain: &Brain, author: &str, text: &str, to: &Space) {
+/// The people of the note (its `personnes/` tags) are learned with it: the next note about them goes there too.
+fn learn_route(brain: &Brain, author: &str, text: &str, tags: &[String], to: &Space) {
     if !author.to_lowercase().contains("janitor") {
-        crate::autotag::Store::open(brain.dir()).learn_route(text, to.as_str());
+        let store = crate::autotag::Store::open(brain.dir());
+        store.learn_route(text, to.as_str());
+        store.learn_people_route(&crate::call::people_of(tags), to.as_str());
     }
 }

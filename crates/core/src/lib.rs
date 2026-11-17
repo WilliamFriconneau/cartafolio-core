@@ -44,6 +44,7 @@
 pub mod access;
 pub mod autotag;
 mod brain;
+pub mod call;
 pub mod catalogue;
 pub mod directory;
 mod error;
