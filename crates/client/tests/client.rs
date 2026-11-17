@@ -561,3 +561,18 @@ fn a_program_may_take_an_address_in_clear_when_it_says_so() {
         "taken when the program says so"
     );
 }
+
+#[test]
+fn many_tries_never_overflow_the_wait() {
+    // Nothing listens on port 1: every try fails at once, and the doubled wait passes what a duration holds.
+    let mut c = Client::new("http://127.0.0.1:1/mcp/x", "hcp_fictional");
+    c.retry = memcp_client::Retry {
+        tries: 90,
+        first: Duration::from_millis(1),
+        longest: Duration::from_millis(1),
+    };
+    assert!(matches!(
+        c.call("recall", json!({})),
+        Err(Error::Unreachable(_))
+    ));
+}

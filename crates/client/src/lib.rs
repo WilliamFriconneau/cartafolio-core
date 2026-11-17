@@ -273,7 +273,7 @@ impl Client {
             match attempt(self) {
                 Err(Error::Unreachable(_)) if tries < self.retry.tries => {
                     std::thread::sleep(wait.min(self.retry.longest));
-                    wait *= 2;
+                    wait = wait.saturating_mul(2);
                 }
                 Err(Error::RateLimited(s)) if tries < self.retry.tries => {
                     std::thread::sleep(Duration::from_secs(s).min(self.retry.longest));
