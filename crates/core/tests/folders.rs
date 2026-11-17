@@ -956,14 +956,22 @@ fn a_space_never_sits_in_or_over_a_folder_of_keys_or_of_the_system() -> Res {
     let t = Temp::new("folders-secret");
     let b = brain(&t)?;
     let s = sp("home");
-    let home = std::env::var_os("HOME").map(PathBuf::from).ok_or("HOME")?;
-    for path in [
+    let home = ["HOME", "USERPROFILE"]
+        .iter()
+        .find_map(std::env::var_os)
+        .map(PathBuf::from)
+        .ok_or("HOME or USERPROFILE")?;
+    let mut places = vec![
         home.join(".ssh"),
-        home.join(".ssh/inside"),
-        home.join(".config/memcp"),
+        home.join(".ssh").join("inside"),
+        home.join(".config").join("memcp"),
         home.clone(),
-        PathBuf::from("/etc"),
-    ] {
+    ];
+    // A path from the root is absolute only on Unix; on Windows it has no drive and is refused before.
+    if cfg!(unix) {
+        places.push(PathBuf::from("/etc"));
+    }
+    for path in places {
         let err = folders::set(&b, &s, Some(&path), Mode::Read, 1)
             .err()
             .ok_or_else(|| format!("{} was taken", path.display()))?;
