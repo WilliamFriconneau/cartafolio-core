@@ -80,6 +80,23 @@ pub fn request(app: &App, req: &Request) -> Response {
         return refused(400, "JSON expected: {\"device\": \"name\"}");
     };
     let device = clean_device(body.get("device").and_then(Value::as_str).unwrap_or(""));
+    // A ticket made by a peer of the same person: the device joins at once, once, with a key of its own.
+    let ticket_owner = match body.get("ticket").and_then(Value::as_str) {
+        Some(t) => {
+            let key = ticket_key(t);
+            let mut tickets = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
+            tickets.retain(|_, (_, _, until)| *until > now);
+            match tickets.remove(&key) {
+                Some((user_id, user_name, _)) => Some((user_id, user_name)),
+                None => {
+                    drop(tickets);
+                    app.fail(now, &who);
+                    return refused(403, "this ticket is unknown, used or expired");
+                }
+            }
+        }
+        None => None,
+    };
     let mut joins = app.joins.lock().unwrap_or_else(|e| e.into_inner());
     sweep(&mut joins, now);
     let waiting = joins
@@ -96,13 +113,16 @@ pub fn request(app: &App, req: &Request) -> Response {
     let secret = util::random_base32(24);
     let check = phrase();
     // A device the person allowed in advance joins at once, once: no words to compare.
-    let allowed = {
-        let mut a = app
-            .allowed_devices
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        a.retain(|_, (_, _, until)| *until > now);
-        a.remove(&device.to_lowercase())
+    let allowed = match ticket_owner {
+        Some((id, name)) => Some((id, name, now)),
+        None => {
+            let mut a = app
+                .allowed_devices
+                .lock()
+                .unwrap_or_else(|e| e.into_inner());
+            a.retain(|_, (_, _, until)| *until > now);
+            a.remove(&device.to_lowercase())
+        }
     };
     let mut state = State::Waiting;
     if let Some((user_id, user_name, _)) = allowed
@@ -246,4 +266,71 @@ pub fn decide(
         "vaults": paired.vaults,
     }));
     Ok(json!({ "result": "approved", "connection": paired.agent }))
+}
+
+/// The hash a ticket is kept under (the ticket itself is never stored).
+fn ticket_key(ticket: &str) -> String {
+    use sha2::{Digest, Sha256};
+    Sha256::digest(format!("join-ticket:{}", ticket.trim()).as_bytes())
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect()
+}
+
+/// How long an invitation ticket lives, in seconds.
+pub const TICKET_TTL: i64 = 600;
+/// Tickets waiting at once, from all peers.
+const MAX_TICKETS: usize = 16;
+
+/// `POST /mcp/<connection>/join/invite` {device?}, with the key of a PEER of the person: a one-time ticket that lets
+/// another device of the same person join at once (`POST /join` {device, ticket}), without the page or the three words,
+/// with a key of its own that can be revoked alone. The ticket is shown once, lives ten minutes, is kept only as a hash,
+/// and is never the peer's own key. Only a peer (a connection that reads and writes the person's spaces) may invite.
+pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
+    let who = req.ip.clone().unwrap_or_else(|| "?".into());
+    if app.blocked(now, &who) {
+        return refused(429, "too many attempts").with("Retry-After", "900");
+    }
+    let Ok(ctl) = app.brain.open_control() else {
+        return refused(500, "storage failed");
+    };
+    let Some(caller) = crate::http::bearer_of(req.header("authorization")).and_then(|t| {
+        memcp_core::access::authenticate(&ctl, &t, now)
+            .ok()
+            .flatten()
+    }) else {
+        app.fail(now, &who);
+        return refused(401, "refused");
+    };
+    if caller.agent != agent {
+        return refused(403, "this key does not reach this address");
+    }
+    if !caller.agent.starts_with("peer-") || caller.is_scoped() || caller.read_only_forced {
+        return refused(403, "only a peer of the person may invite a device");
+    }
+    if !app.rate_ok(now, &format!("invite:{}", caller.id), 6) {
+        return refused(429, "too many invitations, wait a minute").with("Retry-After", "60");
+    }
+    let name = memcp_core::users::user(&ctl, &caller.user_id)
+        .ok()
+        .flatten()
+        .map(|u| u.name)
+        .unwrap_or_default();
+    let ticket = util::random_base32(24);
+    {
+        let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
+        t.retain(|_, (_, _, until)| *until > now);
+        if t.len() >= MAX_TICKETS {
+            return refused(429, "too many invitations are waiting");
+        }
+        t.insert(
+            ticket_key(&ticket),
+            (caller.user_id.clone(), name, now + TICKET_TTL),
+        );
+    }
+    memcp_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
+    Response::json(
+        200,
+        &json!({ "ticket": ticket, "expires_in": TICKET_TTL, "single_use": true }),
+    )
 }

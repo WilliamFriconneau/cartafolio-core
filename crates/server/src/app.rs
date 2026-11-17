@@ -56,6 +56,8 @@ pub struct App {
     pub(crate) joins: Mutex<HashMap<String, crate::join::Join>>,
     /// Devices the person allowed in advance (a reinstalled phone): device name, lower case, to (person id, person
     /// name, end of the permission). A request from such a device is allowed at once, once.
+    /// One-time invitation tickets made by a peer: hash of the ticket to (person id, person name, end of validity).
+    pub(crate) tickets: Mutex<HashMap<String, (String, String, i64)>>,
     pub(crate) allowed_devices: Mutex<HashMap<String, (String, String, i64)>>,
     /// The `memcp-sync` programs this node started (joining a memory, keeping in step with a peer).
     pub(crate) children: Mutex<Vec<std::process::Child>>,
@@ -112,6 +114,7 @@ impl App {
             consents: Mutex::new(HashMap::new()),
             joins: Mutex::new(HashMap::new()),
             allowed_devices: Mutex::new(HashMap::new()),
+            tickets: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
             synced: Mutex::new(std::collections::HashSet::new()),
         }
@@ -189,6 +192,15 @@ impl App {
             // An address that names a vault: a key used there reaches that vault and no other.
             // One that names a connection: only that connection's key is let in.
             // The synchronisation between peers, at the address of the peer's own connection.
+            // A peer invites another device of the same person: a one-time ticket (see join.rs).
+            ("POST", p) if p.starts_with("/mcp/") && p.ends_with("/join/invite") => {
+                let agent = &p["/mcp/".len()..p.len() - "/join/invite".len()];
+                if access::valid_agent(agent) {
+                    crate::join::invite(self, req, now, agent)
+                } else {
+                    Response::json(404, &json!({ "error": "not found" }))
+                }
+            }
             (_, p) if p.starts_with("/mcp/") && p.contains("/sync/") => {
                 let rest = &p["/mcp/".len()..];
                 match rest.split_once("/sync/") {
