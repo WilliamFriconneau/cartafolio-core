@@ -158,3 +158,63 @@ fn a_note_filed_on_two_nodes_before_they_meet_is_one_note() -> Res {
     }
     Ok(())
 }
+
+#[test]
+fn a_box_offered_by_a_peer_of_another_person_never_takes_a_space_of_this_one() -> Res {
+    let t = Temp::new("swarm-other-box");
+    let (a, own_box) = node(&t, "alma")?;
+    let garage = a.add_custom_space(OWNER, "alma", "Garage", None)?;
+    let bob = memcp_core::users::create_user(&a.open_control()?, OWNER, "bob", "Bob", false)?;
+    // A peer of Bob, who has no box here, offers « À trier » under the names of the owner's spaces.
+    for name in [&garage, &own_box] {
+        let offer = Offer::from_json(&serde_json::json!({
+            "space": name.as_str(), "kind": memcp_core::catalogue::TRIAGE,
+            "label": null, "parent": null, "position": 0, "since": 1,
+        }))?;
+        assert!(swarm::accept(&a, &bob.id, &offer).is_err(), "{name} taken");
+    }
+    // The owner's space keeps its kind, and the owner's box stays the one it was.
+    assert_eq!(a.space_kind(&garage)?, "custom");
+    assert_eq!(triage::of(&a, OWNER)?, Some(own_box));
+    assert_eq!(triage::of(&a, &bob.id)?, None);
+    Ok(())
+}
+
+#[test]
+fn two_passes_that_make_the_same_space_at_once_both_succeed() -> Res {
+    let t = Temp::new("swarm-adopt-race");
+    let (a, _) = node(&t, "alma")?;
+    let dir = t.path().join("alma");
+    // Two passes of one node (one per peer) that hear of the same new spaces at the same moment, each with its own
+    // handle on the memory, as two `memcp-sync` processes have.
+    let names: Vec<Space> = (0..30)
+        .map(|i| Space::new(&format!("owner-made-{i}")))
+        .collect::<Result<_, _>>()?;
+    let workers: Vec<_> = (0..4)
+        .map(|_| {
+            let (dir, names) = (dir.clone(), names.clone());
+            std::thread::spawn(move || -> Vec<String> {
+                let Ok(b) = Brain::open(&dir) else {
+                    return vec!["open".into()];
+                };
+                names
+                    .iter()
+                    .filter_map(|s| {
+                        swarm::adopt(&b, OWNER, s, "custom", 1)
+                            .err()
+                            .map(|e| format!("{s}: {e}"))
+                    })
+                    .collect()
+            })
+        })
+        .collect();
+    let mut failed = vec![];
+    for w in workers {
+        failed.extend(w.join().map_err(|_| "a worker panicked")?);
+    }
+    assert!(failed.is_empty(), "{failed:?}");
+    for s in &names {
+        assert!(a.has_space(s)?, "{s}");
+    }
+    Ok(())
+}

@@ -24,9 +24,14 @@ impl Listener {
 
     pub(crate) fn accept(&self) -> std::io::Result<(Connection, Option<SocketAddr>)> {
         match self {
-            Self::Tcp(l) => l
-                .accept()
-                .map(|(conn, addr)| (Connection::from(conn), Some(addr))),
+            Self::Tcp(l) => l.accept().map(|(conn, addr)| {
+                // memcp: a connection silent for longer than the read timeout (when one is set) is closed, so that a
+                // client that stops sending holds its thread, and the place of its request, for that long only.
+                if let Some(t) = crate::read_timeout() {
+                    let _ = conn.set_read_timeout(Some(t));
+                }
+                (Connection::from(conn), Some(addr))
+            }),
             #[cfg(unix)]
             Self::Unix(l) => l.accept().map(|(conn, _)| (Connection::from(conn), None)),
         }

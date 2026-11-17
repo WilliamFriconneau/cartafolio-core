@@ -552,12 +552,22 @@ fn serve_on_a_free_port(
     dir: &std::path::Path,
     extra: &[&str],
 ) -> Result<(std::process::Child, u16), Box<dyn Error>> {
+    serve_with_env(bin, dir, extra, &[])
+}
+
+fn serve_with_env(
+    bin: &str,
+    dir: &std::path::Path,
+    extra: &[&str],
+    env: &[(&str, &str)],
+) -> Result<(std::process::Child, u16), Box<dyn Error>> {
     use std::io::{BufRead, BufReader};
     let mut child = std::process::Command::new(bin)
         .arg("--data")
         .arg(dir)
         .args(["serve", "--listen", "127.0.0.1:0"])
         .args(extra)
+        .envs(env.iter().copied())
         .stderr(std::process::Stdio::piped())
         .spawn()?;
     let mut reader = BufReader::new(child.stderr.take().ok_or("no stderr")?);
@@ -1573,5 +1583,214 @@ fn no_key_is_written_in_the_logs_the_audit_or_the_answers() -> Res {
         checked += 1;
     }
     assert!(checked >= 5, "the databases were looked at ({checked})");
+    Ok(())
+}
+
+#[test]
+fn bodies_that_never_come_without_a_key_do_not_turn_away_a_keyed_assistant() -> Res {
+    let dir = temp("anon-bodies");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let run = |args: &[&str]| -> Result<String, Box<dyn Error>> {
+        let o = std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(args)
+            .output()?;
+        Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    run(&["init", "--spaces", "personal"])?;
+    let out = run(&["connect", "keyed", "--grant", "personal:rw"])?;
+    let token = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("hcp_"))
+        .ok_or("token not shown")?
+        .to_string();
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // 64 connections from this address, without a key, each announcing a body (bigger than what the server reads
+    // before handing the request on) and sending none of it.
+    let mut held = vec![];
+    for _ in 0..64 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\nab")?;
+        held.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    // The person's assistant, from the same address, with its key: answered, not told to come back.
+    let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x" } } }).to_string();
+    let (head, _) = http(
+        port,
+        &format!(
+            "POST /mcp/keyed HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+            payload.len()
+        ),
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    drop(held);
+    Ok(())
+}
+
+#[test]
+fn a_body_cut_short_is_not_taken_as_a_request() -> Res {
+    let dir = temp("cut-body");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let run = |args: &[&str]| -> Result<String, Box<dyn Error>> {
+        let o = std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(args)
+            .output()?;
+        Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    run(&["init", "--spaces", "personal"])?;
+    let out = run(&["connect", "keyed", "--grant", "personal:rw"])?;
+    let token = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("hcp_"))
+        .ok_or("token not shown")?
+        .to_string();
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // A whole JSON request, but the connection ends before the body it announced: the message is not complete.
+    let payload =
+        json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "remember",
+        "arguments": { "space": "personal", "text": "Written by a request that never ended." } } })
+        .to_string();
+    let padded = format!("{payload:<1400}");
+    let mut s = TcpStream::connect(("127.0.0.1", port))?;
+    s.set_read_timeout(Some(Duration::from_secs(5)))?;
+    s.write_all(
+        format!(
+            "POST /mcp/keyed HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: 1500\r\n\r\n{padded}"
+        )
+        .as_bytes(),
+    )?;
+    s.shutdown(std::net::Shutdown::Write)?;
+    let mut answer = String::new();
+    let _ = std::io::Read::read_to_string(&mut s, &mut answer);
+    assert!(!answer.contains("created"), "{answer}");
+    std::thread::sleep(Duration::from_millis(300));
+    let listed = run(&["note", "list", "personal"])?;
+    assert!(!listed.contains("never ended"), "{listed}");
+    Ok(())
+}
+
+#[test]
+fn a_connection_that_falls_silent_or_drips_gives_its_place_back() -> Res {
+    let dir = temp("silent");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    // One second of silence for the test (30 by default).
+    let (child, port) = serve_with_env(bin, &dir, &[], &[("MEMCP_READ_TIMEOUT_SECS", "1")])?;
+    let _srv = Child(child, dir.clone());
+    let pair = "POST /pair HTTP/1.1\r\nHost: x\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}";
+    let answered_within = |secs: u64| -> Result<bool, Box<dyn Error>> {
+        let started = std::time::Instant::now();
+        while started.elapsed() < Duration::from_secs(secs) {
+            std::thread::sleep(Duration::from_millis(250));
+            let (head, _) = http(port, pair)?;
+            if !head.starts_with("HTTP/1.1 503") {
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    };
+    // Every keyless place of this address taken by a body that never comes.
+    let mut held = vec![];
+    for _ in 0..24 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\nab")?;
+        held.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(300));
+    let (head, _) = http(port, pair)?;
+    assert!(
+        head.starts_with("HTTP/1.1 503"),
+        "the places are taken: {head}"
+    );
+    assert!(
+        answered_within(10)?,
+        "still turned away 10 s after they fell silent"
+    );
+    drop(held);
+    // Every place taken by bodies sent a byte at a time: never silent long enough for the timeout of one read, they
+    // meet the deadline of the whole body.
+    let stop = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let mut drips = vec![];
+    for _ in 0..16 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\n")?;
+        let stop = stop.clone();
+        drips.push(std::thread::spawn(move || {
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                if s.write_all(b"a").is_err() {
+                    return;
+                }
+                std::thread::sleep(Duration::from_millis(300));
+            }
+        }));
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    let (head, _) = http(port, pair)?;
+    assert!(
+        head.starts_with("HTTP/1.1 503"),
+        "the places are taken: {head}"
+    );
+    let freed = answered_within(10)?;
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    for d in drips {
+        let _ = d.join();
+    }
+    assert!(
+        freed,
+        "still turned away 10 s after the bodies began to drip"
+    );
+    Ok(())
+}
+
+#[test]
+fn an_endless_request_line_or_header_is_cut_short() -> Res {
+    let dir = temp("endless-line");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    assert!(
+        std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(["init", "--spaces", "personal"])
+            .output()?
+            .status
+            .success()
+    );
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // Without a line break the server used to keep every byte, until the memory ran out.
+    for start in [&b"GET /"[..], &b"GET / HTTP/1.1\r\nX-Long: "[..]] {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(start)?;
+        let chunk = vec![b'a'; 1 << 20];
+        let mut sent = 0usize;
+        for _ in 0..64 {
+            if s.write_all(&chunk).is_err() {
+                break;
+            }
+            sent += 1;
+        }
+        assert!(sent < 64, "64 MiB taken in one line");
+    }
+    let (head, _) = http(
+        port,
+        "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
     Ok(())
 }

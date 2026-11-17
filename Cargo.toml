@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor", "crates/capture-ffi", "crates/spaces"]
+members = ["crates/core", "crates/finances", "crates/server", "crates/manager", "crates/client", "crates/janitor", "crates/capture-ffi", "crates/spaces", "crates/bench"]
 exclude = ["vendor/tiny_http"]
 
 [workspace.package]
@@ -18,7 +18,7 @@ all = { level = "deny", priority = -1 }
 unwrap_used = "deny"
 expect_used = "warn"
 
-# tiny_http with two fixes of ours (see vendor/tiny_http/Cargo.toml): every connection gets a thread, and a body left
-# unread is drained without allocating its declared size.
+# tiny_http with fixes of ours (see vendor/tiny_http/Cargo.toml): every connection gets a thread, a body left unread is
+# drained without allocating its declared size, and a silent connection can be closed after a read timeout.
 [patch.crates-io]
 tiny_http = { path = "vendor/tiny_http" }

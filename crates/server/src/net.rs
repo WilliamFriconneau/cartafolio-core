@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::io::Read;
 use std::net::IpAddr;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use crate::cli::Failure;
 use crate::http::{self, Request, Response};
@@ -38,14 +39,28 @@ pub const LARGE_MAX: u64 = READ_MAX;
 
 /// Requests being read and answered by a thread of their own. A client that sends its body slowly holds only its own
 /// thread, never a worker; past these numbers (in all, and from one address) a new request is turned away at once.
-static IN_FLIGHT: std::sync::Mutex<Option<HashMap<String, usize>>> = std::sync::Mutex::new(None);
+///
+/// Two pools: a request with no key of this installation that still has a body to send (the only kind a stranger can
+/// keep waiting at no cost) takes its place in a pool of its own, so that such requests, however many, never turn
+/// away an assistant or a peer with its key, nor a request without a body.
+static IN_FLIGHT: std::sync::Mutex<[Option<HashMap<String, usize>>; 2]> =
+    std::sync::Mutex::new([None, None]);
 const IN_FLIGHT_MAX: usize = 64;
 const IN_FLIGHT_PER_ADDRESS: usize = 16;
 
+/// Which pool a request takes its place in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Pool {
+    /// A request with a key, or with no body to wait for.
+    Main = 0,
+    /// A request with no key that has a body to send.
+    Keyless = 1,
+}
+
 /// Takes a place for a request from `who`; `false` if there is none.
-fn take_place(who: &str) -> bool {
+fn take_place(pool: Pool, who: &str) -> bool {
     let mut g = IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner());
-    let m = g.get_or_insert_with(HashMap::new);
+    let m = g[pool as usize].get_or_insert_with(HashMap::new);
     let total: usize = m.values().sum();
     let mine = m.get(who).copied().unwrap_or(0);
     if total >= IN_FLIGHT_MAX || mine >= IN_FLIGHT_PER_ADDRESS {
@@ -55,9 +70,9 @@ fn take_place(who: &str) -> bool {
     true
 }
 
-fn give_place(who: &str) {
+fn give_place(pool: Pool, who: &str) {
     let mut g = IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(m) = g.as_mut()
+    if let Some(m) = g[pool as usize].as_mut()
         && let Some(n) = m.get_mut(who)
     {
         *n = n.saturating_sub(1);
@@ -132,7 +147,17 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     let path = path.to_string();
     let query = query.to_string();
     let who = ip.clone().unwrap_or_else(|| "?".into());
-    if !take_place(&who) {
+    // Only a request with a key of this installation (an MCP call, a peer's sync, a file of the page) may bring a
+    // large body: below that limit, one that still has a body to send goes to the keyless pool (the page's other
+    // actions, small, with it).
+    let has_body =
+        headers.contains_key("transfer-encoding") || rq.body_length().is_some_and(|n| n > 0);
+    let pool = if has_body && limit <= SMALL_MAX {
+        Pool::Keyless
+    } else {
+        Pool::Main
+    };
+    if !take_place(pool, &who) {
         // Busy, not broken: say when to come back, so that a client waits instead of hammering.
         let mut busy = tiny_http::Response::empty(503);
         if let Ok(h) = tiny_http::Header::from_bytes(&b"Retry-After"[..], &b"1"[..]) {
@@ -144,11 +169,29 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     let app = Arc::clone(app);
     std::thread::spawn(move || {
         let mut rq = rq;
+        let declared = rq.body_length();
         let mut body = Vec::new();
-        let _ = rq.as_reader().take(limit + 1).read_to_end(&mut body);
+        // A keyless body has a deadline as a whole (twice the timeout of one read): sent a byte at a time, it would
+        // otherwise hold its place for ever without ever being silent.
+        let deadline = (pool == Pool::Keyless).then(|| Instant::now() + read_timeout() * 2);
+        let read = read_body(rq.as_reader(), limit + 1, &mut body, deadline);
         let too_big = body.len() as u64 > limit;
+        // A body that stopped before its end (the connection closed or failed, or fewer bytes than announced) is not a
+        // request: what came may be whole JSON and still not be what the client meant to send.
+        let cut = read.is_err() || declared.is_some_and(|n| body.len() < n);
         let resp = if too_big {
             http::Response::json(413, &serde_json::json!({ "error": "body too large" }))
+        } else if cut {
+            let late = read.as_ref().is_err_and(|e| {
+                matches!(
+                    e.kind(),
+                    std::io::ErrorKind::TimedOut | std::io::ErrorKind::WouldBlock
+                )
+            });
+            http::Response::json(
+                if late { 408 } else { 400 },
+                &serde_json::json!({ "error": "the body did not come whole" }),
+            )
         } else {
             app.handle(&http::Request {
                 method,
@@ -161,9 +204,54 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
                 via_ingress: mode == Mode::Ingress,
             })
         };
-        send(rq, resp);
-        give_place(&who);
+        if cut {
+            // What is left of a body cut short is drained by the connection after the answer, at the client's pace:
+            // the place is not held for that.
+            give_place(pool, &who);
+            send(rq, resp);
+        } else {
+            send(rq, resp);
+            give_place(pool, &who);
+        }
     });
+}
+
+/// How long a connection may stay silent before the node closes it: `MEMCP_READ_TIMEOUT_SECS`, 30 by default.
+fn read_timeout() -> Duration {
+    std::env::var("MEMCP_READ_TIMEOUT_SECS")
+        .ok()
+        .and_then(|v| v.trim().parse::<u64>().ok())
+        .filter(|s| *s > 0)
+        .map_or(Duration::from_secs(30), Duration::from_secs)
+}
+
+/// Reads a body into `body`, at most `max` bytes, and gives up with `TimedOut` past `deadline`.
+fn read_body(
+    r: &mut dyn Read,
+    max: u64,
+    body: &mut Vec<u8>,
+    deadline: Option<Instant>,
+) -> std::io::Result<()> {
+    let mut buf = [0u8; 16 * 1024];
+    loop {
+        if deadline.is_some_and(|d| Instant::now() > d) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::TimedOut,
+                "the body is too slow",
+            ));
+        }
+        let room = usize::try_from(max.saturating_sub(body.len() as u64)).unwrap_or(usize::MAX);
+        if room == 0 {
+            return Ok(());
+        }
+        let take = room.min(buf.len());
+        match r.read(&mut buf[..take]) {
+            Ok(0) => return Ok(()),
+            Ok(n) => body.extend_from_slice(&buf[..n]),
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => {}
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 /// Answers a request turned away before its body is read, from a thread of its own: once answered, the request reads
@@ -200,6 +288,7 @@ fn send(rq: tiny_http::Request, resp: http::Response) {
 
 /// Listens until the process ends. `banner` is what is printed once the listeners are open.
 pub fn serve<H: Handler>(app: Arc<H>, l: &Listeners, banner: &str) -> Result<(), Failure> {
+    tiny_http::set_read_timeout(Some(read_timeout()));
     let server = tiny_http::Server::http(&l.listen)
         .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
     serve_server(app, server, l, banner)
@@ -213,6 +302,7 @@ pub fn serve_on<H: Handler>(
     l: &Listeners,
     banner: &str,
 ) -> Result<(), Failure> {
+    tiny_http::set_read_timeout(Some(read_timeout()));
     let server = tiny_http::Server::from_listener(listener, None)
         .map_err(|e| (1, format!("cannot listen on {}: {e}", l.listen)))?;
     serve_server(app, server, l, banner)

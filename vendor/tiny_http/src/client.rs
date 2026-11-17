@@ -98,6 +98,11 @@ impl ClientConnection {
             prev_byte_was_cr = byte == b'\r';
 
             buf.push(byte);
+            // memcp: a line is at most MAX_LINE bytes. Without a limit a client that never sends a line break had every
+            // byte kept, until the process ran out of memory.
+            if buf.len() > MAX_LINE {
+                return Err(IoError::new(ErrorKind::InvalidData, "Line too long"));
+            }
         }
     }
 
@@ -123,6 +128,10 @@ impl ClientConnection {
                     if line.is_empty() {
                         break;
                     };
+                    // memcp: so many headers that they can only be an attack: the connection is closed.
+                    if headers.len() >= MAX_HEADERS {
+                        return Err(ReadError::WrongHeader(version));
+                    }
                     headers.push(match FromStr::from_str(line.as_str().trim()) {
                         // TODO: remove this conversion
                         Ok(h) => h,
@@ -168,6 +177,10 @@ impl ClientConnection {
         Ok(request)
     }
 }
+
+/// memcp: the longest request line or header line taken (8 KiB, as most servers), and the most headers.
+const MAX_LINE: usize = 8 * 1024;
+const MAX_HEADERS: usize = 100;
 
 impl Iterator for ClientConnection {
     type Item = Request;

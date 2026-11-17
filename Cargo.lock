@@ -724,6 +724,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "memcp-bench"
+version = "20261117.0.17"
+dependencies = [
+ "rusqlite",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
 name = "memcp-capture-ffi"
 version = "20261117.0.19"
 dependencies = [

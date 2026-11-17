@@ -1,0 +1,19 @@
+[package]
+publish = false
+name = "memcp-bench"
+description = "memcp bench: real nodes, started from the programs of this workspace, driven from outside to measure the swarm, the load, the security and what a crash leaves (scripts/bench.sh)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde_json = "1.0.154"
+# The same HTTP client as `memcp-client` (the bench talks to nodes on the loopback only).
+ureq = { version = "3.5", default-features = false, features = ["rustls"] }
+# Read-only, at the end of a phase: the oracle of convergence compares what each node holds.
+rusqlite = { version = "0.41", features = ["bundled"] }
+
+[lints]
+workspace = true

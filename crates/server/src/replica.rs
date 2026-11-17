@@ -233,6 +233,8 @@ pub fn resume(app: &App) {
             .arg(app.brain.dir())
             .args(["--peer", address, "--name", name, "--every", EVERY])
             .env("MEMCP_PEER_TOKEN", key)
+            // The loop ends with this node, so a node started again never runs two loops with one peer.
+            .env("MEMCP_SYNC_PARENT", std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

@@ -254,13 +254,27 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
         }
     };
     if brain.has_space(space)? {
-        // A box that an earlier version made `custom` here is put right.
-        if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
+        // A box that an earlier version made `custom` here is put right (a space of this person only).
+        if kind == TRIAGE
+            && brain.space_kind(space)? == CUSTOM
+            && is_space_owner(&brain.open_control()?, space, user)?
+        {
             set_kind(brain)?;
         }
         return Ok(false);
     }
-    brain.add_space_for(space, user)?;
+    if let Err(e) = brain.add_space_for(space, user) {
+        // Another pass of this node (it runs one per peer, each its own process) may be making the same space at this
+        // moment: once it is made, it is held here, as above.
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !brain.has_space(space)? && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        if brain.has_space(space)? && is_space_owner(&brain.open_control()?, space, user)? {
+            return Ok(false);
+        }
+        return Err(e);
+    }
     // A kind this node's catalogue does not know stays `custom`.
     let _ = set_kind(brain);
     let ctl = brain.open_control()?;
@@ -281,21 +295,31 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
 /// # Errors
 /// [`Error::Invalid`] when the name is held here by a space of another person.
 pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
+    // A name held here by a space of another person is never taken, whatever the offer says it is (a box offered
+    // under that name would otherwise turn that person's space into a box).
+    let other_person = || {
+        Error::Invalid(format!(
+            "{} is the name of a space of another person here",
+            offer.space
+        ))
+    };
+    let held_by_other = brain.has_space(&offer.space)?
+        && !is_space_owner(&brain.open_control()?, &offer.space, user)?;
     if offer.kind == TRIAGE {
         if let Some(mine) = crate::triage::of(brain, user)? {
             return Ok(Answer::Triage(mine));
+        }
+        if held_by_other {
+            return Err(other_person());
         }
         adopt(brain, user, &offer.space, TRIAGE, offer.since)?;
         return Ok(Answer::Created(offer.space.clone()));
     }
     if brain.has_space(&offer.space)? {
-        if is_space_owner(&brain.open_control()?, &offer.space, user)? {
+        if !held_by_other {
             return Ok(Answer::Held(offer.space.clone()));
         }
-        return Err(Error::Invalid(format!(
-            "{} is the name of a space of another person here",
-            offer.space
-        )));
+        return Err(other_person());
     }
     if let Some((_, at)) = archived_at(brain, &offer.space)?
         && at >= offer.since

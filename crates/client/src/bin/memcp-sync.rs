@@ -133,6 +133,65 @@ fn join(
     ExitCode::from(1)
 }
 
+/// Whether the node that started this loop is gone: this process has another parent now (the system took it over).
+/// Not on Windows, where a process is not told that its parent ended: there a loop still outlives its node.
+fn orphaned(parent: Option<u32>) -> bool {
+    #[cfg(unix)]
+    {
+        parent.is_some_and(|p| std::os::unix::process::parent_id() != p)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = parent;
+        false
+    }
+}
+
+/// `scheme://host:port` of an address, in lower case: what tells two nodes apart.
+fn origin(address: &str) -> String {
+    let (scheme, rest) = address.split_once("://").unwrap_or(("", address));
+    let host = rest.split(['/', '?', '#']).next().unwrap_or("");
+    format!(
+        "{}://{}",
+        scheme.to_ascii_lowercase(),
+        host.to_ascii_lowercase()
+    )
+}
+
+/// Keeps a peer this node joined in `dir` (its connection's address and key, private); returns the name it goes by.
+/// The name comes from the first label of the host (`peer-nas`); a node at another address whose name would be the
+/// same (two nodes on one machine, `nas.home` and `nas.office`) gets `peer-nas-2`, and so on, so that no peer ever
+/// replaces another. Joining the same node again replaces its record, under its name.
+fn keep_peer(dir: &std::path::Path, address: &str, url: &str, key: &str) -> Option<String> {
+    let host = address
+        .split("://")
+        .nth(1)
+        .and_then(|r| r.split(['/', ':']).next())
+        .unwrap_or("peer");
+    let base = format!("peer-{}", host.split('.').next().unwrap_or("peer"));
+    let _ = std::fs::create_dir_all(dir);
+    let joined = origin(address);
+    let peer = (1..=1000)
+        .map(|n| {
+            if n == 1 {
+                base.clone()
+            } else {
+                format!("{base}-{n}")
+            }
+        })
+        .find(|name| {
+            let Ok(text) = std::fs::read_to_string(dir.join(format!("{name}.json"))) else {
+                return true;
+            };
+            let v: serde_json::Value = serde_json::from_str(&text).unwrap_or_default();
+            // A record of an earlier version has no `joined`: the address of its connection says where it is.
+            let there = v["joined"].as_str().or(v["address"].as_str()).map(origin);
+            there.is_none_or(|o| o == joined)
+        })?;
+    let record = serde_json::json!({ "name": peer, "address": url, "key": key, "joined": joined });
+    save_private(&dir.join(format!("{peer}.json")), &record.to_string()).then_some(peer)
+}
+
 fn save_private(path: &std::path::Path, text: &str) -> bool {
     use std::io::Write;
     #[cfg(unix)]
@@ -236,7 +295,15 @@ fn main() -> ExitCode {
             }
         }
     }
+    // `MEMCP_SYNC_PARENT`: the node that started this loop (it sets it). When that node is gone (killed, crashed),
+    // the loop ends: a node started again starts its own, and two loops with one peer must never pile up.
+    let parent = std::env::var("MEMCP_SYNC_PARENT")
+        .ok()
+        .and_then(|p| p.trim().parse::<u32>().ok());
     loop {
+        if orphaned(parent) {
+            return ExitCode::SUCCESS;
+        }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs() as i64);
@@ -267,8 +334,92 @@ fn main() -> ExitCode {
             }
         };
         match every {
-            Some(s) if code != 1 => std::thread::sleep(Duration::from_secs(s.max(5))),
+            Some(s) if code != 1 => {
+                for _ in 0..s.max(5) {
+                    if orphaned(parent) {
+                        eprintln!(
+                            "memcp-sync: the node that started this loop is gone; it ends with it"
+                        );
+                        return ExitCode::SUCCESS;
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
             _ => return ExitCode::from(code),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::keep_peer;
+
+    fn kept(dir: &std::path::Path) -> Vec<serde_json::Value> {
+        let mut out: Vec<serde_json::Value> = std::fs::read_dir(dir)
+            .map(|d| {
+                d.flatten()
+                    .filter_map(|e| std::fs::read_to_string(e.path()).ok())
+                    .filter_map(|t| serde_json::from_str(&t).ok())
+                    .collect()
+            })
+            .unwrap_or_default();
+        out.sort_by_key(|v| v["address"].to_string());
+        out
+    }
+
+    #[test]
+    fn a_second_node_on_the_same_host_is_kept_beside_the_first_and_a_rejoin_replaces() {
+        let dir = std::env::temp_dir().join(format!("memcp-sync-peers-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        // Two nodes of the person on one machine (two ports), and one whose name starts the same way elsewhere.
+        let a = keep_peer(
+            &dir,
+            "http://127.0.0.1:8791",
+            "http://127.0.0.1:8791/mcp/peer-a1",
+            "hcp_a_1",
+        );
+        let b = keep_peer(
+            &dir,
+            "http://127.0.0.1:8792",
+            "http://127.0.0.1:8792/mcp/peer-b1",
+            "hcp_b_1",
+        );
+        let c = keep_peer(
+            &dir,
+            "https://nas.home.example",
+            "https://nas.home.example/mcp/peer-c1",
+            "hcp_c_1",
+        );
+        let d = keep_peer(
+            &dir,
+            "https://nas.office.example",
+            "https://nas.office.example/mcp/peer-d1",
+            "hcp_d_1",
+        );
+        let names = [a.clone(), b.clone(), c, d];
+        assert!(names.iter().all(Option::is_some), "{names:?}");
+        let mut unique = names.to_vec();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(
+            unique.len(),
+            4,
+            "each peer has a name of its own: {names:?}"
+        );
+        assert_eq!(kept(&dir).len(), 4, "no peer replaced another");
+        // Joining the first node again (a new key) replaces its record and keeps its name.
+        let again = keep_peer(
+            &dir,
+            "http://127.0.0.1:8791",
+            "http://127.0.0.1:8791/mcp/peer-a2",
+            "hcp_a_2",
+        );
+        assert_eq!(again, a);
+        let all = kept(&dir);
+        assert_eq!(all.len(), 4);
+        assert!(all.iter().any(|v| v["key"] == "hcp_a_2"));
+        assert!(!all.iter().any(|v| v["key"] == "hcp_a_1"));
+        assert!(all.iter().any(|v| v["key"] == "hcp_b_1"));
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
