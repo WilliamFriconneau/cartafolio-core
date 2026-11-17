@@ -130,9 +130,97 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
             "counts": counts,
             "tags": tags,
             "dashboard": dashboard,
-            "rules": read_rules(&conn).1,
+            "rules": rules_view(app, ctl, me, &space, &conn),
+            "proposals": proposals_of(&conn),
+            "rules_history": rules_history(&conn),
         }),
     )
+}
+
+/// The rules of a space, with which keywords it shares with another of the person's spaces: a keyword only this
+/// space lists is *unique* and files a note here at once; a shared one only scores.
+fn rules_view(app: &App, ctl: &Connection, me: &User, space: &Space, conn: &Connection) -> Value {
+    let mut rules = read_rules(conn).1;
+    let mine = clean_list(rules.get("keywords"), 100, false);
+    let mut shared: Vec<String> = vec![];
+    if let Ok(reach) = users::access_of(ctl, &me.id) {
+        for other in reach.keys().filter(|s| *s != space) {
+            let Ok(c) = app.brain.open_space(other) else {
+                continue;
+            };
+            let theirs = clean_list(read_rules(&c).1.get("keywords"), 100, false);
+            shared.extend(mine.iter().filter(|k| theirs.contains(k)).cloned());
+        }
+    }
+    shared.sort();
+    shared.dedup();
+    rules["shared"] = json!(shared);
+    rules
+}
+
+/// What the janitor (or an assistant) proposed for the rules and nobody answered yet: active notes tagged
+/// `proposals/rules`, each `{"keywords": [...], "tags": [...], "why": "..."}`.
+fn proposals_of(conn: &Connection) -> Vec<Value> {
+    let ids: Vec<String> = conn
+        .prepare(
+            "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+             (SELECT fact_id FROM fact_tags WHERE tag = 'proposals/rules') ORDER BY f.created_at DESC LIMIT 20",
+        )
+        .ok()
+        .and_then(|mut st| {
+            st.query_map([], |r| r.get::<_, String>(0))
+                .ok()
+                .map(|r| r.flatten().collect())
+        })
+        .unwrap_or_default();
+    ids.iter()
+        .filter_map(|id| facts::read_fact(conn, id).ok().flatten())
+        .filter_map(|f| {
+            let doc = serde_json::from_str::<Value>(f.text.trim()).ok()?;
+            Some(json!({
+                "id": f.id,
+                "by": f.author,
+                "at": iso(f.created_at),
+                "keywords": clean_list(doc.get("keywords"), 100, false),
+                "tags": clean_list(doc.get("tags"), 100, true),
+                "why": doc.get("why").and_then(Value::as_str).unwrap_or(""),
+            }))
+        })
+        .collect()
+}
+
+/// Who changed the filing rules, when, and what the keywords and tags were each time (newest first).
+fn rules_history(conn: &Connection) -> Vec<Value> {
+    let Some(id) = read_rules(conn).0 else {
+        return vec![];
+    };
+    let chain = facts::history(conn, &id).unwrap_or_default();
+    let mut out = vec![];
+    let mut before: (Vec<String>, Vec<String>) = (vec![], vec![]);
+    for f in &chain {
+        let doc = serde_json::from_str::<Value>(f.text.trim()).unwrap_or(Value::Null);
+        let now = (
+            clean_list(doc.get("keywords"), 100, false),
+            clean_list(doc.get("tags"), 100, true),
+        );
+        let diff = |a: &[String], b: &[String]| -> (Vec<String>, Vec<String>) {
+            (
+                b.iter().filter(|x| !a.contains(x)).cloned().collect(),
+                a.iter().filter(|x| !b.contains(x)).cloned().collect(),
+            )
+        };
+        let (kw_added, kw_removed) = diff(&before.0, &now.0);
+        let (tag_added, tag_removed) = diff(&before.1, &now.1);
+        out.push(json!({
+            "by": f.author, "at": iso(f.created_at),
+            "keywords_added": kw_added, "keywords_removed": kw_removed,
+            "tags_added": tag_added, "tags_removed": tag_removed,
+        }));
+        before = now;
+    }
+    out.reverse();
+    out.truncate(30);
+    out
 }
 
 /// The dashboard of a space, with no model: a JSON document (DASHBOARDS.md) kept in the space as an
@@ -808,6 +896,52 @@ pub fn space_write(
                 .unwrap_or_else(|| clean_list(old.get("keywords"), 100, false));
             write_rules(&conn, &space, &who, tags, keywords)?;
             Ok(json!({ "result": "ok" }))
+        }
+        "/space/proposal" => {
+            // One click on a proposal: accepted, its words join the rules; refused, it is retired. Either way the
+            // proposal leaves the list and its history stays.
+            let name = body
+                .get("space")
+                .and_then(Value::as_str)
+                .ok_or_else(|| err(400, "space is required"))?;
+            let (space, conn) = own(app, ctl, me, name)?;
+            let id = body
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| err(400, "id is required"))?;
+            let accept = match body.get("decision").and_then(Value::as_str) {
+                Some("accept") => true,
+                Some("refuse") => false,
+                _ => return Err(err(400, "decision: accept or refuse")),
+            };
+            let proposal = proposals_of(&conn)
+                .into_iter()
+                .find(|p| p["id"] == id)
+                .ok_or_else(|| err(404, "this proposal is gone"))?;
+            if accept {
+                let (_, old) = read_rules(&conn);
+                let mut tags = clean_list(old.get("tags"), 100, true);
+                tags.extend(clean_list(proposal.get("tags"), 100, true));
+                let mut keywords = clean_list(old.get("keywords"), 100, false);
+                keywords.extend(clean_list(proposal.get("keywords"), 100, false));
+                tags.sort();
+                tags.dedup();
+                keywords.sort();
+                keywords.dedup();
+                write_rules(&conn, &space, &who, tags, keywords)?;
+            }
+            facts::retire(
+                &conn,
+                &who,
+                id,
+                if accept {
+                    "proposal accepted"
+                } else {
+                    "proposal refused"
+                },
+            )
+            .map_err(fail)?;
+            Ok(json!({ "result": if accept { "accepted" } else { "refused" } }))
         }
         "/space/move-tag" => {
             let get = |k: &str| {
