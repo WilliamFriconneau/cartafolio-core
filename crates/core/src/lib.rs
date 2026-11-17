@@ -25,6 +25,8 @@ mod space;
 pub mod sync;
 pub mod text;
 pub mod tools;
+#[cfg(test)]
+mod tools_tests;
 pub mod triage;
 pub mod users;
 pub mod util;
