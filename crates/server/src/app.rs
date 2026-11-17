@@ -512,6 +512,10 @@ impl crate::net::Handler for App {
         App::handle(self, req)
     }
 
+    fn oversize(&self, ip: &str) {
+        self.fail(util::now(), ip);
+    }
+
     fn body_limit(
         &self,
         method: &str,

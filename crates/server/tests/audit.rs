@@ -135,3 +135,47 @@ fn a_connection_limited_to_paths_cannot_use_the_sync_routes() -> Res {
     assert_eq!(listed["spaces"], json!([]), "{listed}");
     Ok(())
 }
+
+#[test]
+fn a_request_may_not_make_the_server_buffer_a_gigabyte() {
+    // The biggest body of any request is what an MCP call may carry (a 24 MB recording in base64), not more.
+    assert!(memcp_server::net::LARGE_MAX <= 40 * 1024 * 1024);
+}
+
+fn raw(port: u16, req: &str) -> String {
+    use std::io::{Read, Write};
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
+    s.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
+    s.write_all(req.as_bytes()).expect("write");
+    let mut out = String::new();
+    let _ = s.read_to_string(&mut out);
+    out
+}
+
+#[test]
+fn guessing_a_key_by_the_size_of_a_body_is_counted_like_any_wrong_key() -> Res {
+    use std::io::{BufRead, BufReader};
+    let e = env()?;
+    let dir = e.dir.clone();
+    let mut child = std::process::Command::new(env!("CARGO_BIN_EXE_memcp"))
+        .arg("--data")
+        .arg(&dir)
+        .args(["serve", "--listen", "127.0.0.1:0"])
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let mut reader = BufReader::new(child.stderr.take().ok_or("no stderr")?);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    std::thread::spawn(move || for _ in reader.lines() {});
+    let port: u16 = line.trim().rsplit(':').next().and_then(|p| p.parse().ok()).ok_or("port")?;
+    // A wrong key with a big declared body used to be answered 413 for ever, with no count: an oracle for the key.
+    let big = "POST /mcp/x HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer wrong\r\nContent-Length: 5000000\r\nConnection: close\r\n\r\n";
+    for _ in 0..10 {
+        assert!(raw(port, big).starts_with("HTTP/1.1 413"));
+    }
+    let after = raw(port, "POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+    let _ = child.kill();
+    let _ = child.wait();
+    assert!(after.starts_with("HTTP/1.1 429"), "{after}");
+    Ok(())
+}
