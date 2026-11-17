@@ -1,4 +1,4 @@
-//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--window-days N|off]`: keeps this node's memory in
+//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off]`: keeps this node's memory in
 //! step with a peer. ADDRESS is the address of this node's connection on the peer (`https://…/mcp/<person>/<connection>`),
 //! its key read from VAR (default MEMCP_PEER_TOKEN). One pass, or one every SECONDS. Exit: 0 done, 1 the key is refused,
 //! 2 wrong use, 3 done with problems (said on standard error).
@@ -10,7 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use memcp_client::peer_sync::Peer;
 use memcp_core::Brain;
 
-const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--window-days N|off]\n       memcp-sync --data DIR --join ADDRESS --status-file FILE [--name NAME]";
+const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off]\n       memcp-sync --data DIR --join ADDRESS --status-file FILE [--name NAME]";
 
 /// `--join ADDRESS`: asks the node at ADDRESS to let this machine in, writes the three words to the status file for the
 /// person's page, waits for the answer, and on a yes keeps the peer (its address and key, private) in `DIR/peers/` so that
@@ -137,6 +137,13 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // `--node-name NAME`: the name this node goes by in the peer directory (else one it made for itself, kept).
+    if let Some(n) = value("--node-name")
+        && let Err(e) = memcp_core::directory::set_own_name(&brain, &n)
+    {
+        eprintln!("memcp-sync: {e}");
+        return ExitCode::from(2);
+    }
     // `--window-days N`: this replica holds the last N days only (kept in its settings); `off` holds everything.
     if let Some(w) = value("--window-days") {
         let days = match w.as_str() {

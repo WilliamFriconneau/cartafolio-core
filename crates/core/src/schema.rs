@@ -27,6 +27,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V16,
     CONTROL_V17,
     CONTROL_V18,
+    CONTROL_V19,
 ];
 
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
@@ -541,6 +542,23 @@ CREATE TABLE sync_state (
   total  INTEGER NOT NULL DEFAULT 0,
   at     INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (peer, space)
+) STRICT, WITHOUT ROWID;
+";
+
+/// The peer directory (see `directory`): every node of the memory, as this node knows it. Rows are never deleted: a
+/// revoked peer keeps its row with the flag, so the revocation spreads.
+const CONTROL_V19: &str = r"
+CREATE TABLE peer_directory (
+  name         TEXT PRIMARY KEY,
+  last_seen    INTEGER NOT NULL,
+  version      TEXT NOT NULL DEFAULT '',
+  first_seen   INTEGER NOT NULL,
+  learned_from TEXT,
+  stamp        TEXT NOT NULL,
+  link         TEXT,
+  revoked      INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER,
+  exposures    TEXT NOT NULL DEFAULT '[]'
 ) STRICT, WITHOUT ROWID;
 ";
 

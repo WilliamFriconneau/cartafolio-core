@@ -2,6 +2,8 @@
 //!
 //! - `GET  /mcp/<connection>/sync/status`: every peer of this memory, its direction, progress per space and last activity
 //!   (what the apps show live).
+//! - `GET  /mcp/<connection>/sync/peers`: this node's peer directory (`{node, peers: [{name, last_seen, version, ...}]}`).
+//! - `POST /mcp/<connection>/sync/peers` `{node: {name}, peers: [...]}`: the peer's directory, merged here.
 //! - `GET  /mcp/<connection>/sync/spaces`: the spaces this key reaches, with their kind and the head of their log.
 //! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L]`: the events of a space after the asker's cursor, never
 //!   the ones it sent itself.
@@ -10,7 +12,7 @@
 //! Only the connection's own key is let in, and only on the spaces it reaches (read for pulling, write for pushing). The
 //! engine is `memcp_core::sync`; nothing here decides what a merge does.
 
-use memcp_core::{Space, access, sync};
+use memcp_core::{Space, access, directory, sync};
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -44,22 +46,39 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         return refused(403, "this key does not reach this address");
     }
     let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
+    // Serving a request is activity: this node's own entry in the peer directory says so.
+    let _ = directory::touch_self(brain, now);
     let space = || -> Result<Space, Response> {
         let name = req.query.get("space").map(String::as_str).unwrap_or("");
         Space::new(name).map_err(|_| refused(400, "space: a space name"))
     };
     match (req.method.as_str(), op) {
-        ("GET", "status") => match sync::status(brain, now) {
-            Ok(list) => Response::json(
-                200,
-                &json!({
-                    "peers": list.iter().map(status_json).collect::<Vec<_>>(),
-                    // This replica's window and what it pruned last.
-                    "window": sync::window_status(brain).map_or(Value::Null, |w| w.to_json()),
-                }),
-            ),
-            Err(e) => refused(500, &e.to_string()),
+        ("GET", "status") => match status_body(brain, now, &caller.user_id) {
+            Ok(body) => Response::json(200, &body),
+            Err(e) => refused(500, &e),
         },
+        // The peer directory, as this node tells it: its own entry first-hand, the others as it learned them.
+        ("GET", "peers") => match (directory::node_json(brain, now), directory::to_wire(brain)) {
+            (Ok(node), Ok(peers)) => Response::json(200, &json!({ "node": node, "peers": peers })),
+            (Err(e), _) | (_, Err(e)) => refused(500, &e.to_string()),
+        },
+        // A peer tells its directory: merged here, and the peer is known as the node behind this connection.
+        ("POST", "peers") => {
+            let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
+                return refused(400, "JSON expected: {\"node\": {...}, \"peers\": [...]}");
+            };
+            let from = body["node"]["name"].as_str().unwrap_or(&caller.agent);
+            let list = body["peers"].as_array().cloned().unwrap_or_default();
+            match directory::merge(brain, from, &list, now) {
+                Ok(changed) => {
+                    if let Some(name) = body["node"]["name"].as_str() {
+                        let _ = directory::set_link(brain, name, &caller.agent);
+                    }
+                    Response::json(200, &json!({ "merged": changed }))
+                }
+                Err(e) => refused(400, &e.to_string()),
+            }
+        }
         ("GET", "spaces") => {
             let mut out = Vec::new();
             for s in brain.spaces().unwrap_or_default() {
@@ -187,17 +206,20 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     }
 }
 
-pub(crate) fn status_json(p: &sync::PeerStatus) -> Value {
-    let done: i64 = p.spaces.iter().map(|s| s.done).sum();
-    let total: i64 = p.spaces.iter().map(|s| s.total).sum();
-    json!({
-        "peer": p.peer,
-        "name": p.name,
-        "direction": p.direction,
-        "done": done,
-        "total": total,
-        "percent": if total > 0 { done * 100 / total } else { 100 },
-        "spaces": p.spaces.iter().map(|s| json!({ "space": s.space, "done": s.done, "total": s.total, "percent": s.percent })).collect::<Vec<_>>(),
-        "last_activity": p.last_activity,
-    })
+/// What `GET /sync/status` answers: every peer of the memory (direct ones with their progress, and the nodes of the
+/// peer directory), this node, and this replica's window with what it pruned last.
+pub(crate) fn status_body(
+    brain: &memcp_core::Brain,
+    now: i64,
+    user: &str,
+) -> Result<Value, String> {
+    let _ = directory::touch_self(brain, now);
+    let fail = |e: memcp_core::Error| e.to_string();
+    Ok(json!({
+        "node": directory::node_json(brain, now).map_err(fail)?,
+        "peers": sync::peers_view(brain, now).map_err(fail)?,
+        // The assistants of this person on this node, and how each reaches it.
+        "connections": directory::connections(brain, user).map_err(fail)?,
+        "window": sync::window_status(brain).map_or(Value::Null, |w| w.to_json()),
+    }))
 }

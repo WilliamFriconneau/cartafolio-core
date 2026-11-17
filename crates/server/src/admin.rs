@@ -219,12 +219,9 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
-            "/sync/status" => match memcp_core::sync::status(&app.brain, now) {
-                Ok(list) => Response::json(
-                    200,
-                    &json!({ "peers": list.iter().map(crate::sync_http::status_json).collect::<Vec<_>>() }),
-                ),
-                Err(e) => fail(e),
+            "/sync/status" => match crate::sync_http::status_body(&app.brain, now, &me.id) {
+                Ok(body) => Response::json(200, &body),
+                Err(e) => err(500, &e),
             },
             "/discover" => Response::json(200, &crate::replica::discover(app)),
             "/join-memory" => match crate::replica::join_state(

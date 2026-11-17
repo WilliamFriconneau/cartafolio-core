@@ -20,7 +20,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
 | `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of À trier for some minutes, and gives them back | built (20261116.0.3) |
 | `rules_get` / `rules_set` | read and write the filing rules (tags, keywords) of a space as versions of its `rules` note | built (20261116.0.4) |
-| `peers` | the machines holding this memory: connections named `peer-…`, created, last used, allowed | built (20261116.0.4) |
+| `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |
 | `vocabulary_terms` | the terms of the vocabularies imported into a space, and the vocabularies with their source | built |
 | `library_search` | search the libraries mounted read-only on the spaces you can read: hits with path, title, snippet, type, dates | new |
 | `library_raise` | raise an original into a normal fact with a short summary you give, your tags and the path of the original | new |

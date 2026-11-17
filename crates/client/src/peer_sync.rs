@@ -5,6 +5,7 @@
 
 use std::time::Duration;
 
+use memcp_core::directory;
 use memcp_core::sync::{self, Cursor, Event};
 use memcp_core::{Brain, Space};
 use serde_json::{Value, json};
@@ -73,6 +74,8 @@ impl Peer {
 
     /// One pass over every space the peer's key reaches.
     pub fn sync_once(&self, brain: &Brain, now: i64) -> Result<Pass, String> {
+        // This node is active now: its own entry in the peer directory says so, at every pass.
+        let _ = directory::touch_self(brain, now);
         let listed = self.get("spaces")?;
         let theirs = listed["protocol"].as_i64().unwrap_or(1);
         if theirs > sync::PROTOCOL {
@@ -101,6 +104,7 @@ impl Peer {
                 pass.problems.push(format!("{name}: push: {e}"));
             }
         }
+        self.gossip(brain, now);
         // A replica that holds a window drops what is outside it and acknowledged: local, nothing is sent.
         match sync::prune_all(brain, now) {
             Ok(Some(done)) => pass.pruned = done.iter().map(|p| p.facts).sum(),
@@ -108,6 +112,28 @@ impl Peer {
             Err(e) => pass.problems.push(format!("window: {e}")),
         }
         Ok(pass)
+    }
+
+    /// The peer directories, both ways: takes the peer's (`GET /sync/peers`), then gives this node's
+    /// (`POST /sync/peers`). A peer without the endpoint (an older node) or a failure changes nothing: the
+    /// directory is a courtesy, never a reason for a pass to fail.
+    fn gossip(&self, brain: &Brain, now: i64) {
+        if let Ok(theirs) = self.get("peers") {
+            let node = theirs["node"]["name"].as_str().unwrap_or(&self.name);
+            let list = theirs["peers"].as_array().cloned().unwrap_or_default();
+            let _ = directory::merge(brain, node, &list, now);
+            // The peer's own entry is the one this connection reaches.
+            if let Some(n) = theirs["node"]["name"].as_str() {
+                let _ = directory::merge(brain, n, std::slice::from_ref(&theirs["node"]), now);
+                let _ = directory::set_link(brain, n, &self.name);
+            }
+        } else {
+            return;
+        }
+        if let (Ok(node), Ok(peers)) = (directory::node_json(brain, now), directory::to_wire(brain))
+        {
+            let _ = self.post("peers", &json!({ "node": node, "peers": peers }));
+        }
     }
 
     fn pull(&self, brain: &Brain, space: &Space, now: i64, pass: &mut Pass) -> Result<(), String> {

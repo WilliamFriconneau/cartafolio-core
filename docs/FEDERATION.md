@@ -80,6 +80,45 @@ A phone should not carry a whole memory. A node may be set to hold only a **wind
 - **Offline means the window.** Without a connection, a node answers from what it holds; the page says that older notes need a connection.
 - **Sensitive spaces** are pruned the same way, and never pushed to a drive connector that is not locked (see ENCRYPTION.md).
 
+## The list of peers is shared
+
+Like the peers of a torrent swarm, every node knows every peer of the memory, not only the ones that joined it. Each node keeps a **peer directory** in its control database (`peer_directory`, migration 19) and writes its OWN entry (its node name, set with `--node-name` or made once and kept; the program version; the time it was last active; how it can be reached) at every synchronisation pass and whenever it serves a synchronisation request. Nodes pass directories to each other at each pass (`memcp_core::directory`).
+
+- **Endpoints**, at the address of the connection, like the rest of the exchange: `GET /sync/peers` answers `{node, peers}`; `POST /sync/peers` takes `{node: {name, ...}, peers: [...]}` and merges it. A pass pulls the peer's directory, then pushes its own. A node without these routes (an older one) answers 404 and the pass goes on without it: the directory is never a reason for a pass to fail.
+- **An entry** on the wire: `{name, last_seen (unix), version, first_seen, revoked, revoked_at, exposures: [{kind, address?}]}`. Locally a row also keeps `learned_from` (the node that told this one), `stamp` (`last_seen` and the node it comes from) and `link` (the connection that reaches it directly).
+- **Merge.** Per name the entry with the newest `last_seen` wins, and brings its version and exposures with it. Nothing is made up: a time later than the receiver's clock (plus five minutes) is held back to it, and a node never takes an entry about itself from another. `first_seen` is the earliest told.
+- **Never removed, except by revocation.** When the person revokes a peer's connection, the entry of that peer gets `revoked: true`. The flag sticks (a later sighting does not clear it) and spreads with the rest, so the peer disappears from every list. The row is kept so the flag keeps spreading. An entry not seen for 90 days is listed with `gone: true`, and kept.
+- **Version.** `behind: true` when the version (`AAAAMMJJ.0.N`, compared number by number) is older than this node's. A version that cannot be read is never `behind`.
+- **Exposures** say how a node can be reached: `loopback` (this machine only), `lan` (the local network), `tailnet`, `public` (funnel, the internet), each with its address when known. A node takes them from its settings (the address it listens on, `--public-url`, the tailnet login) when it starts, and tells them in its entry. A peer whose only exposures are `loopback` and `lan` has `only_local: true` and `note: "syncs_on_open"`: it syncs when it is opened, with the peers it can reach. A node whose exposures are unknown is not said to be local.
+- **Assistant connections** (the ones that are not peers) are listed apart with how each reaches the node: `cloud` when its last requests came from an address on the internet (a service such as claude.ai), `local` when they came from this machine, the local network, the tailnet, or not at all (a program of the person's). `via` is the node that served them, the one holding the connection.
+
+The answer of the `peers` tool and of `GET /sync/status` (the same rows):
+
+```json
+{
+  "node": { "name": "bravo", "version": "20261117.0.7", "last_seen": 1794800000,
+            "exposures": [{ "kind": "lan", "address": "10.0.0.14:8791" }], "only_local": true, "note": "syncs_on_open" },
+  "peers": [
+    { "name": "alpha", "peer": "peer-alpha-0001", "connection": "peer-alpha-0001", "direct": true,
+      "version": "20261117.0.7", "last_seen": 1794800000, "first_seen": 1794700000, "learned_from": "alpha",
+      "gone": false, "behind": false, "exposures": [], "only_local": false, "note": null,
+      "direction": "idle", "done": 120, "total": 120, "percent": 100,
+      "spaces": [{ "space": "sam-me", "done": 120, "total": 120, "percent": 100 }],
+      "last_activity": 1794799990, "allowed": null, "created_at": null, "last_used_at": null },
+    { "name": "charlie", "peer": "charlie", "connection": null, "direct": false,
+      "version": "20261101.0.1", "last_seen": 1794790000, "first_seen": 1794700000, "learned_from": "alpha",
+      "gone": false, "behind": true, "exposures": [{ "kind": "loopback" }], "only_local": true, "note": "syncs_on_open",
+      "direction": null, "last_activity": null }
+  ],
+  "connections": [
+    { "name": "claude-web", "kind": "cloud", "via": "bravo", "last_used_at": "2026-11-17T09:00:00Z" }
+  ],
+  "window": { }
+}
+```
+
+For a peer that holds a connection on this node, `connection` is its name (`peer-…`), `allowed` (the `peers` tool only) says whether that connection is still allowed, and `created_at` / `last_used_at` are dates. The rows of direct peers come first, then the others, the most recently seen first. Revoked nodes are not listed.
+
 ## What this is not
 
 - Not a replacement for a file synchroniser: mounted folders can still be synchronised by Syncthing or a Drive, and MemCP only reads and writes them with the care of SPACES.md. MemCP synchronises **memory** (facts, layout, guides, files it holds), not the disk.
