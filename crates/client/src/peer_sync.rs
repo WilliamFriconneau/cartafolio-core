@@ -135,21 +135,39 @@ impl Peer {
     /// (`POST /sync/peers`). A peer without the endpoint (an older node) or a failure changes nothing: the
     /// directory is a courtesy, never a reason for a pass to fail.
     fn gossip(&self, brain: &Brain, now: i64) {
+        // The name the peer goes by: the one it tells, else the one this node keeps it under.
+        let mut asked = self.name.clone();
         if let Ok(theirs) = self.get("peers") {
-            let node = theirs["node"]["name"].as_str().unwrap_or(&self.name);
-            let list = theirs["peers"].as_array().cloned().unwrap_or_default();
-            let _ = directory::merge(brain, node, &list, now);
-            // The peer's own entry is the one this connection reaches.
             if let Some(n) = theirs["node"]["name"].as_str() {
-                let _ = directory::merge(brain, n, std::slice::from_ref(&theirs["node"]), now);
-                let _ = directory::set_link(brain, n, &self.name);
+                asked = n.to_string();
+            }
+            let list = theirs["peers"].as_array().cloned().unwrap_or_default();
+            let _ = directory::merge(brain, &asked, &list, now);
+            // The devices asking to join that node: the person may answer them from here too.
+            let asking = theirs["node"]["pending"]
+                .as_array()
+                .cloned()
+                .unwrap_or_default();
+            let _ = directory::store_remote_joins(brain, &asked, &asking, now);
+            // The peer's own entry is the one this connection reaches.
+            if theirs["node"]["name"].is_string() {
+                let _ = directory::merge(brain, &asked, std::slice::from_ref(&theirs["node"]), now);
+                let _ = directory::set_link(brain, &asked, &self.name);
             }
         } else {
             return;
         }
         if let (Ok(node), Ok(peers)) = (directory::node_json(brain, now), directory::to_wire(brain))
         {
-            let _ = self.post("peers", &json!({ "node": node, "peers": peers }));
+            // The answers the person gave here to requests of that node go back with this exchange.
+            let answers = directory::answers_for(brain, &asked).unwrap_or_default();
+            let sent = self.post(
+                "peers",
+                &json!({ "node": node, "peers": peers, "answers": answers }),
+            );
+            if sent.is_ok() && !answers.is_empty() {
+                let _ = directory::answers_delivered(brain, &asked);
+            }
         }
     }
 
@@ -283,11 +301,29 @@ fn join_agent() -> ureq::Agent {
 /// Asks the node at `server` to let this machine join (`POST /join`): a person there compares the three words and
 /// answers. Nothing is joined until they do.
 pub fn join_request(server: &str, device: &str) -> Result<JoinAsk, String> {
+    join_request_with(server, device, None, None)
+}
+
+/// [`join_request`] with a one-time `ticket` from a node of the same person (no words to compare then) and the id of
+/// the asking node, which the person sees beside the three words.
+pub fn join_request_with(
+    server: &str,
+    device: &str,
+    ticket: Option<&str>,
+    node_id: Option<&str>,
+) -> Result<JoinAsk, String> {
     let server = server.trim().trim_end_matches('/');
+    let mut body = json!({ "device": device });
+    if let Some(t) = ticket {
+        body["ticket"] = json!(t);
+    }
+    if let Some(i) = node_id {
+        body["node_id"] = json!(i);
+    }
     let mut res = join_agent()
         .post(&format!("{server}/join"))
         .header("Content-Type", "application/json")
-        .send(json!({ "device": device }).to_string().as_bytes())
+        .send(body.to_string().as_bytes())
         .map_err(|e| format!("unreachable: {e}"))?;
     let v = read(&mut res)?;
     let field = |k: &str| {
@@ -311,4 +347,18 @@ pub fn join_poll(server: &str, ask: &JoinAsk) -> Result<Value, String> {
         .call()
         .map_err(|e| format!("unreachable: {e}"))?;
     read(&mut res)
+}
+
+/// Who answers at `server` (`GET /.well-known/memcp`): its name and, for a node of this version, its id.
+pub fn who_is_there(server: &str) -> Result<Value, String> {
+    let server = server.trim().trim_end_matches('/');
+    let mut res = join_agent()
+        .get(&format!("{server}/.well-known/memcp"))
+        .call()
+        .map_err(|e| format!("unreachable: {e}"))?;
+    let v = read(&mut res)?;
+    if v["service"] != "memcp" {
+        return Err("this is not a MemCP node".into());
+    }
+    Ok(v)
 }

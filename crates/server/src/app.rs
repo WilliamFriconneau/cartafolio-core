@@ -167,9 +167,13 @@ impl App {
             ("POST", "/oauth/register") => crate::oauth::register(self, req),
             ("POST", "/oauth/token") => crate::oauth::token(self, req),
             ("POST", "/pair") => crate::pair::exchange(self, req),
-            ("GET", "/.well-known/memcp") => {
-                Response::json(200, &crate::discovery::well_known(&self.node_name))
-            }
+            ("GET", "/.well-known/memcp") => Response::json(
+                200,
+                &match memcp_core::directory::node_id(&self.brain) {
+                    Ok(id) => crate::discovery::well_known_with_id(&self.node_name, &id),
+                    Err(_) => crate::discovery::well_known(&self.node_name),
+                },
+            ),
             ("POST", "/join") => crate::join::request(self, req),
             ("GET", p) if p.starts_with("/join/") => {
                 crate::join::poll(self, req, &p["/join/".len()..])

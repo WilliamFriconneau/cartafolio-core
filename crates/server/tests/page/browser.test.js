@@ -187,7 +187,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.mouse.down(); await sleep(1600); await page.mouse.up();
   await page.waitForFunction(() => !document.querySelector("#connections").innerText.includes("work-laptop"));
   check("holding revokes it and closes the confirmation", !(await page.locator("#confirm-dlg").isVisible()));
-  // a bare code typed alone on this node's page goes to its own pairing route
+  // a bare code typed alone on this node's page goes to its own pairing route (the codes are under Advanced)
+  await page.evaluate(() => { document.querySelector("#advanced").open = true; });
   const made = await (await fetch(BASE + "/admin/api/pairing", { method: "POST", headers: { Authorization: "Bearer " + console_token, "X-Requested-With": "memcp", "Content-Type": "application/json" }, body: "{}" })).json();
   await page.fill("#code-input", made.code.replace("-", "").toLowerCase());
   await page.click("#code-go");

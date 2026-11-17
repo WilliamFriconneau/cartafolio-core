@@ -99,15 +99,29 @@ fn status_file(app: &App, id: &str) -> PathBuf {
     app.brain.dir().join(format!("join-{id}.json"))
 }
 
+fn valid_address(address: &str) -> bool {
+    (address.starts_with("https://") || address.starts_with("http://"))
+        && !address.chars().any(|c| c.is_whitespace() || c.is_control())
+        && address.len() <= 300
+}
+
 /// `POST /join-memory` {address}: asks that node to let this one in. Answers an id to follow it by.
 pub fn join_start(app: &App, address: &str) -> Result<Value, String> {
     let address = address.trim().trim_end_matches('/');
-    if !(address.starts_with("https://") || address.starts_with("http://"))
-        || address.chars().any(|c| c.is_whitespace() || c.is_control())
-        || address.len() > 300
-    {
+    if !valid_address(address) {
         return Err("an address such as https://memory.example.net".into());
     }
+    ask(app, &[address.to_string()], None, None)
+}
+
+/// Starts the program that asks the node (the first of `addresses` that answers, and says `expect` as its id when
+/// given) to let this one in, with `ticket` when the person holds one.
+fn ask(
+    app: &App,
+    addresses: &[String],
+    expect: Option<&str>,
+    ticket: Option<&str>,
+) -> Result<Value, String> {
     {
         // Programs that ask to join are few and short: a flood of requests must not fill the process table.
         let mut kids = app.children.lock().unwrap_or_else(|e| e.into_inner());
@@ -118,21 +132,68 @@ pub fn join_start(app: &App, address: &str) -> Result<Value, String> {
     }
     let id = util::random_base32(12).to_ascii_lowercase();
     let file = status_file(app, &id);
-    let child = Command::new(sync_program())
-        .arg("--data")
-        .arg(app.brain.dir())
-        .args(["--join", address, "--status-file"])
+    let mut cmd = Command::new(sync_program());
+    cmd.arg("--data").arg(app.brain.dir());
+    for a in addresses {
+        cmd.args(["--join", a]);
+    }
+    if let Some(e) = expect {
+        cmd.args(["--expect-id", e]);
+    }
+    cmd.arg("--status-file")
         .arg(&file)
         .args(["--name", &app.node_name])
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|_| {
-            "the program that joins (memcp-sync) is not installed on this node".to_string()
-        })?;
+        .stderr(Stdio::null());
+    // The ticket goes by the environment, never on a command line another user of the machine could read.
+    if let Some(t) = ticket {
+        cmd.env("MEMCP_JOIN_TICKET", t);
+    }
+    let child = cmd.spawn().map_err(|_| {
+        "the program that joins (memcp-sync) is not installed on this node".to_string()
+    })?;
     keep(app, child);
     Ok(json!({ "id": id, "state": "asking" }))
+}
+
+/// `POST /nodes/add` {link}: what the person pasted or scanned (a node link, an id, an address): this node asks THAT
+/// node to let it in. With a ticket in the link, the node lets this one in at once; without, a person there compares
+/// the three words and answers, from any of their nodes. A bare id is looked up in the peer directory: a node that a
+/// peer told about is added without typing an address.
+pub fn add_node(app: &App, text: &str) -> Result<Value, String> {
+    use memcp_core::directory as dir;
+    let link = dir::NodeLink::parse(text).map_err(|e| e.to_string())?;
+    let own = dir::node_id(&app.brain).map_err(|e| e.to_string())?;
+    let mut addresses = link.addresses.clone();
+    let mut name = link.name.clone();
+    if let Some(id) = &link.id {
+        if *id == own {
+            return Err("that is this node".into());
+        }
+        if let Some(e) = dir::find_by_id(&app.brain, id).map_err(|e| e.to_string())? {
+            if e.link.is_some() && !e.revoked {
+                return Err(format!("{} is already one of your nodes", e.name));
+            }
+            for a in dir::ways_in(&app.brain, &e).map_err(|e| e.to_string())? {
+                if !addresses.contains(&a) {
+                    addresses.push(a);
+                }
+            }
+            name.get_or_insert(e.name);
+        }
+    }
+    let here = app.public_url.trim_end_matches('/');
+    addresses.retain(|a| valid_address(a));
+    if addresses.iter().any(|a| a.trim_end_matches('/') == here) {
+        return Err("that is this node".into());
+    }
+    if addresses.is_empty() {
+        return Err("this node is not known here yet: paste its link or its address".into());
+    }
+    let mut started = ask(app, &addresses, link.id.as_deref(), link.ticket.as_deref())?;
+    started["node"] = json!({ "id": link.id, "name": name });
+    Ok(started)
 }
 
 /// `GET /join-memory?id=`: where the request stands. When it is approved, the sync with that peer starts.

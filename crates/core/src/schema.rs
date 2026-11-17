@@ -30,6 +30,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V19,
     CONTROL_V20,
     CONTROL_V21,
+    CONTROL_V22,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -604,5 +605,21 @@ CREATE TABLE peer_meta (
   note TEXT NOT NULL DEFAULT '',
   paused_at INTEGER,
   forgotten_at INTEGER
+) STRICT, WITHOUT ROWID;
+";
+
+/// The node's identity in the peer directory (a short id each node makes once and tells its peers), and the requests to
+/// join that a peer told this node about (so that the person can answer them from here; the answer travels back with
+/// the next exchange with that peer).
+const CONTROL_V22: &str = r"
+ALTER TABLE peer_directory ADD COLUMN node_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS remote_joins (
+  node       TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  device     TEXT NOT NULL,
+  words      TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  answer     TEXT,
+  PRIMARY KEY (node, id)
 ) STRICT, WITHOUT ROWID;
 ";
