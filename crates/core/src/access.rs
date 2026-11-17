@@ -19,14 +19,18 @@ use crate::util;
 /// Right of a connection on one space.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Grant {
+    /// May read the space (a write grant also reads).
     pub read: bool,
+    /// May write the space (add, correct, retire facts, put files).
     pub write: bool,
 }
 
+/// Read and write.
 pub const RW: Grant = Grant {
     read: true,
     write: true,
 };
+/// Read only.
 pub const R: Grant = Grant {
     read: true,
     write: false,
@@ -43,6 +47,7 @@ pub type ParsedSpec = (Vec<(Space, Grant)>, Vec<PathGrant>);
 pub struct Rights {
     /// Every space the person reaches, including spaces shared later.
     pub all_spaces: bool,
+    /// Whole-vault grants. A vault reached by paths also has a row here (read, or write if any path writes).
     pub grants: Vec<(Space, Grant)>,
     /// Grants limited to a tag path inside a vault: (vault, path, may write). A vault listed
     /// here also has a row in `grants`; the connection sees only what is filed under the paths.
@@ -76,6 +81,7 @@ impl Rights {
         })
     }
 
+    /// The spec text this value parses from (`all`, or `health:rw,work/dev:r`): the inverse of [`Rights::parse`].
     pub fn label(&self) -> String {
         if self.all_spaces {
             return "all".into();
@@ -166,26 +172,34 @@ with the candidates: `supersede` if it is the same thing corrected, otherwise ca
 /// An anti-flood ceiling, not a pace: 100 calls a second per connection. A runaway loop or a stolen key
 /// meets it; no app that sends its history, even one record per call, does.
 pub const DEFAULT_RATE_PER_MIN: i64 = 6000;
+/// No limit on the length of a fact by default.
 pub const DEFAULT_MAX_TEXT: i64 = i64::MAX;
 
 /// Who is calling, and what it may do. Built from the connection, never from arguments.
 #[derive(Clone, Debug)]
 pub struct Caller {
+    /// Identifier of the connection row.
     pub id: String,
+    /// The connection's name: the author written on everything it writes, and the end of its address (`/mcp/<name>`).
     pub agent: String,
     /// The person the connection belongs to.
     pub user_id: String,
+    /// Reaches every space the person reaches, including spaces shared later.
     pub all_spaces: bool,
+    /// Grants per space, when not `all_spaces`.
     pub grants: BTreeMap<Space, Grant>,
     /// For a vault reached by paths only: the tag paths and whether each may be written. A
     /// vault absent here is reached whole.
     pub paths: BTreeMap<Space, Vec<(String, bool)>>,
     /// Spaces reachable through this connection, as of authentication.
     pub known: Vec<Space>,
+    /// The owner switched this connection to read-only: it cannot write whatever its grants say.
     pub read_only_forced: bool,
     /// The person's own guide is left out of what this connection is told when it connects.
     pub no_person_guide: bool,
+    /// Calls allowed per minute (an anti-flood ceiling, see [`DEFAULT_RATE_PER_MIN`]).
     pub rate_per_min: i64,
+    /// Longest text of one fact, in characters.
     pub max_text: i64,
 }
 
@@ -205,16 +219,19 @@ impl Caller {
         c
     }
 
+    /// Whether the connection reads `s`: the space is reachable through it and it holds a read or write grant (or `all`).
     pub fn can_read(&self, s: &Space) -> bool {
         self.knows(s) && (self.all_spaces || self.grants.get(s).is_some_and(|g| g.read || g.write))
     }
 
+    /// Whether the connection writes `s`: not forced read-only, the space is reachable, and it holds a write grant (or `all`).
     pub fn can_write(&self, s: &Space) -> bool {
         !self.read_only_forced
             && self.knows(s)
             && (self.all_spaces || self.grants.get(s).is_some_and(|g| g.write))
     }
 
+    /// The spaces this connection reads, in the order of `known`.
     pub fn readable(&self) -> Vec<Space> {
         self.known
             .iter()
@@ -223,6 +240,7 @@ impl Caller {
             .collect()
     }
 
+    /// The spaces this connection writes, in the order of `known`; empty for a read-only connection.
     pub fn writable(&self) -> Vec<Space> {
         self.known
             .iter()
@@ -231,6 +249,7 @@ impl Caller {
             .collect()
     }
 
+    /// Whether at least one space is writable: decides if the write tools are listed.
     pub fn can_write_anywhere(&self) -> bool {
         !self.writable().is_empty()
     }
@@ -292,21 +311,32 @@ impl Caller {
     }
 }
 
+/// One connection as listed on the page; never contains the token (only its hash is stored).
 #[derive(Clone, Debug)]
 pub struct ConnectionInfo {
+    /// Identifier of the row.
     pub id: String,
+    /// Name of the connection.
     pub agent: String,
     /// The person the connection belongs to.
     pub user_id: String,
+    /// The grants as text (see [`Rights::label`]).
     pub rights: String,
+    /// Creation date (seconds since the epoch).
     pub created_at: i64,
+    /// Expiry date, if the key expires.
     pub expires_at: Option<i64>,
+    /// Date of revocation, if revoked (a revoked key never works again).
     pub revoked_at: Option<i64>,
+    /// Last authenticated call (updated at most once a minute).
     pub last_used_at: Option<i64>,
+    /// Whether the owner forced it to read-only.
     pub read_only_forced: bool,
+    /// Whether the person's own guide is left out of what it is told when it connects.
     pub no_person_guide: bool,
 }
 
+/// SHA-256 of a token: the only form in which a token is stored and compared.
 pub fn hash_token(token: &str) -> Vec<u8> {
     Sha256::digest(token.as_bytes()).to_vec()
 }
@@ -325,6 +355,7 @@ fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
     Ok(())
 }
 
+/// Whether `name` is a valid connection name: 1 to 40 lowercase letters, digits or dashes, not starting with a dash.
 pub fn valid_agent(name: &str) -> bool {
     let b = name.as_bytes();
     (1..=40).contains(&b.len())
@@ -447,9 +478,17 @@ pub fn connect(
     )
 }
 
-/// Creates a connection for a person and returns its token (shown once). With
-/// `rotate`, the person's existing agent gets a new token and the old one stops
-/// working. An agent name belongs to one person.
+/// Creates a connection named `agent` for the person `user_id` and returns its token (shown once;
+/// only its hash is kept). `days` sets an expiry. With `rotate`, the person's existing connection of
+/// that name gets a new token and the old one stops working. An agent name belongs to one person.
+///
+/// # Errors
+/// [`Error::Invalid`] for a bad name, a name that is a vault's name or another person's, no space
+/// requested, a grant on a space the person does not reach (a connection never goes beyond its
+/// person), an unknown or disabled person, or an existing name without `rotate`.
+///
+/// # Effects
+/// A row in `connections` and its grants; a `connect` row in the control audit log.
 pub fn connect_for(
     ctl: &Connection,
     user_id: &str,
@@ -834,6 +873,8 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
     })
 }
 
+/// Records that `caller` was just used (time and address), at most once a minute per connection
+/// (fewer writes on the disk). Effect: updates `last_used_at` and `last_ip` of its row.
 pub fn touch(ctl: &Connection, caller: &Caller, ip: Option<&str>, now: i64) -> Result<()> {
     // At most one write per minute: batteries and SSDs matter.
     ctl.execute(
@@ -844,6 +885,9 @@ pub fn touch(ctl: &Connection, caller: &Caller, ip: Option<&str>, now: i64) -> R
     Ok(())
 }
 
+/// Revokes every active key of the connection `agent` and its OAuth refresh tokens; it can never be
+/// brought back (make a new connection). Returns `false` when there was nothing to revoke. Effect:
+/// `revoked_at` set, one `revoke` row in the control audit log.
 pub fn revoke(ctl: &Connection, agent: &str) -> Result<bool> {
     let n = ctl.execute(
         "UPDATE connections SET revoked_at = ?2 WHERE agent = ?1 AND revoked_at IS NULL",
@@ -878,6 +922,8 @@ pub fn set_no_person_guide(ctl: &Connection, agent: &str, on: bool) -> Result<bo
     Ok(n == 1)
 }
 
+/// Forces (`on`) or releases the read-only mode of `agent`. Returns `false` if the name is unknown.
+/// Effect: one `readonly` row in the control audit log.
 pub fn set_read_only(ctl: &Connection, agent: &str, on: bool) -> Result<bool> {
     let n = ctl.execute(
         "UPDATE connections SET read_only_forced = ?2 WHERE agent = ?1",
@@ -912,6 +958,7 @@ pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result
     )? == 1)
 }
 
+/// Every connection (consoles excluded), oldest first. Read-only.
 pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
     let mut st = ctl.prepare(
         "SELECT id, agent, coalesce(user_id, 'owner'), created_at, expires_at, revoked_at, last_used_at,

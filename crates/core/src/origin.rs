@@ -32,11 +32,14 @@ use crate::util;
 /// sources (`dossier/<app>`, read first).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Layer {
+    /// The raw records of an app, tagged `sources/<app>` and left out of a plain recall.
     Source,
+    /// The sorted memory an expert reader writes after reconciling sources, tagged `dossier/<app>`.
     Dossier,
 }
 
 impl Layer {
+    /// Reads `"source"` or `"dossier"`; [`Error::Invalid`] for anything else.
     pub fn parse(s: &str) -> Result<Layer> {
         match s {
             "source" => Ok(Layer::Source),
@@ -47,6 +50,7 @@ impl Layer {
         }
     }
 
+    /// `"source"` or `"dossier"`.
     pub fn word(self) -> &'static str {
         match self {
             Layer::Source => "source",
@@ -62,9 +66,12 @@ impl Layer {
     }
 }
 
+/// Where a deposited record comes from: the app, its own id for the record, and when the data point happened.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Origin {
+    /// Lowercase name of the app (letters, digits, `-`, `_`).
     pub app: String,
+    /// The app's own identifier of the record (the same id again means the same record).
     pub id: String,
     /// When the data point happened (ISO 8601, starting `YYYY-MM-DD`). Left out: now.
     pub at: Option<String>,
@@ -79,6 +86,7 @@ pub struct Origin {
 /// What a deposit did.
 #[derive(Clone, Debug)]
 pub enum Deposit {
+    /// The record is new: the fact was written.
     Created(Fact),
     /// The vault already held exactly this under this id: nothing written.
     Unchanged(Fact),
@@ -89,7 +97,9 @@ pub enum Deposit {
     /// The app's earlier version of this record is replaced by its merge with the new one (or by
     /// the new one in the dossier layer); the old one stays in the history.
     Updated {
+        /// The merged (or rewritten) fact.
         fact: Fact,
+        /// Id of the earlier version it replaced.
         replaced: String,
     },
 }
@@ -97,15 +107,19 @@ pub enum Deposit {
 /// The point to resume from for one source.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Cursor {
+    /// The app.
     pub app: String,
+    /// The latest `at` the memory holds for the app.
     pub last_at: Option<String>,
     /// When the memory last received a fact of this app: always a real instant, unlike `last_at`, which is the app's own
     /// word (an app may date a day at its last minute, so ahead of now).
     pub received_at: Option<String>,
+    /// Number of facts the app has deposited.
     pub facts: i64,
 }
 
 impl Cursor {
+    /// The JSON shape: `app`, `last_at`, `received_at` and `facts`.
     pub fn to_json(&self) -> Value {
         json!({ "app": self.app, "last_at": self.last_at, "received_at": self.received_at, "facts": self.facts })
     }

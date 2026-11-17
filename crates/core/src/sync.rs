@@ -46,15 +46,22 @@ pub const PROTOCOL: i64 = 1;
 pub struct Event {
     /// The position in the log of the node that sent it. Meaningless elsewhere.
     pub seq: i64,
+    /// Event id: derived from what changed, so the same change received twice is one row.
     pub eid: String,
+    /// Hybrid logical clock stamp (`<milliseconds>.<counter>.<replica>`, fixed width): orders events across nodes without trusting any clock.
     pub hlc: String,
+    /// The node that made the change.
     pub origin: String,
+    /// What changed (`fact_created`, `fact_superseded`, `fact_retired`, `file_put`, `file_retired`, `layout`...).
     pub kind: String,
+    /// When it happened on the origin (seconds since the epoch).
     pub at: i64,
+    /// The change itself, a JSON object whose fields depend on `kind`.
     pub payload: Value,
 }
 
 impl Event {
+    /// The wire form of the event: an object with `seq`, `eid`, `hlc`, `origin`, `kind`, `at` and `payload`.
     pub fn to_json(&self) -> Value {
         json!({
             "seq": self.seq, "eid": self.eid, "hlc": self.hlc, "origin": self.origin,
@@ -62,6 +69,10 @@ impl Event {
         })
     }
 
+    /// Reads the wire form back. A missing `seq` reads as 0 (it is meaningless on the receiver).
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if `eid`, `hlc`, `origin`, `kind` or `at` is missing, or `payload` is not an object.
     pub fn from_json(v: &Value) -> Result<Event> {
         let text = |k: &str| {
             v.get(k)
@@ -91,17 +102,20 @@ impl Event {
 /// A page of the log.
 #[derive(Clone, Debug)]
 pub struct Page {
+    /// The events, in log order.
     pub events: Vec<Event>,
     /// The position to ask for next (past events left out because the asker sent them).
     pub next: i64,
     /// The last position of this log.
     pub head: i64,
+    /// Whether the log holds more after `next`.
     pub more: bool,
 }
 
 /// What applying events did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Applied {
+    /// Events that changed this replica.
     pub applied: usize,
     /// Already known, or without effect here.
     pub skipped: usize,
@@ -1330,10 +1344,15 @@ pub fn cursors(brain: &Brain, peer: &str, space: &Space) -> Result<(i64, i64)> {
 /// Which cursor to move.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cursor {
+    /// The position read from the peer's log: where to resume pulling.
     Pulled,
+    /// The position of this node's log the peer has acknowledged: where to resume pushing.
     Pushed,
 }
 
+/// Moves one cursor of `peer` on `space` to `to` (created at 0 on first use). The caller moves a cursor
+/// only after the events before it were applied or acknowledged, so a failure re-sends instead of losing.
+/// Effect: one row of `sync_state` in the control database.
 pub fn set_cursor(brain: &Brain, peer: &str, space: &Space, which: Cursor, to: i64) -> Result<()> {
     let ctl = brain.open_control()?;
     let col = match which {
@@ -1376,14 +1395,20 @@ pub fn note_transfer(
     Ok(())
 }
 
+/// How far one space has got in the transfer with a peer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpaceProgress {
+    /// Space name.
     pub space: String,
+    /// Events moved.
     pub done: i64,
+    /// Events to move in all.
     pub total: i64,
+    /// `done` over `total`, 0 to 100.
     pub percent: i64,
 }
 
+/// One peer as shown on the page and in the `peers` tool.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PeerStatus {
     /// The connection's name, `peer-<device>-xxxx`.
@@ -1392,7 +1417,9 @@ pub struct PeerStatus {
     pub name: String,
     /// `sending`, `receiving` or `idle`.
     pub direction: String,
+    /// Progress per space.
     pub spaces: Vec<SpaceProgress>,
+    /// When the peer last moved events (seconds), if ever.
     pub last_activity: Option<i64>,
 }
 
@@ -1458,6 +1485,7 @@ pub fn status(brain: &Brain, now: i64) -> Result<Vec<PeerStatus>> {
 }
 
 impl PeerStatus {
+    /// The JSON shape served to clients: `peer`, `name`, `direction`, `spaces` and `last_activity`.
     pub fn to_json(&self) -> Value {
         json!({
             "peer": self.peer,
@@ -1532,10 +1560,13 @@ pub fn window_cutoff(brain: &Brain, now: i64) -> Result<Option<i64>> {
 /// What one pruning removed or kept.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Pruned {
+    /// Space pruned.
     pub space: String,
     /// Notes removed, whatever their status.
     pub facts: usize,
+    /// Tag rows removed with the notes.
     pub tags: usize,
+    /// Files removed with the notes (the bytes too, when nothing else holds them).
     pub files: usize,
     /// Notes outside the window that stay because a peer has not acknowledged them yet.
     pub kept_unacknowledged: usize,
@@ -1544,6 +1575,7 @@ pub struct Pruned {
 }
 
 impl Pruned {
+    /// The JSON shape: `space`, `facts`, `tags`, `files`, `kept_unacknowledged` and `kept_pinned`.
     pub fn to_json(&self) -> Value {
         json!({
             "space": self.space, "facts": self.facts, "tags": self.tags, "files": self.files,
@@ -1746,16 +1778,22 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
 /// What the last pruning of this replica did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LastPrune {
+    /// When the pruning ran (seconds since the epoch).
     pub at: i64,
+    /// Notes removed.
     pub facts: usize,
+    /// Files removed.
     pub files: usize,
+    /// Notes kept because a peer has not acknowledged them.
     pub kept_unacknowledged: usize,
 }
 
 /// The window of this replica and what was pruned last, for the page and the apps.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WindowStatus {
+    /// Size of the window in days; `None` keeps everything.
     pub days: Option<u32>,
+    /// What the last pruning did, if one ran.
     pub last_prune: Option<LastPrune>,
 }
 
@@ -1768,6 +1806,7 @@ impl WindowStatus {
         }
     }
 
+    /// The JSON shape: `days`, `label` and `last_prune` (or `null`).
     pub fn to_json(&self) -> Value {
         json!({
             "days": self.days,
@@ -1780,6 +1819,7 @@ impl WindowStatus {
     }
 }
 
+/// The window of this replica and what the last pruning did. Read-only.
 pub fn window_status(brain: &Brain) -> Result<WindowStatus> {
     let ctl = brain.open_control()?;
     let last = meta_get(&ctl, WINDOW_LAST_KEY)?
