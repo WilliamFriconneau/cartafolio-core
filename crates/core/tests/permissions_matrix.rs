@@ -204,7 +204,8 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         "retire" => json!({"id": fact, "reason": "test"}),
         "recall" => json!({"query": "review", "space": space}),
         "read_fact" | "history" => json!({"id": fact}),
-        "tidy" | "triage_claim" | "triage_release" | "triage_waiting" | "peers" | "spaces" | "stats" => {
+        "tidy" | "triage_claim" | "triage_release" | "triage_waiting" | "peers" | "spaces"
+        | "stats" => {
             json!({})
         }
         "triage_send" => json!({"id": "nothing", "to": space}),

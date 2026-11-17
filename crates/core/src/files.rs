@@ -494,7 +494,6 @@ pub fn mark_transcription_failed(
     Ok(f)
 }
 
-
 /// How long a recording is kept after its transcription was written (seven days).
 pub const ERASE_AFTER: i64 = 7 * 24 * 3600;
 

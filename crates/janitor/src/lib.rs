@@ -48,6 +48,8 @@ pub struct Report {
     pub left: u32,
     /// Notes of « À trier » sent to the inbox of a vault.
     pub sent: u32,
+    /// Files of « À trier » sent to the inbox of a vault.
+    pub files_sent: u32,
     /// Notes left in « À trier »: the model was unsure, the person decides.
     pub unsure: u32,
     pub problems: Vec<String>,
@@ -121,6 +123,12 @@ fn split_triage(stats: &Value) -> (Vec<String>, Vec<String>) {
     }
     (triage, vaults)
 }
+
+/// The tag of the note that says why each thing waits (the memory's `triage_waiting` reads it).
+pub(crate) const REASONS_TAG: &str = "janitor/reasons";
+
+/// The characters of a text file the router reads.
+const FILE_TEXT_CHARS: usize = 20_000;
 
 /// Tries before a recording that cannot be read, or a note that cannot be written, is left alone (and said once).
 const MAX_FAILS: u64 = 3;
@@ -583,6 +591,20 @@ impl Janitor {
         budget: &mut usize,
         report: &mut Report,
     ) -> Vec<Unplaced> {
+        let mut left = self.sort_notes(triage, vaults, budget, report);
+        if !report.key_refused {
+            left.extend(self.sort_files(triage, vaults, budget, report));
+        }
+        left
+    }
+
+    fn sort_notes(
+        &mut self,
+        triage: &str,
+        vaults: &[String],
+        budget: &mut usize,
+        report: &mut Report,
+    ) -> Vec<Unplaced> {
         let mut unplaced = vec![];
         if vaults.is_empty() {
             return unplaced;
@@ -629,8 +651,15 @@ impl Janitor {
                 || note["type"].as_str() == Some("file")
                 || tags_of(note).iter().any(|g| g.starts_with("inbox/audio"))
                 || is_library(note)
-                || self.state.note_fails(id) >= MAX_FAILS
             {
+                continue;
+            }
+            if self.state.note_fails(id) >= MAX_FAILS {
+                unplaced.push(Unplaced::new(
+                    id,
+                    text,
+                    "it could not be sent three times; the person decides",
+                ));
                 continue;
             }
             *budget -= 1;
@@ -641,13 +670,20 @@ impl Janitor {
                 continue;
             }
             // The person's rule for work: a meeting, or a note about their work, goes to `work`.
+            let mut why = String::new();
             let (to, by): (Vec<String>, &str) = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(text, &self.config.work_words)
             {
                 (vec![work_rule::WORK.to_string()], "the person's work rule")
             } else {
+                let routed =
+                    router::decide(text, &tags_of(note), &self.routing_rules(), &self.layout)
+                        .unwrap_or_else(|reason| {
+                            why = reason;
+                            vec![]
+                        });
                 (
-                    router::route(text, &tags_of(note), &self.routing_rules(), &self.layout)
+                    routed
                         .into_iter()
                         .filter(|t| t != triage && vaults.contains(t))
                         .collect(),
@@ -656,9 +692,10 @@ impl Janitor {
             };
             if to.is_empty() {
                 report.unsure += 1;
-                unplaced.push(Unplaced {
-                    text: text.to_string(),
-                });
+                if why.is_empty() {
+                    why = "no keyword matched".into();
+                }
+                unplaced.push(Unplaced::new(id, text, &why));
                 continue;
             }
             match self.send_many(note, id, text, triage, &to, false, by) {
@@ -674,6 +711,115 @@ impl Janitor {
             }
             if report.key_refused {
                 return unplaced;
+            }
+        }
+        unplaced
+    }
+
+    /// The files of one « À trier » (documents, images; never a recording, which the bridge reads): the same router as for
+    /// notes, on the words of the file's name, its readable text (a text or markdown file), its description and its tags.
+    /// A file the router places goes, as it is, to the inbox of that vault (`triage_send`); the others stay, with the reason.
+    /// A file goes to the first space named when the person names several: nothing is copied.
+    fn sort_files(
+        &mut self,
+        triage: &str,
+        vaults: &[String],
+        budget: &mut usize,
+        report: &mut Report,
+    ) -> Vec<Unplaced> {
+        let mut unplaced = vec![];
+        if vaults.is_empty() {
+            return unplaced;
+        }
+        // A node without the tool has no files to sort this way.
+        let Ok(listed) = self.client.call("triage_waiting", json!({ "limit": 200 })) else {
+            return unplaced;
+        };
+        let files: Vec<Value> = listed["triage"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter(|t| t["space"].as_str() == Some(triage))
+            .flat_map(|t| t["files"].as_array().cloned().unwrap_or_default())
+            .collect();
+        for file in &files {
+            let (Some(id), Some(name)) = (file["id"].as_str(), file["name"].as_str()) else {
+                continue;
+            };
+            let mime = file["mime"].as_str().unwrap_or("");
+            // A recording is the bridge's: its text is made there, and when that fails it is tagged and left.
+            if mime.starts_with("audio/") || file["status"].as_str().is_some_and(|s| s != "active")
+            {
+                continue;
+            }
+            let note = file["note"].as_str().unwrap_or("");
+            if self.state.note_fails(id) >= MAX_FAILS {
+                unplaced.push(Unplaced::file(
+                    id,
+                    name,
+                    note,
+                    "it could not be sent three times; the person decides",
+                ));
+                continue;
+            }
+            if *budget == 0 {
+                unplaced.push(Unplaced::file(id, name, note, "not looked at yet"));
+                continue;
+            }
+            *budget -= 1;
+            // What is readable: the text of a text or markdown file (the first characters only).
+            let body =
+                if mime.starts_with("text/") && file["size"].as_i64().unwrap_or(0) <= 1_000_000 {
+                    self.client
+                        .file_get(id)
+                        .map(|(_, bytes)| {
+                            String::from_utf8_lossy(&bytes)
+                                .chars()
+                                .take(FILE_TEXT_CHARS)
+                                .collect::<String>()
+                        })
+                        .unwrap_or_default()
+                } else {
+                    String::new()
+                };
+            let text = format!("{name}\n{note}\n{body}");
+            let tags: Vec<&str> = tags_of(file);
+            let mut why = String::new();
+            let to: Vec<String> = if vaults.iter().any(|v| v == work_rule::WORK)
+                && work_rule::applies(&text, &self.config.work_words)
+            {
+                vec![work_rule::WORK.to_string()]
+            } else {
+                router::decide(&text, &tags, &self.routing_rules(), &self.layout)
+                    .unwrap_or_else(|reason| {
+                        why = reason;
+                        vec![]
+                    })
+                    .into_iter()
+                    .filter(|t| t != triage && vaults.contains(t))
+                    .collect()
+            };
+            let Some(target) = to.first() else {
+                report.unsure += 1;
+                if why.is_empty() {
+                    why = "no keyword matched".into();
+                }
+                unplaced.push(Unplaced::file(id, name, note, &why));
+                continue;
+            };
+            match self
+                .client
+                .call("triage_send", json!({ "id": id, "to": target }))
+            {
+                Ok(_) => report.files_sent += 1,
+                Err(e) => {
+                    self.state.note_failed(id);
+                    self.fail(report, &format!("{name} cannot be sent to {target}"), &e);
+                    if report.key_refused {
+                        return unplaced;
+                    }
+                    unplaced.push(Unplaced::file(id, name, note, "it could not be sent"));
+                }
             }
         }
         unplaced

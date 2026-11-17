@@ -548,8 +548,13 @@ fn action(
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
-            memcp_core::files::mark_transcription_failed(&app.brain, &from, arg(body, "id")?, false)
-                .map_err(fail)?;
+            memcp_core::files::mark_transcription_failed(
+                &app.brain,
+                &from,
+                arg(body, "id")?,
+                false,
+            )
+            .map_err(fail)?;
             Ok(json!({ "ok": true }))
         }
         "/spaces/open" => {
