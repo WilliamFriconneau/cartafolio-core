@@ -18,6 +18,11 @@ Rules that hold for every row:
 - **Assistants** get tools only for what is safe: writing and correcting notes, restoring a retired note, the keywords
   of a space they may write. Creating or deleting spaces, nodes, connections and people stays with the person.
 
+- **By key, from anywhere.** Every command of the **CLI** column also runs against a running node with a console key
+  (`memcp --node ADDRESS --key-file FILE ...`, [CLI.md](CLI.md)): the node runs the same function with the key's
+  person's rights and answers the same text, so each row below is reachable by key without its own route. The
+  routes of the **HTTP** column stay the way for a page or an app.
+
 Legend: **core** = `memcp_core` function, **CLI** = `memcp` command, **HTTP** = route under `/admin/api`,
 **page** = button on the node page, **MCP** = tool for the person's assistants. `-` = deliberately not offered.
 

@@ -2,6 +2,17 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## The command line reaches a running node (next version)
+
+Every command of `memcp` also runs against a node that is up, with a key ([CLI.md](CLI.md)). All routes are under `/admin/api`, authorised by a console key (`Authorization: Bearer hcpc_...`), with `X-Requested-With: memcp` on a POST, and audited.
+
+- **`POST /admin/api/cli`** `{ "argv": ["space", "new", "Cars"] }` runs a command of the command line for the key's person, on the node's data, and answers `{ "code": 0, "stdout": "...", "stderr": "..." }`: exactly the text and exit code of the local command (`code` 1 for a failure of the command, 2 for a wrong command line). A command of the machine itself (`init`, `serve`...) answers 400 with the reason; a command that needs an administrator, 403 with a sentence; a command a member runs on another person (`--user`), 403. An administrator acts for anyone with `--user`; any other key acts for its own person. The files a command reads must have been sent first (`@upload:ID[/path]` words).
+- **`POST /admin/api/upload?id=&path=&offset=`** takes one chunk of one file (raw bytes, up to 32 MB; the client sends 8 MiB): `id` is 8 to 32 letters or digits, `path` a plain relative path, `offset` the size of the file now (409 otherwise: a chunk is never written twice). 8 GiB at most per `id`, 200 000 files; a folder not used within 12 hours is removed.
+- **`POST /admin/api/upload/discard`** `{ "id" }` forgets a folder that was sent.
+- **`GET /admin/api/export`** now sends the tar from a file, block by block, instead of holding it in memory; the answer is the same.
+- **`GET` and `POST /admin/api/space/folder`** are named by the command `memcp folder get|set` and are **pending** (they come with the space folders): the command answers exit 6, "pending", on a 404.
+- Command line only: `memcp status`, `memcp person new`, `memcp note recall`, `memcp note tags`, `memcp connection list|new|regrant|revoke|internal|readonly|person-guide|limit` (the former words still work), `memcp invite code|ticket|pending|approve|deny|allow` and `memcp join LINK|ID|ADDRESS [--ticket T]` (they call `POST /pairing`, `POST /nodes/invite`, `GET /join/pending`, `POST /join/approve|deny|allow-device`, `POST /nodes/add`, `GET /join-memory`), `memcp folder ...`. `--prefix` and `--token-env` are read as options with a value (they were read as switches, so `adopt DIR --prefix P` did not apply the prefix).
+
 ## Adding a node by its id or link, from any node (next version)
 
 Added only; nothing existing changes except one more key in two answers. Details and the rules: [FEDERATION.md](FEDERATION.md), *Adding a node*.

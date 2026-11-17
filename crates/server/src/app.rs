@@ -643,7 +643,7 @@ pub fn large_body_allowed(
     let path = path.trim_end_matches('/');
     let large = if path.starts_with("/mcp/") {
         bearer.as_deref().is_some_and(key)
-    } else if path.ends_with("/admin/api/files") {
+    } else if path.ends_with("/admin/api/files") || path.ends_with("/admin/api/upload") {
         trusted || bearer.as_deref().is_some_and(console)
     } else {
         false
