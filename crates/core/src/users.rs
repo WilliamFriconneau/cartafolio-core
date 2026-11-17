@@ -705,6 +705,13 @@ pub fn make_recovery_key(ctl: &Connection, id: &str) -> Result<String> {
     Ok(key)
 }
 
+/// Removes the person's recovery key: no new account can take their memory over with it any more.
+pub fn clear_recovery_key(ctl: &Connection, id: &str) -> Result<()> {
+    ctl.execute("UPDATE users SET recovery_hash = NULL WHERE id = ?1", [id])?;
+    audit(ctl, id, "recovery_key_cleared", "");
+    Ok(())
+}
+
 /// Whether a recovery key was made for the person (the key itself is never stored, only its digest). Read-only.
 pub fn has_recovery_key(ctl: &Connection, id: &str) -> Result<bool> {
     Ok(ctl

@@ -281,9 +281,54 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
             who.name
         )));
     }
+    export_vaults(brain, who, &vaults, to, "", at)
+}
+
+/// A person's whole memory, to a folder the caller chose (inside the data directory is fine). `None` when they own
+/// no vault.
+pub(crate) fn export_all(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Option<PathBuf>> {
+    let vaults = owned(&brain.open_control()?, &who.id)?;
+    if vaults.is_empty() {
+        return Ok(None);
+    }
+    export_vaults(brain, who, &vaults, to, "", at).map(Some)
+}
+
+/// The export of one space of a person (what an archive keeps). `to` may be inside the data directory: the caller
+/// chose it (the archive folder).
+pub(crate) fn export_space(
+    brain: &Brain,
+    who: &User,
+    space: &Space,
+    kind: &str,
+    to: &Path,
+    at: i64,
+) -> Result<PathBuf> {
+    export_vaults(
+        brain,
+        who,
+        &[(space.clone(), kind.to_string())],
+        to,
+        &format!("-{space}"),
+        at,
+    )
+}
+
+fn export_vaults(
+    brain: &Brain,
+    who: &User,
+    vaults: &[(Space, String)],
+    to: &Path,
+    tag: &str,
+    at: i64,
+) -> Result<PathBuf> {
+    let ctl = brain.open_control()?;
     private_dir(to)?;
-    let root =
-        crate::fsx::canonical(to)?.join(format!("memcp-export-{}-{}", who.name, util::compact(at)));
+    let root = crate::fsx::canonical(to)?.join(format!(
+        "memcp-export-{}{tag}-{}",
+        who.name,
+        util::compact(at)
+    ));
     fs::DirBuilder::new()
         .private_dir()
         .create(&root)
@@ -291,7 +336,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
 
     let mut hashes: BTreeMap<String, String> = BTreeMap::new();
     let mut entries = vec![];
-    for (space, kind) in &vaults {
+    for (space, kind) in vaults {
         let conn = brain.open_space(space)?;
         let rel = format!("vaults/{space}.sqlite");
         let target = root.join(&rel);
@@ -351,7 +396,7 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
         }));
     }
 
-    let g = serde_json::to_string_pretty(&guides_of(&ctl, who, &vaults)?).unwrap_or_default();
+    let g = serde_json::to_string_pretty(&guides_of(&ctl, who, vaults)?).unwrap_or_default();
     write_private(&root.join("guides.json"), g.as_bytes())?;
     hashes.insert("guides.json".into(), sha_of(g.as_bytes()));
 

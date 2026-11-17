@@ -163,7 +163,7 @@ fn a_database_from_before_kinds_gets_custom_for_every_space() -> Res {
     {
         let c = rusqlite::Connection::open(t.path().join("data").join("control.sqlite"))?;
         c.execute_batch(
-            "ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; ALTER TABLE spaces DROP COLUMN kind; DROP TABLE bridge_pairings; DROP TABLE sync_state; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; PRAGMA user_version = 6;",
+            "ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; ALTER TABLE spaces DROP COLUMN kind; DROP TABLE bridge_pairings; DROP TABLE sync_state; DROP TABLE peer_meta; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; PRAGMA user_version = 6;",
         )?;
     }
     let b = Brain::open(&t.path().join("data"))?;

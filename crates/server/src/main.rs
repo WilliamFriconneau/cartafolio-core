@@ -34,6 +34,19 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          title, dates, text of .md and .txt, [[links]]) and never copies or changes it
   library scan [--space NAME] | library list
                                          reads the mounted folders again (only what changed) | lists them
+  space new LABEL [--kind K] [--parent S] [--keywords a,b] [--tags t] | space show NAME | space tree
+  space set NAME [--label L] [--parent S | --top] [--position N] [--kind K]
+  space delete NAME (--into SPACE | --archive) [--children grandparent|top|under:SPACE] [--dry-run]
+                                         a space is never destroyed: its notes, files and tags go into another space,
+                                         or it is archived (full export, database moved aside); sub-spaces move up
+  space archived | space restore ARCHIVE [--dry-run]
+  rules show|add-keyword|remove-keyword|add-tag|remove-tag SPACE [WORD]
+  node list [--all] | node rename|note|pause|resume|revoke|forget PEER [TEXT] [--dry-run]
+  connection show|rename|rotate|delete AGENT [NAME] [--dry-run]
+  person list | person show|set|heir|recovery-key|disable|enable|delete NAME [--display D] [--role admin|member] [--dry-run]
+  note add|show|list|edit|retire|restore SPACE [TEXT|ID] [--tag T] [--reason R]
+  library remove FOLDER --space NAME [--dry-run] | vocabulary term-add|term-remove NAME TERM... --space NAME
+                                         every command above takes --user PERSON (default: the first administrator)
   console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--console-admin]                the admin page on this listener, with a console token: on by
@@ -43,7 +56,7 @@ const USAGE: &str = "usage: memcp --data DIR <command>
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL] [--oauth-redirect URL]
                                          OAuth for Claude on the web: consent page behind Tailscale serve
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
-        [--days N] [--read-only] [--rotate] [--public-url URL]
+        [--days N] [--read-only] [--rotate] [--internal] [--public-url URL]
                                          creates an MCP connection and shows its token once
   open VAULT [--user PERSON] [--read-only] [--days N] [--public-url URL]
                                          opens one vault to an assistant: a connection limited to it,
@@ -67,6 +80,7 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   regrant AGENT (--all | --grant ...)
                                          changes the rights, same token
   revoke AGENT                           cuts a connection
+  internal AGENT on|off                  marks a connection as one of the program's own tools (kept out of the assistants)
   readonly AGENT on|off                  forces read-only
   person-guide AGENT on|off              off: the person's own guide is not told to this connection (a work assistant)
   limit AGENT rate|max-text N     sets a limit
@@ -82,6 +96,18 @@ const VALUE_FLAGS: &[&str] = &[
     "--out",
     "--person",
     "--assistant",
+    "--label",
+    "--parent",
+    "--position",
+    "--kind",
+    "--into",
+    "--children",
+    "--keywords",
+    "--tags",
+    "--reason",
+    "--tag",
+    "--role",
+    "--note",
     "--name",
     "--source",
     "--plan",
@@ -243,6 +269,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .unwrap_or_else(|| "http://127.0.0.1:8791".into());
     let rights = || cli::rights(sw("--all"), flag("--grant"));
 
+    let cmd = memcp_server::cli_crud::Cmd {
+        pos: &a.pos,
+        flag: &flag,
+        sw: &sw,
+    };
+    if let Some(done) = memcp_server::cli_crud::run(&data, &cmd) {
+        return done;
+    }
+
     match (a.pos[0].as_str(), a.pos.get(1).map(String::as_str)) {
         ("init", _) => {
             let code = flag("--language").unwrap_or("en");
@@ -298,6 +333,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
                 days: flag("--days").and_then(|d| d.parse().ok()),
                 read_only: sw("--read-only"),
                 rotate: sw("--rotate"),
+                internal: sw("--internal"),
                 url: public,
             },
         ),
@@ -338,6 +374,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ),
         ("regrant", _) => cli::regrant(&data, arg(1, "the agent name")?, &rights()?),
         ("revoke", _) => cli::revoke(&data, arg(1, "the agent name")?),
+        ("internal", _) => cli::internal(&data, arg(1, "the agent name")?, arg(2, "on or off")?),
         ("readonly", _) => cli::readonly(&data, arg(1, "the agent name")?, arg(2, "on or off")?),
         ("person-guide", _) => {
             cli::person_guide(&data, arg(1, "the agent name")?, arg(2, "on or off")?)

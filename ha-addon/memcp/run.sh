@@ -72,10 +72,12 @@ if bashio::config.true 'janitor'; then
         fi
       fi
       if [ ! -s "$JDIR/key" ]; then
-        OUT=$(/usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all 2>&1 ||
-              /usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all --rotate 2>&1 || true)
+        OUT=$(/usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all --internal 2>&1 ||
+              /usr/bin/memcp --data "$DATA/people/$PERSON" connect janitor --all --rotate --internal 2>&1 || true)
         echo "$OUT" | grep -oE 'hcp_[A-Za-z0-9_-]+' | head -1 | tr -d '\n' > "$JDIR/key"
       fi
+      # Also for a key made before connections had a kind: the janitor is an internal tool, not an assistant.
+      /usr/bin/memcp --data "$DATA/people/$PERSON" internal janitor on >/dev/null 2>&1 || true
       if [ ! -s "$JDIR/key" ]; then
         bashio::log.error "janitor: no key could be made for $PERSON; it is not started"
         exit 0

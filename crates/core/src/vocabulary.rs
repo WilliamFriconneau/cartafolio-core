@@ -120,3 +120,49 @@ pub fn terms(conn: &Connection, limit: usize) -> Result<Vec<String>> {
     let rows = st.query_map([i64::try_from(limit).unwrap_or(i64::MAX)], |r| r.get(0))?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)
 }
+
+/// Adds terms to a vocabulary that exists; returns how many are new.
+pub fn add_terms(conn: &mut Connection, name: &str, terms: &[String]) -> Result<usize> {
+    let tx = conn.transaction()?;
+    let exists: i64 = tx.query_row(
+        "SELECT count(*) FROM vocabularies WHERE name = ?1",
+        [name],
+        |r| r.get(0),
+    )?;
+    if exists == 0 {
+        return Err(crate::error::Error::Invalid(format!(
+            "no vocabulary {name}"
+        )));
+    }
+    let mut added = 0;
+    for t in terms.iter().filter_map(|t| clean_term(t)) {
+        added += tx.execute(
+            "INSERT OR IGNORE INTO vocabulary_terms (name, term) VALUES (?1, ?2)",
+            [name, &t],
+        )?;
+    }
+    tx.execute(
+        "UPDATE vocabularies SET terms = (SELECT count(*) FROM vocabulary_terms WHERE name = ?1) WHERE name = ?1",
+        [name],
+    )?;
+    tx.commit()?;
+    Ok(added)
+}
+
+/// Removes terms from a vocabulary; returns how many were there.
+pub fn remove_terms(conn: &mut Connection, name: &str, terms: &[String]) -> Result<usize> {
+    let tx = conn.transaction()?;
+    let mut gone = 0;
+    for t in terms.iter().filter_map(|t| clean_term(t)) {
+        gone += tx.execute(
+            "DELETE FROM vocabulary_terms WHERE name = ?1 AND term = ?2",
+            [name, &t],
+        )?;
+    }
+    tx.execute(
+        "UPDATE vocabularies SET terms = (SELECT count(*) FROM vocabulary_terms WHERE name = ?1) WHERE name = ?1",
+        [name],
+    )?;
+    tx.commit()?;
+    Ok(gone)
+}

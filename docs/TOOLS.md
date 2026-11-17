@@ -936,6 +936,42 @@ Example call and answer:
 }
 ```
 
+### `restore`
+
+Brings a retired fact back as a new version: a new active fact with the same text, tags, kind and validity, pointing at the retired one, which stays retired in the history.
+
+- **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it).
+- **Answer:** `{ result: "restored", fact }`.
+- **Errors:** `invalid` (`unknown fact`, the fact is not retired, the same text is active again already); `denied`.
+- **Effects:** A new active fact is written (its `replaces` names the retired one). Nothing is erased.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes | - |
+| `reason` | string | no | - |
+
+Example call and answer:
+
+```json
+{
+  "name": "restore",
+  "arguments": {
+    "id": "f_ab12",
+    "reason": "it was right after all"
+  }
+}
+```
+
+```json
+{
+  "result": "restored",
+  "fact": {
+    "id": "f_ad34",
+    "status": "active"
+  }
+}
+```
+
 ### `deposit`
 
 Deposits records of an app in one call, in one space: each is a `remember` with its `origin` (required), with the same rules, the same paths and the same answer per record, so a feed that sends many records does not pay one request each. A record that is refused does not stop the others; the answer lists each one by its position. The same app and id again changes nothing, or merges into the app's earlier version, which is never overwritten (JSON objects merge field by field, a null or absent value erases nothing; other text is appended). The answer carries the cursor of each app and layer, to resume from.
@@ -1275,6 +1311,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `recall` | search or list: by words, by path, newest first; `space` may be a path of the tree | kept, one query shape |
 | `read` | one note with its history | merges `read_fact` and `history` |
 | `remember`, `supersede`, `retire` | write, correct, retire (reason required) | kept: these three words are the model |
+| `restore` | bring a retired fact back as a new version (same text and tags, pointing at the retired one, which stays retired in the history) | built (see CRUD.md) |
 | `files` | `put`, `get`, `list`, `retire` in one tool with an `op` | merges `file_put`, `file_get`, `file_list`, `file_retire`, `file_erase` |
 | `dashboard` | `get` the JSON of a space's dashboard; `propose` or `set` a change, checked against the widget catalogue | new |
 | `rules` | `get` the keywords and tags of a space; `propose` or `apply` a change | new |

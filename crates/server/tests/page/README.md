@@ -59,3 +59,16 @@ cargo build -p memcp-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node french.test.js
 ```
+
+## Create, read, update, delete
+
+`crud.test.js` drives the real program in a real Chromium through the buttons added for docs/CRUD.md: create a space with
+keywords, delete it with a choice (preview first, then hold to confirm), the archive list and restore, delete into another
+space, a new key, revoke and remove a connection, the janitor kept in *Internal tools*, pause, revoke and forget a machine,
+bring a removed note back, remove a vocabulary, and that no browser dialog is ever used.
+
+```sh
+cargo build -p memcp-server
+cd crates/server/tests/page && npm install jsdom playwright-core --no-save
+CHROMIUM=/usr/bin/chromium node crud.test.js
+```

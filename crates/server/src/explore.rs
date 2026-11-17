@@ -565,7 +565,23 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
         .clamp(1, PAGE_MAX);
     let tag = req.query.get("tag").map(String::as_str).unwrap_or("");
     let q = req.query.get("q").map(|s| s.trim()).unwrap_or("");
-    let rows: Vec<facts::Fact> = if q.is_empty() {
+    // `status=retired`: the notes that were removed, newest first, for bringing one back.
+    let rows: Vec<facts::Fact> = if req.query.get("status").map(String::as_str) == Some("retired") {
+        let Ok(mut st) = conn.prepare(
+            "SELECT id FROM facts WHERE status = 'retired'
+             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
+             ORDER BY status_at DESC, rowid DESC LIMIT ?1",
+        ) else {
+            return err(500, "storage failed");
+        };
+        let ids: Vec<String> = st
+            .query_map([limit as i64], |r| r.get(0))
+            .map(|r| r.flatten().collect())
+            .unwrap_or_default();
+        ids.iter()
+            .filter_map(|id| facts::read_fact(&conn, id).ok().flatten())
+            .collect()
+    } else if q.is_empty() {
         let like = format!("{tag}/%");
         let sql = if tag.is_empty() {
             "SELECT id FROM facts WHERE status = 'active'
@@ -964,6 +980,15 @@ pub fn write(
             let f = facts::supersede(&conn, &space, &who, id, new, reason).map_err(fail)?;
             Ok(json!({ "result": "replaced", "fact": fact_row(&f) }))
         }
+        "/fact/restore" => {
+            let id = body
+                .get("id")
+                .and_then(Value::as_str)
+                .ok_or_else(|| err(400, "id is required"))?;
+            let reason = body.get("reason").and_then(Value::as_str);
+            let f = facts::restore(&conn, &space, &who, id, reason).map_err(fail)?;
+            Ok(json!({ "result": "restored", "fact": fact_row(&f) }))
+        }
         "/fact/retire" => {
             let id = body
                 .get("id")
@@ -1160,7 +1185,27 @@ pub fn space_write(
                 .get("keywords")
                 .map(|v| clean_list(Some(v), 100, false))
                 .unwrap_or_else(|| clean_list(old.get("keywords"), 100, false));
-            write_rules(&conn, &space, &who, tags, keywords)?;
+            if body.get("tags").is_some() || body.get("keywords").is_some() {
+                write_rules(&conn, &space, &who, tags, keywords)?;
+            }
+            let list = |k: &str| -> Vec<String> {
+                body.get(k)
+                    .and_then(Value::as_array)
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(Value::as_str)
+                            .map(String::from)
+                            .collect()
+                    })
+                    .unwrap_or_default()
+            };
+            let edit = memcp_core::rules::Edit {
+                add_tags: list("add_tags"),
+                remove_tags: list("remove_tags"),
+                add_keywords: list("add_keywords"),
+                remove_keywords: list("remove_keywords"),
+            };
+            memcp_core::rules::edit(&conn, &space, &who, &edit).map_err(fail)?;
             Ok(json!({ "result": "ok" }))
         }
         "/space/move-tag" => {
