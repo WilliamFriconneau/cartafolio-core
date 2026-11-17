@@ -312,3 +312,22 @@ fn a_retire_and_a_supersede_racing_on_one_fact_have_one_winner() -> Res {
     assert_eq!(status, if r { "retired" } else { "replaced" });
     Ok(())
 }
+
+/// SQLite counts the memory it takes under one lock of the whole process unless it is built without that count: with
+/// it, every connection a worker opens (and the server opens several per request) waits for every other, and eight
+/// clients got fewer answers than one. The build of this workspace turns it off (`.cargo/config.toml`).
+#[test]
+fn sqlite_is_built_without_the_process_wide_memory_count() -> Res {
+    let t = Temp::new("memstatus");
+    let b = brain(&t)?;
+    let conn = b.open_space(&sp("personal"))?;
+    let mut st = conn.prepare("PRAGMA compile_options")?;
+    let options: Vec<String> = st
+        .query_map([], |r| r.get::<_, String>(0))?
+        .collect::<Result<_, _>>()?;
+    assert!(
+        options.iter().any(|o| o == "DEFAULT_MEMSTATUS=0"),
+        "{options:?}"
+    );
+    Ok(())
+}

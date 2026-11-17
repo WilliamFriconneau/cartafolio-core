@@ -1,0 +1,5 @@
+# The SQLite built into every program of this workspace (rusqlite, `bundled`) does not count the memory it takes:
+# that count is kept under one lock of the whole process, and a node opens several connections per request, so with it
+# eight clients at once got fewer answers than one (scripts/bench.sh, docs/BENCH.md).
+[env]
+LIBSQLITE3_FLAGS = "-DSQLITE_DEFAULT_MEMSTATUS=0"
