@@ -56,3 +56,61 @@ jobs:
         run: cargo build --workspace --locked
       - name: Tests
         run: cargo test --workspace --locked --no-fail-fast
+
+  linux-app:
+    # The Linux server app: the units, the packages and the program started from them.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-capture
+      - name: Smoke test (setup, serve, discovery, a connection, remember and recall, the page, doctor, backup)
+        run: scripts/linux-smoke.sh target/release/memcp
+      - name: The example memcp.toml is the documented one
+        run: |
+          target/release/memcp config example | diff - packaging/linux/memcp.toml
+      - name: Units
+        run: |
+          sudo install -m 755 target/release/memcp target/release/memcp-janitor target/release/memcp-capture /usr/bin/
+          sudo useradd --system --no-create-home memcp || true
+          systemd-analyze verify packaging/linux/memcp.service packaging/linux/memcp-backup.service \
+            packaging/linux/memcp-janitor.service packaging/linux/memcp-transcribe.service \
+            packaging/linux/memcp-backup.timer packaging/linux/memcp-transcribe.timer
+      - name: Debian package
+        run: |
+          packaging/linux/build-deb.sh
+          sudo apt-get install -y ./target/debian/memcp_*.deb
+          test -f /etc/memcp/memcp.toml
+          scripts/linux-smoke.sh /usr/bin/memcp
+          sudo apt-get remove -y memcp
+          test -f /etc/memcp/memcp.toml
+      - name: Release archive
+        run: |
+          packaging/linux/build-tarball.sh
+          d=$(mktemp -d)
+          tar -C "$d" -xzf target/tarball/memcp-*.tar.gz
+          sh -n "$d"/memcp-*/install.sh
+          scripts/linux-smoke.sh "$d"/memcp-*/bin/memcp
+
+  arch-package:
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      - name: Tools
+        run: pacman -Syu --noconfirm git rust systemd curl
+      - uses: actions/checkout@v4
+      - name: Build the package from this checkout
+        run: |
+          useradd -m builder
+          chown -R builder .
+          git config --global --add safe.directory "$PWD"
+          cd packaging/linux
+          su builder -c "MEMCP_SRC=$(cd ../.. && pwd) makepkg --nocheck --noconfirm -f"
+      - name: Install it and run it
+        run: |
+          pacman -U --noconfirm packaging/linux/memcp-*.pkg.tar.zst
+          test -f /etc/memcp/memcp.toml
+          systemd-sysusers /usr/lib/sysusers.d/memcp.conf
+          scripts/linux-smoke.sh /usr/bin/memcp
