@@ -87,7 +87,8 @@ fn the_options_that_are_only_for_linux_are_listed_as_such() {
 
 #[test]
 fn the_shipped_memcp_toml_is_the_documented_one_with_every_option() {
-    let shipped = read("packaging/linux/memcp.toml");
+    // A checkout on Windows may turn the line ends into CRLF: the content is what counts.
+    let shipped = read("packaging/linux/memcp.toml").replace("\r\n", "\n");
     assert_eq!(
         shipped,
         Settings::default().render(),

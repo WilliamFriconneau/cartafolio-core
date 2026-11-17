@@ -122,6 +122,8 @@ fn word(text: &str, prefix: &str) -> Result<String, Box<dyn Error>> {
         .ok_or_else(|| format!("no {prefix}... in {text}").into())
 }
 
+// File modes and the systemd layout are those of a Linux machine.
+#[cfg(unix)]
 #[test]
 fn setup_makes_a_private_memory_a_page_key_and_one_address_for_an_assistant() -> Res {
     let t = temp("setup");
