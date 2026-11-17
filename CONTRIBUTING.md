@@ -7,6 +7,7 @@ Thank you for looking. This is a small project with a clear purpose: a memory fo
 ```sh
 scripts/check.sh          # format, lints, tests, dependency checks (the same steps as the CI)
 scripts/check.sh quick    # format and lints only
+scripts/bench.sh          # real nodes: swarm, load, security probes, kill -9 (docs/BENCH.md)
 ```
 
 These must pass. The add-on binaries are built with `ha-addon/build.sh` (needs `cross` and Docker).
