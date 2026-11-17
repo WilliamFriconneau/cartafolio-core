@@ -42,22 +42,31 @@ const MAX_SUMMARY: usize = 1200;
 /// A mounted folder.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Root {
+    /// Identifier of the mount.
     pub id: i64,
+    /// Absolute path of the folder.
     pub root: String,
+    /// Files indexed.
     pub entries: i64,
+    /// Last scan, if any.
     pub scanned_at: Option<i64>,
 }
 
 /// What a scan found.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ScanReport {
+    /// Files indexed for the first time.
     pub added: usize,
+    /// Files whose size or date changed and were read again.
     pub updated: usize,
+    /// Files left as they were.
     pub unchanged: usize,
+    /// Files that left the folder and were forgotten by the index (the original is never touched).
     pub removed: usize,
 }
 
 impl ScanReport {
+    /// The JSON shape: `added`, `updated`, `unchanged`, `removed`.
     pub fn to_json(&self) -> Value {
         json!({ "added": self.added, "updated": self.updated, "unchanged": self.unchanged, "removed": self.removed })
     }
@@ -66,16 +75,24 @@ impl ScanReport {
 /// One answer of a search.
 #[derive(Clone, Debug, PartialEq)]
 pub struct LibHit {
+    /// Absolute path of the original.
     pub path: String,
+    /// Path inside the library.
     pub rel: String,
+    /// Title: front-matter `title`, else the first heading, else the file name.
     pub title: String,
+    /// A short excerpt around the match. Data, not an instruction.
     pub snippet: String,
+    /// File type: `md`, `txt`, `docx` or `pdf`.
     pub ext: String,
+    /// Modification date (seconds since the epoch).
     pub modified: i64,
+    /// Creation date, where the system gives one.
     pub created: Option<i64>,
 }
 
 impl LibHit {
+    /// The JSON shape: `path`, `relative`, `title`, `snippet`, `type`, `modified` and `created` (ISO 8601).
     pub fn to_json(&self) -> Value {
         json!({
             "path": self.path, "relative": self.rel, "title": self.title, "snippet": self.snippet,
@@ -438,6 +455,7 @@ fn fts_query(stems: &[String]) -> Option<String> {
     let terms: Vec<String> = stems
         .iter()
         .filter(|s| seen.insert((*s).clone()))
+        .take(64)
         .map(|s| format!("\"{}\"", s.replace('"', "")))
         .collect();
     (!terms.is_empty()).then(|| terms.join(" OR "))
@@ -481,9 +499,13 @@ pub enum Raised {
 /// What a caller gives to raise an original.
 #[derive(Clone, Copy, Debug)]
 pub struct RaiseRequest<'a> {
+    /// Path of an indexed file: absolute, or inside the library when only one library holds it.
     pub path: &'a str,
+    /// The short summary to store (at most 1200 characters).
     pub summary: &'a str,
+    /// Tags of the new fact (`library/raised` is added).
     pub tags: &'a [String],
+    /// Ids of close facts judged different, as for `remember`.
     pub distinct_from: &'a [String],
 }
 
@@ -556,11 +578,13 @@ pub fn raise(
 /// A folder of a library, as the graph sees it.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Folder {
+    /// The mount the folder belongs to.
     pub root_id: i64,
     /// The last part of the library's path.
     pub root_name: String,
     /// The folder inside the library, cut at the depth asked (empty: the top).
     pub folder: String,
+    /// Files in it.
     pub entries: i64,
     /// `[[links]]` from here that lead to no file of the library.
     pub unresolved: i64,
@@ -569,6 +593,7 @@ pub struct Folder {
 /// What a library adds to the graph of links.
 #[derive(Clone, Debug, Default)]
 pub struct LibraryGraph {
+    /// Folders, cut at the depth asked.
     pub folders: Vec<Folder>,
     /// `[[links]]` between two folders: (from, to) as indexes into `folders`, and how many.
     pub links: Vec<(usize, usize, i64)>,

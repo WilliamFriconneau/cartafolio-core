@@ -1449,3 +1449,27 @@ fn an_internal_connection_is_kept_apart_and_only_its_owner_marks_it() -> Res {
     assert!(listed(&state(&e, ALEX), false));
     Ok(())
 }
+
+#[test]
+fn a_member_cannot_make_the_node_join_another_memory() -> Res {
+    let e = env()?;
+    join(&e, ALEX)?;
+    let r = ha(
+        &e,
+        "POST",
+        "/admin/api/join-memory",
+        ALEX,
+        json!({ "address": "https://elsewhere.example.net" }),
+    );
+    assert_eq!(r.status, 403, "{}", r.body_json());
+    // An administrator is not refused for rights (the program that joins may be missing here: another answer).
+    let r = ha(
+        &e,
+        "POST",
+        "/admin/api/join-memory",
+        SAM,
+        json!({ "address": "not an address" }),
+    );
+    assert_eq!(r.status, 400);
+    Ok(())
+}

@@ -16,31 +16,58 @@ use crate::util;
 pub const CANDIDATE_THRESHOLD: f64 = 0.5;
 const MAX_CANDIDATES: usize = 5;
 
+/// A fact as stored and as returned: one short dated statement with its source and status.
+///
+/// Immutable once written: the text never changes. The only fields that change afterwards are
+/// `status`, `status_*`, `replaced_by`, `valid_to` bookkeeping and `tags` (see `supersede` and `retire`).
 #[derive(Clone, Debug, PartialEq)]
 pub struct Fact {
+    /// Opaque identifier, unique in the whole installation (random, never reused).
     pub id: String,
+    /// The space that holds the fact.
     pub space: Space,
+    /// `fact`, `decision`, `context` or `passage` (a passage of an imported note).
     pub kind: String,
+    /// Sub-type label: `file` for the fact that describes a stored file, `None` otherwise.
     pub typ: Option<String>,
+    /// The text, normalised (NFC, single spaces).
     pub text: String,
+    /// `agent` for a fact written by a connection, `note` for a passage of an imported note.
     pub source_kind: String,
+    /// Path of the imported note (`note` sources only).
     pub source_path: Option<String>,
+    /// Reference of the passage inside the note (heading path), unique among active facts.
     pub source_ref: Option<String>,
+    /// Name of the connection that wrote it (`agent` sources only).
     pub source_agent: Option<String>,
+    /// Who wrote it: the identity of the connection, never an argument of the request.
     pub author: String,
+    /// When it was written (seconds since the epoch).
     pub created_at: i64,
+    /// Start of the period the statement is true for (defaults to `created_at`).
     pub valid_from: i64,
+    /// End of the period, if the statement expires; an expired fact is hidden unless asked for.
     pub valid_to: Option<i64>,
+    /// Id of the version this one corrects.
     pub replaces: Option<String>,
+    /// Id of the version that corrected this one (set when `status` is `replaced`).
     pub replaced_by: Option<String>,
+    /// `active`, `proposed` (made by a model, never served by default), `replaced` or `retired`.
     pub status: String,
+    /// When the status last changed.
     pub status_at: Option<i64>,
+    /// Who changed the status.
     pub status_by: Option<String>,
+    /// Why: always set for `retired`.
     pub status_reason: Option<String>,
+    /// Normalised tags (`work/dev`), sorted; `@space` means "also concerns that space".
     pub tags: Vec<String>,
 }
 
 impl Fact {
+    /// The JSON shape served to clients: `id`, `space`, `kind`, `type`, `text`, `status`, a `source`
+    /// object (`kind`, `path`, `ref`, `agent`), `author`, the dates, `replaces`, `replaced_by`,
+    /// `status_at`, `status_by`, `status_reason` and `tags`. Pure.
     pub fn to_json(&self) -> Value {
         json!({
             "id": self.id,
@@ -76,19 +103,30 @@ pub enum Source {
     Agent(String),
     /// Passage of an imported note.
     Note {
+        /// Path of the note.
         path: String,
+        /// Hash of the note text the passage was taken from.
         hash: String,
+        /// Character range of the passage in the note, if known.
         range: Option<String>,
+        /// Stable reference of the passage in the note (unique among active facts).
         reference: Option<String>,
     },
 }
 
+/// What a caller gives to write a fact. The author and the space are not in it: the writer's
+/// identity and the target space come from the call.
 #[derive(Clone, Debug)]
 pub struct NewFact {
+    /// `fact`, `decision`, `context` or `passage`; anything else is refused.
     pub kind: String,
+    /// The statement. Not empty, no control characters; normalised when stored.
     pub text: String,
+    /// Where it comes from.
     pub source: Source,
+    /// Start of validity (seconds); `None` is now.
     pub valid_from: Option<i64>,
+    /// End of validity; must not be before `valid_from`.
     pub valid_to: Option<i64>,
     /// `proposed`: output of a model, never served by default.
     pub proposed: bool,
@@ -97,6 +135,7 @@ pub struct NewFact {
 }
 
 impl NewFact {
+    /// A plain `fact` written by `agent`, with no tags and no dates; the other fields are changed on the value.
     pub fn agent(text: &str, agent: &str) -> NewFact {
         NewFact {
             kind: "fact".into(),
@@ -110,15 +149,21 @@ impl NewFact {
     }
 }
 
+/// An existing active fact close to the one being written.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Candidate {
+    /// Id of the existing fact.
     pub id: String,
+    /// Its text.
     pub text: String,
+    /// Jaccard index of the stems, between [`CANDIDATE_THRESHOLD`] and 1.
     pub similarity: f64,
 }
 
+/// What `remember` did. Only `Created` changes the memory.
 #[derive(Clone, Debug)]
 pub enum Remembered {
+    /// The fact was written.
     Created(Fact),
     /// The same exact text is already active: nothing is written.
     Duplicate(Fact),
@@ -127,17 +172,25 @@ pub enum Remembered {
     NeedsDecision(Vec<Candidate>),
 }
 
+/// One search result.
 #[derive(Clone, Debug)]
 pub struct Hit {
+    /// The fact, whatever its status (the options decide which statuses are searched).
     pub fact: Fact,
+    /// Relevance (BM25, higher is better). In a listing (no words) the order is newest first and the score carries no meaning.
     pub score: f64,
 }
 
+/// How to search. The default searches active facts only, 10 results, with no tag filter.
 #[derive(Clone, Debug, Default)]
 pub struct RecallOptions {
+    /// Maximum hits; `0` means 10.
     pub limit: usize,
+    /// Also search replaced and retired facts.
     pub include_retired: bool,
+    /// Also search facts whose `valid_to` is past.
     pub include_expired: bool,
+    /// Also search `proposed` facts (a model's output).
     pub include_proposed: bool,
     /// What was true at that date (Unix seconds).
     pub as_of: Option<i64>,
@@ -183,6 +236,8 @@ fn fact_of(r: &Row) -> rusqlite::Result<Fact> {
     })
 }
 
+/// Reads one fact by id, whatever its status, tags included. `Ok(None)` if the id is unknown in
+/// this database (another space's fact is unknown here). Read-only.
 pub fn read_fact(conn: &Connection, id: &str) -> Result<Option<Fact>> {
     let found = conn
         .query_row(
@@ -230,6 +285,9 @@ pub fn inbox(conn: &Connection) -> Result<(i64, Option<i64>)> {
     )?)
 }
 
+/// Tags on one note, at most.
+pub const MAX_TAGS: usize = 64;
+
 /// A tag in its one accepted form, or an error that says what is accepted (an assistant
 /// reads it and tries again). Lowercase, accents and spaces tolerated and normalised:
 /// `Évaluation / Maths` becomes `evaluation/maths`. Segments of letters, digits, `-` and
@@ -269,6 +327,11 @@ pub fn normalize_tag(raw: &str) -> Result<String> {
 
 /// The tags of a fact, each normalised, without repeats, in order.
 pub fn normalize_tags(raw: &[String]) -> Result<Vec<String>> {
+    if raw.len() > MAX_TAGS {
+        return Err(Error::Invalid(format!(
+            "at most {MAX_TAGS} tags on one note"
+        )));
+    }
     let mut out: Vec<String> = Vec::new();
     for r in raw {
         let t = normalize_tag(r)?;
@@ -461,11 +524,20 @@ fn insert_unlogged(
     read_fact(conn, &id)?.ok_or_else(|| Error::Schema("fact not found after writing".into()))
 }
 
+/// The most distinct words one search looks for: an OR of thousands of terms is a slow query, not a better one.
+const MAX_SEARCH_TERMS: usize = 64;
+
+/// How many terms the search of `text` would use (see `MAX_SEARCH_TERMS`).
+pub fn fts_terms(text: &str) -> usize {
+    fts_query(&text::stems(text)).map_or(0, |q| q.matches(" OR ").count() + 1)
+}
+
 fn fts_query(stems: &[String]) -> Option<String> {
     let mut seen = std::collections::BTreeSet::new();
     let terms: Vec<String> = stems
         .iter()
         .filter(|s| seen.insert((*s).clone()))
+        .take(MAX_SEARCH_TERMS)
         .map(|s| format!("\"{}\"", s.replace('"', "")))
         .collect();
     if terms.is_empty() {
@@ -517,9 +589,25 @@ fn close_facts(
     Ok(out)
 }
 
-/// Writes a fact. An exact duplicate is dropped; close facts block the write until
-/// the caller decides: `supersede` to correct one of them, or `distinct_from` (the
-/// ids of the candidates it judges different) to confirm.
+/// Writes a new fact in `space` on behalf of `author`.
+///
+/// Arguments: the fact to write (`new`) and `distinct_from`, the ids of close facts the caller has
+/// looked at and judges different (they are then not counted as candidates).
+///
+/// Returns [`Remembered::Created`] with the stored fact (status `active`, or `proposed` when
+/// `new.proposed`), [`Remembered::Duplicate`] with the existing fact when the exact same normalised
+/// text is already active (nothing is written), or [`Remembered::NeedsDecision`] with up to five
+/// close active facts (stem similarity at least [`CANDIDATE_THRESHOLD`]; nothing is written until
+/// the caller `supersede`s one of them or repeats the call with `distinct_from`). A fact tagged
+/// `inbox` skips the closeness check: a quick note is taken as it comes.
+///
+/// # Errors
+/// [`Error::Invalid`] for an empty text, control characters, an unknown kind, a bad tag, or
+/// `valid_to` before `valid_from`.
+///
+/// # Effects
+/// One transaction: a row in `facts` and `fact_tags`, an event `remember` in the fact's history and
+/// an entry in the sync log. Nothing already stored is touched.
 pub fn remember(
     conn: &Connection,
     space: &Space,
@@ -560,8 +648,11 @@ pub const SAME_FACT_THRESHOLD: f64 = 0.8;
 /// A pair of active facts of one space that say nearly the same thing.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClosePair {
+    /// Id and text of the first fact.
     pub first: (String, String),
+    /// Id and text of the second fact.
     pub second: (String, String),
+    /// Stem similarity of the two texts, from the threshold to 1.
     pub similarity: f64,
 }
 
@@ -635,8 +726,21 @@ pub fn tidy_after(conn: &Connection, id: &str, text: &str, now: i64) -> Result<M
     Ok(out)
 }
 
-/// Replaces an active fact with a corrected version. The old one becomes
-/// `replaced`; its text stays readable in the history.
+/// Replaces the active fact `old_id` with a corrected version, written by `author`.
+///
+/// The old fact becomes `replaced` (never erased: its text stays readable through [`history`]) and
+/// points to the new one. The new fact keeps the old fact's tags unless `new` brings its own;
+/// the same text is accepted only when it is filed under different tags (sorting an inbox note).
+/// `reason` is stored in the history and the old fact's `status_reason`.
+///
+/// # Errors
+/// [`Error::UnknownFact`] if `old_id` is not in `space`; [`Error::Invalid`] if the old fact is not
+/// `active`, the new text is identical (same tags) or already active as another fact, or `new` breaks
+/// the rules of [`remember`] (text, kind, tags).
+///
+/// # Effects
+/// One transaction: the old row is updated, a new row is inserted, an event `supersede` is
+/// appended to the history, and the sync log records the replacement.
 pub fn supersede(
     conn: &Connection,
     space: &Space,
@@ -740,7 +844,17 @@ pub(crate) fn supersede_as(
     read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
 }
 
-/// Tombstone: the text stays, the fact leaves default searches.
+/// Retires an `active` or `proposed` fact: it leaves default searches but its text stays and can
+/// be read by id and in [`history`]. Retiring is how a wrong or obsolete fact is removed; nothing is
+/// ever erased.
+///
+/// # Errors
+/// [`Error::Invalid`] if `reason` is empty, or the fact is already replaced or retired;
+/// [`Error::UnknownFact`] if `id` is not in this database.
+///
+/// # Effects
+/// The row gets status `retired`, `status_at`, `status_by = author` and `status_reason = reason`;
+/// an event `retire` is appended to the history and the sync log records it.
 pub fn retire(conn: &Connection, author: &str, id: &str, reason: &str) -> Result<Fact> {
     retire_as(conn, author, id, reason, "retire")
 }
@@ -815,7 +929,11 @@ pub fn restore(
     read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
 }
 
-/// The replacement chain around a fact, from the oldest version to the newest.
+/// The replacement chain around a fact, from the oldest version to the newest, whatever the status of
+/// each version. Read-only.
+///
+/// # Errors
+/// [`Error::UnknownFact`] if `id` is not in this database.
 pub fn history(conn: &Connection, id: &str) -> Result<Vec<Fact>> {
     let start = read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
     let mut chain = vec![start.clone()];
@@ -845,7 +963,15 @@ pub fn history(conn: &Connection, id: &str) -> Result<Vec<Fact>> {
 }
 
 /// Lexical search (FTS5, BM25) on stems. Never a summary: the exact text, its
-/// source, its date and its status.
+/// source, its date and its status. Read-only.
+///
+/// `query` is matched on stems (accents, case and plurals ignored; common words dropped). `opts`
+/// chooses the statuses, the date (`as_of`), the tags and the paths (`within`). The raw layers
+/// (`inbox`, `sources`) are left out unless one of them is asked for by tag. Returns at most
+/// `opts.limit` hits (10 if 0), best first.
+///
+/// # Errors
+/// [`Error::Invalid`] for a malformed tag in `opts`.
 ///
 /// A query with no word to search for (empty, or only words too common to count) and at least one tag
 /// is a **listing**: what is filed under those tags, newest first. It is how an inbox is read.
@@ -961,7 +1087,8 @@ pub fn recall(conn: &Connection, query: &str, opts: &RecallOptions, now: i64) ->
     Ok(hits)
 }
 
-/// Number of facts per status.
+/// Number of facts per status, as a JSON object (`{"active": 12, "retired": 1}`; absent statuses are
+/// not listed). Read-only.
 pub fn counts(conn: &Connection) -> Result<Value> {
     let mut st = conn.prepare("SELECT status, count(*) FROM facts GROUP BY status")?;
     let rows = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))?;
@@ -973,7 +1100,9 @@ pub fn counts(conn: &Connection) -> Result<Value> {
     Ok(Value::Object(m))
 }
 
-/// One row of the space audit log. Never the full text: it is in `facts`.
+/// Appends one row to the space audit log: who (`client`) called which `tool`, whether it worked,
+/// the ids of the facts touched, a hash of the arguments and the first 300 characters of `detail`.
+/// Never the full text: it is in `facts`. The log is append-only.
 pub fn audit(
     conn: &Connection,
     client: &str,

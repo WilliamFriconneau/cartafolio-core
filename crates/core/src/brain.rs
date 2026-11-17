@@ -82,6 +82,7 @@ impl Brain {
         })
     }
 
+    /// The data directory this handle points at (the folder given to `init` or `open`).
     pub fn dir(&self) -> &Path {
         &self.dir
     }
@@ -114,6 +115,8 @@ impl Brain {
         names.iter().map(|n| Space::new(n)).collect()
     }
 
+    /// Whether `space` is registered in the control database. Read-only; a registered
+    /// space whose file is missing still answers `true` (use `doctor` to find that).
     pub fn has_space(&self, space: &Space) -> Result<bool> {
         let ctl = self.open_control()?;
         Ok(ctl
@@ -534,7 +537,8 @@ pub(crate) fn open_db(path: &Path) -> Result<Connection> {
          PRAGMA secure_delete = ON;
          PRAGMA foreign_keys = ON;
          PRAGMA cache_size = -4096;
-         PRAGMA mmap_size = 0;",
+         PRAGMA mmap_size = 0;
+         PRAGMA trusted_schema = OFF;",
     )?;
     Ok(conn)
 }

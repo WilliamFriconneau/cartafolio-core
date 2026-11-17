@@ -29,9 +29,11 @@ use crate::text::hex;
 use crate::users::User;
 use crate::util;
 
+/// Value of the `format` field of an export manifest.
 pub const FORMAT: &str = "memcp-export";
 /// What the format was called before the project was renamed: exports already made are still read.
 const FORMER_FORMAT: &str = "humanmemcp-export";
+/// Version of the export format this program writes; a newer manifest is refused.
 pub const VERSION: u32 = 1;
 
 fn private_dir(path: &Path) -> Result<()> {
@@ -428,6 +430,12 @@ fn export_vaults(
 fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
+        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+            return Err(Error::Invalid(format!(
+                "{} is a link: an export holds only plain files",
+                path.display()
+            )));
+        }
         if path.is_dir() {
             walk(&path, base, out)?;
         } else if let Ok(rel) = path.strip_prefix(base) {
@@ -462,6 +470,11 @@ pub fn verify_export(dir: &Path) -> Result<Value> {
                 "the manifest names a path outside the export: {rel}"
             )));
         }
+        let kind = fs::symlink_metadata(dir.join(rel))
+            .map_err(|e| Error::Invalid(format!("{rel} cannot be read: {e}")))?;
+        if !kind.file_type().is_file() {
+            return Err(Error::Invalid(format!("{rel} is not a plain file")));
+        }
         let bytes = fs::read(dir.join(rel))
             .map_err(|e| Error::Invalid(format!("{rel} cannot be read: {e}")))?;
         if Some(sha_of(&bytes).as_str()) != want.as_str() {
@@ -485,9 +498,13 @@ pub fn verify_export(dir: &Path) -> Result<Value> {
 /// What an adoption did.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Adopted {
+    /// Name given to the vault in this installation (with the prefix, if one was asked).
     pub name: String,
+    /// Kind of the vault.
     pub kind: String,
+    /// Facts taken in (all versions, retired ones included).
     pub facts: i64,
+    /// Files taken in.
     pub files: i64,
 }
 

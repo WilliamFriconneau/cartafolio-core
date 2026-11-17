@@ -216,15 +216,14 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                     Err(r) => r,
                 }
             }
+            "/journal" => crate::explore::journal(app, &ctl, &me, req, now),
+            "/links" => crate::explore::graph(app, &ctl, &me, req),
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
-            "/sync/status" => match memcp_core::sync::status(&app.brain, now) {
-                Ok(list) => Response::json(
-                    200,
-                    &json!({ "peers": list.iter().map(crate::sync_http::status_json).collect::<Vec<_>>() }),
-                ),
-                Err(e) => fail(e),
+            "/sync/status" => match crate::sync_http::status_body(&app.brain, now, &me.id) {
+                Ok(body) => Response::json(200, &body),
+                Err(e) => err(500, &e),
             },
             "/discover" => Response::json(200, &crate::replica::discover(app)),
             "/join-memory" => match crate::replica::join_state(
@@ -294,7 +293,7 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
 
 /// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
 /// the person acts with their own rights (the spaces they own), as the connection `page`.
-fn living(
+pub(crate) fn living(
     app: &App,
     ctl: &Connection,
     me: &User,
@@ -477,11 +476,14 @@ fn action(
             let name = body.get("name").and_then(Value::as_str).unwrap_or("");
             crate::replica::start(app, ctl, me, name).map_err(fail)
         }
-        "/join-memory" => crate::replica::join_start(
-            app,
-            body.get("address").and_then(Value::as_str).unwrap_or(""),
-        )
-        .map_err(|m| err(400, &m)),
+        "/join-memory" => {
+            admin_only(me)?;
+            crate::replica::join_start(
+                app,
+                body.get("address").and_then(Value::as_str).unwrap_or(""),
+            )
+            .map_err(|m| err(400, &m))
+        }
         "/spaces" => {
             // A vault comes from a kind of the catalogue, named after the person.
             let space = app
@@ -746,7 +748,9 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
                         } else {
                             "inline"
                         },
-                        f.name.replace(['"', '\\'], "_")
+                        f.name
+                            .replace(['"', '\\'], "_")
+                            .replace(|c: char| c.is_control(), "_")
                     ),
                 ),
                 (
@@ -974,7 +978,10 @@ fn vault_stats(app: &App, space: &Space) -> Value {
         .ok()
         .flatten();
     json!({
-        "facts": count("SELECT count(*) FROM facts WHERE status = 'active'"),
+        "facts": count(&format!(
+            "SELECT count(*) FROM facts WHERE status = 'active' AND {}",
+            crate::explore::NOT_FURNITURE
+        )),
         "files": count("SELECT count(*) FROM files WHERE status = 'active'"),
         "last_write": last.map(iso),
     })
@@ -1007,10 +1014,11 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
             }
             let mut counts = vec![0_i64; TIMELINE_BUCKETS as usize];
             let conn = app.brain.open_space(&s)?;
-            let mut st = conn.prepare(
+            let mut st = conn.prepare(&format!(
                 "SELECT (created_at - ?1) / ?2, count(*) FROM facts
-                 WHERE created_at >= ?1 GROUP BY 1",
-            )?;
+                     WHERE created_at >= ?1 AND {} GROUP BY 1",
+                crate::explore::NOT_FURNITURE
+            ))?;
             let rows = st.query_map([from, width], |r| {
                 Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
             })?;

@@ -22,22 +22,35 @@ use crate::space::Space;
 use crate::text::{self, hex};
 use crate::util::{self, iso};
 
+/// A stored file as listed: the record, never the bytes. The bytes are named by their digest on disk.
 #[derive(Clone, Debug, PartialEq)]
 pub struct FileInfo {
+    /// Opaque identifier of the record.
     pub id: String,
+    /// The space that holds it.
     pub space: Space,
+    /// Cleaned file name (no folders).
     pub name: String,
+    /// Type read from the content (never from the name).
     pub mime: String,
+    /// Size in bytes.
     pub size: i64,
+    /// SHA-256 of the bytes in lowercase hex.
     pub sha256: String,
+    /// Free note given at `put` (1000 characters at most); searched with the name.
     pub note: String,
+    /// The fact that describes the file, so `recall` finds it.
     pub fact_id: Option<String>,
+    /// The connection that put it.
     pub author: String,
+    /// When it was put (seconds since the epoch).
     pub created_at: i64,
+    /// `active` or `retired`.
     pub status: String,
 }
 
 impl FileInfo {
+    /// The JSON shape served to clients: `id`, `space`, `name`, `mime`, `size`, `note`, `fact_id`, `author`, `created_at` (ISO 8601) and `status`. The digest is left out.
     pub fn to_json(&self) -> Value {
         json!({
             "id": self.id, "space": self.space.as_str(), "name": self.name, "mime": self.mime,
@@ -46,16 +59,29 @@ impl FileInfo {
         })
     }
 
+    /// Whether the type is `image/*`.
     pub fn is_image(&self) -> bool {
         self.mime.starts_with("image/")
     }
 
+    /// Whether the type is `audio/*`.
     pub fn is_audio(&self) -> bool {
         self.mime.starts_with("audio/")
     }
 }
 
 /// The type of an `.xlsx` workbook.
+/// Whether `mime` is one of the types this program keeps (`sniff` can name it).
+pub(crate) fn is_kept_type(mime: &str) -> bool {
+    mime == XLSX
+        || ["image/", "audio/", "text/plain", "application/pdf"]
+            .iter()
+            .any(|p| mime.starts_with(p))
+            && mime.len() <= 60
+            && mime.bytes().all(|b| b.is_ascii_graphic())
+}
+
+/// The media type of an Excel workbook (`.xlsx`).
 pub const XLSX: &str = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
 /// The type of the content, from its first bytes. `None` for anything not accepted.
@@ -237,7 +263,7 @@ pub(crate) fn read_blob(brain: &Brain, space: &Space, sha: &str) -> Result<Optio
     }
 }
 
-fn clean_name(name: &str) -> String {
+pub(crate) fn clean_name(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
     base.chars()
         .filter(|c| !c.is_control())
@@ -354,6 +380,7 @@ pub fn put_tagged(
     info(brain, space, &id)?.ok_or_else(|| Error::Schema("file not found after writing".into()))
 }
 
+/// The record of a file by id, any status. `Ok(None)` if there is none in this space. Read-only.
 pub fn info(brain: &Brain, space: &Space, id: &str) -> Result<Option<FileInfo>> {
     let conn = brain.open_space(space)?;
     Ok(conn

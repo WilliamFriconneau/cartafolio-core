@@ -1,8 +1,8 @@
 //! memcp-finances: a person's bank statements in a memory space.
 //!
 //! The person exports their accounts from the bank (an `.xlsx` workbook: a summary
-//! sheet named "Vos comptes" and one sheet per account, "Cpt <number>" or
-//! "CB <number>"), stores it in the space (admin page or `file_put`) and has an
+//! sheet named "Vos comptes" and one sheet per account, "Cpt `<number>`" or
+//! "CB `<number>`"), stores it in the space (admin page or `file_put`) and has an
 //! agent import it with `finances_import`. An import is idempotent: importing the
 //! same export again, or one that overlaps the previous, adds only the new
 //! movements.

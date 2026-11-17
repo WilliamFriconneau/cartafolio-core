@@ -46,15 +46,22 @@ pub const PROTOCOL: i64 = 1;
 pub struct Event {
     /// The position in the log of the node that sent it. Meaningless elsewhere.
     pub seq: i64,
+    /// Event id: derived from what changed, so the same change received twice is one row.
     pub eid: String,
+    /// Hybrid logical clock stamp (`<milliseconds>.<counter>.<replica>`, fixed width): orders events across nodes without trusting any clock.
     pub hlc: String,
+    /// The node that made the change.
     pub origin: String,
+    /// What changed (`fact_created`, `fact_superseded`, `fact_retired`, `file_put`, `file_retired`, `layout`...).
     pub kind: String,
+    /// When it happened on the origin (seconds since the epoch).
     pub at: i64,
+    /// The change itself, a JSON object whose fields depend on `kind`.
     pub payload: Value,
 }
 
 impl Event {
+    /// The wire form of the event: an object with `seq`, `eid`, `hlc`, `origin`, `kind`, `at` and `payload`.
     pub fn to_json(&self) -> Value {
         json!({
             "seq": self.seq, "eid": self.eid, "hlc": self.hlc, "origin": self.origin,
@@ -62,6 +69,10 @@ impl Event {
         })
     }
 
+    /// Reads the wire form back. A missing `seq` reads as 0 (it is meaningless on the receiver).
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if `eid`, `hlc`, `origin`, `kind` or `at` is missing, or `payload` is not an object.
     pub fn from_json(v: &Value) -> Result<Event> {
         let text = |k: &str| {
             v.get(k)
@@ -91,17 +102,20 @@ impl Event {
 /// A page of the log.
 #[derive(Clone, Debug)]
 pub struct Page {
+    /// The events, in log order.
     pub events: Vec<Event>,
     /// The position to ask for next (past events left out because the asker sent them).
     pub next: i64,
     /// The last position of this log.
     pub head: i64,
+    /// Whether the log holds more after `next`.
     pub more: bool,
 }
 
 /// What applying events did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Applied {
+    /// Events that changed this replica.
     pub applied: usize,
     /// Already known, or without effect here.
     pub skipped: usize,
@@ -949,7 +963,12 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             return Err(Fault::Missing(format!("fact {f} has not arrived")));
         }
     }
-    if p.get("erased").and_then(Value::as_bool) != Some(true) {
+    // The name is cleaned as it is when an assistant puts a file: no path, no control character.
+    let clean = crate::files::clean_name(req(p, "name")?);
+    if clean.is_empty() {
+        return Err(Fault::Bad("a file needs a name".into()));
+    }
+    let mime = if p.get("erased").and_then(Value::as_bool) != Some(true) {
         let data = req(p, "data")?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(data)
@@ -957,11 +976,22 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
         if hex(&Sha256::digest(&bytes)) != sha || i64::try_from(bytes.len()).ok() != Some(size) {
             return Err(Fault::Bad("the bytes do not match their digest".into()));
         }
+        // The type is what the bytes say, never what the sender claims; a kind that is not kept is refused.
+        let sniffed = crate::files::sniff(&bytes, &clean)
+            .ok_or_else(|| Fault::Bad("this kind of file is not kept".into()))?;
         crate::files::store_blob(brain, space, sha, &bytes).map_err(Fault::from)?;
-    }
+        sniffed.to_string()
+    } else {
+        let claimed = req(p, "mime")?;
+        if crate::files::is_kept_type(claimed) {
+            claimed.to_string()
+        } else {
+            "application/octet-stream".into()
+        }
+    };
     // The same name with other content: both stay, and the later one by the clock takes the name with its
     // node and time, on every node alike.
-    let mut name = req(p, "name")?.to_string();
+    let mut name = clean;
     let clash: Option<(String, String)> = conn
         .query_row(
             "SELECT id, sha256 FROM files WHERE name = ?1 AND status = 'active' AND sha256 <> ?2 LIMIT 1",
@@ -993,7 +1023,7 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
         params![
             id,
             name,
-            req(p, "mime")?,
+            mime,
             size,
             sha,
             opt(p, "note").unwrap_or_default(),
@@ -1198,6 +1228,53 @@ fn window_gate(
     Ok(None)
 }
 
+/// The biggest text of one fact a peer may send, and how many tags it may carry.
+const MAX_EVENT_TEXT: usize = 1 << 20;
+const MAX_EVENT_TAGS: usize = 64;
+
+/// What every event must look like before anything is read from it: short plain identifiers for who and when, and
+/// bounded text, so that a peer cannot fill the store or put control characters where a name is shown.
+fn check_shape(ev: &Event) -> std::result::Result<(), Fault> {
+    if !plain_id(&ev.origin) {
+        return Err(Fault::Bad("the origin is not a plain identifier".into()));
+    }
+    let replica = ev.hlc.rsplit('.').next().unwrap_or("");
+    if !plain_id(replica) {
+        return Err(Fault::Bad("the clock stamp is malformed".into()));
+    }
+    let p = &ev.payload;
+    let small = |k: &str, max: usize| match opt(p, k) {
+        Some(v) if v.chars().count() > max || v.chars().any(|c| c == '\0') => {
+            Err(Fault::Bad(format!("{k} is too long")))
+        }
+        _ => Ok(()),
+    };
+    for k in ["author", "actor", "source_agent", "source_kind", "type"] {
+        small(k, 200)?;
+    }
+    for k in [
+        "source_path",
+        "source_hash",
+        "source_range",
+        "source_ref",
+        "reason",
+        "note",
+    ] {
+        small(k, 4096)?;
+    }
+    small("fields", 64 * 1024)?;
+    if opt(p, "text").is_some_and(|t| t.len() > MAX_EVENT_TEXT) {
+        return Err(Fault::Bad("text is too long".into()));
+    }
+    if p.get("tags")
+        .and_then(Value::as_array)
+        .is_some_and(|t| t.len() > MAX_EVENT_TAGS)
+    {
+        return Err(Fault::Bad("too many tags".into()));
+    }
+    Ok(())
+}
+
 fn apply_one(
     brain: &Brain,
     space: &Space,
@@ -1211,6 +1288,7 @@ fn apply_one(
             "the identifier does not match the change".into(),
         ));
     }
+    check_shape(ev)?;
     match parse_hlc(&ev.hlc) {
         None => return Err(Fault::Bad("the clock stamp is malformed".into())),
         Some((ms, _)) if ms > util::now_ms().saturating_add(MAX_DRIFT_MS) => {
@@ -1330,10 +1408,15 @@ pub fn cursors(brain: &Brain, peer: &str, space: &Space) -> Result<(i64, i64)> {
 /// Which cursor to move.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Cursor {
+    /// The position read from the peer's log: where to resume pulling.
     Pulled,
+    /// The position of this node's log the peer has acknowledged: where to resume pushing.
     Pushed,
 }
 
+/// Moves one cursor of `peer` on `space` to `to` (created at 0 on first use). The caller moves a cursor
+/// only after the events before it were applied or acknowledged, so a failure re-sends instead of losing.
+/// Effect: one row of `sync_state` in the control database.
 pub fn set_cursor(brain: &Brain, peer: &str, space: &Space, which: Cursor, to: i64) -> Result<()> {
     let ctl = brain.open_control()?;
     let col = match which {
@@ -1376,14 +1459,20 @@ pub fn note_transfer(
     Ok(())
 }
 
+/// How far one space has got in the transfer with a peer.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SpaceProgress {
+    /// Space name.
     pub space: String,
+    /// Events moved.
     pub done: i64,
+    /// Events to move in all.
     pub total: i64,
+    /// `done` over `total`, 0 to 100.
     pub percent: i64,
 }
 
+/// One peer as shown on the page and in the `peers` tool.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PeerStatus {
     /// The connection's name, `peer-<device>-xxxx`.
@@ -1392,7 +1481,9 @@ pub struct PeerStatus {
     pub name: String,
     /// `sending`, `receiving` or `idle`.
     pub direction: String,
+    /// Progress per space.
     pub spaces: Vec<SpaceProgress>,
+    /// When the peer last moved events (seconds), if ever.
     pub last_activity: Option<i64>,
 }
 
@@ -1458,6 +1549,31 @@ pub fn status(brain: &Brain, now: i64) -> Result<Vec<PeerStatus>> {
 }
 
 impl PeerStatus {
+    /// This peer as a direct peer of the directory's union.
+    pub fn to_local(&self) -> crate::directory::Local {
+        crate::directory::Local {
+            connection: self.peer.clone(),
+            name: self.name.clone(),
+            direction: self.direction.clone(),
+            spaces: self.spaces.clone(),
+            last_activity: self.last_activity,
+            ..Default::default()
+        }
+    }
+}
+
+/// Every peer of the memory: the direct ones (connections held here, peers synced with) with direction and
+/// progress, and every node the peer directory knows, each row once (see `directory::union`).
+pub fn peers_view(brain: &Brain, now: i64) -> Result<Vec<Value>> {
+    let locals = status(brain, now)?
+        .iter()
+        .map(PeerStatus::to_local)
+        .collect();
+    crate::directory::union(brain, now, locals)
+}
+
+impl PeerStatus {
+    /// The JSON shape served to clients: `peer`, `name`, `direction`, `spaces` and `last_activity`.
     pub fn to_json(&self) -> Value {
         json!({
             "peer": self.peer,
@@ -1532,10 +1648,13 @@ pub fn window_cutoff(brain: &Brain, now: i64) -> Result<Option<i64>> {
 /// What one pruning removed or kept.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct Pruned {
+    /// Space pruned.
     pub space: String,
     /// Notes removed, whatever their status.
     pub facts: usize,
+    /// Tag rows removed with the notes.
     pub tags: usize,
+    /// Files removed with the notes (the bytes too, when nothing else holds them).
     pub files: usize,
     /// Notes outside the window that stay because a peer has not acknowledged them yet.
     pub kept_unacknowledged: usize,
@@ -1544,6 +1663,7 @@ pub struct Pruned {
 }
 
 impl Pruned {
+    /// The JSON shape: `space`, `facts`, `tags`, `files`, `kept_unacknowledged` and `kept_pinned`.
     pub fn to_json(&self) -> Value {
         json!({
             "space": self.space, "facts": self.facts, "tags": self.tags, "files": self.files,
@@ -1746,16 +1866,22 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
 /// What the last pruning of this replica did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LastPrune {
+    /// When the pruning ran (seconds since the epoch).
     pub at: i64,
+    /// Notes removed.
     pub facts: usize,
+    /// Files removed.
     pub files: usize,
+    /// Notes kept because a peer has not acknowledged them.
     pub kept_unacknowledged: usize,
 }
 
 /// The window of this replica and what was pruned last, for the page and the apps.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WindowStatus {
+    /// Size of the window in days; `None` keeps everything.
     pub days: Option<u32>,
+    /// What the last pruning did, if one ran.
     pub last_prune: Option<LastPrune>,
 }
 
@@ -1768,6 +1894,7 @@ impl WindowStatus {
         }
     }
 
+    /// The JSON shape: `days`, `label` and `last_prune` (or `null`).
     pub fn to_json(&self) -> Value {
         json!({
             "days": self.days,
@@ -1780,6 +1907,7 @@ impl WindowStatus {
     }
 }
 
+/// The window of this replica and what the last pruning did. Read-only.
 pub fn window_status(brain: &Brain) -> Result<WindowStatus> {
     let ctl = brain.open_control()?;
     let last = meta_get(&ctl, WINDOW_LAST_KEY)?

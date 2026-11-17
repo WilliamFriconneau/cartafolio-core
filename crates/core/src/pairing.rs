@@ -20,7 +20,9 @@ const CODE_LEN: usize = 8;
 /// What a device gets for a code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paired {
+    /// Name of the connection created for the device (`peer-...` or a bridge name).
     pub agent: String,
+    /// The bearer token of that connection. Shown once: only its hash is stored.
     pub token: String,
     /// The vaults whose inbox the connection writes to.
     pub vaults: Vec<String>,
@@ -106,16 +108,21 @@ fn create_with(ctl: &Connection, user_id: &str, rights: Rights, now: i64) -> Res
     Ok(display(&code))
 }
 
-/// Whether this control database holds `code`, unused and not expired (the manager finds the person this way).
 /// Where a join code stands for the person who made it: waiting, joined (by which connection) or expired.
 #[derive(Debug, PartialEq, Eq)]
 pub enum Standing {
+    /// Not used yet and not expired.
     Waiting,
+    /// Used; the text is the name of the connection it created.
     Joined(String),
+    /// Past its ten minutes without having been used.
     Expired,
+    /// No such code for this person (also the answer for someone else's code).
     Unknown,
 }
 
+/// Where the code `code` made by `user_id` stands at time `now`. Read-only; a database
+/// error is read as [`Standing::Unknown`].
 pub fn standing(ctl: &Connection, user_id: &str, code: &str, now: i64) -> Standing {
     let row: Option<(Option<i64>, i64, Option<String>)> = ctl
         .query_row(
@@ -134,6 +141,8 @@ pub fn standing(ctl: &Connection, user_id: &str, code: &str, now: i64) -> Standi
     }
 }
 
+/// Whether this control database holds `code`, unused and not expired (the manager finds the person this way).
+/// Read-only: nothing is consumed and no attempt is recorded.
 pub fn holds(ctl: &Connection, code: &str, now: i64) -> bool {
     ctl.query_row(
         "SELECT 1 FROM bridge_pairings WHERE hash = ?1 AND used_at IS NULL AND expires_at > ?2",

@@ -30,7 +30,9 @@ use crate::util;
 /// Where the notes of a deleted space go.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Disposition {
+    /// Everything goes into this other space.
     Into(Space),
+    /// The space is archived: a full export, the database moved aside.
     Archive,
 }
 
@@ -47,6 +49,7 @@ pub enum Children {
 }
 
 impl Children {
+    /// Parse.
     pub fn parse(s: &str) -> Result<Children> {
         match s {
             "grandparent" => Ok(Children::Grandparent),
@@ -66,35 +69,52 @@ impl Children {
 pub struct SpaceNew {
     /// A kind of the catalogue; `custom` when none.
     pub kind: Option<String>,
+    /// The label.
     pub label: String,
+    /// The parent.
     pub parent: Option<Space>,
+    /// The keywords.
     pub keywords: Vec<String>,
+    /// The tags.
     pub tags: Vec<String>,
 }
 
 /// What to change in a space. `None` leaves a field as it is.
 #[derive(Clone, Debug, Default)]
 pub struct SpaceUpdate {
+    /// The layout.
     pub layout: Change,
+    /// The kind.
     pub kind: Option<String>,
+    /// The rules.
     pub rules: rules::Edit,
 }
 
 /// A space as its owner reads it.
 #[derive(Clone, Debug)]
 pub struct SpaceInfo {
+    /// The space.
     pub space: Space,
+    /// The label.
     pub label: String,
+    /// The kind.
     pub kind: String,
+    /// The parent.
     pub parent: Option<Space>,
+    /// The position.
     pub position: i64,
+    /// The facts.
     pub facts: i64,
+    /// The files.
     pub files: i64,
+    /// The children.
     pub children: Vec<Space>,
+    /// The rules.
     pub rules: Rules,
 }
 
 impl SpaceInfo {
+    /// To json.
     pub fn to_json(&self) -> Value {
         json!({
             "space": self.space.as_str(), "label": self.label, "kind": self.kind,
@@ -109,14 +129,21 @@ impl SpaceInfo {
 /// What a delete did, or (with `dry_run`) would do.
 #[derive(Clone, Debug, Default)]
 pub struct DeleteReport {
+    /// The dry run.
     pub dry_run: bool,
+    /// The space.
     pub space: String,
+    /// The label.
     pub label: String,
+    /// The facts.
     pub facts: i64,
+    /// The files.
     pub files: i64,
+    /// The tags.
     pub tags: usize,
     /// `into` or `archive`.
     pub disposition: String,
+    /// The into.
     pub into: Option<String>,
     /// Notes of the space the target already holds (same text), so not copied again.
     pub already: i64,
@@ -131,6 +158,7 @@ pub struct DeleteReport {
 }
 
 impl DeleteReport {
+    /// To json.
     pub fn to_json(&self) -> Value {
         json!({
             "dry_run": self.dry_run, "space": self.space, "label": self.label,
@@ -174,15 +202,22 @@ impl DeleteReport {
 pub struct Archived {
     /// The folder name, what `restore_space` takes.
     pub name: String,
+    /// The space.
     pub space: String,
+    /// The label.
     pub label: String,
+    /// The kind.
     pub kind: String,
+    /// The at.
     pub at: i64,
+    /// The facts.
     pub facts: i64,
+    /// The into.
     pub into: Option<String>,
 }
 
 impl Archived {
+    /// To json.
     pub fn to_json(&self) -> Value {
         json!({
             "name": self.name, "space": self.space, "label": self.label, "kind": self.kind,

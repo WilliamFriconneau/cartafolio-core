@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! A program's view of a connection of the memory: its address (`https://<server>/mcp/<name>`) and its
 //! key, over MCP on HTTP. It sends what it is given and keeps nothing but the session the memory opens.
 //!
@@ -45,10 +46,13 @@ fn redact(message: &str, url: &str) -> String {
 /// What a device gets when it pairs: its connection's address and key, and the vaults whose inbox it writes to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paired {
+    /// Name of the new connection (`peer-<device>-<4 characters>`).
     pub agent: String,
     /// The address of the new connection (`https://<server>/mcp/<agent>`).
     pub url: String,
+    /// The key, shown once: the caller must keep it; the memory stores only its hash.
     pub key: String,
+    /// The one box the key writes to (the person's inbox).
     pub vaults: Vec<String>,
 }
 
@@ -143,7 +147,12 @@ pub enum Error {
     /// The memory asks to wait (HTTP 429: the flood ceiling, or an address blocked after refused keys): the seconds it asks.
     RateLimited(u64),
     /// The memory answered with an error of the protocol.
-    Rpc { code: i64, message: String },
+    Rpc {
+        /// The JSON-RPC error code (`-32602` for an unknown tool).
+        code: i64,
+        /// The memory's text.
+        message: String,
+    },
     /// The memory refused this call in its own words (a right, a size, a rule).
     Tool(String),
     /// An answer that is not what was expected.
@@ -168,6 +177,7 @@ impl std::error::Error for Error {}
 /// How long to wait before trying again, and how many tries.
 #[derive(Clone, Debug)]
 pub struct Retry {
+    /// Attempts in all (the first one included).
     pub tries: u32,
     /// The first wait; doubled each time, for a failure without a delay of its own.
     pub first: Duration,
@@ -190,15 +200,19 @@ impl Default for Retry {
 pub struct Deposited {
     /// One entry per record sent, in order: `{index, result, id}` or `{index, result: "error", error}`.
     pub results: Vec<Value>,
+    /// Records the memory refused or that could not be sent.
     pub failed: usize,
 }
 
+/// A connection to one memory: its address, its key and the MCP session the memory opened. Not shared between
+/// threads (calls take `&mut self`).
 pub struct Client {
     url: String,
     token: String,
     agent: ureq::Agent,
     session: Option<String>,
     next_id: u64,
+    /// The retry policy applied by every call.
     pub retry: Retry,
     /// Take an address that is not HTTPS nor of the own network (off by default). Whoever turns it on warns the person:
     /// the key travels in clear.

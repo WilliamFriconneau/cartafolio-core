@@ -43,7 +43,9 @@ use crate::text::{self, hex};
 use crate::users::{self, User};
 use crate::util;
 
+/// Value of the `format` field of a saved plan.
 pub const PLAN_FORMAT: &str = "memcp-merge-plan";
+/// Version of the plan file; another version is refused.
 pub const PLAN_VERSION: u32 = 1;
 
 /// What a line does with its space.
@@ -58,6 +60,7 @@ pub enum Action {
 }
 
 impl Action {
+    /// The word used in a plan file: `merge`, `copy` or `skip`.
     pub fn word(self) -> &'static str {
         match self {
             Action::Merge => "merge",
@@ -66,6 +69,7 @@ impl Action {
         }
     }
 
+    /// Reads the word of a plan file; [`Error::Invalid`] for any other text.
     pub fn parse(s: &str) -> Result<Action> {
         match s {
             "merge" => Ok(Action::Merge),
@@ -92,6 +96,7 @@ pub enum Policy {
 }
 
 impl Policy {
+    /// The word used in a plan file: `keep-both`, `keep-mine`, `take-theirs` or `replace`.
     pub fn word(self) -> &'static str {
         match self {
             Policy::KeepBoth => "keep-both",
@@ -101,6 +106,7 @@ impl Policy {
         }
     }
 
+    /// Reads the word of a plan file; [`Error::Invalid`] for any other text.
     pub fn parse(s: &str) -> Result<Policy> {
         match s {
             "keep-both" => Ok(Policy::KeepBoth),
@@ -159,11 +165,13 @@ pub struct Line {
     pub source: String,
     /// Its kind in the export.
     pub kind: String,
+    /// What to do with this space.
     pub action: Action,
     /// The space it joins (`merge`), or the name of the new space (`copy`).
     pub target: String,
     /// For `copy`: another name for the new space, replacing `target`.
     pub rename: Option<String>,
+    /// What to do with a note that exists on both sides with a different text.
     pub policy: Policy,
     /// Filled in by [`plan`] and [`preview`]; ignored when applying.
     pub preview: Preview,
@@ -210,7 +218,9 @@ pub struct Plan {
     pub export: PathBuf,
     /// The person the merged spaces belong to.
     pub user: String,
+    /// Creation time of the plan, as text (informational).
     pub created_at: String,
+    /// The correspondence table, one line per space of the other memory.
     pub lines: Vec<Line>,
 }
 
@@ -231,6 +241,10 @@ impl Plan {
         )
     }
 
+    /// Reads a plan saved by [`Plan::to_text`]. Pure: nothing is opened.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] if the text is not JSON, is not a merge plan, has another version, or a line holds an unknown action or policy.
     pub fn from_text(text: &str) -> Result<Plan> {
         let v: Value = serde_json::from_str(text)
             .map_err(|e| Error::Invalid(format!("the plan is not valid JSON: {e}")))?;
@@ -654,7 +668,9 @@ pub struct Options {
 /// What a line did.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct LineReport {
+    /// The space in the export.
     pub source: String,
+    /// The space it ended in.
     pub destination: String,
     /// The space was created by this merge.
     pub created: bool,
@@ -666,7 +682,9 @@ pub struct LineReport {
     pub replaced: usize,
     /// Conflicts left as they were.
     pub left: usize,
+    /// Files taken in.
     pub files: usize,
+    /// The other side's dashboard note and guide replaced the target's (policy `replace`).
     pub guide_replaced: bool,
 }
 
@@ -675,12 +693,14 @@ pub struct LineReport {
 pub struct Report {
     /// Where the backup is; `None` when there was nothing to change.
     pub backup: Option<PathBuf>,
+    /// One report per applied line, in plan order.
     pub lines: Vec<LineReport>,
     /// The guides of the other memory that were not applied: space, text.
     pub guide_proposals: Vec<(String, String)>,
 }
 
 impl Report {
+    /// Whether anything was written (a backup exists exactly when something was).
     pub fn changed(&self) -> bool {
         self.backup.is_some()
     }
@@ -896,6 +916,13 @@ fn copy_file(
     f: &TheirFile,
     undo: &mut Undo,
 ) -> Result<()> {
+    // A fingerprint is 64 hexadecimal digits and nothing else: it names a file under `blobs`, never a path.
+    if f.sha256.len() != 64 || !f.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(Error::Invalid(format!(
+            "{} carries a fingerprint that is not one",
+            f.name
+        )));
+    }
     let from = blobs.join(&f.sha256);
     let bytes = fs::read(&from)
         .map_err(|e| Error::Invalid(format!("the bytes of {} cannot be read: {e}", f.name)))?;

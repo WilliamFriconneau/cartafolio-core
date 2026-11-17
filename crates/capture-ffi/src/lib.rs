@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! The bridge, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
 //! bridge's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
 //! is read from the Keychain by Swift and handed over for the length of the run, never stored here.
@@ -25,32 +26,46 @@ pub struct IntakeConfig {
     pub utc_offset_minutes: i32,
 }
 
+/// What a captured item is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ItemKind {
+    /// A typed or dictated text.
     Text,
+    /// A file (a photo, a PDF).
     Document,
+    /// A recording.
     Audio,
     /// A call of a tool of the memory kept by the bridge's gateway.
     Call,
 }
 
+/// Where an item stands in the outbox.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
 pub enum ItemState {
+    /// Waiting for the next `flush`.
     Queued,
+    /// Being sent now.
     Sending,
+    /// Taken by the memory; it leaves the outbox.
     Sent,
     /// The memory refused it in its own words (see `detail`); not sent again unless `retry`.
     Failed,
 }
 
+/// One item of the outbox, as the app lists it.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct IntakeItem {
+    /// Identifier of the item in the outbox.
     pub id: String,
+    /// What it is.
     pub kind: ItemKind,
+    /// Short title shown in the list.
     pub title: String,
     /// Unix time.
     pub created_at: i64,
+    /// Size on disk, in bytes.
     pub bytes: u64,
+    /// Where it stands.
     pub state: ItemState,
     /// Why it failed, or how many tries it has had.
     pub detail: String,
@@ -67,16 +82,22 @@ pub struct IntakeItem {
 /// What this Mac made of a recording, and what of it goes to one memory.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct HeardInput {
+    /// The text this Mac made of the recording.
     pub text: String,
+    /// Its summary, made on this Mac.
     pub summary: String,
+    /// Send the recording itself.
     pub send_audio: bool,
+    /// Send the text.
     pub send_text: bool,
+    /// Send the summary.
     pub send_summary: bool,
 }
 
 /// How a `flush()` went.
 #[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
 pub struct IntakeFlush {
+    /// Items the memory took in this flush.
     pub sent: u32,
     /// Still queued: they will be tried again.
     pub waiting: u32,
@@ -94,9 +115,13 @@ pub struct IntakeFlush {
 /// box the key writes to, the person's « À trier » (`<person>-a-trier`): it is no vault, and there is nothing to choose.
 #[derive(Clone, uniffi::Record)]
 pub struct Pairing {
+    /// Name of the new connection (`peer-...`).
     pub agent: String,
+    /// Address of the connection (`https://<server>/mcp/<agent>`).
     pub url: String,
+    /// The key, shown once: put it in the Keychain at once.
     pub key: String,
+    /// The one box the key writes to (the person's inbox); never a vault to choose.
     pub vaults: Vec<String>,
     /// The key would travel in clear (HTTP outside this machine and the own network): warn the person, never refuse.
     pub in_clear: bool,
@@ -106,11 +131,23 @@ pub struct Pairing {
 #[derive(Debug, uniffi::Error)]
 pub enum PairError {
     /// The code is unknown, used or expired, or the address is refused: the person must check it.
-    Refused { message: String },
+    /// Plain words for the person.
+    Refused {
+        /// Plain words for the person.
+        message: String,
+    },
     /// Too many tries from this address: wait a minute.
-    Wait { message: String },
+    /// Plain words for the person.
+    Wait {
+        /// Plain words for the person.
+        message: String,
+    },
     /// The server cannot be reached, or answered something else.
-    Unreachable { message: String },
+    /// Plain words for the person.
+    Unreachable {
+        /// Plain words for the person.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for PairError {
@@ -152,11 +189,23 @@ pub fn pair(server: String, code: String, device: String) -> Result<Pairing, Pai
 #[derive(Debug, uniffi::Error)]
 pub enum IntakeError {
     /// The outbox could not be written.
-    Storage { message: String },
+    /// Plain words for the person.
+    Storage {
+        /// Plain words for the person.
+        message: String,
+    },
     /// What was given is not a capture, or the address is not allowed.
-    Invalid { message: String },
+    /// Plain words for the person.
+    Invalid {
+        /// Plain words for the person.
+        message: String,
+    },
     /// Too big for the memory, which would refuse it.
-    TooBig { message: String },
+    /// Plain words for the person.
+    TooBig {
+        /// Plain words for the person.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for IntakeError {
@@ -339,6 +388,7 @@ impl LocalMcp {
         }))
     }
 
+    /// Stops the local server (idempotent); the port is free afterwards.
     pub fn stop(&self) {
         if let Ok(mut s) = self.server.lock() {
             s.stop();
@@ -358,6 +408,7 @@ pub struct BrowserLink {
 pub struct BrowserCall {
     /// `meet` or `teams`.
     pub platform: String,
+    /// Title of the call, as the page shows it.
     pub title: String,
     /// Where the call is (the Meet code, or the Teams title): another room is another meeting.
     pub room: String,
@@ -398,6 +449,7 @@ impl BrowserLink {
             .unwrap_or_default()
     }
 
+    /// Stops listening (idempotent); the port is free afterwards.
     pub fn stop(&self) {
         if let Ok(mut l) = self.link.lock() {
             l.stop();
@@ -444,14 +496,18 @@ pub fn address_allowed(url: String) -> bool {
 /// One line of the live text of a meeting or a dictation.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct LiveLineInput {
+    /// Whether the line was said by the user (otherwise by someone else).
     pub me: bool,
+    /// What was said.
     pub text: String,
 }
 
 /// One part of a recording, as it is handed to the core.
 #[derive(Debug, Clone, uniffi::Record)]
 pub struct MarkdownPart {
+    /// Path of the audio file of this part.
     pub path: String,
+    /// Its length in seconds.
     pub seconds: u32,
 }
 
@@ -576,7 +632,11 @@ pub fn markdown_meeting(
 #[derive(Debug, uniffi::Error)]
 pub enum ReplicaError {
     /// The folder is not a memory, or it cannot be opened, or the value is refused (a window is 1 to 36500 days).
-    Failed { message: String },
+    /// Plain words for the person.
+    Failed {
+        /// Plain words for the person.
+        message: String,
+    },
 }
 
 impl std::fmt::Display for ReplicaError {
@@ -609,7 +669,9 @@ pub struct ReplicaWindow {
     pub pruned_at: i64,
     /// Notes removed by the last pruning, and notes kept because a peer has not acknowledged them yet.
     pub pruned_facts: u32,
+    /// Files removed by the last pruning.
     pub pruned_files: u32,
+    /// Notes kept because a peer has not acknowledged them yet.
     pub kept_unacknowledged: u32,
 }
 

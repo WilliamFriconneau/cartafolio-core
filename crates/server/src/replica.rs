@@ -19,6 +19,9 @@ use crate::app::App;
 /// The spaces `memcp init --defaults` makes.
 pub const DEFAULT_SPACES: [&str; 6] = ["personal", "health", "home", "finances", "hobbies", "work"];
 
+/// Programs started by this node that may run at once.
+const MAX_CHILDREN: usize = 16;
+
 /// The seconds between two passes with a peer.
 const EVERY: &str = "10";
 
@@ -104,6 +107,14 @@ pub fn join_start(app: &App, address: &str) -> Result<Value, String> {
         || address.len() > 300
     {
         return Err("an address such as https://memory.example.net".into());
+    }
+    {
+        // Programs that ask to join are few and short: a flood of requests must not fill the process table.
+        let mut kids = app.children.lock().unwrap_or_else(|e| e.into_inner());
+        kids.retain_mut(|c| matches!(c.try_wait(), Ok(None)));
+        if kids.len() >= MAX_CHILDREN {
+            return Err("too many programs are running already, try again in a minute".into());
+        }
     }
     let id = util::random_base32(12).to_ascii_lowercase();
     let file = status_file(app, &id);

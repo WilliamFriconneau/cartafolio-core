@@ -26,25 +26,32 @@ const MAX_NAME: usize = 64;
 const MAX_NOTE: usize = 500;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
+/// The node.
 pub struct Node {
     /// The connection's name, `peer-<machine>-xxxx`.
     pub peer: String,
     /// What is shown: the name the person gave, else the machine's own.
     pub name: String,
+    /// The label.
     pub label: Option<String>,
+    /// The note.
     pub note: String,
     /// `active`, `paused` or `revoked`.
     pub state: String,
+    /// The created at.
     pub created_at: Option<i64>,
+    /// The last used at.
     pub last_used_at: Option<i64>,
     /// `sending`, `receiving` or `idle`.
     pub direction: String,
+    /// The last activity.
     pub last_activity: Option<i64>,
     /// Hidden from the lists since then (it shows again if it speaks after).
     pub forgotten_at: Option<i64>,
 }
 
 impl Node {
+    /// To json.
     pub fn to_json(&self) -> Value {
         json!({
             "peer": self.peer, "name": self.name, "label": self.label, "note": self.note,
@@ -52,6 +59,8 @@ impl Node {
             "created_at": self.created_at.map(util::iso), "last_used_at": self.last_used_at.map(util::iso),
             "direction": self.direction, "last_activity": self.last_activity,
             "forgotten": self.forgotten_at.is_some(),
+            // Forgotten and silent since: left out of the lists.
+            "hidden": self.forgotten_at.is_some_and(|f| self.last_seen().is_none_or(|s| s <= f)),
         })
     }
 

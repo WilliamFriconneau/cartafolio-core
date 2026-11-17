@@ -9,22 +9,47 @@ pub(super) fn peers(
     name: &str,
     args: &Value,
 ) -> Result<Value, ToolError> {
+    use crate::directory::Local;
     let author = caller.agent.as_str();
     let ctl = brain.open_control()?;
-    let list: Vec<Value> = crate::access::list(&ctl)?
-        .into_iter()
+    let now = crate::util::now();
+    let all = crate::access::list(&ctl)?;
+    let status = crate::sync::status(brain, now)?;
+    let progress = |agent: &str| status.iter().find(|s| s.peer == agent);
+    // The connections of this person made for a peer, then the peers this node syncs with that hold no connection
+    // here, then every other node of the directory.
+    let mut locals: Vec<Local> = Vec::new();
+    for c in all
+        .iter()
         .filter(|c| c.user_id == caller.user_id && c.agent.starts_with("peer-"))
-        .map(|c| {
-            json!({
-                "name": c.agent,
-                "created_at": crate::util::iso(c.created_at),
-                "last_used_at": c.last_used_at.map(crate::util::iso),
-                "allowed": c.revoked_at.is_none(),
-            })
-        })
-        .collect();
+    {
+        let mut l = progress(&c.agent).map_or_else(
+            || Local {
+                direction: "idle".into(),
+                ..Default::default()
+            },
+            crate::sync::PeerStatus::to_local,
+        );
+        l.connection = c.agent.clone();
+        l.name = c.agent.clone();
+        l.allowed = Some(c.revoked_at.is_none());
+        l.created_at = Some(crate::util::iso(c.created_at));
+        l.last_used_at = c.last_used_at.map(crate::util::iso);
+        locals.push(l);
+    }
+    for s in &status {
+        if !all.iter().any(|c| c.agent == s.peer) {
+            locals.push(s.to_local());
+        }
+    }
+    let list = crate::directory::union(brain, now, locals)?;
     let window = crate::sync::window_status(brain)?.to_json();
-    Ok(json!({ "peers": list, "window": window }))
+    Ok(json!({
+        "node": crate::directory::node_json(brain, now)?,
+        "peers": list,
+        "connections": crate::directory::connections(brain, &caller.user_id)?,
+        "window": window,
+    }))
 }
 
 #[allow(unused_variables)]

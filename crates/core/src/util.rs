@@ -1,5 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
+/// Seconds since the Unix epoch (0 if the clock is before it). The unit of every
+/// timestamp stored by the core.
 pub fn now() -> i64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)

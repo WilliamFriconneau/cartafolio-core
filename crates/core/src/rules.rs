@@ -13,20 +13,28 @@ const MAX_ITEMS: usize = 100;
 const MAX_KEYWORD: usize = 40;
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+/// The rules.
 pub struct Rules {
+    /// The tags.
     pub tags: Vec<String>,
+    /// The keywords.
     pub keywords: Vec<String>,
 }
 
 /// What to add and what to remove. Words and tags are normalised; unknown ones to remove are ignored.
 #[derive(Clone, Debug, Default)]
 pub struct Edit {
+    /// The add tags.
     pub add_tags: Vec<String>,
+    /// The remove tags.
     pub remove_tags: Vec<String>,
+    /// The add keywords.
     pub add_keywords: Vec<String>,
+    /// The remove keywords.
     pub remove_keywords: Vec<String>,
 }
 
+/// Clean keyword.
 pub fn clean_keyword(raw: &str) -> Option<String> {
     let k = raw.trim().trim_start_matches('#').to_lowercase();
     (!k.is_empty() && k.chars().count() <= MAX_KEYWORD).then_some(k)

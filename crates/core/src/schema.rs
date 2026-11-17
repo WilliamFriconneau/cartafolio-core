@@ -29,9 +29,13 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V18,
     CONTROL_V19,
     CONTROL_V20,
+    CONTROL_V21,
 ];
 
+/// Number of migrations a space database goes through; a file recording a higher
+/// version was written by a newer program and is refused.
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
+/// Number of migrations of the control database (same rule as [`SPACE_SCHEMA_VERSION`]).
 pub const CONTROL_SCHEMA_VERSION: u32 = CONTROL_MIGRATIONS.len() as u32;
 
 const SPACE_V1: &str = r"
@@ -546,6 +550,23 @@ CREATE TABLE sync_state (
 ) STRICT, WITHOUT ROWID;
 ";
 
+/// The peer directory (see `directory`): every node of the memory, as this node knows it. Rows are never deleted: a
+/// revoked peer keeps its row with the flag, so the revocation spreads.
+const CONTROL_V19: &str = r"
+CREATE TABLE peer_directory (
+  name         TEXT PRIMARY KEY,
+  last_seen    INTEGER NOT NULL,
+  version      TEXT NOT NULL DEFAULT '',
+  first_seen   INTEGER NOT NULL,
+  learned_from TEXT,
+  stamp        TEXT NOT NULL,
+  link         TEXT,
+  revoked      INTEGER NOT NULL DEFAULT 0,
+  revoked_at   INTEGER,
+  exposures    TEXT NOT NULL DEFAULT '[]'
+) STRICT, WITHOUT ROWID;
+";
+
 /// A replica that holds only a window of days (see `sync::prune_window`): the facts and files it left out or
 /// removed here, so that a later event about them is ignored instead of waiting for them for ever. Pruning
 /// deletes history and log rows on purpose, and only while it holds the `window_pruning` flag in `meta`: the
@@ -570,13 +591,13 @@ CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
 /// A connection of the program's own tools (the janitor, voice transcription, the weekly report, the device
 /// rangers) is marked `internal`: the page keeps it out of the list of connected assistants and shows it in its own
 /// section, with its own controls.
-const CONTROL_V19: &str = r"
+const CONTROL_V20: &str = r"
 ALTER TABLE connections ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
 ";
 
 /// What the person says of each machine (peer): a name they gave it, a note, whether its sync is paused, and when it
 /// was forgotten (hidden from the lists). The peer's own key and progress live in `connections` and `sync_state`.
-const CONTROL_V20: &str = r"
+const CONTROL_V21: &str = r"
 CREATE TABLE peer_meta (
   peer TEXT PRIMARY KEY,
   label TEXT,

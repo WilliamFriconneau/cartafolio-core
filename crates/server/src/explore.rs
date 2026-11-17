@@ -19,6 +19,10 @@ const DAY: i64 = 86_400;
 const WINDOW_DAYS: i64 = 30;
 const PAGE_MAX: usize = 100;
 
+/// SQL: what counts as a note of the person. The page's own furniture (filing rules, dashboard, living pages) does
+/// not, so every count on every screen is the number of notes the journal lists.
+pub const NOT_FURNITURE: &str = "id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')";
+
 fn err(status: u16, msg: &str) -> Response {
     Response::json(status, &json!({ "error": msg }))
 }
@@ -113,7 +117,14 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
         .layout(&me.id)
         .ok()
         .and_then(|l| l.into_iter().find(|p| p.space == space));
-    let counts = facts::counts(&conn).unwrap_or(Value::Null);
+    let mut counts = facts::counts(&conn).unwrap_or(Value::Null);
+    if let Ok(n) = conn.query_row(
+        &format!("SELECT count(*) FROM facts WHERE status = 'active' AND {NOT_FURNITURE}"),
+        [],
+        |r| r.get::<_, i64>(0),
+    ) {
+        counts["active"] = json!(n);
+    }
     let tags: Vec<Value> = facts::tag_counts(&conn)
         .unwrap_or_default()
         .into_iter()
@@ -581,6 +592,251 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
         200,
         &json!({ "facts": rows.iter().map(|f| row_with_file(&conn, f)).collect::<Vec<_>>() }),
     )
+}
+
+/// The tags the page keeps out of every list: the notes that are its own furniture.
+fn system_tag(tag: &str) -> bool {
+    let top = tag.split('/').next().unwrap_or("");
+    matches!(
+        top,
+        "dashboard" | "rules" | "living" | "living-meta" | "index" | "guide"
+    )
+}
+
+/// The spaces of the person that a cross-space view reads: theirs, never the sorting box, optionally one only.
+fn readable_spaces(
+    app: &App,
+    ctl: &Connection,
+    me: &User,
+    only: Option<&str>,
+) -> Result<Vec<Space>, Response> {
+    let reach = users::access_of(ctl, &me.id).map_err(fail)?;
+    let triage = memcp_core::triage::of(&app.brain, &me.id).map_err(fail)?;
+    if let Some(name) = only.filter(|s| !s.is_empty()) {
+        let space = Space::new(name).map_err(|_| err(400, "invalid space"))?;
+        if !reach.contains_key(&space) {
+            return Err(err(404, "unknown space"));
+        }
+        return Ok(vec![space]);
+    }
+    Ok(app
+        .brain
+        .spaces()
+        .map_err(fail)?
+        .into_iter()
+        .filter(|s| reach.contains_key(s) && Some(s) != triage.as_ref())
+        .collect())
+}
+
+/// `GET /journal[?space=NAME][&tag=PATH][&q=WORDS][&limit=N][&before=TS&before_id=ID]`: the notes of every space the
+/// person reads, newest first, each with its space. `before` and `before_id` continue after the last note of a page
+/// (`next` in the answer); `tags` (first page only) are the tags to filter by, with their counts across the spaces.
+pub fn journal(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
+    let spaces = match readable_spaces(app, ctl, me, req.query.get("space").map(String::as_str)) {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+    let limit = req
+        .query
+        .get("limit")
+        .and_then(|l| l.parse::<usize>().ok())
+        .unwrap_or(50)
+        .clamp(1, PAGE_MAX);
+    let before = req.query.get("before").and_then(|b| b.parse::<i64>().ok());
+    let before_id = req.query.get("before_id").cloned().unwrap_or_default();
+    let tag = req.query.get("tag").map(String::as_str).unwrap_or("");
+    let q = req.query.get("q").map(|s| s.trim()).unwrap_or("");
+    let past = |f: &facts::Fact| match before {
+        None => true,
+        Some(t) => f.created_at < t || (f.created_at == t && f.id < before_id),
+    };
+    let mut rows: Vec<(facts::Fact, Value)> = vec![];
+    let mut tag_totals: std::collections::BTreeMap<String, i64> = Default::default();
+    for space in &spaces {
+        let Ok(conn) = app.brain.open_space(space) else {
+            continue;
+        };
+        if before.is_none() {
+            for (t, n) in facts::tag_counts(&conn).unwrap_or_default() {
+                if !system_tag(&t) {
+                    *tag_totals.entry(t).or_insert(0) += n;
+                }
+            }
+        }
+        let found: Vec<facts::Fact> = if q.is_empty() {
+            let like = format!("{tag}/%");
+            let sql = format!(
+                "SELECT id FROM facts WHERE status = 'active'
+                 AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
+                 {}
+                 AND (?2 IS NULL OR created_at < ?2 OR (created_at = ?2 AND id < ?3))
+                 ORDER BY created_at DESC, id DESC LIMIT ?1",
+                if tag.is_empty() {
+                    ""
+                } else {
+                    "AND id IN (SELECT fact_id FROM fact_tags WHERE tag = ?4 OR tag LIKE ?5)"
+                }
+            );
+            let Ok(mut st) = conn.prepare(&sql) else {
+                continue;
+            };
+            let take = (limit + 1) as i64;
+            let ids: Vec<String> = if tag.is_empty() {
+                st.query_map(rusqlite::params![take, before, before_id], |r| r.get(0))
+                    .map(|r| r.flatten().collect())
+                    .unwrap_or_default()
+            } else {
+                st.query_map(rusqlite::params![take, before, before_id, tag, like], |r| {
+                    r.get(0)
+                })
+                .map(|r| r.flatten().collect())
+                .unwrap_or_default()
+            };
+            ids.iter()
+                .filter_map(|id| facts::read_fact(&conn, id).ok().flatten())
+                .collect()
+        } else {
+            let opts = RecallOptions {
+                limit: limit * 3 + 1,
+                include_expired: true,
+                tags: if tag.is_empty() {
+                    vec![]
+                } else {
+                    vec![tag.to_string()]
+                },
+                ..Default::default()
+            };
+            match facts::recall(&conn, q, &opts, now) {
+                Ok(hits) => hits
+                    .into_iter()
+                    .map(|h| h.fact)
+                    .filter(|f| past(f) && !f.tags.iter().any(|t| system_tag(t)))
+                    .collect(),
+                Err(e) => return fail(e),
+            }
+        };
+        for f in found {
+            let mut row = row_with_file(&conn, &f);
+            row["space"] = json!(space.as_str());
+            rows.push((f, row));
+        }
+    }
+    rows.sort_by(|a, b| (b.0.created_at, &b.0.id).cmp(&(a.0.created_at, &a.0.id)));
+    let more = rows.len() > limit;
+    rows.truncate(limit);
+    let next = if more {
+        rows.last()
+            .map(|(f, _)| json!({ "before": f.created_at, "before_id": f.id }))
+    } else {
+        None
+    };
+    let mut out = json!({
+        "facts": rows.into_iter().map(|(_, r)| r).collect::<Vec<_>>(),
+        "more": more,
+        "next": next,
+        "spaces": spaces.iter().map(|s| s.as_str()).collect::<Vec<_>>(),
+    });
+    if before.is_none() {
+        let mut tags: Vec<(String, i64)> = tag_totals.into_iter().collect();
+        tags.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        tags.truncate(80);
+        out["tags"] = json!(
+            tags.into_iter()
+                .map(|(t, n)| json!({ "tag": t, "count": n }))
+                .collect::<Vec<_>>()
+        );
+    }
+    Response::json(200, &out)
+}
+
+/// `GET /links[?space=NAME]`: the graph of what the person reads (the `links` tool, as the signed-in person) with
+/// the keywords of each space added: nodes are spaces, tags, keywords and library folders; edges are what they
+/// share. The sorting box and the page's own furniture (rules, dashboard…) are left out.
+pub fn graph(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response {
+    let spaces = match readable_spaces(app, ctl, me, req.query.get("space").map(String::as_str)) {
+        Ok(s) => s,
+        Err(r) => return r,
+    };
+    let names: Vec<&str> = spaces.iter().map(|s| s.as_str()).collect();
+    let mut args = json!({ "max_tags": 150 });
+    if let Some(s) = req.query.get("space").filter(|s| !s.is_empty()) {
+        args["space"] = json!(s);
+    }
+    let mut g = match crate::admin::living(app, ctl, me, "links", &args) {
+        Ok(v) => v,
+        Err(r) => return r,
+    };
+    let mut nodes: Vec<Value> = g["nodes"].as_array().cloned().unwrap_or_default();
+    let mut edges: Vec<Value> = g["edges"].as_array().cloned().unwrap_or_default();
+    let in_scope = |id: &str| {
+        id.strip_prefix("space:")
+            .map(|s| names.contains(&s))
+            .unwrap_or(true)
+    };
+    let hidden_tag = |id: &str| id.strip_prefix("tag:").is_some_and(system_tag);
+    nodes.retain(|n| {
+        let id = n["id"].as_str().unwrap_or("");
+        in_scope(id) && !hidden_tag(id)
+    });
+    edges.retain(|e| {
+        let (a, b) = (
+            e["source"].as_str().unwrap_or(""),
+            e["target"].as_str().unwrap_or(""),
+        );
+        in_scope(a) && in_scope(b) && !hidden_tag(a) && !hidden_tag(b)
+    });
+    // A space is as big as the notes the journal lists for it.
+    for n in nodes.iter_mut().filter(|n| n["type"] == "space") {
+        let Some(name) = n["id"].as_str().and_then(|i| i.strip_prefix("space:")) else {
+            continue;
+        };
+        if let Ok(space) = Space::new(name)
+            && let Ok(conn) = app.brain.open_space(&space)
+            && let Ok(c) = conn.query_row(
+                &format!("SELECT count(*) FROM facts WHERE status = 'active' AND {NOT_FURNITURE}"),
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+        {
+            n["count"] = json!(c);
+        }
+    }
+    // The keywords of each space: a node each, joined to every space that lists it, sized by the notes that cite it.
+    let mut seen: std::collections::BTreeMap<String, i64> = Default::default();
+    for space in &spaces {
+        let Ok(conn) = app.brain.open_space(space) else {
+            continue;
+        };
+        for k in clean_list(read_rules(&conn).1.get("keywords"), 100, false) {
+            let like = format!(
+                "%{}%",
+                k.replace('\\', "\\\\")
+                    .replace('%', "\\%")
+                    .replace('_', "\\_")
+            );
+            let n: i64 = conn
+                .query_row(
+                    "SELECT count(*) FROM facts WHERE status = 'active' AND lower(text) LIKE ?1 ESCAPE '\\'
+                     AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'rules')",
+                    [&like],
+                    |r| r.get(0),
+                )
+                .unwrap_or(0);
+            *seen.entry(k.clone()).or_insert(0) += n;
+            edges.push(
+                json!({ "type": "keyword", "source": format!("space:{space}"),
+                "target": format!("keyword:{k}"), "count": n.max(1) }),
+            );
+        }
+    }
+    for (k, n) in seen {
+        nodes.push(
+            json!({ "id": format!("keyword:{k}"), "type": "keyword", "label": k, "count": n.max(1) }),
+        );
+    }
+    g["nodes"] = json!(nodes);
+    g["edges"] = json!(edges);
+    Response::json(200, &g)
 }
 
 /// `GET /fact?space=NAME&id=ID`: a note with its history.

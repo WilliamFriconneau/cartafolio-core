@@ -384,6 +384,19 @@ fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
         app.public_url = u.trim_end_matches('/').to_string();
     }
     app.node_name = flag("--node-name").unwrap_or("MemCP").to_string();
+    // The name the node goes by in the peer directory: the one given, else the one it made for itself once.
+    if let Some(n) = flag("--node-name") {
+        let _ = memcp_core::directory::set_own_name(&app.brain, n);
+    }
+    // How this node can be reached, from its settings: told to the other nodes in its directory entry.
+    let tailnet = flag("--identity-listen")
+        .map(String::from)
+        .filter(|_| !app.tailnet_users.is_empty() || app.login_url.is_some())
+        .map(|l| app.login_url.clone().unwrap_or(l));
+    let _ = memcp_core::directory::set_exposures(
+        &app.brain,
+        &memcp_core::directory::exposures_from(listen, &app.public_url, tailnet.as_deref()),
+    );
     // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
     let _advertised = if a.switches.iter().any(|s| s == "--advertise") {
         let port = listen

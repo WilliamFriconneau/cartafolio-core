@@ -6,7 +6,8 @@
 - [UI-SPEC.md](UI-SPEC.md): what each screen shows, on the node page and in each app.
 
 **Use it**
-- [TOOLS.md](TOOLS.md): the MCP tools an assistant gets. [REFERENCE.md](REFERENCE.md): commands and settings.
+- [CORE-API.md](CORE-API.md): the map of the core by module, and the error vocabulary.
+- [TOOLS.md](TOOLS.md): the MCP tools an assistant gets, one section each. [REFERENCE.md](REFERENCE.md): commands and settings.
 - [DESKTOP.md](DESKTOP.md), [CAPTURE.md](CAPTURE.md): the apps on a computer and the capture program.
 - [TAILSCALE.md](TAILSCALE.md), [DISCOVERY.md](DISCOVERY.md): reaching a node.
 - [MIGRATING.md](MIGRATING.md), [MERGE.md](MERGE.md): moving a memory, merging two.
