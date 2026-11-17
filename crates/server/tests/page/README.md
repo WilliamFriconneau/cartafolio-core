@@ -27,3 +27,21 @@ CHROMIUM=/usr/bin/chromium node browser.test.js     # SCREENSHOTS=some/dir keeps
 
 It needs a Chromium on the machine (`CHROMIUM` says where) and the program built in `target/debug`
 (`MEMCP_BIN` says otherwise). Not part of `cargo test`.
+
+## The start screen, machines, keywords and targets, languages and themes
+
+`onboarding.test.js` drives the real program in a real Chromium: a node with no memory offers exactly two choices and a
+guided path of four steps with its progress (start: name, an assistant with the single address that carries the key;
+join: nodes found on the network or an address, then three words), a node with spaces shows its machines first (live
+peers), folders, labels, the keywords and targets of a space, French and English, light and dark, and that nothing
+scrolls sideways at 400 px. It stands in for `memcp-bridge discover` and `memcp-sync --join` with small scripts, so it
+needs no network. `SCREENSHOTS=dir` keeps pictures at 1280 and 400 px.
+
+```sh
+cargo build -p memcp-server
+cd crates/server/tests/page && npm install jsdom playwright-core --no-save
+CHROMIUM=/usr/bin/chromium node onboarding.test.js
+```
+
+`wizard.test.js` and `browser.test.js` predate the page's separate views (`#triage-section`, `.vault` cards) and need
+their selectors brought up to date.

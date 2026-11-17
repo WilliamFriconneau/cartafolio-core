@@ -226,6 +226,7 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                 ),
                 Err(e) => fail(e),
             },
+            "/discover" => Response::json(200, &crate::replica::discover(app)),
             "/join-memory" => match crate::replica::join_state(
                 app,
                 req.query.get("id").map(String::as_str).unwrap_or(""),

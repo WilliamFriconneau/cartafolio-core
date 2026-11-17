@@ -39,20 +39,47 @@ pub fn start(app: &App, ctl: &rusqlite::Connection, me: &User, name: &str) -> Re
     Ok(json!({ "made": made, "spaces": DEFAULT_SPACES }))
 }
 
-fn sync_program() -> PathBuf {
-    if let Some(p) = std::env::var_os("MEMCP_SYNC_BIN") {
+/// A program shipped next to this one (or the one named by the variable).
+fn program(var: &str, base: &str) -> PathBuf {
+    if let Some(p) = std::env::var_os(var) {
         return PathBuf::from(p);
     }
     let name = if cfg!(windows) {
-        "memcp-sync.exe"
+        format!("{base}.exe")
     } else {
-        "memcp-sync"
+        base.to_string()
     };
     std::env::current_exe()
         .ok()
-        .and_then(|e| e.parent().map(|d| d.join(name)))
+        .and_then(|e| e.parent().map(|d| d.join(&name)))
         .filter(|p| p.is_file())
         .unwrap_or_else(|| PathBuf::from(name))
+}
+
+fn sync_program() -> PathBuf {
+    program("MEMCP_SYNC_BIN", "memcp-sync")
+}
+
+/// `GET /discover`: the nodes found on this network and on the tailnet (the work of `memcp-bridge discover`, which owns
+/// the mDNS browsing and the probes), this node left out. Nothing found is an empty list, never an error.
+pub fn discover(app: &App) -> Value {
+    let out = Command::new(program("MEMCP_BRIDGE_BIN", "memcp-bridge"))
+        .args(["discover", "--seconds", "3"])
+        .stdin(Stdio::null())
+        .stderr(Stdio::null())
+        .output();
+    let text = out
+        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
+        .unwrap_or_default();
+    let nodes: Vec<Value> = text
+        .lines()
+        .filter_map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f.len() == 4 && f[0] != app.node_name && f[1] != app.public_url)
+                .then(|| json!({ "name": f[0], "address": f[1], "version": f[2], "via": f[3] }))
+        })
+        .collect();
+    json!({ "nodes": nodes })
 }
 
 fn keep(app: &App, child: Child) {

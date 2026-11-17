@@ -8,6 +8,7 @@ for pair in amd64:x86_64-unknown-linux-musl aarch64:aarch64-unknown-linux-musl; 
   # and it must never reuse the ones the host (or the other architecture) built against another glibc.
   export CARGO_TARGET_DIR="$PWD/target/cross-$arch"
   CROSS_CONTAINER_ENGINE=docker cross build --release --target "$target" -p memcp-server -p memcp-manager -p memcp-janitor -p memcp-bridge
+  CROSS_CONTAINER_ENGINE=docker cross build --release --target "$target" -p memcp-client --features sync --bin memcp-sync
   mkdir -p "ha-addon/memcp/bin/$arch"
-  cp "$CARGO_TARGET_DIR/$target/release/memcp" "$CARGO_TARGET_DIR/$target/release/memcp-manager" "$CARGO_TARGET_DIR/$target/release/memcp-janitor" "$CARGO_TARGET_DIR/$target/release/memcp-bridge" "ha-addon/memcp/bin/$arch/"
+  cp "$CARGO_TARGET_DIR/$target/release/memcp" "$CARGO_TARGET_DIR/$target/release/memcp-manager" "$CARGO_TARGET_DIR/$target/release/memcp-janitor" "$CARGO_TARGET_DIR/$target/release/memcp-bridge" "$CARGO_TARGET_DIR/$target/release/memcp-sync" "ha-addon/memcp/bin/$arch/"
 done

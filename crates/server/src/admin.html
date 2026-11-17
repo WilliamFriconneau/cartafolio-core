@@ -316,10 +316,9 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <div id="machines"></div>
       <p class="mute mfoot" id="mfoot"></p>
       <div class="acts" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-        <button type="button" class="primary" id="join-memory-btn">Join a memory</button>
-        <form id="pair-form" style="margin:0"><button class="primary">Add a machine</button></form>
+        <form id="pair-form" style="margin:0"><button class="primary" id="add-node">Add a node</button></form>
       </div>
-      <p class="mute small">Join a memory: this machine asks another one to let it in, and keeps a copy in step. Add a machine: show a code that a computer or a phone types or scans to join this memory.</p>
+      <p class="mute small">A new machine or phone asks to join: its request appears here with three words, and you allow it. Or show a code that it types or scans.</p>
     </section>
     <div class="bento" id="actions" style="margin-bottom:16px">
       <div class="tile t2">
@@ -475,12 +474,6 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
   </div>
 </main>
 
-<dialog id="joinmem-dlg">
-  <h2>Join a memory</h2>
-  <div id="joinmem-body"></div>
-  <form method="dialog" style="justify-content:flex-end"><button id="joinmem-close">Close</button></form>
-</dialog>
-
 <dialog id="guide-dlg">
   <h2 id="guide-title">Instructions</h2>
   <p class="mute small" id="guide-lead"></p>
@@ -529,9 +522,9 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 </dialog>
 
 <dialog id="pair-dlg">
-  <h2 id="pair-title">Join a MemCP network</h2>
+  <h2 id="pair-title">Add a node</h2>
   <div id="pair-waiting">
-    <p class="mute small">In the app: choose “Join a MemCP network” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
+    <p class="mute small">On the new node: choose “Join a memory” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
     <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
     <div class="small mute">Address of the server</div>
     <div class="pair-row"><code id="pair-server"></code><button type="button" class="link" data-copy="pair-server">copy</button></div>
@@ -605,7 +598,19 @@ const FR = {
   "Machines": "Machines",
   "The machines that hold this memory, and whether they are in step. Refreshed every two seconds.": "Les machines qui détiennent cette mémoire, et si elles sont à jour. Actualisé toutes les deux secondes.",
   "Join a memory": "Rejoindre une mémoire",
-  "Add a machine": "Ajouter une machine",
+  "Add a node": "Ajouter un nœud",
+  "Add a node": "Ajouter un nœud",
+  "A new machine or phone asks to join: its request appears here with three words, and you allow it. Or show a code that it types or scans.": "Une nouvelle machine ou un téléphone demande à rejoindre : sa demande apparaît ici avec trois mots, et vous l’autorisez. Ou affichez un code qu’il saisit ou scanne.",
+  "No other machine yet. Add a node below.": "Pas d’autre machine pour l’instant. Ajoutez un nœud ci-dessous.",
+  "Looking for nodes on your network…": "Recherche de nœuds sur votre réseau…",
+  "Nodes found": "Nœuds trouvés",
+  "No node found on this network. Type its address below.": "Aucun nœud trouvé sur ce réseau. Saisissez son adresse ci-dessous.",
+  "Or type an address": "Ou saisissez une adresse",
+  "Add a node: ": "Ajouter un nœud : ",
+  "Recently added by the janitor": "Ajouté récemment par le rangeur",
+  "The janitor adds words after reading your notes, then sorts again. Remove a word you do not want: it is not added again by hand, and the history keeps it.": "Le rangeur ajoute des mots après avoir lu vos notes, puis range de nouveau. Retirez un mot dont vous ne voulez pas : l’historique le garde.",
+  "Nothing added by the janitor yet.": "Rien d’ajouté par le rangeur pour l’instant.",
+  "Remove this word": "Retirer ce mot",
   "Join a memory: this machine asks another one to let it in, and keeps a copy in step. Add a machine: show a code that a computer or a phone types or scans to join this memory.": "Rejoindre une mémoire : cette machine demande à une autre de l’accueillir et garde une copie à jour. Ajouter une machine : afficher un code qu’un ordinateur ou un téléphone saisit ou scanne pour rejoindre cette mémoire.",
   "Connect an assistant": "Connecter un assistant",
   "Claude, ChatGPT, OpenCode… One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.": "Claude, ChatGPT, OpenCode… Une seule adresse porte la clé. Chaque assistant n’obtient que les espaces que vous cochez. Vous pourrez changer cela plus tard sans rien refaire.",
@@ -619,6 +624,7 @@ const FR = {
   "a new space, in any words": "un nouvel espace, avec vos mots",
   "— top level —": "— niveau supérieur —",
   "Add a space": "Ajouter un espace",
+  "Personal": "Personnel", "Health": "Santé", "Home": "Maison", "Money": "Argent", "Hobbies": "Loisirs", "Work": "Travail", "People": "Proches",
   "Timeline": "Chronologie",
   "What each space received, over the last hours. Counts only, never content.": "Ce que chaque espace a reçu ces dernières heures. Des nombres seulement, jamais le contenu.",
   "Scale": "Échelle",
@@ -697,7 +703,7 @@ const FR = {
   "Send these notes?": "Envoyer ces notes ?",
   "Move them": "Les déplacer",
   "Join a MemCP network": "Rejoindre un réseau MemCP",
-  "In the app: choose “Join a MemCP network” and scan this code, or type the address and the code. It works once, for": "Dans l’application : choisissez « Rejoindre un réseau MemCP » et scannez ce code, ou saisissez l’adresse et le code. Il ne sert qu’une fois, pendant",
+  "On the new node: choose “Join a memory” and scan this code, or type the address and the code. It works once, for": "Sur le nouveau nœud : choisissez « Rejoindre une mémoire » et scannez ce code, ou saisissez l’adresse et le code. Il ne sert qu’une fois, pendant",
   "Address of the server": "Adresse du serveur",
   "copy": "copier",
   "Code": "Code",
@@ -750,7 +756,7 @@ const FR = {
   "The other machine said no.": "L’autre machine a dit non.",
   "Nobody answered in time. Ask again.": "Personne n’a répondu à temps. Demandez de nouveau.",
   "the other machine could not be reached": "l’autre machine est injoignable",
-  "No other machine yet. Join a memory, or add a machine below.": "Pas d’autre machine pour l’instant. Rejoignez une mémoire, ou ajoutez une machine ci-dessous.",
+  "No other machine yet. Add a node below.": "Pas d’autre machine pour l’instant. Rejoignez une mémoire, ou ajoutez une machine ci-dessous.",
   "This machine": "Cette machine",
   "this machine": "cette machine",
   "= in step": "= à jour",
@@ -1253,9 +1259,9 @@ async function loadSpace(name) {
 }
 function renderSpace() {
   const ov = SP.ov;
-  $("#space-title").textContent = ov.label || ov.space;
+  $("#space-title").textContent = spaceLabel(ov.space);
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
-  $("#space-sub").textContent = (kl ? kl.label : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + spaceLabel(ov.parent) : "");
+  $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes") + (ov.parent ? " · inside " + spaceLabel(ov.parent) : "");
   $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["boards", "Boards"], ["words", "Keywords and targets"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"]].map(([k, t]) =>
     el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
   const body = $("#space-body");
@@ -1602,7 +1608,7 @@ async function openNote(body, id) {
 // ---- The spaces as folders: a tree, drag and drop, tags and keywords at each level ----
 const FT = { l: [], open: new Set(), sel: null, info: null };
 async function renderLayout() {
-  try { FT.l = (await api("layout")).spaces.filter(x => x.kind !== "a-trier"); } catch (x) { return; }
+  try { FT.l = (await api("layout")).spaces.filter(x => x.kind !== "a-trier").map(x => ({ ...x, label: niceLabel(x, x.kind) })); } catch (x) { return; }
   drawTree();
   $("#layout-parent").replaceChildren(el("option", { value: "" }, "— top level —"), ...FT.l.map(x => el("option", { value: x.space }, x.label)));
   if (FT.sel) loadSide();
@@ -2501,7 +2507,15 @@ $$("form[data-act]").forEach(f => f.addEventListener("submit", async e => {
 // =====================================================================================================================
 
 // ---- The spaces: a folder holds other spaces (no count, nothing to connect); only a space with no child is opened. ----
-const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p && p.label ? p.label : name; };
+// A space with no label of its own is shown by its kind (Health, Work…) or by its name in words: never "owner-health".
+function niceLabel(p, kind) {
+  if (p.label && p.label !== p.space) return p.label;
+  const c = kind && kind !== "custom" && (S && S.catalogue || []).find(x => x.key === kind);
+  if (c) return c.label;
+  const words = p.space.replace(/-/g, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : name; };
 function renderSpaceTiles() {
   if (!S) return;
   const kindLabel = k => { const c = (S.catalogue || []).find(x => x.key === k); return c ? c.label : k; };
@@ -2611,38 +2625,6 @@ function joinWatch(id, on) {
   tick(); JOINT = setInterval(tick, 2000);
 }
 const joinProblem = r => r.state === "denied" ? "The other machine said no." : r.state === "expired" ? "Nobody answered in time. Ask again." : "It did not work: " + (r.error || "the other machine could not be reached") + ".";
-function openJoinMemory() {
-  const box = $("#joinmem-body");
-  const form = () => {
-    const input = el("input", { id: "jm-address", placeholder: "memory.example.net", size: 34, autocomplete: "off", spellcheck: "false" });
-    const go = el("button", { type: "button", class: "primary", id: "jm-go" }, "Ask to join");
-    const err = el("p", { class: "err", id: "jm-err" });
-    go.addEventListener("click", async () => {
-      err.textContent = "";
-      try { const r = await joinAsk(input.value); words(r.id); } catch (x) { err.textContent = x.message; }
-    });
-    input.addEventListener("keydown", e => { if (e.key === "Enter") go.click(); });
-    box.replaceChildren(
-      el("p", { class: "mute small" }, "Type the address of the other memory, or paste the link you were given. It shows you three words; the other machine shows the same three, and someone there says yes."),
-      el("div", { class: "add-row" }, input, go), err);
-    input.focus();
-  };
-  const words = id => {
-    const out = el("div", {}, el("p", { class: "mute small" }, "Asking…"));
-    box.replaceChildren(out);
-    joinWatch(id, r => {
-      if (r.state === "approved") { out.replaceChildren(el("p", {}, el("b", {}, "Joined."), " The copy starts now: follow it in Machines."), el("p", { class: "mute small" }, "Nothing is written on the other machine except what you do there.")); pollSync(); load(); return; }
-      if (r.state === "waiting") { out.replaceChildren(el("div", { class: "three-words", id: "jm-words" }, r.check), el("p", { class: "mute small" }, "Check that the other machine shows the same three words, then allow it there. Waiting for the answer…"), el("button", { type: "button", class: "link", onclick: () => { clearInterval(JOINT); form(); } }, "Cancel")); return; }
-      if (r.state === "asking") return;
-      out.replaceChildren(el("p", { class: "warn" }, joinProblem(r)), el("button", { type: "button", class: "primary", onclick: form }, "Ask again"));
-    });
-  };
-  form();
-  $("#joinmem-dlg").showModal();
-}
-$("#join-memory-btn").addEventListener("click", openJoinMemory);
-$("#joinmem-dlg").addEventListener("close", () => clearInterval(JOINT));
-
 // ---- No memory yet: two choices, then at most four steps, with the progress always visible ----
 const OB = { active: false, mode: null, step: 1, name: "", conn: null, err: "", words: "", joinState: null };
 const OB_STEPS = { start: ["Choose", "Your name", "An assistant", "Done"], join: ["Choose", "Address", "Three words", "Copy"], none: ["Choose", "Set up", "Connect", "Done"] };
@@ -2718,8 +2700,18 @@ function renderOnboarding() {
       try { const r = await joinAsk(input.value); OB.joinId = r.id; OB.words = ""; OB.joinState = "asking"; obGo(3); } catch (x) { OB.err = x.message; renderOnboarding(); }
     });
     input.addEventListener("keydown", e => { if (e.key === "Enter") go.click(); });
-    body.replaceChildren(el("h2", {}, "Where is the memory?"), el("p", { class: "mute" }, "Type the address of the machine that holds it, or paste the link you were given."),
+    const found = el("div", { id: "ob-found" }, el("p", { class: "mute small" }, "Looking for nodes on your network…"));
+    body.replaceChildren(el("h2", {}, "Where is the memory?"), found,
+      el("h3", { class: "sub" }, "Or type an address"), el("p", { class: "mute" }, "Type the address of the machine that holds it, or paste the link you were given."),
       el("div", { class: "add-row" }, input, go), err, el("div", {}, back));
+    const ask = async address => { OB.address = address; try { const r = await joinAsk(address); OB.joinId = r.id; OB.words = ""; OB.joinState = "asking"; obGo(3); } catch (x) { OB.err = x.message; renderOnboarding(); } };
+    api("discover").then(r => {
+      if (!found.isConnected) return;
+      found.replaceChildren(...((r.nodes || []).length ? [el("h3", { class: "sub" }, "Nodes found"), ...r.nodes.map(n => el("div", { class: "mrow", "data-found": n.address },
+        el("span", { class: "dot ok" }), el("div", {}, el("div", { class: "mname" }, n.name), el("div", { class: "msub" }, n.address + (n.version ? " · " + n.version : ""))),
+        el("span", {}), el("button", { type: "button", class: "primary", onclick: () => ask(n.address) }, "Ask to join")))]
+        : [el("p", { class: "mute small" }, "No node found on this network. Type its address below.")]));
+    }).catch(() => found.isConnected && found.replaceChildren(el("p", { class: "mute small" }, "No node found on this network. Type its address below.")));
     input.focus();
     return;
   }
@@ -2804,22 +2796,21 @@ async function wordsView(body) {
     ...(targetRows.length ? targetRows : [el("p", { class: "mute" }, "No target yet.")]),
     el("div", { class: "add-row" }, tin, el("button", { type: "button", onclick: tgo }, "Add")),
     el("p", { class: "legend" }, el("button", { type: "button", class: "link", onclick: () => { SP.tab = "boards"; renderSpace(); } }, "Open the Targets board")));
-  const props = ov.proposals || [];
-  const decide = async (id, decision) => { try { await api("space/proposal", { space: name, id, decision }); toast(decision === "accept" ? "Accepted" : "Refused"); await loadSpace(name); } catch (x) { fail(x); } };
-  const proposed = block("What the janitor proposed", "The janitor suggests words after reading your notes. Nothing changes until you accept.",
-    ...(props.length ? props.map(pr => el("div", { class: "prop", "data-proposal": pr.id },
-      el("div", {}, ...pr.keywords.map(k => el("span", { class: "chip" }, "+ " + k)), ...pr.tags.map(k => el("span", { class: "chip" }, "+ tag " + k)),
-        pr.why ? el("div", { class: "msub" }, pr.why) : null, el("div", { class: "msub" }, pr.by + " · " + fmt(pr.at))),
-      el("div", {}, el("button", { type: "button", class: "primary", onclick: () => decide(pr.id, "accept") }, "Accept"), el("button", { type: "button", class: "link danger", onclick: () => decide(pr.id, "refuse") }, "Refuse"))))
-      : [el("p", { class: "mute" }, "Nothing proposed right now.")]));
   const hist = ov.rules_history || [];
+  const byJanitor = hist.filter(h => h.janitor && h.keywords_added.length);
+  const janitor = block("Recently added by the janitor", "The janitor adds words after reading your notes, then sorts again. Remove a word you do not want: the history keeps it.",
+    ...(byJanitor.length ? byJanitor.slice(0, 8).map(h => el("div", { class: "hist", "data-janitor": "" },
+      el("span", { class: "mute" }, fmt(h.at) + " "),
+      ...h.keywords_added.map(k => el("span", { class: "chip" + (kw.includes(k) ? "" : " warn") }, k,
+        kw.includes(k) ? el("button", { type: "button", title: "Remove this word", "aria-label": "Remove this word", onclick: () => save({ keywords: kw.filter(x => x !== k) }) }, "✕") : null))))
+      : [el("p", { class: "mute" }, "Nothing added by the janitor yet.")]));
   const changed = block("What changed", "Every change of the keywords and tags: who made it and when. The earlier lists stay in the history of the note.",
     ...(hist.length ? hist.map(h => el("div", { class: "hist" },
       el("span", { class: "mute" }, fmt(h.at) + " · " + h.by + " "),
       ...h.keywords_added.map(k => el("span", { class: "chip" }, "+ " + k)), ...h.keywords_removed.map(k => el("span", { class: "chip warn" }, "− " + k)),
       ...h.tags_added.map(k => el("span", { class: "chip" }, "+ tag " + k)), ...h.tags_removed.map(k => el("span", { class: "chip warn" }, "− tag " + k))))
       : [el("p", { class: "mute" }, "No change yet.")]));
-  body.replaceChildren(keywords, tags, targets, proposed, changed);
+  body.replaceChildren(keywords, tags, targets, janitor, changed);
 }
 
 // ---- Language and theme ----
