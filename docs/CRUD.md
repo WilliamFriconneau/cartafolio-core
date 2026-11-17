@@ -122,7 +122,9 @@ points back at the retired one; the retired one stays retired in the history.
 | Vocabulary | `vocabulary::import` | `vocabulary::list` | `vocabulary::import` (same name replaces), `add_terms`, `remove_terms` | `vocabulary::remove` | `vocabulary import|list|remove|term-add|term-remove` | `GET /space/vocabularies`, `POST /space/vocabulary` | vocabularies block |
 | Library root | `library::add_root` | `library::roots` | `library::rescan_all` | `library::remove_root` | `library add|scan|list|remove` | `GET /space/libraries`, `POST /space/library` (administrators) | libraries block |
 
-Removing a library root forgets its index only; the person's folder is never touched. Mounting a folder by HTTP is for
+| Folder of a space on this node | `folders::set` | `folders::info`, `folders::get` | `folders::set`, `folders::sync_space` | `folders::set` with no path (the folder is left as it is) | `folder set|get|sync` | `GET /space/folder`, `POST /space/folder` (a path: administrators) | "Folder on this node" block |
+
+`library add` is the read-only alias of the folder of a space ([FOLDERS.md](FOLDERS.md)). Removing a library root forgets its index only; the person's folder is never touched. Mounting a folder by HTTP is for
 administrators, because it names a path on the machine.
 
 ## What assistants never get
