@@ -217,3 +217,16 @@ fn the_failure_guard_holds_an_ipv6_network_and_cannot_grow_without_bound() -> Re
     assert!(e.app.failures_held() <= 5000);
     Ok(())
 }
+
+#[test]
+fn guessing_oauth_codes_is_counted_and_held_off() -> Res {
+    let e = env()?;
+    let mut last = 0;
+    for _ in 0..12 {
+        let mut r = rq("POST", "/oauth/token", "", &[], "grant_type=authorization_code&code=x&client_id=nope");
+        r.ip = Some("10.9.9.9".into());
+        last = e.app.handle(&r).status;
+    }
+    assert_eq!(last, 429);
+    Ok(())
+}
