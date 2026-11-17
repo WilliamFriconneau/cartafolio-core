@@ -461,7 +461,7 @@ Example call and answer:
 
 ### `living_set`
 
-Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.
+Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward); left out, the pass is taken to have read up to the moment it writes, so a board written by an app is never « behind » by notes it was given. `living_get` answers `behind` (notes created after `covers`) and `first_pass: true` while no pass was ever recorded (then `behind` is every note of the space). Records the pass. Never drop a card the person wrote.
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
 - **Answer:** The updated board (cards, pass recorded).

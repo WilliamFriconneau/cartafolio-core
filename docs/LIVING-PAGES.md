@@ -22,7 +22,7 @@ symptom it groups. A board's last pass is a note `living-meta/<board>` (`{"cover
 - `living_get(space, board)`: the cards by column, the last pass, and the delta (notes filed since the pass, oldest first,
   with `behind` their count).
 - `living_set(space, board, add, move, drop, covers)`: cards added (`{text, column, signs}`), moved (`{id, column}`),
-  dropped (ids, kept in history); `covers` moves forward only; the pass is recorded.
+  dropped (ids, kept in history); `covers` moves forward only (left out, it is the moment of the write); the pass is recorded. `living_get` says `first_pass` while no pass exists.
 
 ## Rules for an assistant
 

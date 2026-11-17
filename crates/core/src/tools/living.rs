@@ -148,7 +148,7 @@ pub(super) fn living(
         return Ok(json!({
             "space": space_name, "page": page, "columns": columns, "board": board,
             "covers": since, "last_pass": { "at": last["at"], "by": last["by"] },
-            "behind": behind, "delta": delta,
+            "behind": behind, "first_pass": since == 0, "delta": delta,
         }));
     }
     let write_card =
@@ -279,7 +279,10 @@ pub(super) fn living(
                 ToolError::Invalid("covers: seconds, or YYYY-MM-DDTHH:MM:SS+00:00".into())
             })?
             .max(since),
-        None => since,
+        // A pass that does not say how far it read has read up to the moment it writes: an app that writes a board
+        // has seen the notes it was given. Without this, a board written by an app would stay « behind » by every note
+        // of the space forever (covers stuck at 0).
+        None => crate::util::now().max(since),
     };
     let doc =
         json!({ "covers": covers, "at": crate::util::iso(crate::util::now()), "by": caller.agent })
