@@ -528,6 +528,8 @@ impl Brain {
         }
         // 4. Aside, not erased.
         self.move_aside(user_id, space, &archive, &info, &report, at)?;
+        // The other nodes of the person archive their copy too (see `swarm`).
+        crate::swarm::note_archived(self, space, user_id, at)?;
         auth_event(
             &self.open_control()?,
             Some(user_id),
@@ -773,6 +775,8 @@ impl Brain {
         // The file must declare this space and open cleanly.
         self.open_space(&space)?;
         let _ = fs::rename(dir.join("archive.json"), dir.join("restored.json"));
+        // Brought back after it was archived: newer than the archive, so the other nodes take it again.
+        crate::swarm::note_restored(self, &space, util::now())?;
         auth_event(
             &self.open_control()?,
             Some(user_id),

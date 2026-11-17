@@ -2,6 +2,33 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## The swarm: spaces, « À trier » and archives go both ways (next version)
+
+The protocol stays 1: everything below is added, and a node of the previous version is kept in step as before ([FEDERATION.md](FEDERATION.md), *Spaces in the swarm*).
+
+**`GET /mcp/<connection>/sync/spaces`** carries more. Each space gains `label`, `parent`, `position`, `since` (seconds: when the space was made at its origin, or brought back from an archive) and `triage` (`true` for the person's own « À trier »). The answer gains `offers` (whether this connection may offer spaces) and `archived` (the archives of the person's spaces this node knows of):
+
+```json
+{ "protocol": 1, "version": "…", "offers": true,
+  "spaces": [
+    { "space": "owner-a-trier", "kind": "a-trier", "head": 12, "writable": true,
+      "label": null, "parent": null, "position": 0, "since": 1794800000, "triage": true },
+    { "space": "owner-pompiers", "kind": "custom", "head": 5, "writable": true,
+      "label": "Pompiers", "parent": "hobbies", "position": 2, "since": 1794800500, "triage": false } ],
+  "archived": [ { "space": "owner-garden", "archived_at": 1794801000 } ] }
+```
+
+**`POST /mcp/<connection>/sync/spaces`**, new. Only a machine of the person: a `peer-…` connection that reaches every space of theirs, whole, and may write (otherwise 403). Two bodies:
+
+- A space the peer lacks: `{"space", "kind", "label", "parent", "position", "since"}`. Answers `{"result": "created", "space"}` (made now, for the same person), `{"result": "held", "space"}` (already there), `{"result": "triage", "space": "<this node's box>"}` (the offer was « À trier » and this node has the person's box: the two are paired), or `{"result": "archived", "archived_at"}` (this node archived it after the offering node's copy began: the offering node archives its copy). 409 when the name is a space of another person there.
+- An archive: `{"space", "archived_at"}`. Answers `{"result": "archived" | "kept", "space"}`.
+
+**Connections of peers.** A node that joins now gets a connection with `all` (it reaches every space of the person, present and future); the join answer's `spaces` lists the spaces the person has at that moment. A `peer-…` connection made by an earlier join (a read-write grant on « À trier » and on at least one other space, no path limits) is read as `all` too. A device paired to capture keeps its grant on the box alone.
+
+**Filing from « À trier».** The note a `triage_send` (or the janitor) writes in the target space has an id derived from the note and the space (`f_t` and 20 hex characters, `memcp_core::triage::filed_id`), the same on every node.
+
+**Rust.** `memcp_core::swarm` (`Offer`, `Answer`, `offers`, `accept`, `adopt`, `archive_here`, `archived_at`, `tombstones`, `since`); `memcp_client::peer_sync::Pass` gains `offered` and `archived`; `Peer::with_person`. **Command.** `memcp-sync --person ID`; its line ends with `N offered, N archived`.
+
 ## The capture program is gone: the node does its work (next version)
 
 There is one program on every machine, the node (`memcp`, `memcp-manager`). It reads the voice notes, watches the folders and absorbs

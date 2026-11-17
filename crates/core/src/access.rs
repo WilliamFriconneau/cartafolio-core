@@ -811,6 +811,12 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         },
     )?;
     let reach = crate::users::access_of(ctl, &user_id)?;
+    // A machine of the person reaches every space of theirs, present and future: every node is equal.
+    let all = if all == 0 && ro == 0 && is_machine(ctl, &agent, id)? {
+        1
+    } else {
+        all
+    };
     let grants: BTreeMap<Space, Grant> = if all != 0 {
         reach
     } else {
@@ -874,6 +880,31 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         rate_per_min: rate.unwrap_or(DEFAULT_RATE_PER_MIN),
         max_text: max_text.unwrap_or(DEFAULT_MAX_TEXT),
     })
+}
+
+/// Whether the connection `id` is a machine of the person that joined before a peer reached every space by itself
+/// (`pairing::create_for_peer` now gives `all`): named `peer-…`, limited by no path, and holding read and write on the
+/// person's « À trier » and on at least one other space, as a join gave it. A device paired to capture holds the box
+/// alone and stays limited to it.
+fn is_machine(ctl: &Connection, agent: &str, id: &str) -> Result<bool> {
+    if !agent.starts_with(crate::sync::PEER_PREFIX) {
+        return Ok(false);
+    }
+    let paths: i64 = ctl.query_row(
+        "SELECT count(*) FROM grant_paths WHERE connection_id = ?1",
+        [id],
+        |r| r.get(0),
+    )?;
+    if paths > 0 {
+        return Ok(false);
+    }
+    let (total, writes, boxes): (i64, i64, i64) = ctl.query_row(
+        "SELECT count(*), coalesce(sum(g.can_write != 0), 0), coalesce(sum(s.kind = ?2), 0)
+         FROM grants g LEFT JOIN spaces s ON s.name = g.space WHERE g.connection_id = ?1",
+        params![id, crate::catalogue::TRIAGE],
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+    )?;
+    Ok(total >= 2 && writes == total && boxes >= 1)
 }
 
 /// Records that `caller` was just used (time and address), at most once a minute per connection

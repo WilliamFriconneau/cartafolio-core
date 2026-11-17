@@ -218,7 +218,9 @@ pub fn send(
     };
     let dst = brain.open_space(to)?;
     crate::autotag::add_to(brain, user_id, to, &dst, &fact.text, &mut new.tags);
-    let new_id = match facts::remember(&dst, to, author, new, &[])? {
+    // The same note sent to the same space has the same id on every node: two janitors of the swarm that file it
+    // before they hear of each other make one note, not two (the second copy is the same row when it arrives).
+    let new_id = match facts::remember_as(&dst, to, author, new, &filed_id(id, to))? {
         Remembered::Created(f) | Remembered::Duplicate(f) => f.id,
         // An inbox note is never held back by the ones it resembles.
         Remembered::NeedsDecision(_) => {
@@ -228,6 +230,13 @@ pub fn send(
     facts::retire(&src, author, id, &reason(&new_id))?;
     learn_route(brain, author, &fact.text, to);
     Ok(new_id)
+}
+
+/// The id of note `id` of « À trier » once filed in `to`: derived from both, so it is the same on every node.
+pub fn filed_id(id: &str, to: &Space) -> String {
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(format!("{id}\u{0}{}", to.as_str()).as_bytes());
+    format!("f_t{}", &crate::text::hex(&digest)[..20])
 }
 
 /// The person chose where a note of « À trier » goes: the node learns it (the words of the note lead to that space).
