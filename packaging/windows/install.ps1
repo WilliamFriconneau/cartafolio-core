@@ -1,25 +1,25 @@
 <#
-MemCP on Windows: the node (`memcp serve`) and the bridge (`memcp-bridge`) as tasks of your user, started at logon and
+MemCP on Windows: the node (`memcp serve`) and the bridge (`memcp-capture`) as tasks of your user, started at logon and
 again after a crash, with their logs. Nothing needs an administrator and nothing is put outside your own folders.
 
   powershell -ExecutionPolicy Bypass -File install.ps1               install or update
   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall    remove the tasks and the programs; the memory is kept
 
 What goes where:
-  %LOCALAPPDATA%\MemCP\bin      memcp.exe, memcp-bridge.exe, memcp-janitor.exe
+  %LOCALAPPDATA%\MemCP\bin      memcp.exe, memcp-capture.exe, memcp-janitor.exe
   %LOCALAPPDATA%\MemCP\data     the memory (a folder of databases: back it up, it is yours)
   %LOCALAPPDATA%\MemCP\bridge   the bridge's settings, its key (readable by you only) and what waits to be sent
   %LOCALAPPDATA%\MemCP\logs     node.log, bridge.log, transcribe.log
   Task Scheduler, folder \MemCP  the tasks MemCP node, MemCP bridge, MemCP transcribe
 
 There is no Unix socket on Windows: assistants reach the memory through the bridge on this machine,
-`memcp-bridge connect 127.0.0.1:PORT`, and know neither its address nor its key.
+`memcp-capture connect 127.0.0.1:PORT`, and know neither its address nor its key.
 #>
 [CmdletBinding()]
 param(
     [switch]$Yes,
     [string]$Version = $env:MEMCP_VERSION,
-    # Take memcp.exe, memcp-bridge.exe and memcp-janitor.exe from this folder (a build of your own) instead of a release.
+    # Take memcp.exe, memcp-capture.exe and memcp-janitor.exe from this folder (a build of your own) instead of a release.
     [string]$From = $env:MEMCP_FROM,
     [string]$Language = $(if ($env:MEMCP_LANGUAGE) { $env:MEMCP_LANGUAGE } else { 'en' }),
     [string]$Spaces = $(if ($env:MEMCP_SPACES) { $env:MEMCP_SPACES } else { 'personal,work,health' }),
@@ -46,7 +46,7 @@ $Bridge = Join-Path $Root 'bridge'
 $Logs = Join-Path $Root 'logs'
 $TaskPath = '\MemCP\'
 $Tasks = @('MemCP node', 'MemCP bridge', 'MemCP transcribe')
-$Programs = @('memcp', 'memcp-bridge', 'memcp-janitor')
+$Programs = @('memcp', 'memcp-capture', 'memcp-janitor')
 $Target = 'x86_64-pc-windows-msvc'
 $NodeUrl = "http://127.0.0.1:$Port"
 $Connection = 'desktop-bridge'
@@ -154,7 +154,7 @@ if ($From) {
     } finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
 }
 $Memcp = Join-Path $Bin 'memcp.exe'
-$MemcpBridge = Join-Path $Bin 'memcp-bridge.exe'
+$MemcpBridge = Join-Path $Bin 'memcp-capture.exe'
 Say "installed in $Bin"
 
 # --- the memory ----------------------------------------------------------------------------------------------

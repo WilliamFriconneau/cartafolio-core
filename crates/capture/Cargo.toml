@@ -1,7 +1,7 @@
 [package]
 publish = false
-name = "memcp-bridge"
-description = "memcp bridge: what is captured on a computer is kept until the memory has it; the memory's tools for an assistant that runs a command, with that buffer in front"
+name = "memcp-capture"
+description = "memcp capture program: what is captured on a computer is kept until the memory has it; the memory's tools for an assistant that runs a command, with that buffer in front"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -34,5 +34,5 @@ socket2 = "0.6"
 workspace = true
 
 [[bin]]
-name = "memcp-bridge"
+name = "memcp-capture"
 path = "src/main.rs"

@@ -60,10 +60,10 @@ fn sync_program() -> PathBuf {
     program("MEMCP_SYNC_BIN", "memcp-sync")
 }
 
-/// `GET /discover`: the nodes found on this network and on the tailnet (the work of `memcp-bridge discover`, which owns
+/// `GET /discover`: the nodes found on this network and on the tailnet (the work of `memcp-capture discover`, which owns
 /// the mDNS browsing and the probes), this node left out. Nothing found is an empty list, never an error.
 pub fn discover(app: &App) -> Value {
-    let out = Command::new(program("MEMCP_BRIDGE_BIN", "memcp-bridge"))
+    let out = Command::new(program("MEMCP_BRIDGE_BIN", "memcp-capture"))
         .args(["discover", "--seconds", "3"])
         .stdin(Stdio::null())
         .stderr(Stdio::null())

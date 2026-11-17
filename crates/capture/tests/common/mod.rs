@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use memcp_bridge::Config;
+use memcp_capture::Config;
 use memcp_core::access::{self, Rights};
 use memcp_core::text::Language;
 use memcp_core::{Brain, users};
@@ -29,7 +29,7 @@ pub fn unique(tag: &str) -> PathBuf {
     let n = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.subsec_nanos());
-    std::env::temp_dir().join(format!("memcp-bridge-{tag}-{}-{n}", std::process::id()))
+    std::env::temp_dir().join(format!("memcp-capture-{tag}-{}-{n}", std::process::id()))
 }
 
 /// A memory with one person and one vault, a key per entry of `rights`, and a port reserved but **not

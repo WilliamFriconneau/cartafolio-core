@@ -43,7 +43,7 @@ allow = [
   "Unlicense",
 ]
 # MPL-2.0 is a weak, per-file copyleft: it binds only changes made to the files of those crates, which we do
-# not make. Allowed for UniFFI alone (the Swift interface of the bridge), never for the project at large.
+# not make. Allowed for UniFFI alone (the Swift interface of the capture program), never for the project at large.
 exceptions = [
   { allow = ["MPL-2.0"], crate = "uniffi" },
   { allow = ["MPL-2.0"], crate = "uniffi_bindgen" },
@@ -66,7 +66,7 @@ allow-wildcard-paths = true
 # Crates this project does not want, with the reason.
 deny = [
   # A TLS stack or an HTTP client would make the server reach out; it is memory only.
-  # The one exception is `memcp-client`, which programs that reach the memory use (the bridge, the
+  # The one exception is `memcp-client`, which programs that reach the memory use (the capture program, the
   # janitor): rustls may be used by its `ureq` and by nothing else.
   { crate = "reqwest", reason = "the server fetches nothing" },
   { crate = "hyper-util", reason = "the server fetches nothing" },

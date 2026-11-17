@@ -163,7 +163,7 @@ if bashio::config.true 'transcribe'; then
       chmod 600 "$CONF"
       bashio::log.info "transcribe: reading the recordings of $SPACES every minute, by the speech service"
       while true; do
-        /usr/bin/memcp-bridge transcribe --config "$CONF" || true
+        /usr/bin/memcp-capture transcribe --config "$CONF" || true
         sleep 60
       done
     ) &

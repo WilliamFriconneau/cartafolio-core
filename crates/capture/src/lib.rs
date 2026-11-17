@@ -13,7 +13,7 @@
 //! - a capture sent twice (the connection was cut before the answer) is kept once: the memory ignores a text
 //!   it already holds and a file it already holds under the same name;
 //! - [`Gateway`] is the same buffer in front of the memory's tools, for an assistant that runs a command;
-//! - the `memcp-bridge` program is both, on Linux and on macOS.
+//! - the `memcp-capture` program is both, on Linux and on macOS.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;

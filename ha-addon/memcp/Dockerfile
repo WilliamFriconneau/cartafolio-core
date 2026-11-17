@@ -15,7 +15,7 @@ RUN apk add --no-cache tzdata curl \
     esac \
  && base="https://github.com/WilliamFriconneau/memcp-core/releases/download/v${MEMCP_VERSION}" \
  && cd /tmp && curl -fsSLO "${base}/SHA256SUMS" \
- && for b in memcp memcp-manager memcp-janitor memcp-bridge memcp-sync; do \
+ && for b in memcp memcp-manager memcp-janitor memcp-capture memcp-sync; do \
       f="${b}-v${MEMCP_VERSION}-${T}"; \
       curl -fsSLO "${base}/${f}"; \
       grep " ${f}\$" SHA256SUMS | sha256sum -c -; \

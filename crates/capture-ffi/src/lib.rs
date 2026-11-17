@@ -1,5 +1,5 @@
 //! The bridge, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
-//! bridge's own (`memcp-bridge`), renamed for Swift. The logic, the outbox and the network are Rust; the key
+//! bridge's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
 //! is read from the Keychain by Swift and handed over for the length of the run, never stored here.
 //!
 //! `Intake.flush()` blocks while it sends: call it from a background task, after each `submit…` and every
@@ -8,7 +8,7 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use memcp_bridge::{Config, Intake as Core};
+use memcp_capture::{Config, Intake as Core};
 
 uniffi::setup_scaffolding!();
 
@@ -130,9 +130,9 @@ impl std::error::Error for PairError {}
 #[uniffi::export]
 pub fn pair(server: String, code: String, device: String) -> Result<Pairing, PairError> {
     use memcp_client::Error as E;
-    match memcp_bridge::pair_allowing(&server, &code, &device, true) {
+    match memcp_capture::pair_allowing(&server, &code, &device, true) {
         Ok(p) => Ok(Pairing {
-            in_clear: memcp_bridge::in_clear(&p.url),
+            in_clear: memcp_capture::in_clear(&p.url),
             agent: p.agent,
             url: p.url,
             key: p.key,
@@ -170,36 +170,36 @@ impl std::fmt::Display for IntakeError {
 
 impl std::error::Error for IntakeError {}
 
-impl From<memcp_bridge::Error> for IntakeError {
-    fn from(e: memcp_bridge::Error) -> Self {
+impl From<memcp_capture::Error> for IntakeError {
+    fn from(e: memcp_capture::Error) -> Self {
         let message = e.to_string();
         match e {
-            memcp_bridge::Error::Io(_) => IntakeError::Storage { message },
-            memcp_bridge::Error::Invalid(_) => IntakeError::Invalid { message },
-            memcp_bridge::Error::TooBig(_) => IntakeError::TooBig { message },
-            memcp_bridge::Error::Folder(_) => IntakeError::Storage { message },
+            memcp_capture::Error::Io(_) => IntakeError::Storage { message },
+            memcp_capture::Error::Invalid(_) => IntakeError::Invalid { message },
+            memcp_capture::Error::TooBig(_) => IntakeError::TooBig { message },
+            memcp_capture::Error::Folder(_) => IntakeError::Storage { message },
         }
     }
 }
 
-impl From<memcp_bridge::Item> for IntakeItem {
-    fn from(i: memcp_bridge::Item) -> Self {
+impl From<memcp_capture::Item> for IntakeItem {
+    fn from(i: memcp_capture::Item) -> Self {
         IntakeItem {
             id: i.id,
             kind: match i.kind {
-                memcp_bridge::Kind::Text => ItemKind::Text,
-                memcp_bridge::Kind::Document => ItemKind::Document,
-                memcp_bridge::Kind::Audio => ItemKind::Audio,
-                memcp_bridge::Kind::Call => ItemKind::Call,
+                memcp_capture::Kind::Text => ItemKind::Text,
+                memcp_capture::Kind::Document => ItemKind::Document,
+                memcp_capture::Kind::Audio => ItemKind::Audio,
+                memcp_capture::Kind::Call => ItemKind::Call,
             },
             title: i.title,
             created_at: i.created_at,
             bytes: i.bytes,
             state: match i.state {
-                memcp_bridge::State::Queued => ItemState::Queued,
-                memcp_bridge::State::Sending => ItemState::Sending,
-                memcp_bridge::State::Sent => ItemState::Sent,
-                memcp_bridge::State::Failed => ItemState::Failed,
+                memcp_capture::State::Queued => ItemState::Queued,
+                memcp_capture::State::Sending => ItemState::Sending,
+                memcp_capture::State::Sent => ItemState::Sent,
+                memcp_capture::State::Failed => ItemState::Failed,
             },
             detail: i.detail,
             sent_at: i.sent_at,
@@ -255,7 +255,7 @@ impl Intake {
         parts: u8,
         heard: HeardInput,
     ) -> Result<String, IntakeError> {
-        let heard = memcp_bridge::Heard {
+        let heard = memcp_capture::Heard {
             text: heard.text,
             summary: heard.summary,
             send_audio: heard.send_audio,
@@ -319,7 +319,7 @@ impl Intake {
 /// It shares the connection's outbox with the app. Stops with `stop()` or when the app lets it go.
 #[derive(uniffi::Object)]
 pub struct LocalMcp {
-    server: std::sync::Mutex<memcp_bridge::HttpServer>,
+    server: std::sync::Mutex<memcp_capture::HttpServer>,
 }
 
 #[uniffi::export]
@@ -327,13 +327,13 @@ impl LocalMcp {
     /// Listens on `127.0.0.1:<port>` before it returns: a port already taken is an error at once.
     #[uniffi::constructor]
     pub fn new(config: IntakeConfig, port: u16) -> Result<Arc<LocalMcp>, IntakeError> {
-        let gateway = memcp_bridge::Gateway::new(Config {
+        let gateway = memcp_capture::Gateway::new(Config {
             url: config.url,
             key: config.key,
             outbox: config.outbox.into(),
             utc_offset_minutes: config.utc_offset_minutes,
         })?;
-        let server = memcp_bridge::HttpServer::start(gateway, &format!("127.0.0.1:{port}"))?;
+        let server = memcp_capture::HttpServer::start(gateway, &format!("127.0.0.1:{port}"))?;
         Ok(Arc::new(LocalMcp {
             server: std::sync::Mutex::new(server),
         }))
@@ -350,7 +350,7 @@ impl LocalMcp {
 /// extension only, on `127.0.0.1:8790`. Stops with `stop()` or when the app lets it go.
 #[derive(uniffi::Object)]
 pub struct BrowserLink {
-    link: std::sync::Mutex<memcp_bridge::BrowserLink>,
+    link: std::sync::Mutex<memcp_capture::BrowserLink>,
 }
 
 /// The call the extension reports now.
@@ -368,7 +368,7 @@ impl BrowserLink {
     /// Listens before it returns: a port already taken is an error at once.
     #[uniffi::constructor]
     pub fn new() -> Result<Arc<BrowserLink>, IntakeError> {
-        let link = memcp_bridge::BrowserLink::start(memcp_bridge::browser::EXTENSION_PORT)?;
+        let link = memcp_capture::BrowserLink::start(memcp_capture::browser::EXTENSION_PORT)?;
         Ok(Arc::new(BrowserLink {
             link: std::sync::Mutex::new(link),
         }))
@@ -408,7 +408,7 @@ impl BrowserLink {
 /// The extension's id, fixed by its key: the one the app hears.
 #[uniffi::export]
 pub fn browser_extension_id() -> String {
-    memcp_bridge::browser::EXTENSION_ID.to_string()
+    memcp_capture::browser::EXTENSION_ID.to_string()
 }
 
 /// The outbox folder of one connection under `base` (the app's own data folder, Application Support): pass it as
@@ -416,7 +416,7 @@ pub fn browser_extension_id() -> String {
 /// sends another's captures.
 #[uniffi::export]
 pub fn connection_outbox(base: String, url: String) -> String {
-    memcp_bridge::connection_outbox(Path::new(&base), &url)
+    memcp_capture::connection_outbox(Path::new(&base), &url)
         .to_string_lossy()
         .into_owned()
 }
@@ -426,7 +426,7 @@ pub fn connection_outbox(base: String, url: String) -> String {
 /// « À trier ». Call it once at start, before `Intake(config:)`; calling it again moves nothing. How many moved.
 #[uniffi::export]
 pub fn adopt_old_captures(old: String, new: String) -> Result<u32, IntakeError> {
-    Ok(memcp_bridge::adopt_old_captures(
+    Ok(memcp_capture::adopt_old_captures(
         Path::new(&old),
         Path::new(&new),
     )?)
@@ -455,8 +455,8 @@ pub struct MarkdownPart {
     pub seconds: u32,
 }
 
-fn markdown(folder: String, utc_offset_minutes: i32) -> memcp_bridge::markdown::Markdown {
-    memcp_bridge::markdown::Markdown {
+fn markdown(folder: String, utc_offset_minutes: i32) -> memcp_capture::markdown::Markdown {
+    memcp_capture::markdown::Markdown {
         folder: folder.into(),
         utc_offset_minutes,
     }
@@ -473,7 +473,7 @@ pub fn transcribe(
 ) -> Result<String, IntakeError> {
     let threads =
         std::thread::available_parallelism().map_or(4, |n| u32::try_from(n.get()).unwrap_or(4));
-    Ok(memcp_bridge::local::transcribe(
+    Ok(memcp_capture::local::transcribe(
         Path::new(&model),
         Path::new(&pcm),
         "fr",
@@ -486,31 +486,31 @@ pub fn transcribe(
 /// Whether this Mac reads a recording itself: on mains, or on a battery not low and not in Low Power Mode.
 #[uniffi::export]
 pub fn should_transcribe(on_mains: bool, battery_percent: u8, low_power: bool) -> bool {
-    memcp_bridge::plan::should_transcribe(on_mains, battery_percent, low_power)
+    memcp_capture::plan::should_transcribe(on_mains, battery_percent, low_power)
 }
 
 /// What the summarising model of the system is told, once per session.
 #[uniffi::export]
 pub fn summary_instructions() -> String {
-    memcp_bridge::plan::SUMMARY_INSTRUCTIONS.to_string()
+    memcp_capture::plan::SUMMARY_INSTRUCTIONS.to_string()
 }
 
 /// The requests to make, one per piece of the transcript, in order.
 #[uniffi::export]
 pub fn summary_prompts(text: String) -> Vec<String> {
-    let pieces = memcp_bridge::plan::summary_pieces(&text);
+    let pieces = memcp_capture::plan::summary_pieces(&text);
     let n = pieces.len();
     pieces
         .iter()
         .enumerate()
-        .map(|(i, p)| memcp_bridge::plan::summary_prompt(p, i, n))
+        .map(|(i, p)| memcp_capture::plan::summary_prompt(p, i, n))
         .collect()
 }
 
 /// The request that joins the summaries of the pieces; `None` for a single one (it is the summary).
 #[uniffi::export]
 pub fn summary_join_prompt(summaries: Vec<String>) -> Option<String> {
-    memcp_bridge::plan::summary_join_prompt(&summaries)
+    memcp_capture::plan::summary_join_prompt(&summaries)
 }
 
 /// A note as one dated `.md` in `folder` (a folder the person chose, often an Obsidian vault). Returns the file.
@@ -559,9 +559,9 @@ pub fn markdown_meeting(
         .into_iter()
         .map(|p| (p.path.into(), p.seconds))
         .collect();
-    let live: Vec<memcp_bridge::markdown::LiveLine> = live
+    let live: Vec<memcp_capture::markdown::LiveLine> = live
         .into_iter()
-        .map(|l| memcp_bridge::markdown::LiveLine {
+        .map(|l| memcp_capture::markdown::LiveLine {
             me: l.me,
             text: l.text,
         })

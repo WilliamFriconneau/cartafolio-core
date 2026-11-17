@@ -316,7 +316,7 @@ impl BrowserLink {
         let state = Arc::new(Mutex::new(State::default()));
         let (serving, shared) = (Arc::clone(&server), Arc::clone(&state));
         let thread = std::thread::Builder::new()
-            .name("memcp-bridge-browser".into())
+            .name("memcp-capture-browser".into())
             .spawn(move || serve(&serving, &shared))
             .map_err(|e| Error::Io(e.to_string()))?;
         Ok(BrowserLink {
@@ -386,7 +386,7 @@ fn serve(server: &tiny_http::Server, state: &Mutex<State>) {
                 {
                     s.last_seen = now_ms();
                 }
-                reply(request, 200, &json!({ "app": "memcp-bridge" }));
+                reply(request, 200, &json!({ "app": "memcp-capture" }));
             }
             tiny_http::Method::Post if origin.as_deref() == Some(ours.as_str()) => {
                 let mut body = String::new();

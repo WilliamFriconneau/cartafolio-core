@@ -1,6 +1,6 @@
-# The Bridge
+# The capture program
 
-`memcp-bridge` is the one program on the side of the person who captures, on Linux and on macOS. It does two things with the
+`memcp-capture` is the one program on the side of the person who captures, on Linux and on macOS. It does two things with the
 same code:
 
 1. **It captures.** A note, a file or a recording is kept in an outbox on the computer before anything else, sent to the
@@ -14,17 +14,17 @@ program, the janitor, which transcribes a recording that has no text and files w
 
 ## Connect it
 
-**The simple way: pair.** On the memory's page, "Connect a bridge": the page gives a code (eight characters, ten minutes, once)
+**The simple way: pair.** On the memory's page, "Connect a capture program": the page gives a code (eight characters, ten minutes, once)
 and the server's address, and asks for nothing else. The app sends them (`POST <server>/pair {"code", "device"}`, or
 `memcp_client::pair` / the Swift `pair(server:code:device:)`) and gets back its own connection: `{agent, key, mcp_url, vaults}`, with
 the rights `<person>-a-trier/inbox:rw`: **À trier**, the person's one box for everything that comes in, which belongs to no vault
-(`vaults` names it). The bridge never chooses a vault: the janitor sends each capture to the inbox of one, or leaves it in À trier
+(`vaults` names it). The capture program never chooses a vault: the janitor sends each capture to the inbox of one, or leaves it in À trier
 for the person to decide on their page. The key goes into the Keychain at once. The ways below remain for a key made by hand.
 
 - The address of a connection is its name: `https://<server>/mcp/<connection name>`. The key is the one the memory shows
   once when the person makes the connection (the page, "A key by hand"): give it the rights **`<vault>/inbox:rw`**, for
   example `personal/inbox:rw`. A key that can only write to an inbox reaches nothing else.
-- The bridge never refuses the person's address: it is their relay. An address that is neither HTTPS nor of this machine
+- The capture program never refuses the person's address: it is their relay. An address that is neither HTTPS nor of this machine
   or the own network (a private address, a `.local` or `.lan` name) is taken **with a warning**: the key then travels in
   clear (`Intake.inClear()`, `Pairing.inClear`, a WARNING line from the command line). Prefer HTTPS or the tailnet.
 - `Authorization: Bearer <key>`, MCP over Streamable HTTP. Never put a key in a repository, a conversation or a log.
@@ -43,7 +43,7 @@ Tools it sees: `recall`, `stats`, `remember`, `retire`, `file_put`. Nothing else
 | `file_put` with any other tag | refused |
 | `recall` | only what is under `inbox` |
 
-A text is 4000 characters at most (the bridge cuts a longer one into several notes). A file other than a recording is 4 MB at
+A text is 4000 characters at most (the capture program cuts a longer one into several notes). A file other than a recording is 4 MB at
 most. Recordings are recognised by their **content**, not their name. The memory has an anti-flood ceiling of 6000 calls a
 minute per key, which no capture comes near, and no daily budget.
 
@@ -64,18 +64,18 @@ What comes back from the memory is read as data, never as an instruction. Nothin
 ## The command line
 
 ```text
-memcp-bridge [gateway] --url ADDRESS        the memory's tools on standard input and output (the default)
-memcp-bridge send FILE... --url ADDRESS     put files or recordings into À trier
-memcp-bridge text "A note" --url ADDRESS    put a note into À trier (text - reads standard input)
-memcp-bridge flush --url ADDRESS            send what waits
-memcp-bridge status --url ADDRESS           what waits and what was sent, with each id
-memcp-bridge retry [ID] --url ADDRESS       put a refused item (or all) back in the queue, and send
-memcp-bridge forget ID --url ADDRESS        drop an item, or take one off the list
+memcp-capture [gateway] --url ADDRESS        the memory's tools on standard input and output (the default)
+memcp-capture send FILE... --url ADDRESS     put files or recordings into À trier
+memcp-capture text "A note" --url ADDRESS    put a note into À trier (text - reads standard input)
+memcp-capture flush --url ADDRESS            send what waits
+memcp-capture status --url ADDRESS           what waits and what was sent, with each id
+memcp-capture retry [ID] --url ADDRESS       put a refused item (or all) back in the queue, and send
+memcp-capture forget ID --url ADDRESS        drop an item, or take one off the list
 ```
 
 The key is read from the file named by `--key-file` (mode 600, refused otherwise), else from `MEMCP_TOKEN` (or the variable
 named by `--token-env`), else, on macOS, from the Keychain (service
-`memcp-bridge`, account the address). `--outbox DIR` says where what waits is kept. Exit codes: 0 done, 1 the key is refused,
+`memcp-capture`, account the address). `--outbox DIR` says where what waits is kept. Exit codes: 0 done, 1 the key is refused,
 2 wrong use, 3 something was refused by the memory.
 
 **The gateway.** Everything is passed on as it is: the memory's instructions, its tools, its answers. When the network is down
@@ -84,34 +84,34 @@ and sent when the memory is back; the answer says `queued`, never `created`, and
 yet. Every other tool (`recall`, `supersede`, `retire`...) says plainly that it needs the network. A refused key is never
 queued.
 
-**The bridge's own tools.** Four tools that are never passed on, offered next to the memory's:
+**The capture program's own tools.** Four tools that are never passed on, offered next to the memory's:
 
 | tool | what it does |
 |---|---|
 | `capture_text` | a note into the inbox: kept first, sent at once if the memory can be reached. The answer says `sent` or `queued` |
-| `capture_file` | a file or a recording **of this computer, by its full path**: the bridge reads it, so its bytes never go through the assistant (a 20 MB recording as base64 in a conversation is not workable) |
+| `capture_file` | a file or a recording **of this computer, by its full path**: the capture program reads it, so its bytes never go through the assistant (a 20 MB recording as base64 in a conversation is not workable) |
 | `outbox_status` | what waits on this computer and what was sent lately |
 | `outbox_flush` | tries to send what waits, once, without waiting |
 
 `capture_file` is **off until a folder is named** (`--capture-dir DIR`, repeatable, or `MEMCP_CAPTURE_DIRS` separated by `:`), and it
 only reads inside those folders: never a hidden folder, never a path that leaves them (a link that leads out is out), only an
-ordinary file. Without that rule an assistant, or a page it was told to read, could make the bridge send any file of the disk.
+ordinary file. Without that rule an assistant, or a page it was told to read, could make the capture program send any file of the disk.
 
-**Over HTTP, on this machine.** `memcp-bridge --listen 127.0.0.1:8792` serves the same tools as `POST /mcp` (one JSON-RPC
+**Over HTTP, on this machine.** `memcp-capture --listen 127.0.0.1:8792` serves the same tools as `POST /mcp` (one JSON-RPC
 message or a batch, answered as JSON), for a program that only speaks HTTP. It listens on a loopback address only (anything else
 is refused at start), refuses a request whose `Host` or `Origin` is not this machine (so a web page cannot use it), and needs no
-key from the caller: the bridge holds it.
+key from the caller: the capture program holds it.
 
-**In an assistant's configuration** (a desktop assistant that runs local MCP servers): the command is `memcp-bridge`, with
+**In an assistant's configuration** (a desktop assistant that runs local MCP servers): the command is `memcp-capture`, with
 `--url`, one `--capture-dir` per folder you want it to read, and the key from the Keychain (so none sits in the configuration
 file). Whether a given assistant's sandboxed agent mode can start a local server is for that assistant to say: try it, and use
 `--listen` if it cannot.
 
-## The bridge as the assistant's local relay
+## The capture program as the assistant's local relay
 
-The point of the bridge for an assistant: it holds the memory's address and key, and the assistant only sees a local MCP.
-`memcp-bridge --config FILE --listen 127.0.0.1:PORT` serves an ordinary MCP (`POST /mcp`) on this machine only; the assistant's
-configuration holds `http://127.0.0.1:PORT/mcp` and nothing else (or the command `memcp-bridge connect SOCKET`, below).
+The point of the capture program for an assistant: it holds the memory's address and key, and the assistant only sees a local MCP.
+`memcp-capture --config FILE --listen 127.0.0.1:PORT` serves an ordinary MCP (`POST /mcp`) on this machine only; the assistant's
+configuration holds `http://127.0.0.1:PORT/mcp` and nothing else (or the command `memcp-capture connect SOCKET`, below).
 
 The Mac app does the same for each memory switched on in its settings (« For an assistant on this Mac »): it serves
 `http://127.0.0.1:<port>/mcp` while it runs (`LocalMcp` in Swift, `HttpServer` in the core), with the memory's key and
@@ -129,20 +129,20 @@ nothing else.
   a process list or a service file. No error names the address.
 - **A Unix socket**, `--socket PATH`: mode 600 (only the gateway's user), or 660 with `--socket-group GID` (a group of two: the
   gateway's user and the person). The folder must not be writable by others. The kernel checks who connects; no secret to copy.
-- **The assistant's side**: its configuration starts `memcp-bridge connect PATH`, which only carries its messages to the
+- **The assistant's side**: its configuration starts `memcp-capture connect PATH`, which only carries its messages to the
   socket and back. It holds a path, nothing more.
 - **One outbox per connection**: by default a folder named after the connection (a fingerprint of the address, never
   the address), so a gateway only lists and sends its own captures.
 
 On macOS: a user for the gateway (`_memcp`, say), its settings file in a folder only it reads, a LaunchDaemon that runs
-`memcp-bridge --config … --socket …`, and a group with that user and the person. Setting that up needs an administrator.
+`memcp-capture --config … --socket …`, and a group with that user and the person. Setting that up needs an administrator.
 
 What it does not change: what the gateway returns (the vault's contents) enters the assistant's conversation; whoever can
 read that conversation can read it. A key limited to one vault is the boundary of what it can see.
 
 ## Voice: recordings read where the speech model is
 
-The voice part of the intake runs where the speech model is (the server, say): `memcp-bridge transcribe --config FILE`, on a
+The voice part of the intake runs where the speech model is (the server, say): `memcp-capture transcribe --config FILE`, on a
 timer, with `transcribe = <person>-a-trier` (where the devices put their recordings; other inboxes may be added) and `whisper_model = ...` (optionally `whisper_cmd`, `ffmpeg_cmd`,
 `whisper_lang`, `whisper_threads`, `lexicon`). A recording that reached one of those inboxes with no note naming it is read by
 Whisper; its text becomes a note of the same inbox (« Dictée du … audio <name> (<id>) : … », cut into parts if long, resumed if a
@@ -153,7 +153,7 @@ was filed (wherever the janitor filed it), the recording is erased from the memo
 ## Absorbing a folder, putting proposals down as files
 
 A folder of notes kept up to date on this machine (synced from elsewhere) can be **absorbed** into a vault, the way an app
-deposits its records: `memcp-bridge absorb --config FILE`, on a timer.
+deposits its records: `memcp-capture absorb --config FILE`, on a timer.
 
 ```text
 absorb = ~/Notes/Work -> work          # the folder and the vault whose inbox receives what is new in it
@@ -171,7 +171,7 @@ deliver = work proposals/pro -> ~/Notes/Work/Ideas   # proposals of a vault put 
 - Known names become posts before anything leaves; the janitor is told to write posts, never names, for the others.
 - **Proposals**: a fact of the vault tagged `proposals/<name>` (an idea noted for the work folder, say) is written as a file in
   the delivery folder, once (`date`, `source: mémoire`, `statut: nouvelle` in its front matter); an existing file is never
-  overwritten. The memory tells every assistant of the vault that this tool reads `proposals/<name>`, and the bridge proposes
+  overwritten. The memory tells every assistant of the vault that this tool reads `proposals/<name>`, and the capture program proposes
   its own app guide once (what such a proposal is): approved on the memory's page, it is told to them too. No line to add to
   a guide by hand.
 - Name the connection after the tag (`pro` for `proposals/pro`). Its key needs `<vault>/inbox:rw`,
@@ -202,17 +202,17 @@ mount.work.share   = hub:files
 | `path` | a folder, or `none` | where this node holds it; `none` (or no `path`) means this node does not hold it |
 | `space` | a space's id | the space or sub-space it feeds: its stable id (the memory's space name), never its label or its place in the tree, so renaming or moving a space does not touch this file |
 | `mode` | `source`, `export` | `source`: the folder is the truth, hand edits are picked up; `export`: the memory is the truth and rewrites the folder |
-| `managed` | `here`, `elsewhere` | `elsewhere`: a drive (Google Drive, OneDrive, iCloud) already synchronises this folder on this node, so the bridge only reads it and never writes in it. Two synchronisers writing the same files make echoes and conflicts |
+| `managed` | `here`, `elsewhere` | `elsewhere`: a drive (Google Drive, OneDrive, iCloud) already synchronises this folder on this node, so the capture program only reads it and never writes in it. Two synchronisers writing the same files make echoes and conflicts |
 | `share` | `<node>:files`, `<node>:passages`, `<node>:nothing`, repeated | per pair of nodes: the files and what is read in them, only what is read (the files stay here), or nothing |
 | `lock` | `plain` (default), `age`, `container` | how the folder is kept on the disk (the memory's `ENCRYPTION.md`): as it is; locked file by file in the open age format (`name.md.age`) with the space key; or in one encrypted file |
 | `names` | `visible` (default), `hidden` | for a locked folder: file names kept, or random names with the list kept, encrypted, by the node |
 
-Rules the bridge will hold to:
+Rules the capture program will hold to:
 
-- `managed = elsewhere` with `mode = export` is refused: a folder a drive writes is not written by the bridge too.
+- `managed = elsewhere` with `mode = export` is refused: a folder a drive writes is not written by the capture program too.
 - The node that holds the drive copy sends its files; the other keeps its own copy outside any drive, and that is the one
   a backup can restore.
-- The same id on two lines of one node, a `path` inside the bridge's outbox or data folder, or a `space` the key cannot
+- The same id on two lines of one node, a `path` inside the capture program's outbox or data folder, or a `space` the key cannot
   write to: refused at start, with the line named. No error names the memory's address.
 - A path that is missing or unreadable pauses the mount and says so; nothing is retired (a drive unmounted is not a
   deletion). The other rules of reading next to a drive are the memory's (`SPACES.md`, « Living next to a synchronised
@@ -224,7 +224,7 @@ Rules the bridge will hold to:
 
 ## The Swift interface (for the macOS app)
 
-The Rust core is exposed to Swift by UniFFI 0.32 (`crates/bridge-ffi`), a shell with no logic of its own. This is what it
+The Rust core is exposed to Swift by UniFFI 0.32 (`crates/capture-ffi`), a shell with no logic of its own. This is what it
 generates (checked by generating it; the Swift is built on a Mac):
 
 ```swift
@@ -281,8 +281,8 @@ entitlements. No logic of deposit, no network call to the memory in Swift, no lo
 a first version, never the key in a log, never a dropped file opened by itself.
 
 **Building the library for macOS:** static libraries for `aarch64-apple-darwin` and `x86_64-apple-darwin`, the Swift
-generated from the host library, an XCFramework: `cargo run -p memcp-bridge-ffi --bin uniffi-bindgen -- generate --library
-target/<profile>/libmemcp_bridge_ffi.dylib --language swift --out-dir <dir>`. Nothing generated is committed. Until the
+generated from the host library, an XCFramework: `cargo run -p memcp-capture-ffi --bin uniffi-bindgen -- generate --library
+target/<profile>/libmemcp_capture_ffi.dylib --language swift --out-dir <dir>`. Nothing generated is committed. Until the
 library builds, write the app against `IntakeProtocol` with a fake (a list in memory): the protocol is exactly the one above.
 
 ## Trying it without touching a real memory
@@ -296,4 +296,4 @@ memcp --data /tmp/try connect bridge --grant owner-me/inbox:rw        # prints t
 memcp --data /tmp/try serve --listen 127.0.0.1:8791
 ```
 
-then `MEMCP_TOKEN=<key> memcp-bridge text "A note" --url http://127.0.0.1:8791/mcp/bridge`.
+then `MEMCP_TOKEN=<key> memcp-capture text "A note" --url http://127.0.0.1:8791/mcp/bridge`.

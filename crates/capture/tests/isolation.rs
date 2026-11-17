@@ -15,7 +15,7 @@ use common::{memory, unique};
 use serde_json::{Value, json};
 
 fn bridge() -> Command {
-    let mut c = Command::new(env!("CARGO_BIN_EXE_memcp-bridge"));
+    let mut c = Command::new(env!("CARGO_BIN_EXE_memcp-capture"));
     for v in [
         "MEMCP_URL",
         "MEMCP_VAULT",

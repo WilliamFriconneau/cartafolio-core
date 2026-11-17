@@ -1,7 +1,7 @@
 # Reviews by the server session, 2 and 3 November 2026
 
 Three read-only reviews (the server and core changes, the janitor, the bridge) were run on 2 November, next to the Mac
-session's review (`memcp-bridge/docs/reviews/2026-11-02-code-review.md`). Their results were not reported to the owner at
+session's review (`memcp-capture/docs/reviews/2026-11-02-code-review.md`). Their results were not reported to the owner at
 the time; this file is that report, with what was done since.
 
 ## Fixed

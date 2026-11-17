@@ -23,7 +23,7 @@ like any other client, with a connection of its own, and does three jobs:
    each ends with where it came from and is written in the vault of that inbox, tagged `absorb`. Then the piece leaves.
 
 **Recordings are not its business.** The bridge, where the speech model is, transcribes them, puts their text in the inbox,
-and erases them a week after the text was filed (`memcp-bridge transcribe`).
+and erases them a week after the text was filed (`memcp-capture transcribe`).
 
 ## Keywords
 

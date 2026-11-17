@@ -1,7 +1,7 @@
 # MemCP on a computer: the desktop node
 
 The same memory as the server under Home Assistant, on a Mac or a Windows computer: the node (`memcp serve`) keeps the
-memory and serves its page; the bridge (`memcp-bridge`) gives the memory's tools to the assistants of this computer and,
+memory and serves its page; the capture program (`memcp-capture`) gives the memory's tools to the assistants of this computer and,
 if asked, reads the voice notes. Both run as tasks of the person's own user, start at login, start again after a crash
 and write a log. Nothing needs an administrator, nothing listens beyond this computer (127.0.0.1 only), and nothing
 leaves it unless a speech service is chosen for the voice notes.
@@ -14,8 +14,8 @@ leaves it unless a speech service is chosen for the voice notes.
 | bridge (settings, what waits) | `~/Library/Application Support/MemCP/bridge` | `%LOCALAPPDATA%\MemCP\bridge` |
 | logs | `~/Library/Logs/MemCP` | `%LOCALAPPDATA%\MemCP\logs` |
 | tasks | launchd agents `~/Library/LaunchAgents/org.memcp.{node,bridge,transcribe}.plist` | Task Scheduler, folder `\MemCP\` |
-| keys | Keychain, service `memcp-bridge`, account the connection's address | `bridge.key`, `device.key` in the bridge folder, readable by the person only |
-| assistants | `memcp-bridge connect 127.0.0.1:8792` | `memcp-bridge.exe connect 127.0.0.1:8792` (no Unix socket on Windows) |
+| keys | Keychain, service `memcp-capture`, account the connection's address | `bridge.key`, `device.key` in the capture program folder, readable by the person only |
+| assistants | `memcp-capture connect 127.0.0.1:8792` | `memcp-capture.exe connect 127.0.0.1:8792` (no Unix socket on Windows) |
 
 ## Install
 
@@ -38,10 +38,10 @@ Both download the release's programs and check them against its `SHA256SUMS` (or
 
 1. **pair this computer with its own memory**, as a phone does. That makes the person's « À trier », the one box every
    capture goes to; the computer's key writes only there and reads nothing;
-2. **make the bridge's connection** (`desktop-bridge`, all rights): the memory's tools for the assistants of this
+2. **make the capture program's connection** (`desktop-bridge`, all rights): the memory's tools for the assistants of this
    computer, and the voice notes to read. Its key is in the Keychain on a Mac, in a file only the person can read on
    Windows; the settings file holds the address only on a Mac;
-3. start the bridge, and the reading of voice notes if a model or a service was given.
+3. start the capture program, and the reading of voice notes if a model or a service was given.
 
 At the end they show the page's address (`http://127.0.0.1:8791/admin`) and a console key that opens it, once.
 
@@ -49,7 +49,7 @@ Running an installer again updates the programs and leaves the memory and the ke
 
 ## Voice notes and files
 
-A recording sent by a phone, the Mac app, or `memcp-bridge send note.m4a` waits in « À trier » under `inbox/audio`. The
+A recording sent by a phone, the Mac app, or `memcp-capture send note.m4a` waits in « À trier » under `inbox/audio`. The
 transcribe task reads it every five minutes and puts its text beside it (« Dictée du … : … »), then erases the recording
 a week after its text was filed. Two ways:
 
@@ -60,16 +60,16 @@ a week after its text was filed. Two ways:
 - **by a speech service** of the OpenAI kind (`…/v1/audio/transcriptions`): `--speech-api URL` / `-SpeechApi URL`,
   key in `MEMCP_SPEECH_API_KEY`. The recordings leave the computer for that service: choose one you trust.
 
-A file (`memcp-bridge send devis.pdf --note "…"`) is kept in « À trier » as it is, and the person or the janitor sends
+A file (`memcp-capture send devis.pdf --note "…"`) is kept in « À trier » as it is, and the person or the janitor sends
 it to a vault from the page.
 
 ## Assistants
 
-An assistant that runs a command starts `memcp-bridge connect 127.0.0.1:8792`: it reaches the memory through the bridge
+An assistant that runs a command starts `memcp-capture connect 127.0.0.1:8792`: it reaches the memory through the capture program
 and knows neither its address nor its key. For Claude Code:
 
 ```sh
-claude mcp add memcp -- "$HOME/Library/Application Support/MemCP/bin/memcp-bridge" connect 127.0.0.1:8792
+claude mcp add memcp -- "$HOME/Library/Application Support/MemCP/bin/memcp-capture" connect 127.0.0.1:8792
 ```
 
 ## Look, stop, remove
@@ -84,5 +84,5 @@ claude mcp add memcp -- "$HOME/Library/Application Support/MemCP/bin/memcp-bridg
 ## Tested
 
 `.github/workflows/desktop.yml` installs both for real on the CI's Mac and Windows machines with the programs of the
-commit, sends a note and a file to « À trier » through the bridge, asks for the tools through `memcp-bridge connect`,
+commit, sends a note and a file to « À trier » through the capture program, asks for the tools through `memcp-capture connect`,
 then removes everything. A voice note read by whisper.cpp was checked by hand on a Mac (the CI has no speech model).

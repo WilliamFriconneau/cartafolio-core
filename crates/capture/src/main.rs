@@ -1,12 +1,12 @@
-//! `memcp-bridge`: the one program on the side of the person who captures, on Linux and on macOS.
+//! `memcp-capture`: the one program on the side of the person who captures, on Linux and on macOS.
 //!
-//! - `memcp-bridge [gateway]`: the memory's tools on standard input and output, for an assistant that runs a
+//! - `memcp-capture [gateway]`: the memory's tools on standard input and output, for an assistant that runs a
 //!   command. Writes without a decision are kept while the network is down.
-//! - `memcp-bridge send FILE...`, `text TEXT`: put captures into « À trier », the person's one box for everything
+//! - `memcp-capture send FILE...`, `text TEXT`: put captures into « À trier », the person's one box for everything
 //!   that comes in (kept first, sent at once if the memory can be reached). The bridge never chooses a vault.
-//! - `memcp-bridge flush`, `status`: send what waits; list what waits and what went.
+//! - `memcp-capture flush`, `status`: send what waits; list what waits and what went.
 //!
-//! - `memcp-bridge --config FILE --socket PATH`: the gateway on a Unix socket, run as a user of its own; `memcp-bridge connect
+//! - `memcp-capture --config FILE --socket PATH`: the gateway on a Unix socket, run as a user of its own; `memcp-capture connect
 //!   PATH` is what an assistant starts: it carries messages to the socket and knows neither the address nor the key.
 //!
 //! The settings come from `--config FILE` (mode 600: address, key), else from the options: the key from the file named by
@@ -16,10 +16,10 @@ use std::io::{self, BufReader, Read};
 use std::path::PathBuf;
 use std::process::{Command, ExitCode};
 
-use memcp_bridge::{Config, Flush, Gateway, Intake, State, serve_http};
+use memcp_capture::{Config, Flush, Gateway, Intake, State, serve_http};
 
-const USAGE: &str = "usage: memcp-bridge [gateway|send|text|flush|status|retry|forget|absorb|transcribe] (--config FILE | --url https://<server>/mcp/<connection>) [options]
-       memcp-bridge connect SOCKET
+const USAGE: &str = "usage: memcp-capture [gateway|send|text|flush|status|retry|forget|absorb|transcribe] (--config FILE | --url https://<server>/mcp/<connection>) [options]
+       memcp-capture connect SOCKET
 
   gateway (default)      the memory's tools on standard input and output; writes without a decision
                          (remember with the tag inbox, deposit, file_put) are kept while the network is down.
@@ -60,7 +60,7 @@ options:
   --key-file PATH        the key is read from this file (MEMCP_KEY_FILE). Refused if group or others can read it (chmod 600).
                          The assistant's own configuration then holds the path only, never the key or the memory's address
   --token-env NAME       the variable holding the key (MEMCP_TOKEN by default); on macOS, else the Keychain
-                         (service memcp-bridge, account the address)
+                         (service memcp-capture, account the address)
   --outbox DIR           where what waits is kept (MEMCP_OUTBOX; by default a folder of this connection in the app's
                          data folder: one connection never lists or sends another's captures)
   --utc-offset MINUTES   the user's offset from UTC, for dates (by default read from the system)
@@ -72,7 +72,7 @@ fn keychain(url: &str) -> Option<String> {
         return None;
     }
     // The relay of an earlier version stored its keys under its own name: still found.
-    ["memcp-bridge", "memcp-relay"].iter().find_map(|service| {
+    ["memcp-capture", "memcp-relay"].iter().find_map(|service| {
         let out = Command::new("security")
             .args(["find-generic-password", "-s", service, "-a", url, "-w"])
             .output()
@@ -98,11 +98,11 @@ struct FileConfig {
     key: String,
     outbox: Option<PathBuf>,
     capture_dirs: Vec<PathBuf>,
-    absorb: Vec<memcp_bridge::AbsorbSource>,
-    deliver: Vec<memcp_bridge::Delivery>,
+    absorb: Vec<memcp_capture::AbsorbSource>,
+    deliver: Vec<memcp_capture::Delivery>,
     /// The vaults whose recordings are transcribed here, and how.
     transcribe: Vec<String>,
-    voice: memcp_bridge::VoiceSettings,
+    voice: memcp_capture::VoiceSettings,
 }
 
 fn home_path(v: &str) -> PathBuf {
@@ -146,7 +146,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
     let (mut url, mut key, mut outbox, mut dirs) = (None, None, None, vec![]);
     let (mut absorb, mut deliver) = (vec![], vec![]);
     let (mut exclude, mut protect, mut roles) = (vec![], vec![], vec![]);
-    let (mut transcribe, mut voice) = (vec![], memcp_bridge::VoiceSettings::default());
+    let (mut transcribe, mut voice) = (vec![], memcp_capture::VoiceSettings::default());
     for (n, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -171,7 +171,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
                 let (d, vlt) = v
                     .split_once("->")
                     .ok_or(format!("{}: absorb = FOLDER -> VAULT", file.display()))?;
-                absorb.push(memcp_bridge::AbsorbSource {
+                absorb.push(memcp_capture::AbsorbSource {
                     dir: home_path(d.trim()),
                     vault: vlt.trim().to_string(),
                     exclude: vec![],
@@ -199,7 +199,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
                 let path = home_path(&v);
                 let text = std::fs::read_to_string(&path)
                     .map_err(|e| format!("absorb_roles {}: {e}", path.display()))?;
-                roles = memcp_bridge::read_roles(&text);
+                roles = memcp_capture::read_roles(&text);
             }
             // `deliver = work proposals/pro -> ~/Notes/Work/Ideas`: proposals of a vault put down as files.
             "deliver" => {
@@ -210,7 +210,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
                     .trim()
                     .split_once(' ')
                     .ok_or(format!("{}: deliver = VAULT TAG -> FOLDER", file.display()))?;
-                deliver.push(memcp_bridge::Delivery {
+                deliver.push(memcp_capture::Delivery {
                     vault: vlt.trim().to_string(),
                     tag: tag.trim().to_string(),
                     dir: home_path(d.trim()),
@@ -241,7 +241,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
         ));
     }
     let url = url.ok_or(format!("{}: url is needed", file.display()))?;
-    // Without key or key_file, on macOS, the Keychain (service memcp-bridge, account the address), as with the options.
+    // Without key or key_file, on macOS, the Keychain (service memcp-capture, account the address), as with the options.
     let key = key
         .map(|k| k.trim().to_string())
         .filter(|k| !k.is_empty())
@@ -267,12 +267,12 @@ fn default_outbox() -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_default();
     if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/memcp-bridge")
+        home.join("Library/Application Support/memcp-capture")
     } else {
         std::env::var_os("XDG_DATA_HOME")
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".local/share"))
-            .join("memcp-bridge")
+            .join("memcp-capture")
     }
 }
 
@@ -460,14 +460,14 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             return Err("connect needs the path of the bridge's socket".into());
         };
         // An address (127.0.0.1:PORT) is an HTTP gateway, on every system; a path is a Unix socket.
-        if memcp_bridge::relay::is_address(path) {
-            memcp_bridge::relay::relay(path, io::stdin().lock(), io::stdout().lock())
+        if memcp_capture::relay::is_address(path) {
+            memcp_capture::relay::relay(path, io::stdin().lock(), io::stdout().lock())
                 .map_err(|e| e.to_string())?;
             return Ok(ExitCode::SUCCESS);
         }
         #[cfg(unix)]
         {
-            memcp_bridge::connect_socket(std::path::Path::new(path)).map_err(|e| e.to_string())?;
+            memcp_capture::connect_socket(std::path::Path::new(path)).map_err(|e| e.to_string())?;
             return Ok(ExitCode::SUCCESS);
         }
         #[cfg(not(unix))]
@@ -479,11 +479,11 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         }
     }
     if a.mode == "discover" {
-        let nodes = memcp_bridge::discover::discover(std::time::Duration::from_secs(
+        let nodes = memcp_capture::discover::discover(std::time::Duration::from_secs(
             a.seconds.clamp(1, 30),
         ));
         if nodes.is_empty() {
-            eprintln!("memcp-bridge: no node found on this network or on the tailnet");
+            eprintln!("memcp-capture: no node found on this network or on the tailnet");
             return Ok(ExitCode::from(1));
         }
         for n in nodes {
@@ -511,10 +511,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                 .or_else(|_| std::env::var("COMPUTERNAME"))
                 .unwrap_or_else(|_| "a computer".into())
         });
-        eprintln!("memcp-bridge: asking {address} to let `{device}` join…");
-        let joined = memcp_bridge::discover::join(address, &device, |phrase| {
+        eprintln!("memcp-capture: asking {address} to let `{device}` join…");
+        let joined = memcp_capture::discover::join(address, &device, |phrase| {
             eprintln!(
-                "memcp-bridge: on the node, check that the phrase is\n\n    {phrase}\n\nand allow it. Waiting for the answer (two minutes)…"
+                "memcp-capture: on the node, check that the phrase is\n\n    {phrase}\n\nand allow it. Waiting for the answer (two minutes)…"
             );
         })?;
         let text = format!("url = {}\nkey = {}\n", joined.url, joined.key);
@@ -532,16 +532,18 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                 .map_err(|e| format!("{}: {e}", file.display()))?;
         }
         eprintln!(
-            "memcp-bridge: joined as {}; written to {}",
+            "memcp-capture: joined as {}; written to {}",
             joined.connection,
             file.display()
         );
         return Ok(ExitCode::SUCCESS);
     }
-    let mut voice: (Vec<String>, memcp_bridge::VoiceSettings) =
-        (vec![], memcp_bridge::VoiceSettings::default());
-    let mut absorbing: (Vec<memcp_bridge::AbsorbSource>, Vec<memcp_bridge::Delivery>) =
-        (vec![], vec![]);
+    let mut voice: (Vec<String>, memcp_capture::VoiceSettings) =
+        (vec![], memcp_capture::VoiceSettings::default());
+    let mut absorbing: (
+        Vec<memcp_capture::AbsorbSource>,
+        Vec<memcp_capture::Delivery>,
+    ) = (vec![], vec![]);
     let (url, key) = if let Some(file) = &a.config {
         if let Some(o) = a.given.first() {
             return Err(format!(
@@ -575,20 +577,20 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
     };
     let outbox = a.outbox.clone().unwrap_or_else(|| {
         let root = default_outbox();
-        let folder = memcp_bridge::connection_outbox(&root, &url);
+        let folder = memcp_capture::connection_outbox(&root, &url);
         // Captures left in the folder all connections shared before, whatever vault they were made for, come here.
-        match memcp_bridge::adopt_old_captures(&root, &folder) {
+        match memcp_capture::adopt_old_captures(&root, &folder) {
             Ok(0) => {}
             Ok(n) => eprintln!(
-                "memcp-bridge: {n} capture(s) of the old shared outbox moved to this connection's"
+                "memcp-capture: {n} capture(s) of the old shared outbox moved to this connection's"
             ),
-            Err(e) => eprintln!("memcp-bridge: the old shared outbox cannot be read: {e}"),
+            Err(e) => eprintln!("memcp-capture: the old shared outbox cannot be read: {e}"),
         }
         folder
     });
-    if memcp_bridge::in_clear(&url) {
+    if memcp_capture::in_clear(&url) {
         eprintln!(
-            "memcp-bridge: WARNING: this address is neither HTTPS nor of this machine or the own network: the key travels in clear"
+            "memcp-capture: WARNING: this address is neither HTTPS nor of this machine or the own network: the key travels in clear"
         );
     }
     let config = Config {
@@ -605,10 +607,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             if let Some(path) = &a.socket {
                 #[cfg(unix)]
                 {
-                    let listener = memcp_bridge::bind_socket(path, a.socket_group)
+                    let listener = memcp_capture::bind_socket(path, a.socket_group)
                         .map_err(|e| e.to_string())?;
-                    eprintln!("memcp-bridge: serving the socket {}", path.display());
-                    memcp_bridge::serve_socket(gateway, &listener).map_err(|e| e.to_string())?;
+                    eprintln!("memcp-capture: serving the socket {}", path.display());
+                    memcp_capture::serve_socket(gateway, &listener).map_err(|e| e.to_string())?;
                 }
                 #[cfg(not(unix))]
                 {
@@ -672,10 +674,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             }
             let everything = a.rest.iter().any(|r| r == "all");
             let state_dir = config.outbox.clone();
-            let mut client = memcp_bridge::client_for(&config.url, &config.key);
+            let mut client = memcp_capture::client_for(&config.url, &config.key);
             let mut code = ExitCode::SUCCESS;
             for src in &absorbing.0 {
-                let r = memcp_bridge::absorb(&mut client, src, &state_dir, everything)
+                let r = memcp_capture::absorb(&mut client, src, &state_dir, everything)
                     .map_err(|e| e.to_string())?;
                 println!(
                     "{}: files read {}, pieces sent {}, files taken stock of {}, refused {}{}",
@@ -691,10 +693,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                     }
                 );
                 for p in &r.problems {
-                    eprintln!("memcp-bridge: {p}");
+                    eprintln!("memcp-capture: {p}");
                 }
                 if r.key_refused {
-                    eprintln!("memcp-bridge: the key is refused or revoked");
+                    eprintln!("memcp-capture: the key is refused or revoked");
                     return Ok(ExitCode::from(1));
                 }
                 if r.failed > 0 || !r.problems.is_empty() {
@@ -702,16 +704,16 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                 }
             }
             for d in &absorbing.1 {
-                let mut r = memcp_bridge::Absorbed::default();
-                memcp_bridge::propose_guide(&mut client, d, &state_dir, &mut r);
-                let n = memcp_bridge::deliver(&mut client, d, &state_dir, &mut r)
+                let mut r = memcp_capture::Absorbed::default();
+                memcp_capture::propose_guide(&mut client, d, &state_dir, &mut r);
+                let n = memcp_capture::deliver(&mut client, d, &state_dir, &mut r)
                     .map_err(|e| e.to_string())?;
                 println!("{} {}: {n} put down as files", d.vault, d.tag);
                 if r.key_refused {
                     return Ok(ExitCode::from(1));
                 }
                 for p in &r.problems {
-                    eprintln!("memcp-bridge: {p}");
+                    eprintln!("memcp-capture: {p}");
                 }
             }
             Ok(code)
@@ -720,8 +722,8 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             if voice.0.is_empty() {
                 return Err("transcribe needs --config with `transcribe = VAULT, VAULT` and `whisper_model` (or `whisper_api_url`)".into());
             }
-            let mut client = memcp_bridge::client_for(&config.url, &config.key);
-            let r = memcp_bridge::transcribe(
+            let mut client = memcp_capture::client_for(&config.url, &config.key);
+            let r = memcp_capture::transcribe(
                 &mut client,
                 &voice.0,
                 &voice.1,
@@ -734,10 +736,10 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                 r.transcribed, r.nothing_audible, r.erased
             );
             for p in &r.problems {
-                eprintln!("memcp-bridge: {p}");
+                eprintln!("memcp-capture: {p}");
             }
             if r.key_refused {
-                eprintln!("memcp-bridge: the key is refused or revoked");
+                eprintln!("memcp-capture: the key is refused or revoked");
                 return Ok(ExitCode::from(1));
             }
             Ok(if r.problems.is_empty() {
@@ -802,7 +804,7 @@ fn main() -> ExitCode {
     match run(&raw) {
         Ok(code) => code,
         Err(message) => {
-            eprintln!("memcp-bridge: {message}\n\n{USAGE}");
+            eprintln!("memcp-capture: {message}\n\n{USAGE}");
             ExitCode::from(2)
         }
     }

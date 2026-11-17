@@ -67,7 +67,7 @@ It asks where the memory should live, checks what it downloads against the publi
 
 ### macOS and Windows
 
-The releases carry `memcp`, `memcp-bridge` and `memcp-janitor` for macOS and Windows. Everything builds and its tests pass on both in CI. On Windows, read [docs/SPACES.md](docs/SPACES.md) for what differs.
+The releases carry `memcp`, `memcp-capture` and `memcp-janitor` for macOS and Windows. Everything builds and its tests pass on both in CI. On Windows, read [docs/SPACES.md](docs/SPACES.md) for what differs.
 
 ## Connect an assistant
 
@@ -75,7 +75,7 @@ On the page, press **Connect an assistant**: it gives an address and a key, and 
 
 ## Join a node
 
-Press **Join a MemCP network** on the page. A phone or a computer scans the QR code, or finds the node by itself on your network or your tailnet (`memcp-bridge discover`) and asks to join; you compare three words on both screens and allow it. Details in [docs/DISCOVERY.md](docs/DISCOVERY.md).
+Press **Join a MemCP network** on the page. A phone or a computer scans the QR code, or finds the node by itself on your network or your tailnet (`memcp-capture discover`) and asks to join; you compare three words on both screens and allow it. Details in [docs/DISCOVERY.md](docs/DISCOVERY.md).
 
 ## Safe by default
 

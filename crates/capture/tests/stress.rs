@@ -8,8 +8,8 @@ use std::sync::Arc;
 use std::thread;
 
 use common::{memory, unique};
-use memcp_bridge::Intake;
-use memcp_bridge::markdown::Markdown;
+use memcp_capture::Intake;
+use memcp_capture::markdown::Markdown;
 
 const WRITERS: usize = 4;
 const EACH: usize = 30;

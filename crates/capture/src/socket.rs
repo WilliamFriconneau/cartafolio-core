@@ -2,7 +2,7 @@
 //!
 //! The gateway runs as a user of its own (a service), which alone reads the settings file. It opens a socket that only
 //! the person's account may open: mode 600 (only the gateway's user), or 660 with a group of two (the gateway's user and
-//! the person). The kernel checks who connects; there is no secret to copy. The assistant starts `memcp-bridge connect
+//! the person). The kernel checks who connects; there is no secret to copy. The assistant starts `memcp-capture connect
 //! PATH`, which only carries its messages to the socket and back: it holds a path, nothing else.
 //!
 //! Each connection speaks the same as standard input and output: one JSON-RPC message a line.
@@ -99,7 +99,7 @@ fn serve_one(gateway: &Mutex<Gateway>, stream: UnixStream) -> std::io::Result<()
     Ok(())
 }
 
-/// What `memcp-bridge connect PATH` does: carries standard input to the socket and the socket's answers to standard
+/// What `memcp-capture connect PATH` does: carries standard input to the socket and the socket's answers to standard
 /// output, until either side closes. It knows nothing of the memory.
 pub fn connect(path: &Path) -> Result<(), Error> {
     let stream = UnixStream::connect(path).map_err(|e| {

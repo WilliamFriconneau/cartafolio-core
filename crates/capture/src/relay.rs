@@ -1,4 +1,4 @@
-//! `memcp-bridge connect ADDRESS`: carries standard input and output to a gateway served over HTTP on this machine
+//! `memcp-capture connect ADDRESS`: carries standard input and output to a gateway served over HTTP on this machine
 //! (`--listen`), the way `connect SOCKET` does for a Unix socket. It is how an assistant that runs a command reaches
 //! the bridge on Windows, which has no Unix socket, and works the same everywhere.
 //!

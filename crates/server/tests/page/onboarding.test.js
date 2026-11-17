@@ -19,7 +19,7 @@ const freePort = () => new Promise(r => { const s = net.createServer().listen(0,
 let failed = 0;
 const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL ") + name + (cond ? "" : "  " + extra)); if (!cond) failed++; };
 
-// Stand-ins for the programs the node starts: memcp-bridge discover (one node found) and memcp-sync --join (three words).
+// Stand-ins for the programs the node starts: memcp-capture discover (one node found) and memcp-sync --join (three words).
 const FAKES = fs.mkdtempSync(path.join(os.tmpdir(), "memcp-fakes-"));
 fs.writeFileSync(path.join(FAKES, "bridge"), "#!/bin/sh\nprintf 'kitchen\\thttp://192.168.1.5:8791\\t1.0\\tlan\\n'\n", { mode: 0o755 });
 fs.writeFileSync(path.join(FAKES, "sync"), "#!/bin/sh\nwhile [ $# -gt 0 ]; do [ \"$1\" = --status-file ] && F=$2; shift; done\nprintf '{\"state\":\"waiting\",\"check\":\"amber-delta-moss\"}' > \"$F\"\n", { mode: 0o755 });

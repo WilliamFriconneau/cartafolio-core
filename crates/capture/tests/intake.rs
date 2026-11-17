@@ -7,7 +7,7 @@
 mod common;
 
 use common::{m4a, memory, unique, write};
-use memcp_bridge::{Error, Gateway, Heard, Intake, Kind, State};
+use memcp_capture::{Error, Gateway, Heard, Intake, Kind, State};
 use serde_json::{Value, json};
 
 #[test]
@@ -673,7 +673,7 @@ fn an_answer_the_network_garbled_keeps_everything_queued() {
         }
     });
     let outbox = unique("outbox");
-    let intake = Intake::open(memcp_bridge::Config {
+    let intake = Intake::open(memcp_capture::Config {
         url: format!("http://127.0.0.1:{port}/mcp/x"),
         key: "mtm_x".into(),
         outbox: outbox.clone(),

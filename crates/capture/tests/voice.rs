@@ -10,7 +10,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use common::{memory, unique};
-use memcp_bridge::{VoiceSettings, transcribe};
+use memcp_capture::{VoiceSettings, transcribe};
 use serde_json::json;
 
 const FFMPEG: &str = r#"#!/bin/sh

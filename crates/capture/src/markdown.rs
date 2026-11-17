@@ -122,7 +122,7 @@ impl Markdown {
         let off = self.utc_offset_minutes;
         let sign = if off < 0 { '-' } else { '+' };
         format!(
-            "---\ndate: {y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}{sign}{:02}:{:02}\ntype: {kind}\nsource: memcp-bridge\ntags: [memcp]\n---\n\n",
+            "---\ndate: {y:04}-{mo:02}-{d:02}T{h:02}:{mi:02}{sign}{:02}:{:02}\ntype: {kind}\nsource: memcp-capture\ntags: [memcp]\n---\n\n",
             off.abs() / 60,
             off.abs() % 60
         )

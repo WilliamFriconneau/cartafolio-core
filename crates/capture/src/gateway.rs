@@ -158,7 +158,7 @@ impl Gateway {
                 json!({
                     "protocolVersion": "2025-06-18",
                     "capabilities": { "tools": {} },
-                    "serverInfo": { "name": "memcp-bridge", "version": env!("CARGO_PKG_VERSION") },
+                    "serverInfo": { "name": "memcp-capture", "version": env!("CARGO_PKG_VERSION") },
                 })
             }),
         };
@@ -167,7 +167,7 @@ impl Gateway {
             result = json!({
                 "protocolVersion": "2025-06-18",
                 "capabilities": { "tools": {} },
-                "serverInfo": { "name": "memcp-bridge", "version": env!("CARGO_PKG_VERSION") },
+                "serverInfo": { "name": "memcp-capture", "version": env!("CARGO_PKG_VERSION") },
             });
         }
         let instructions = result["instructions"].as_str().unwrap_or("").to_string();

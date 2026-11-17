@@ -1,4 +1,4 @@
-//! The `memcp-bridge` program, run for real against the real engine.
+//! The `memcp-capture` program, run for real against the real engine.
 #![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
@@ -12,7 +12,7 @@ use common::{memory, unique, write};
 use serde_json::{Value, json};
 
 fn bridge(args: &[&str], key: &str, stdin: Option<&str>) -> Output {
-    let mut cmd = Command::new(env!("CARGO_BIN_EXE_memcp-bridge"));
+    let mut cmd = Command::new(env!("CARGO_BIN_EXE_memcp-capture"));
     cmd.args(args)
         .env("MEMCP_TOKEN", key)
         .env_remove("MEMCP_URL")
@@ -264,7 +264,7 @@ fn serve_over_http(url: &str, key: &str, outbox: &str) -> (Serving, u16) {
     use std::io::{BufRead, BufReader};
     // Port 0: the system picks one, and the bridge says which on its standard error. No port is chosen here and
     // left free for another program to take.
-    let mut child = Command::new(env!("CARGO_BIN_EXE_memcp-bridge"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_memcp-capture"))
         .args(["--url", url, "--outbox", outbox, "--listen", "127.0.0.1:0"])
         .env("MEMCP_TOKEN", key)
         .stdin(Stdio::null())

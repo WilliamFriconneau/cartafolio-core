@@ -61,7 +61,7 @@ pub fn serve_http(gateway: &mut Gateway, addr: &str) -> Result<(), Error> {
     let server = bind(addr)?;
     // The address really bound (the port is the system's when `addr` asks for port 0).
     eprintln!(
-        "memcp-bridge: serving POST /mcp on {}, this machine only",
+        "memcp-capture: serving POST /mcp on {}, this machine only",
         server.server_addr()
     );
     serve_on(&server, gateway);
@@ -86,7 +86,7 @@ impl HttpServer {
         let server = Arc::new(bind(addr)?);
         let serving = Arc::clone(&server);
         let thread = std::thread::Builder::new()
-            .name("memcp-bridge-http".into())
+            .name("memcp-capture-http".into())
             .spawn(move || serve_on(&serving, &mut gateway))
             .map_err(|e| Error::Io(e.to_string()))?;
         Ok(HttpServer {

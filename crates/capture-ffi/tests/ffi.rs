@@ -1,10 +1,10 @@
 //! The Swift interface as Swift will call it (the same functions, from Rust). The logic is tested in
-//! `memcp-bridge`; here, what the shell itself does: the names, the conversions, the errors.
+//! `memcp-capture`; here, what the shell itself does: the names, the conversions, the errors.
 
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
 
-use memcp_bridge_ffi::{Intake, IntakeConfig, IntakeError, ItemKind, ItemState, address_allowed};
+use memcp_capture_ffi::{Intake, IntakeConfig, IntakeError, ItemKind, ItemState, address_allowed};
 
 fn dir(tag: &str) -> std::path::PathBuf {
     let n = std::time::SystemTime::now()
@@ -48,7 +48,7 @@ fn a_capture_is_kept_listed_and_forgotten_through_the_interface() {
             "Idée".into(),
             1,
             1,
-            memcp_bridge_ffi::HeardInput {
+            memcp_capture_ffi::HeardInput {
                 text: String::new(),
                 summary: String::new(),
                 send_audio: true,
@@ -120,7 +120,7 @@ fn the_setup_screen_can_ask_whether_an_address_is_allowed() {
 
 #[test]
 fn each_connection_has_its_own_outbox_and_all_old_captures_move_into_it() {
-    use memcp_bridge_ffi::{adopt_old_captures, connection_outbox};
+    use memcp_capture_ffi::{adopt_old_captures, connection_outbox};
     let base = dir("base");
     let a = connection_outbox(
         base.display().to_string(),
@@ -184,8 +184,8 @@ fn each_connection_has_its_own_outbox_and_all_old_captures_move_into_it() {
     let _ = std::fs::remove_dir_all(old);
 }
 
-fn heard() -> memcp_bridge_ffi::HeardInput {
-    memcp_bridge_ffi::HeardInput {
+fn heard() -> memcp_capture_ffi::HeardInput {
+    memcp_capture_ffi::HeardInput {
         text: String::new(),
         summary: String::new(),
         send_audio: true,
@@ -196,7 +196,7 @@ fn heard() -> memcp_bridge_ffi::HeardInput {
 
 #[test]
 fn the_window_of_a_replica_is_read_and_written() {
-    use memcp_bridge_ffi::{prune_replica_window, replica_window, set_replica_window};
+    use memcp_capture_ffi::{prune_replica_window, replica_window, set_replica_window};
     use memcp_core::{Brain, Space, text::Language};
 
     let d = dir("window");

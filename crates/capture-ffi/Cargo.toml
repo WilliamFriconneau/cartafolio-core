@@ -1,7 +1,7 @@
 [package]
 publish = false
-name = "memcp-bridge-ffi"
-description = "The Swift interface (UniFFI) of the memcp bridge, for the Mac app: a thin shell, no logic of its own"
+name = "memcp-capture-ffi"
+description = "The Swift interface (UniFFI) of the memcp capture program, for the Mac app: a thin shell, no logic of its own"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -10,21 +10,21 @@ repository.workspace = true
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
-name = "memcp_bridge_ffi"
+name = "memcp_capture_ffi"
 
 [[bin]]
 name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
-memcp-bridge = { path = "../bridge" }
+memcp-capture = { path = "../capture" }
 memcp-client = { path = "../client" }
 memcp-core = { path = "../core" }
 uniffi = { version = "0.32", features = ["cli"] }
 
 # Whisper inside the app, on the GPU: the Mac only.
 [target.'cfg(target_os = "macos")'.dependencies]
-memcp-bridge = { path = "../bridge", features = ["metal"] }
+memcp-capture = { path = "../capture", features = ["metal"] }
 
 [lints]
 workspace = true

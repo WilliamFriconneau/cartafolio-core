@@ -1,22 +1,22 @@
 #!/bin/sh
-# MemCP on a Mac: the node (`memcp serve`) and the bridge (`memcp-bridge`) as background tasks of your user, started at
+# MemCP on a Mac: the node (`memcp serve`) and the bridge (`memcp-capture`) as background tasks of your user, started at
 # login and again after a crash, with their logs. Nothing runs as root and nothing is put outside your home folder.
 #
 #   sh install-mac.sh               install or update (asks a few questions)
 #   sh install-mac.sh --uninstall   stop and remove the programs and the tasks; your memory is kept
 #
 # What goes where:
-#   ~/Library/Application Support/MemCP/bin      memcp, memcp-bridge, memcp-janitor
+#   ~/Library/Application Support/MemCP/bin      memcp, memcp-capture, memcp-janitor
 #   ~/Library/Application Support/MemCP/data     the memory (a folder of databases: back it up, it is yours)
 #   ~/Library/Application Support/MemCP/bridge   the bridge's settings and what waits to be sent
 #   ~/Library/Logs/MemCP                         node.log, bridge.log, transcribe.log
 #   ~/Library/LaunchAgents/org.memcp.*.plist     the tasks (launchd agents of your user)
-#   Keychain, service memcp-bridge               the keys of the bridge and of this Mac (never written in a file)
+#   Keychain, service memcp-capture               the keys of the bridge and of this Mac (never written in a file)
 #
 # Options (or the same words as environment variables, in capitals, prefixed MEMCP_):
 #   --yes                take every default, ask nothing
 #   --version vX.Y.Z     a release other than the latest
-#   --from DIR           take memcp, memcp-bridge and memcp-janitor from DIR (a build of your own) instead of a release
+#   --from DIR           take memcp, memcp-capture and memcp-janitor from DIR (a build of your own) instead of a release
 #   --language en|fr     the language of search and of the page (default en)
 #   --spaces LIST        the first vaults (default personal,work,health)
 #   --port N             the node's port on the loopback (default 8791)
@@ -107,8 +107,8 @@ if [ "$ACTION" = uninstall ]; then
   step "Removing MemCP from this Mac"
   stop_agents
   for label in $LABELS; do rm -f "$AGENTS/$label.plist"; done
-  security delete-generic-password -s memcp-bridge -a "$BRIDGE_URL" >/dev/null 2>&1 || true
-  security delete-generic-password -s memcp-bridge -a "$NODE_URL/mcp/this-mac" >/dev/null 2>&1 || true
+  security delete-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1 || true
+  security delete-generic-password -s memcp-capture -a "$NODE_URL/mcp/this-mac" >/dev/null 2>&1 || true
   rm -rf "$BIN" "$BRIDGE"
   say "the tasks, the programs and the bridge's key are removed."
   if [ "$PURGE" = 1 ]; then
@@ -146,7 +146,7 @@ step "2/5  Programs"
 umask 077
 mkdir -p "$BIN" "$DATA" "$BRIDGE" "$LOGS"
 chmod 700 "$ROOT" "$DATA" "$BRIDGE"
-PROGRAMS="memcp memcp-bridge memcp-janitor"
+PROGRAMS="memcp memcp-capture memcp-janitor"
 if [ -n "$FROM" ]; then
   for prog in $PROGRAMS; do
     [ -x "$FROM/$prog" ] || die "$FROM/$prog is missing"
@@ -252,7 +252,7 @@ CONSOLE=$("$BIN/memcp" --data "$DATA" console-token owner 2>/dev/null | grep -o 
 # This Mac joins its own memory as a device, as a phone does: that makes the person's « À trier », where every capture
 # goes. The device's key (it writes only to À trier, reads nothing) is kept in the Keychain under its address.
 DEVICE_ACCOUNT="$NODE_URL/mcp/this-mac"
-if ! security find-generic-password -s memcp-bridge -a "$DEVICE_ACCOUNT" >/dev/null 2>&1; then
+if ! security find-generic-password -s memcp-capture -a "$DEVICE_ACCOUNT" >/dev/null 2>&1; then
   CODE=$(curl -fsS -X POST -H "Authorization: Bearer $CONSOLE" -H "X-Requested-With: memcp" \
     -H "Content-Type: application/json" -d '{}' "$NODE_URL/admin/api/pairing" |
     sed -n 's/.*"code"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
@@ -261,13 +261,13 @@ if ! security find-generic-password -s memcp-bridge -a "$DEVICE_ACCOUNT" >/dev/n
     -d "{\"code\":\"$CODE\",\"device\":\"this-mac\"}" "$NODE_URL/pair") || die "the pairing of this Mac failed"
   DEVICE_KEY=$(printf '%s' "$PAIRED" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$DEVICE_KEY" ] || die "no key in the pairing's answer"
-  security add-generic-password -U -s memcp-bridge -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
+  security add-generic-password -U -s memcp-capture -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
   DEVICE_KEY=
   say "this Mac is paired with its memory: its captures go to À trier."
 fi
 
 # The bridge's own connection: the memory's tools for the assistants on this Mac, and the voice notes to read.
-if security find-generic-password -s memcp-bridge -a "$BRIDGE_URL" >/dev/null 2>&1; then
+if security find-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1; then
   say "the bridge already has its key in the Keychain."
 else
   OUT=$("$BIN/memcp" --data "$DATA" connect "$CONNECTION" --all --public-url "$NODE_URL" 2>&1 ||
@@ -275,13 +275,13 @@ else
     die "no key could be made for the bridge: $OUT"
   KEY=$(printf '%s\n' "$OUT" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$KEY" ] || die "no key in the node's answer"
-  security add-generic-password -U -s memcp-bridge -a "$BRIDGE_URL" -l "MemCP bridge" -w "$KEY"
+  security add-generic-password -U -s memcp-capture -a "$BRIDGE_URL" -l "MemCP bridge" -w "$KEY"
   KEY=
-  say "a key for the bridge is in the Keychain (service memcp-bridge)."
+  say "a key for the bridge is in the Keychain (service memcp-capture)."
 fi
 # The bridge's settings: the address only; the key stays in the Keychain.
 {
-  echo "# Written by install-mac.sh; the key is in the Keychain (service memcp-bridge, account the url)."
+  echo "# Written by install-mac.sh; the key is in the Keychain (service memcp-capture, account the url)."
   echo "url = $BRIDGE_URL"
   echo "outbox = $BRIDGE/outbox"
   if [ -n "$WHISPER_MODEL" ] || [ -n "$SPEECH_API" ]; then
@@ -306,9 +306,9 @@ chmod 600 "$BRIDGE/bridge.conf"
 
 # --- the tasks -----------------------------------------------------------------------------------------------
 step "5/5  Run it"
-plist org.memcp.bridge 0 "$BIN/memcp-bridge" gateway --config "$BRIDGE/bridge.conf" --listen "127.0.0.1:$BRIDGE_PORT"
+plist org.memcp.bridge 0 "$BIN/memcp-capture" gateway --config "$BRIDGE/bridge.conf" --listen "127.0.0.1:$BRIDGE_PORT"
 if [ -n "$WHISPER_MODEL" ] || [ -n "$SPEECH_API" ]; then
-  plist org.memcp.transcribe 300 "$BIN/memcp-bridge" transcribe --config "$BRIDGE/bridge.conf"
+  plist org.memcp.transcribe 300 "$BIN/memcp-capture" transcribe --config "$BRIDGE/bridge.conf"
 else
   rm -f "$AGENTS/org.memcp.transcribe.plist"
 fi
@@ -333,9 +333,9 @@ EOF
 cat <<EOF
 
 An assistant that runs a command reaches the memory through the bridge, knowing neither its address nor its key:
-  $BIN/memcp-bridge connect 127.0.0.1:$BRIDGE_PORT
+  $BIN/memcp-capture connect 127.0.0.1:$BRIDGE_PORT
 For Claude Code:
-  claude mcp add memcp -- "$BIN/memcp-bridge" connect 127.0.0.1:$BRIDGE_PORT
+  claude mcp add memcp -- "$BIN/memcp-capture" connect 127.0.0.1:$BRIDGE_PORT
 
 Logs:     $LOGS
 Update:   run this installer again; your memory is left alone.
