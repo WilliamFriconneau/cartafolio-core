@@ -40,8 +40,14 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   vocabulary import FILE --space NAME --name NAME [--source TEXT]
   vocabulary list [--space NAME] | remove NAME --space NAME
                                          a list of terms (signs, symptoms…) the router reads after the keywords
-  library add PATH --space NAME          mounts an existing folder on a space, read-only: the node indexes it (path,
-                                         title, dates, text of .md and .txt, [[links]]) and never copies or changes it
+  folder set SPACE PATH [--read]         the local folder of a space ON THIS NODE (never shared with the other nodes): the
+                                         notes are kept there as Markdown and the files as themselves, both ways; --read:
+                                         the folder is only read, for search. `folder set SPACE --default` goes back
+  folder get [SPACE] | folder sync [SPACE]
+                                         the folder of a space (path, mode, cloud, last pass) | one pass now (the node
+                                         does it by itself while it serves, every MEMCP_FOLDER_EVERY seconds, 10)
+  library add PATH --space NAME          an alias of `folder set NAME PATH --read`: the folder is indexed for search
+                                         (path, title, dates, text of .md and .txt, [[links]]) and never changed
   library scan [--space NAME] | library list
                                          reads the mounted folders again (only what changed) | lists them
   space new LABEL [--kind K] [--parent S] [--keywords a,b] [--tags t] | space show NAME | space tree
@@ -321,6 +327,22 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ("library", Some("add")) => {
             cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
         }
+        ("folder", Some("set")) => cli::folder_set(
+            &data,
+            arg(2, "the space")?,
+            if sw("--default") {
+                None
+            } else {
+                Some(Path::new(arg(3, "the folder (or --default)")?))
+            },
+            if sw("--read") {
+                memcp_core::folders::Mode::Read
+            } else {
+                memcp_core::folders::Mode::ReadWrite
+            },
+        ),
+        ("folder", Some("get")) => cli::folder_get(&data, a.pos.get(2).map(String::as_str)),
+        ("folder", Some("sync")) => cli::folder_sync(&data, a.pos.get(2).map(String::as_str)),
         ("library", Some("scan")) => cli::library_scan(&data, flag("--space")),
         ("library", Some("list")) => cli::library_list(&data),
         ("vocabulary", Some("import")) => cli::vocabulary_import(
@@ -533,6 +555,8 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
     memcp_server::replica::resume(&app);
     // Voice notes, watched folders and absorbed folders: tasks of the node itself, as set in memcp.toml.
     let _intake = start_intake(&app.brain, settings, data);
+    // The folders of the spaces on this node, kept in step with the memory (docs/FOLDERS.md).
+    let _folders = memcp_server::folder_sync::start(&app.brain);
     let identity = match flag("--identity-listen") {
         Some(addr) => {
             let trusted: Option<std::net::IpAddr> = match flag("--identity-trust") {

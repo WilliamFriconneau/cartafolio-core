@@ -878,6 +878,16 @@ const FR = {
   "Journal": "Journal",
   "Dashboard": "Tableau de bord",
   "Notes": "Notes",
+  "Folder on this node": "Dossier sur ce nœud",
+  "This setting stays on this node: your other nodes keep their own folder for this space.": "Ce réglage reste sur ce nœud : vos autres nœuds gardent leur propre dossier pour cet espace.",
+  "The node's own storage folder (no copy of the notes)": "Le dossier de stockage propre au nœud (pas de copie des notes)",
+  "Full path of a folder on this node": "Chemin complet d’un dossier sur ce nœud",
+  "Notes and files, both ways": "Notes et fichiers, dans les deux sens",
+  "Read only, for search": "Lecture seule, pour la recherche",
+  "Use this folder": "Utiliser ce dossier",
+  "Sync now": "Synchroniser maintenant",
+  "Back to the default folder": "Revenir au dossier par défaut",
+  "Not scanned yet": "Pas encore parcouru",
   "Tree": "Arbre",
   "Boards": "Tableaux",
   "Keywords and targets": "Mots-clés et cibles",
@@ -1245,6 +1255,12 @@ const FR = {
   "This code was not accepted here: it must come from this node's own page.": "Ce code n’a pas été accepté ici : il doit venir de la page de ce nœud."
 };
 const FRX = [
+  [/^Last scan (.+) · (\d+) notes and files$/, (d, n) => "Dernier passage " + d + " · " + n + " notes et fichiers"],
+  [/^This folder is held by (.+)\. Keep it on the device .*$/, a => "Ce dossier est tenu par " + a + ". Gardez-le sur l’appareil (toujours disponible hors ligne) : un fichier que le nuage n’a pas téléchargé ne peut pas être lu, et deux programmes qui écrivent les mêmes fichiers font des copies et des conflits. Cela fonctionne, mais un dossier qui reste sur l’appareil est plus fiable."],
+  [/^(.+) becomes the folder of (.+) on this node, only read and indexed for search; nothing is written in it$/, (a, b) => a + " devient le dossier de " + b + " sur ce nœud, seulement lu et indexé pour la recherche ; rien n’y est écrit"],
+  [/^(.+) becomes the folder of (.+) on this node: its notes are kept there as Markdown and its files as themselves, and what you change there comes back into the memory\. This is not shared with the other nodes$/, (a, b) => a + " devient le dossier de " + b + " sur ce nœud : ses notes y sont gardées en Markdown et ses fichiers tels quels, et ce que vous y changez revient dans la mémoire. Ce n’est pas partagé avec les autres nœuds"],
+  [/^(.+) goes back to the node's own storage folder; the folder it had is left as it is$/, a => a + " revient au dossier de stockage propre au nœud ; le dossier qu’il avait reste tel quel"],
+  [/^the folder of (.+) is read and written once now$/, a => "le dossier de " + a + " est lu et écrit une fois maintenant"],
   [/^Name shown for (.+)$/, a => "Nom affiché pour " + a],
   [/^Name and note for (.+)$/, a => "Nom de " + a],
   [/^A note about (.+)$/, a => "Une note sur " + a],
@@ -2060,7 +2076,7 @@ async function loadSide() {
     el("select", { id: "kind-select", onchange: e => spaceUpdate({ kind: e.target.value }) },
       el("option", { value: "custom", selected: ov.kind === "custom" ? "" : null }, "no kind"),
       ...(S.catalogue || []).map(k => el("option", { value: k.key, selected: ov.kind === k.key ? "" : null }, k.label))),
-    el("div", { id: "side-vocab" }), el("div", { id: "side-lib" }),
+    el("div", { id: "side-folder" }), el("div", { id: "side-vocab" }), el("div", { id: "side-lib" }),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { type: "button", class: "link danger", id: "delete-space", onclick: () => deleteSpaceFlow(FT.sel) }, "Delete this space…")));
   sideLists(FT.sel);
@@ -2070,10 +2086,14 @@ async function spaceUpdate(patch) {
 }
 // Vocabularies and mounted library folders of the selected space, each removable (after a preview).
 async function sideLists(space) {
-  let v = { vocabularies: [] }, l = { libraries: [] };
+  let v = { vocabularies: [] }, l = { libraries: [] }, fo = null;
   try { v = await api("space/vocabularies?space=" + q(space)); l = await api("space/libraries?space=" + q(space)); } catch (_) { return; }
-  const hv = $("#side-vocab"), hl = $("#side-lib");
+  try { fo = await api("space/folder?space=" + q(space)); } catch (_) {}
+  const hv = $("#side-vocab"), hl = $("#side-lib"), hf = $("#side-folder");
   if (!hv || !hl || FT.sel !== space) return;
+  if (hf && fo) renderFolder(hf, space, fo);
+  // The folder of the space is shown above, with its own controls: the list below is for the other mounts.
+  if (fo && fo.custom) l.libraries = l.libraries.filter(x => x.root !== fo.path);
   hv.replaceChildren(...(v.vocabularies.length ? [el("h3", { style: "margin-top:8px" }, "Vocabularies"),
     ...v.vocabularies.map(x => el("div", { class: "row", "data-vocabulary": x.name },
       el("span", {}, x.name + " · " + x.terms + " terms"),
@@ -2083,6 +2103,27 @@ async function sideLists(space) {
     ...l.libraries.map(x => el("div", { class: "row", "data-library": x.id },
       el("span", {}, x.root + " · " + x.files + " files"),
       el("button", { type: "button", class: "link danger", onclick: () => previewThen("space/library", { space, op: "remove", id: x.id }, () => sideLists(space)) }, "unmount")))] : []));
+}
+// The folder of the selected space on THIS node: where its notes and files are kept as Markdown and readable files, both ways.
+// The setting is this node's own (it never goes to the other nodes); a folder held by a cloud service is allowed and flagged.
+function renderFolder(host, space, f) {
+  const path = el("input", { id: "folder-path", size: 30, placeholder: "Full path of a folder on this node", value: f.custom ? f.path : "" });
+  const mode = el("select", { id: "folder-mode" },
+    el("option", { value: "readwrite", selected: f.mode !== "read" ? "" : null }, "Notes and files, both ways"),
+    el("option", { value: "read", selected: f.mode === "read" ? "" : null }, "Read only, for search"));
+  const again = () => sideLists(space);
+  host.replaceChildren(
+    el("h3", { style: "margin-top:8px" }, "Folder on this node"),
+    el("p", { class: "mute small", style: "margin:0" }, "This setting stays on this node: your other nodes keep their own folder for this space."),
+    el("div", { class: "small", "data-folder-path": f.path }, f.custom ? f.path : "The node's own storage folder (no copy of the notes)"),
+    f.warning ? el("p", { class: "small", "data-cloud": f.cloud }, f.warning) : null,
+    el("div", { class: "row" }, path, mode,
+      el("button", { type: "button", id: "folder-set", onclick: () => previewThen("space/folder", { space, path: path.value.trim(), mode: mode.value }, again) }, "Use this folder")),
+    f.custom ? el("div", { class: "row" },
+      el("button", { type: "button", class: "link", id: "folder-sync", onclick: async () => { try { await api("space/folder", { space, op: "sync" }); toast("Done"); again(); } catch (x) { fail(x); } } }, "Sync now"),
+      el("button", { type: "button", class: "link danger", id: "folder-default", onclick: () => previewThen("space/folder", { space, path: null }, again) }, "Back to the default folder")) : null,
+    f.custom ? el("div", { class: "mute small", id: "folder-scan" }, f.last_scan ? "Last scan " + fmt(f.last_scan) + " · " + f.files + " notes and files" : "Not scanned yet") : null,
+    ...(f.errors || []).slice(0, 5).map(e => el("div", { class: "small", "data-folder-error": "" }, e)));
 }
 // Deleting a space is a choice, never silent: move everything into another space, or archive it. The page shows what
 // will happen (a dry run) and asks to be held to confirm.

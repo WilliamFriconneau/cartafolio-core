@@ -464,13 +464,15 @@ pub fn set(
         ));
     }
     let data = fs::canonicalize(brain.dir())?;
-    if canon.starts_with(&data) || data.starts_with(&canon) {
+    // Where the node writes, never its own data directory; a folder only read (a library) may be anywhere.
+    if mode == Mode::ReadWrite && (canon.starts_with(&data) || data.starts_with(&canon)) {
         return Err(Error::Invalid(
             "the folder must be outside the node's own data directory (its databases must never sit in a folder others write)".into(),
         ));
     }
     for other in all(brain)? {
         if other.space != *space
+            && (mode == Mode::ReadWrite || other.mode == Mode::ReadWrite)
             && (canon.starts_with(&other.path) || other.path.starts_with(&canon))
         {
             return Err(Error::Invalid(format!(
