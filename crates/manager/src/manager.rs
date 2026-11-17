@@ -619,7 +619,10 @@ impl Handler for Manager {
                 if tail.is_empty()
                     || (base == "/mcp/"
                         && ((tail.starts_with("sync/") && !tail["sync/".len()..].contains('/'))
-                            || tail == "join/invite"))
+                            || matches!(
+                                tail,
+                                "join/invite" | "join/pending" | "join/approve" | "join/deny"
+                            )))
                 {
                     let mut inner = req.clone();
                     inner.path = if tail.is_empty() {

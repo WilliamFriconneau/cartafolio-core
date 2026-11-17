@@ -766,3 +766,71 @@ fn a_peer_of_a_person_who_is_not_the_first_administrator_invites_a_device() -> R
     );
     Ok(())
 }
+
+#[test]
+fn a_peer_sees_a_device_asking_to_join_and_allows_it() -> Res {
+    let d = Dir::new("peer-allows");
+    let m = two_people(&d)?;
+    let peer = key(&m, "alice", "peer-alice-mac-0001", "all")?;
+    let auth = format!("Bearer {peer}");
+    let asked = m.handle(&rq(
+        "POST",
+        "/join",
+        &[("content-type", "application/json")],
+        &json!({ "device": "Alice's iPhone" }).to_string(),
+    ));
+    assert_eq!(asked.status, 200, "{}", asked.body_json());
+    let id = asked.body_json()["id"].as_str().ok_or("id")?.to_string();
+    let secret = asked.body_json()["secret"]
+        .as_str()
+        .ok_or("secret")?
+        .to_string();
+    // The Mac, a peer of Alice, sees the request with its three words.
+    let pending = m.handle(&rq(
+        "GET",
+        "/mcp/alice/peer-alice-mac-0001/join/pending",
+        &[("authorization", &auth)],
+        "",
+    ));
+    assert_eq!(pending.status, 200, "{}", pending.body_json());
+    assert!(
+        pending.body_json()["requests"]
+            .as_array()
+            .ok_or("list")?
+            .iter()
+            .any(|r| r["id"] == id.as_str())
+    );
+    // It allows it; the device gets a peer key of its own.
+    let ok = m.handle(&rq(
+        "POST",
+        "/mcp/alice/peer-alice-mac-0001/join/approve",
+        &[
+            ("authorization", &auth),
+            ("content-type", "application/json"),
+        ],
+        &json!({ "id": id }).to_string(),
+    ));
+    assert_eq!(ok.status, 200, "{}", ok.body_json());
+    let polled = m.handle(&rq(
+        "GET",
+        &format!("/join/{id}"),
+        &[("x-join-secret", &secret)],
+        "",
+    ));
+    assert_eq!(
+        polled.body_json()["state"],
+        "approved",
+        "{}",
+        polled.body_json()
+    );
+    // An assistant's key (not a peer) is refused.
+    let assistant = key(&m, "alice", "claude-test", "all")?;
+    let refused = m.handle(&rq(
+        "GET",
+        "/mcp/alice/claude-test/join/pending",
+        &[("authorization", &format!("Bearer {assistant}"))],
+        "",
+    ));
+    assert_eq!(refused.status, 403);
+    Ok(())
+}

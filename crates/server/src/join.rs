@@ -350,3 +350,46 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
         &json!({ "ticket": ticket, "expires_in": TICKET_TTL, "single_use": true }),
     )
 }
+
+/// `GET /mcp/<connection>/join/pending` and `POST /mcp/<connection>/join/approve|deny` {id}, with the key of a PEER of
+/// the person: every node of the person sees the devices asking to join and can answer, not only the one they asked
+/// (all nodes are equal). The same answer as the page's: allowing makes the device a peer of its own.
+pub fn by_peer(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Response {
+    let who = req.ip.clone().unwrap_or_else(|| "?".into());
+    if app.blocked(now, &who) {
+        return refused(429, "too many attempts").with("Retry-After", "900");
+    }
+    let Ok(ctl) = app.brain.open_control() else {
+        return refused(500, "storage failed");
+    };
+    let Some(caller) = crate::http::bearer_of(req.header("authorization")).and_then(|t| {
+        memcp_core::access::authenticate(&ctl, &t, now)
+            .ok()
+            .flatten()
+    }) else {
+        app.fail(now, &who);
+        return refused(401, "refused");
+    };
+    if caller.agent != agent {
+        return refused(403, "this key does not reach this address");
+    }
+    if !caller.agent.starts_with("peer-") || caller.is_scoped() || caller.read_only_forced {
+        return refused(403, "only a peer of the person may answer a device");
+    }
+    let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id) else {
+        return refused(403, "no person behind this key");
+    };
+    match (req.method.as_str(), op) {
+        ("GET", "pending") => pending(app, &me),
+        ("POST", "approve" | "deny") => {
+            let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
+                return refused(400, "JSON expected: {\"id\": \"…\"}");
+            };
+            match decide(app, &ctl, &me, &format!("/join/{op}"), &body) {
+                Ok(v) => Response::json(200, &v),
+                Err(r) => r,
+            }
+        }
+        _ => refused(404, "not found"),
+    }
+}

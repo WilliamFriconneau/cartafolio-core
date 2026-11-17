@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.13
+
+- **Every node answers a device asking to join:** a peer of the person lists the requests waiting (`GET /mcp/<connection>/join/pending`) and allows or refuses them (`POST /mcp/<connection>/join/approve|deny` {id}) with its own key, as the page does. The apps show the request where the person is.
+- **Journal:** every note of every space, À trier included.
+- **Page:** golden paths tested against a real node in CI; badges, empty parts of Settings and French fixed.
+
 ## 20261117.0.12
 
 - **Sync:** after a copy larger than a page, a note written on this node leaves on the next pass. A page holding only the peer's own events no longer ended the push, so a new note waited dozens of passes (found by an end-to-end test against a real memory; a test now copies 1 200 notes then writes one).

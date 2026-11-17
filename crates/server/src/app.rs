@@ -201,6 +201,23 @@ impl App {
                     Response::json(404, &json!({ "error": "not found" }))
                 }
             }
+            // Every peer of the person sees and answers the devices asking to join (see join::by_peer).
+            (_, p)
+                if p.starts_with("/mcp/")
+                    && p.contains("/join/")
+                    && !p.ends_with("/join/invite") =>
+            {
+                let rest = &p["/mcp/".len()..];
+                match rest.split_once("/join/") {
+                    Some((agent, op))
+                        if access::valid_agent(agent)
+                            && matches!(op, "pending" | "approve" | "deny") =>
+                    {
+                        crate::join::by_peer(self, req, now, agent, op)
+                    }
+                    _ => Response::json(404, &json!({ "error": "not found" })),
+                }
+            }
             (_, p) if p.starts_with("/mcp/") && p.contains("/sync/") => {
                 let rest = &p["/mcp/".len()..];
                 match rest.split_once("/sync/") {
