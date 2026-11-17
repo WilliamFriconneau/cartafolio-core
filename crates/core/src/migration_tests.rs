@@ -329,3 +329,25 @@ fn a_database_newer_than_the_program_is_refused_and_left_alone() {
     assert_eq!(version(&conn), SPACE_MIGRATIONS.len() + 1, "left as it was");
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn a_hostile_schema_cannot_call_unsafe_functions_when_a_database_is_opened() {
+    // A database that came from elsewhere (adopt, merge, a restored backup) may carry views and triggers of its own.
+    // With the schema trusted they may call any function; opened as the program opens it, they may not.
+    let dir = temp("hostile");
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("x.sqlite");
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("CREATE TABLE t (a); CREATE VIEW v AS SELECT fts3_tokenizer('simple') AS r FROM t;")
+            .unwrap();
+        conn.execute("INSERT INTO t VALUES (1)", []).unwrap();
+    }
+    let conn = crate::brain::open_db(&path).unwrap();
+    let r: rusqlite::Result<i64> = conn.query_row("SELECT count(*) FROM v", [], |r| r.get(0));
+    assert!(
+        r.as_ref().is_err_and(|e| e.to_string().contains("unsafe")),
+        "{r:?}"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}

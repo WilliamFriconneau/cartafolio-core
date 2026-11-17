@@ -534,7 +534,8 @@ pub(crate) fn open_db(path: &Path) -> Result<Connection> {
          PRAGMA secure_delete = ON;
          PRAGMA foreign_keys = ON;
          PRAGMA cache_size = -4096;
-         PRAGMA mmap_size = 0;",
+         PRAGMA mmap_size = 0;
+         PRAGMA trusted_schema = OFF;",
     )?;
     Ok(conn)
 }
