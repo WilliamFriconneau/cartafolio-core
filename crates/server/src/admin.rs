@@ -239,7 +239,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/file" => file_bytes(app, &ctl, &me, req),
             "/guide" => guide_get(&ctl, &me, req),
             "/export" => export_get(app, &me),
-            _ => err(404, "not found"),
+            _ => crate::crud::get(app, &ctl, &me, path, req, now)
+                .unwrap_or_else(|| err(404, "not found")),
         };
     }
     if req.method != "POST" {
@@ -251,7 +252,9 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
         return err(400, "invalid JSON");
     };
-    let done = if path.starts_with("/fact/") {
+    let done = if let Some(r) = crate::crud::post(app, &ctl, &me, path, &body) {
+        r
+    } else if path.starts_with("/fact/") {
         crate::explore::write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/join/") {
         crate::join::decide(app, &ctl, &me, path, &body)
@@ -385,8 +388,15 @@ fn action(
             Ok(json!({ "refused": done }))
         }
         "/users/update" => {
-            admin_only(me)?;
             let id = arg(body, "id")?;
+            // Anyone may change their own display name; the rest is for administrators.
+            let only_display = id == me.id
+                && body
+                    .as_object()
+                    .is_some_and(|o| o.keys().all(|k| k == "id" || k == "display"));
+            if !only_display {
+                admin_only(me)?;
+            }
             // Nobody takes their own administration away, or disables themselves, by a stray click.
             if id == me.id
                 && (body.get("admin").and_then(Value::as_bool) == Some(false)
@@ -396,6 +406,20 @@ fn action(
                     400,
                     "you cannot remove your own administration or disable yourself: ask another administrator",
                 ));
+            }
+            if body.get("dry_run").and_then(Value::as_bool) == Some(true) {
+                let who = users::user(ctl, id)
+                    .map_err(fail)?
+                    .ok_or_else(|| err(404, "no such person"))?;
+                let would = match body.get("disabled").and_then(Value::as_bool) {
+                    Some(true) => format!(
+                        "{} is disabled: their keys stop and the sign-in closes; nothing is deleted",
+                        who.name
+                    ),
+                    Some(false) => format!("{} is enabled again", who.name),
+                    None => format!("{} is updated", who.name),
+                };
+                return Ok(json!({ "dry_run": true, "would": would }));
             }
             if let Some(d) = body.get("display").and_then(Value::as_str) {
                 users::set_display(ctl, id, d).map_err(fail)?;
@@ -631,6 +655,11 @@ fn action(
             let owner = access::owner_of(ctl, agent).map_err(fail)?;
             if owner.as_deref() != Some(me.id.as_str()) {
                 return Err(err(403, "not your connection"));
+            }
+            if body.get("dry_run").and_then(Value::as_bool) == Some(true) {
+                return Ok(
+                    json!({ "dry_run": true, "would": format!("{agent} stops at once; it stays in the list, marked revoked") }),
+                );
             }
             access::revoke(ctl, agent).map_err(fail)?;
             Ok(json!({ "ok": true }))

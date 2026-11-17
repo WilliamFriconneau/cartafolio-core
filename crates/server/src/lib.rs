@@ -3,6 +3,7 @@
 pub mod admin;
 pub mod app;
 pub mod cli;
+pub mod crud;
 pub mod discovery;
 pub mod doctor;
 pub mod explore;
