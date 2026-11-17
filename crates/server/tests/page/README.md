@@ -1,7 +1,7 @@
 # Page tests (optional)
 
 `wizard.test.js` loads the admin page in a fake browser (jsdom) against a fake server and
-walks through the "Connect an assistant" steps. It is not part of `cargo test`; it needs
+walks through the "Connect an assistant" steps, the triage view and the instructions editors. It is not part of `cargo test`; it needs
 Node.js:
 
 ```sh
@@ -42,6 +42,3 @@ cargo build -p memcp-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node onboarding.test.js
 ```
-
-`wizard.test.js` and `browser.test.js` predate the page's separate views (`#triage-section`, `.vault` cards) and need
-their selectors brought up to date.

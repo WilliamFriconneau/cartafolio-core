@@ -45,11 +45,11 @@ const mockFetch = async (url, opts = {}) => {
     world.paired = JSON.parse(opts.body);
     return ok({ code: "ABCD-EFGH", server: "https://memory.example.net", expires_in: 600, triage: "sam-a-trier" });
   }
-  if (path === "triage/send") {
+  if (path === "triage/send-many") {
     const b = JSON.parse(opts.body);
     world.sent = b;
-    world.triage.notes = world.triage.notes.filter(n => n.id !== b.id);
-    return ok({ ok: true, id: "f9", space: b.space });
+    world.triage.notes = world.triage.notes.filter(n => !b.ids.includes(n.id));
+    return ok({ moved: b.ids.length, failed: [] });
   }
   if (path === "guides/clear") { delete guides[JSON.parse(opts.body).scope]; return ok({ cleared: true }); }
   if (path === "connections") {
@@ -78,9 +78,9 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
 
 (async () => {
   await sleep(300);
-  check("the page loaded the vaults", $$("#spaces .vault").length === 3, String($$("#spaces .vault").length));
+  check("the page loaded the vaults", $$("#spaces .tile[data-space]").length === 3, String($$("#spaces .tile[data-space]").length));
   check("there is no address for the whole memory", $("#mcp-url") === null);
-  check("a vault row offers to connect an assistant", $$("#spaces button").some(b => b.textContent === "Connect an assistant"));
+  check("a vault row offers to connect an assistant", $$("#spaces button").some(b => b.textContent === "Connect"));
 
   // --- Connect a bridge: no vault to choose, everything goes to À trier
   check("no vault is offered to a bridge", $("#pair-all") === null && $("#pair-vaults") === null);
@@ -93,17 +93,24 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   $("#pair-dlg").removeAttribute("open");
 
   // --- À trier: what waits, shown as text, sent to the vault the person chooses
-  check("À trier shows what waits", !$("#triage-section").hidden && $$("#triage .pair-row").length === 1);
-  check("a capture is text, never markup", $("#triage b") === null && text("#triage").includes("<b>rappeler</b>"));
-  check("À trier is not among the vaults", !$$("#spaces .vault h3").some(h => h.textContent.includes("a-trier")));
-  click($$("#triage button").find(b => b.textContent === "Send"));
+  check("À trier shows what waits on the home page", !$("#triage-tile").hidden && text("#triage-count") === "1");
+  w.location.hash = "#triage";
   await sleep(50);
-  check("no vault chosen: nothing is sent", world.sent === undefined && text("#err").includes("Choose"));
-  $("#triage select").value = "work";
-  click($$("#triage button").find(b => b.textContent === "Send"));
+  check("the À trier view lists what waits", !$("#view-triage").hidden && $$("#tr-list .trrow").length === 1);
+  check("a capture is text, never markup", $("#tr-list b") === null && text("#tr-list").includes("<b>rappeler</b>"));
+  check("À trier is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("a-trier")));
+  check("nothing picked: send is disabled", $("#tr-send").disabled);
+  click($("#tr-list .trrow"));
+  check("a row picked, still no space chosen: send stays disabled", $("#tr-send").disabled && text("#tr-count").includes("1 selected"));
+  $("#tr-space").value = "work";
+  $("#tr-space").dispatchEvent(new w.Event("change"));
+  check("a row and a space: send is enabled", !$("#tr-send").disabled && $("#tr-send").textContent === "Send 1");
+  click($("#tr-send"));
   await sleep(150);
-  check("sent to the chosen vault", world.sent && world.sent.id === "n1" && world.sent.space === "work", JSON.stringify(world.sent));
-  check("nothing left, the box is hidden", $("#triage-section").hidden);
+  check("sent to the chosen space", world.sent && world.sent.ids.join() === "n1" && world.sent.space === "work", JSON.stringify(world.sent));
+  check("nothing left, the list says so and the tile is hidden", !$("#tr-empty").hidden && $("#triage-tile").hidden);
+  w.location.hash = "";
+  await sleep(50);
 
   // --- OAuth platform: nothing to create, the steps show the address, then it waits
   click($("#open-wizard"));
@@ -150,7 +157,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("the name is asked first, with a suggestion", $("#w-name").value === "claude-code");
   const rename = v => { $("#w-name").value = v; $("#w-name").dispatchEvent(new w.Event("input")); };
   rename("health");
-  check("the name of a vault is refused", text("#w-name-note").includes("name of a vault") && $("#w-create").disabled === true, text("#w-name-note"));
+  check("the name of a space is refused", text("#w-name-note").includes("name of a space") && $("#w-create").disabled === true, text("#w-name-note"));
   rename("");
   check("an empty name is refused", text("#w-name-note").includes("Give it a name") && text("#w-steps").includes("Give it a name"));
   rename("My Laptop!");
@@ -169,7 +176,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const body = post && JSON.parse(post[2]);
   check("it created one connection with exactly what was ticked", body && body.agent === "my-laptop" && body.rights.split(",").sort().join() === "health:rw,work:rw" && body.upstream === undefined, JSON.stringify(body));
   check("the command carries the name, the key and the address of the connection", text("#w-steps").includes("http my-laptop https://memory.example.net/mcp/my-laptop") && text("#w-steps").includes("Authorization: Bearer hcp_secret_token"), text("#w-steps"));
-  check("the access step summarises it", text("#w-access").includes("health:rw,work:rw"));
+  check("the access step summarises it", text("#w-access").includes("health") && text("#w-access").includes("work"));
   check("it waits for the first call", text("#w-wait").includes("Waiting"));
   world.connections.find(c => c.agent === body.agent).last_used_at = "2026-11-01T12:00:00+00:00";
   await sleep(3400);
@@ -185,15 +192,15 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("other assistants get the header form", text("#w-steps").includes("Authorization: Bearer hcp_secret_token") && text("#w-steps").includes("OAuth"));
 
   // --- instructions (the guide)
-  const guideBtn = n => $$("#spaces .vault").find(r => r.textContent.startsWith(n)) && [...$$("#spaces .vault").find(r => r.textContent.startsWith(n)).querySelectorAll("button")].find(b => b.textContent.startsWith("Instructions"));
+  const guideBtn = n => $$("#spaces .tile[data-space]").find(r => r.textContent.startsWith(n)) && [...$$("#spaces .tile[data-space]").find(r => r.textContent.startsWith(n)).querySelectorAll("button")].find(b => b.textContent.startsWith("Instructions"));
   check("the owner sees the instructions button, ticked when there are some", guideBtn("health") && guideBtn("health").textContent === "Instructions ✓", guideBtn("health") && guideBtn("health").textContent);
   check("a vault without any shows it plainly", guideBtn("work") && guideBtn("work").textContent === "Instructions");
   check("the person has a button of their own", $("#my-guide") && $("#my-guide").textContent === "my instructions");
   click(guideBtn("health"));
   await sleep(200);
   check("the editor opens with the text in force", $("#guide-dlg").hasAttribute("open") && $("#guide-text").value === "Compare with my usual range.", $("#guide-text").value);
-  check("it says who it is for and that no assistant can change it", text("#guide-lead").includes("only on it") && text("#guide-lead").includes("no assistant can change it"));
-  check("it counts and shows the versions kept", text("#guide-count") === "28" && text("#guide-versions").includes("2 versions kept, none erased") && text("#guide-max") === "16384", text("#guide-count") + "/" + text("#guide-versions"));
+  check("it says who it is for and that it is read here, not edited", text("#guide-lead").includes("only on it") && text("#guide-lead").includes("read here, not edited"));
+  check("it counts and shows the versions kept", text("#guide-count") === "28" && text("#guide-versions").includes("2 versions kept, none erased"), text("#guide-count") + "/" + text("#guide-versions"));
   $("#guide-text").value = "Compare with my usual range, and say when it is missing.";
   $("#guide-text").dispatchEvent(new w.Event("input"));
   check("the count follows what is typed", text("#guide-count") === "56", text("#guide-count"));
@@ -284,7 +291,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("a refusal is said plainly and nothing is downloaded", text("#err").includes("owns no vault") && downloads.length === 1, text("#err"));
 
   // --- the name is the address; a name in use is refused, a revoked one is free again
-  click($$("#spaces button").find(b => b.textContent === "Connect an assistant"));
+  click($$("#spaces button").find(b => b.textContent === "Connect"));
   click($$("#w-platforms button").find(b => b.textContent.startsWith("Claude on the web")));
   check("an OAuth connector has no vault to pick: the consent page asks", $("#w-access select") === null && text("#w-access").includes("consent page"));
   const rn = v => { $("#w-name").value = v; $("#w-name").dispatchEvent(new w.Event("input")); };

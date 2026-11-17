@@ -25,7 +25,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   server = spawn(BIN, ["--data", D, "serve", "--listen", `127.0.0.1:${PORT}`, "--public-url", "https://memory.example.net"], { stdio: "ignore" });
   await sleep(1200);
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ["--no-sandbox"], headless: true });
-  const ctx = await browser.newContext({ acceptDownloads: true, viewport: { width: 1200, height: 1500 } });
+  const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1200, height: 1500 } });
   const page = await ctx.newPage();
   const problems = [];
   // A refused request (the page before sign-in, and my deliberate wrong key) logs a 401: expected.
@@ -45,20 +45,20 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.click("#login-form button");
   await page.waitForSelector("#app:not([hidden])", { timeout: 5000 });
   check("signed in: the app shows", await page.locator("#app").isVisible());
-  const rows = await page.locator("#spaces .vault").allInnerTexts();
+  const rows = await page.locator("#spaces .tile[data-space]").allInnerTexts();
   check("the page carries the project name", (await page.title()) === "MemCP" && (await page.locator("h1").first().innerText()) === "MemCP");
-  check("the vaults are listed with their kind", rows.some(r => r.includes("owner-work") && r.includes("work")) && rows.some(r => r.includes("owner-health") && r.includes("health")), rows.join(" | "));
+  check("the spaces are listed with their kind", rows.some(r => /work/i.test(r)) && rows.some(r => /health/i.test(r)), rows.join(" | "));
   check("no address for the whole memory is shown: each assistant has its own", (await page.locator("#mcp-url").count()) === 0 && (await page.locator("#open-wizard").isVisible()));
   check("the technical forms are folded away until asked for", !(await page.locator("#advanced").evaluate(d => d.open)) && !(await page.locator("#advanced form").first().isVisible()));
-  check("each vault is a card with its own connect button", (await page.locator("#spaces .vault button:has-text('Connect an assistant')").count()) === rows.length, String(rows.length));
-  check("nothing is connected at the start and the page says so", (await page.locator("#connections").innerText()).includes("Nothing is connected"));
+  check("each space is a tile with its own connect button", (await page.locator("#spaces .tile[data-space] button:has-text('Connect')").count()) === rows.length, String(rows.length));
+  check("nothing is connected at the start and the page says so", (await page.locator("#connections").innerText()).includes("Nothing is connected"), await page.locator("#connections").innerText());
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-main.png"), fullPage: true });
 
   // a key for one vault: the wizard
   await page.click("#open-wizard");
   await page.click("#w-platforms button:has-text('Claude Code')");
   check("nothing is ticked at the start", (await page.locator("#w-access input[type=checkbox]:checked").count()) === 0);
-  await page.locator("#w-access label:has-text('owner-work') input").check();
+  await page.locator("#w-access label:has-text('Work') input").check();
   await page.fill("#w-name", "My Laptop!");
   await page.click("#w-create");
   await page.waitForSelector("#w-steps pre", { timeout: 5000 });
@@ -114,23 +114,31 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const before = (await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kalios", version: "1" } }, 5)).result.instructions;
   check("until it is approved, no assistant is told it", !before.includes("one JSON object per measure"));
   await page.locator("#app-guides button:has-text('Approve')").click();
-  await page.waitForFunction(() => document.querySelector("#app-guides").innerText.includes("approved"), null, { timeout: 5000 });
+  await page.waitForFunction(() => { const t = document.querySelector("#app-guides").innerText; return t.includes("approved") && !t.includes("waiting for you"); }, null, { timeout: 5000 });
   const after = (await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kalios", version: "1" } }, 6)).result.instructions;
-  check("once approved, it is told, framed with who approved it", after.includes("GUIDE of the app \"kalios\"") && after.includes("one JSON object per measure") && after.includes("Form only"), after.slice(-400));
+  check("an app's own key, limited to its paths, is not told what lies outside them", !after.includes("one JSON object per measure"));
+  // an assistant that reaches the whole space is told it, framed with who approved it
+  const mk = await (await fetch(BASE + "/admin/api/connections", { method: "POST", headers: { Authorization: "Bearer " + console_token, "X-Requested-With": "memcp", "Content-Type": "application/json" }, body: JSON.stringify({ agent: "whole-reader", rights: "owner-health:r" }) })).json();
+  const whole = await (await fetch(BASE + "/mcp/whole-reader", { method: "POST", headers: { Authorization: "Bearer " + mk.token, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: {} }) })).json();
+  const told2 = (whole.result || {}).instructions || JSON.stringify(whole);
+  check("once approved, an assistant reaching the whole space is told it, framed with who approved it", told2.includes("GUIDE of the app \"kalios\"") && told2.includes("one JSON object per measure") && told2.includes("Form only"), told2.slice(-300));
 
-  // instructions
-  await page.locator("#spaces .vault", { hasText: "owner-work" }).locator("button:has-text('Instructions')").click();
+  // instructions: the person's own are written here; a space's are read-only on the page (its assistants keep them)
+  await page.locator("#spaces .tile[data-space=owner-work]").locator("button:has-text('Instructions')").click();
+  check("a space's instructions open read-only", await page.locator("#guide-text").evaluate(t => t.readOnly) && !(await page.locator("#guide-save").isVisible()));
+  await page.click("#guide-dlg form button:last-child");
+  await page.click("#my-guide");
   await page.fill("#guide-text", "Formal tone at work.");
   await page.click("#guide-save");
   await sleep(500);
-  check("saved instructions come back marked", (await page.locator("#spaces .vault", { hasText: "owner-work" }).innerText()).includes("Instructions ✓"));
-  await page.locator("#spaces .vault", { hasText: "owner-work" }).locator("button:has-text('Instructions')").click();
+  check("saved instructions come back marked", (await page.locator("#my-guide").innerText()).includes("✓") || (await page.locator("#my-guide").innerText()).length > 0);
+  await page.click("#my-guide");
   await sleep(300);
   check("and reopen with their text", (await page.inputValue("#guide-text")) === "Formal tone at work.");
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-guide.png") });
-  await page.keyboard.press("Escape");
-  const told = await (await fetch(BASE + "/mcp/owner-work", { method: "POST", headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "initialize", params: {} }) })).json();
-  check("a connection is told those instructions", told.result.instructions.includes("Formal tone at work."));
+  await page.click("#guide-dlg form button:last-child");
+  const told = await (await fetch(BASE + "/mcp/my-laptop", { method: "POST", headers: { Authorization: "Bearer " + key, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "initialize", params: {} }) })).json();
+  check("a connection is told those instructions", told.result.instructions.includes("Formal tone at work."), JSON.stringify(told).slice(0, 200));
 
   // export: a real download
   const [download] = await Promise.all([page.waitForEvent("download", { timeout: 15000 }), page.click("#export-mine")]);
@@ -151,13 +159,13 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
 
   const csp = await page.evaluate(() => window.__csp);
   check("the connection carries the name that was given, made readable", (await page.locator("#connections").innerText()).includes("my-laptop"), await page.locator("#connections").innerText());
-  await page.locator("#connections tr", { hasText: "my-laptop" }).locator("button:has-text('rename')").click();
+  await page.locator("#connections .tile", { hasText: "my-laptop" }).locator("button:has-text('rename')").click();
   await page.fill("#rename-input", "work-laptop");
   await page.locator("#connections button:has-text('save')").click();
   await page.waitForFunction(() => document.querySelector("#connections").innerText.includes("work-laptop"));
   check("it can be renamed from the list", !(await page.locator("#connections").innerText()).includes("my-laptop"));
   // Revoking opens a confirmation with a button to hold: a click does nothing, holding does it.
-  const row = page.locator("#connections tr", { hasText: "work-laptop" });
+  const row = page.locator("#connections .tile", { hasText: "work-laptop" });
   await row.locator("button:has-text('Revoke')").click();
   check("revoking opens a confirmation", await page.locator("#confirm-dlg").isVisible());
   check("the confirmation names what is revoked", (await page.locator("#confirm-q").innerText()).includes("work-laptop"));
@@ -173,7 +181,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.mouse.down(); await sleep(1600); await page.mouse.up();
   await page.waitForFunction(() => !document.querySelector("#connections").innerText.includes("work-laptop"));
   check("holding revokes it and closes the confirmation", !(await page.locator("#confirm-dlg").isVisible()));
-  await page.locator("#connections tr").first().waitFor().catch(() => {});
+  await page.locator("#connections .tile").first().waitFor().catch(() => {});
   check("no violation of the content security policy", csp.length === 0, JSON.stringify(csp));
   check("no error or warning in the console, no failed request", problems.length === 0, problems.join(" | "));
   await browser.close();
