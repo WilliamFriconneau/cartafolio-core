@@ -53,6 +53,9 @@ pub struct App {
     pub(crate) consents: Mutex<HashMap<String, (String, i64)>>,
     /// Requests to join, waiting for the person's answer (in memory only).
     pub(crate) joins: Mutex<HashMap<String, crate::join::Join>>,
+    /// Devices the person allowed in advance (a reinstalled phone): device name, lower case, to (person id, person
+    /// name, end of the permission). A request from such a device is allowed at once, once.
+    pub(crate) allowed_devices: Mutex<HashMap<String, (String, String, i64)>>,
     /// The `memcp-sync` programs this node started (joining a memory, keeping in step with a peer).
     pub(crate) children: Mutex<Vec<std::process::Child>>,
     /// The peers whose sync was started (by name).
@@ -107,6 +110,7 @@ impl App {
             node_name: "MemCP".into(),
             consents: Mutex::new(HashMap::new()),
             joins: Mutex::new(HashMap::new()),
+            allowed_devices: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
             synced: Mutex::new(std::collections::HashSet::new()),
         }

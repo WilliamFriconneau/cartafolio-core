@@ -98,6 +98,29 @@ pub fn request(app: &App, req: &Request) -> Response {
     let id = util::random_base32(12);
     let secret = util::random_base32(24);
     let check = phrase();
+    // A device the person allowed in advance joins at once, once: no words to compare.
+    let allowed = {
+        let mut a = app
+            .allowed_devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        a.retain(|_, (_, _, until)| *until > now);
+        a.remove(&device.to_lowercase())
+    };
+    let mut state = State::Waiting;
+    if let Some((user_id, user_name, _)) = allowed
+        && let Ok(ctl) = app.brain.open_control()
+        && let Ok((code, _)) = pairing::create_for_triage(&app.brain, &user_id, &user_name, now)
+        && let Ok(paired) = pairing::redeem(&ctl, &code, &device, now)
+    {
+        memcp_core::access::auth_event(&ctl, Some(&paired.agent), None, "joined", &device);
+        state = State::Approved(json!({
+            "agent": paired.agent,
+            "key": paired.token,
+            "mcp_url": format!("{}/mcp/{}", app.public_url, paired.agent),
+            "vaults": paired.vaults,
+        }));
+    }
     joins.insert(
         id.clone(),
         Join {
@@ -105,7 +128,7 @@ pub fn request(app: &App, req: &Request) -> Response {
             check: check.clone(),
             secret: secret.clone(),
             created: now,
-            state: State::Waiting,
+            state,
         },
     );
     Response::json(
@@ -168,7 +191,7 @@ pub fn pending(app: &App, _me: &User) -> Response {
 }
 
 /// `POST /join/approve` and `/join/deny` {id}: the person's answer. Allowing makes a connection of its own for the
-/// device, reaching the person's « À trier » only, like a bridge joined by a code.
+/// device, reading and writing every space of the person, as a peer.
 pub fn decide(
     app: &App,
     ctl: &Connection,
@@ -177,6 +200,28 @@ pub fn decide(
     body: &Value,
 ) -> Result<Value, Response> {
     let now = util::now();
+    if path == "/join/allow-device" {
+        // The person lets a device come back (a reinstalled phone) without the three words, for a while, once.
+        let device = clean_device(body.get("device").and_then(Value::as_str).unwrap_or(""));
+        let minutes = body
+            .get("minutes")
+            .and_then(Value::as_i64)
+            .unwrap_or(30)
+            .clamp(1, 1440);
+        let mut a = app
+            .allowed_devices
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
+        a.retain(|_, (_, _, until)| *until > now);
+        if a.len() >= 16 {
+            return Err(refused(429, "too many devices are allowed at once"));
+        }
+        a.insert(
+            device.to_lowercase(),
+            (me.id.clone(), me.name.clone(), now + minutes * 60),
+        );
+        return Ok(json!({ "result": "allowed", "device": device, "minutes": minutes }));
+    }
     let id = body
         .get("id")
         .and_then(Value::as_str)

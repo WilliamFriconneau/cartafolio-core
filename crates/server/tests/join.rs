@@ -257,3 +257,55 @@ fn requests_are_limited_per_address_and_in_all() -> Res {
     assert!(refused >= 1, "only so many requests wait at once");
     Ok(())
 }
+
+#[test]
+fn a_device_the_person_allowed_in_advance_joins_at_once_and_only_once() -> Res {
+    let e = env()?;
+    let _ = person(&e, "GET", "/state", json!({}));
+    // Nobody allowed it: it waits.
+    let first = asked(&e, "192.168.1.31", "Sam's phone");
+    assert!(first["check"].is_string());
+    let ok = person(
+        &e,
+        "POST",
+        "/join/allow-device",
+        json!({ "device": "Sam's Phone", "minutes": 10 }),
+    );
+    assert_eq!(ok.status, 200, "{}", ok.body_json());
+    let ask = asked(&e, "192.168.1.32", "Sam's phone");
+    let (id, secret) = (
+        ask["id"].as_str().ok_or("id")?.to_string(),
+        ask["secret"].as_str().ok_or("secret")?.to_string(),
+    );
+    let got = device(
+        &e,
+        "192.168.1.32",
+        "GET",
+        &format!("/join/{id}"),
+        &secret,
+        json!({}),
+    );
+    let j = got.body_json();
+    assert_eq!(j["state"], "approved", "{j}");
+    assert!(
+        j["join"]["key"]
+            .as_str()
+            .is_some_and(|k| k.starts_with("hcp_"))
+    );
+    // The permission was used up: the next request waits for a person.
+    let next = asked(&e, "192.168.1.33", "Sam's phone");
+    let (id2, secret2) = (
+        next["id"].as_str().ok_or("id")?.to_string(),
+        next["secret"].as_str().ok_or("secret")?.to_string(),
+    );
+    let w = device(
+        &e,
+        "192.168.1.33",
+        "GET",
+        &format!("/join/{id2}"),
+        &secret2,
+        json!({}),
+    );
+    assert_eq!(w.body_json()["state"], "waiting");
+    Ok(())
+}
