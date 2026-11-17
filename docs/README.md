@@ -11,6 +11,7 @@
 - [DESKTOP.md](DESKTOP.md), [CAPTURE.md](CAPTURE.md): the apps on a computer and the capture program.
 - [LINUX.md](LINUX.md): install, first run, upgrade, backup, firewall and TLS on a Linux server; [PARITY.md](PARITY.md): the add-on options and their `memcp.toml` counterparts.
 - [TAILSCALE.md](TAILSCALE.md), [DISCOVERY.md](DISCOVERY.md): reaching a node.
+- [ASSIST.md](ASSIST.md): the memory in a voice assistant (Home Assistant Assist, Siri), and the integrations block of the page (plan).
 - [MIGRATING.md](MIGRATING.md), [MERGE.md](MERGE.md): moving a memory, merging two.
 - [JANITOR.md](JANITOR.md), [VOCABULARIES.md](VOCABULARIES.md), [SPACES.md](SPACES.md), [LIVING-PAGES.md](LIVING-PAGES.md), [DASHBOARDS.md](DASHBOARDS.md), [VIEWS.md](VIEWS.md), [HEALTH-SOURCES.md](HEALTH-SOURCES.md): what the node does with what it holds.
 
