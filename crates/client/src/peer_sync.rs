@@ -397,6 +397,17 @@ impl Peer {
                 .map_err(|e| e.to_string())?;
             pass.pulled += done.applied;
             pass.disputed += done.disputed;
+            // What this node refused or gave up waiting for is said, never passed over in silence.
+            if let Some(line) = refusals(
+                "refused here",
+                done.rejected.iter().map(|(_, w)| w.as_str()),
+            ) {
+                pass.problems
+                    .push(format!("{}: pull: {line}", space.as_str()));
+            }
+            for g in &done.gave_up {
+                pass.problems.push(format!("{}: pull: {g}", space.as_str()));
+            }
             let next = page["next"].as_i64().unwrap_or(pulled);
             let head = page["head"].as_i64().unwrap_or(next);
             // Past what was dealt with only: an event waiting for another stops the cursor there.
@@ -457,6 +468,36 @@ impl Peer {
             let consumed = answer["consumed"]
                 .as_u64()
                 .map_or(page.events.len(), |c| c as usize);
+            // What the peer took without keeping is never counted as held by it: the window here keeps those notes.
+            let dealt = &page.events[..consumed.min(page.events.len())];
+            let unheld: Vec<String> = match answer["not_kept"].as_array() {
+                Some(list) => {
+                    let whys = list.iter().filter_map(|n| n["why"].as_str());
+                    if let Some(line) = refusals("refused by the peer", whys) {
+                        pass.problems
+                            .push(format!("{}: push: {line}", space.as_str()));
+                    }
+                    list.iter()
+                        .filter_map(|n| n["eid"].as_str().map(String::from))
+                        .collect()
+                }
+                // A peer of an earlier version says only how many it refused, not which: none of this page counts.
+                None if answer["malformed"].as_u64().unwrap_or(0) > 0 => {
+                    pass.problems.push(format!(
+                        "{}: push: {} event(s) refused by the peer (an earlier version, which does not say which)",
+                        space.as_str(),
+                        answer["malformed"]
+                    ));
+                    dealt.iter().map(|e| e.eid.clone()).collect()
+                }
+                None => vec![],
+            };
+            for g in answer["gave_up"].as_array().into_iter().flatten() {
+                if let Some(g) = g.as_str() {
+                    pass.problems.push(format!("{}: push: {g}", space.as_str()));
+                }
+            }
+            sync::note_unheld(brain, &self.name, space, &unheld).map_err(|e| e.to_string())?;
             let stopped = !answer["stopped"].is_null();
             let to = if stopped || consumed < page.events.len() {
                 page.events
@@ -473,6 +514,25 @@ impl Peer {
             }
         }
     }
+}
+
+/// One line for the events refused on one side, `None` when there are none: how many, and the first reasons.
+fn refusals<'a>(side: &str, whys: impl Iterator<Item = &'a str>) -> Option<String> {
+    let whys: Vec<&str> = whys.collect();
+    if whys.is_empty() {
+        return None;
+    }
+    let mut first: Vec<&str> = vec![];
+    for w in &whys {
+        if !first.contains(w) && first.len() < 3 {
+            first.push(w);
+        }
+    }
+    Some(format!(
+        "{} event(s) {side}: {}",
+        whys.len(),
+        first.join("; ")
+    ))
 }
 
 fn read(res: &mut ureq::http::Response<ureq::Body>) -> Result<Value, String> {

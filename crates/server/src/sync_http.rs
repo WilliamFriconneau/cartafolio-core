@@ -11,7 +11,8 @@
 //!   peer has and this node lacks (see `memcp_core::swarm`); or `{space, archived_at}`: the peer archived it.
 //! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L]`: the events of a space after the asker's cursor, never
 //!   the ones it sent itself.
-//! - `POST /mcp/<connection>/sync/events?space=S` `{events: [...]}`: events from the peer, applied here idempotently.
+//! - `POST /mcp/<connection>/sync/events?space=S` `{events: [...]}`: events from the peer, applied here idempotently; the
+//!   answer says which were dealt with (`consumed`) and which of those this node did not keep (`not_kept`, with why).
 //!
 //! Only the connection's own key is let in, and only on the spaces it reaches (read for pulling, write for pushing). The
 //! engine is `memcp_core::sync`; nothing here decides what a merge does.
@@ -275,6 +276,10 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                             // Dealt with, from the first; the rest waits for an event that has not arrived.
                             "consumed": done.consumed,
                             "stopped": done.stopped,
+                            // Dealt with but not kept here, each with why when it was refused: the sender does not
+                            // count them as held by this node (its window keeps what they are about).
+                            "not_kept": not_kept(&done),
+                            "gave_up": done.gave_up,
                         }),
                     )
                 }
@@ -283,6 +288,22 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         }
         _ => refused(404, "not found"),
     }
+}
+
+/// `[{eid, why}]`: the events dealt with but not kept, with the reason of a refusal (none for one left out of the
+/// window).
+fn not_kept(done: &sync::Applied) -> Vec<Value> {
+    done.not_kept
+        .iter()
+        .map(|eid| {
+            let why = done
+                .rejected
+                .iter()
+                .find(|(e, _)| e == eid)
+                .map(|(_, w)| w.as_str());
+            json!({ "eid": eid, "why": why })
+        })
+        .collect()
 }
 
 /// Whether the caller may offer spaces and archives: a machine of the person (`peer-…`) that reaches every space of

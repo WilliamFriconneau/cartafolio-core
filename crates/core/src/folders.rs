@@ -39,8 +39,8 @@ pub const CONFLICT_TAG: &str = "conflict";
 /// The subfolder that holds the space's files.
 pub const FILES_DIR: &str = "files";
 
-/// A file bigger than this is left alone (read whole into memory).
-const MAX_FILE: i64 = 100 * 1024 * 1024;
+/// A file bigger than this is left alone: the biggest a space keeps (see `files::MAX_BYTES`).
+const MAX_FILE: i64 = files::MAX_BYTES as i64;
 /// Deepest subfolder the engine goes into.
 const MAX_DEPTH: usize = 12;
 /// Most files one folder may hold for the engine.
@@ -1165,7 +1165,7 @@ impl Pass<'_> {
                     Kind::File,
                     String::new(),
                     &seen,
-                    "too big (over 100 MB)".into(),
+                    format!("too big (over {} MB)", MAX_FILE / 1024 / 1024),
                 )?;
                 continue;
             }

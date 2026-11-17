@@ -2,6 +2,21 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## The exchange between nodes keeps what it cannot place (next version)
+
+Everything is added; the protocol stays 1, and a node of an earlier version reads what it knows. See [FEDERATION.md](FEDERATION.md).
+
+- **`POST /sync/events`** answers two more fields: `not_kept: [{eid, why}]`, the events dealt with but not kept (`why` is the reason of a refusal, `null` for one left out of the receiver's window), and `gave_up: [text]`, what waited too many exchanges for an event that never came and went on without it. A pushing node counts no event of `not_kept` as held by that peer, so its window never prunes it; against a node of an earlier version, a page with refusals (`malformed` above 0) counts as not held at all.
+- **An event that needs one the receiver refused** is refused too (`why`: `it needs fact ID, which this node refused (...)`) instead of stopping the space for ever. One that stops ten exchanges on an event no peer sends goes on as if that note or file were outside the window.
+- **`file_retired`** carries `erased: true` for a recording erased after its transcription (a node of an earlier version gives the reason `erased: ...`, read the same): every node then erases its copy of the bytes, and no node sends them again (its `file_put` travels with `erased: true` and no `data`).
+- **A file is at most 24 MiB** (`files::MAX_BYTES`), whatever way it comes in (`file_put`, a watched folder, a space's folder): above, the answer is `invalid` (`the file is over 24 MB, ...`), and a folder's file is left alone. A file kept before this limit travels as its record alone. A page of events stays under its size unless it holds one event.
+- **A layout move under a parent space this node does not hold** waits aside and applies at a later exchange (it was refused and lost).
+- **A space of the peer named like a space of another person here** is never paired: the pass says `NAME is the name of a space of another person here: it is not exchanged`.
+- **Archive times** told by a peer (`archived` of `GET /sync/spaces`, `archived_at` of `POST /sync/spaces`) are held back to five minutes past the receiver's clock; a space brought back counts as begun after the archive it comes back from.
+- **The pass reports refusals on both sides** in its problems (`SPACE: pull: N event(s) refused here: ...`, `SPACE: push: N event(s) refused by the peer: ...`).
+- **A merge** (and a space deleted into another) logs everything it writes, so the other nodes get the merged space; a note that gains tags in a merge is replaced by a copy of itself with every tag.
+- Space migration 13 adds `sync_unheld`, `sync_rejected`, `sync_waiting` and `sync_deferred`. A received file is logged without its bytes (they live once, in the space's files).
+
 ## The command line reaches a running node (next version)
 
 Every command of `memcp` also runs against a node that is up, with a key ([CLI.md](CLI.md)). All routes are under `/admin/api`, authorised by a console key (`Authorization: Bearer hcpc_...`), with `X-Requested-With: memcp` on a POST, and audited.

@@ -368,3 +368,51 @@ fn only_a_peer_of_the_person_offers_a_space_and_another_persons_key_stays_in_the
     assert!(users::is_space_owner(&ctl, &music, &carol).unwrap());
     assert!(!users::is_space_owner(&ctl, &music, &h.robin).unwrap());
 }
+
+#[test]
+fn a_space_of_the_peer_never_merges_into_a_space_of_another_person_of_the_same_name() {
+    let l = laptop();
+    let h = home();
+    let (address, key) = join(&h, &h.robin, "laptop");
+    let to_home = Peer::new(&address, &key, "peer-home");
+
+    // At home, robin keeps a space; on the laptop, another human who is also called robin has one of the same name.
+    let home_garden = h
+        .brain
+        .add_custom_space(&h.robin, "robin", "Garden", None)
+        .unwrap();
+    note(&h.brain, &home_garden, "Robin at home: the apple tree");
+    let other = users::create_user(
+        &l.brain.open_control().unwrap(),
+        "test",
+        "robin",
+        "Robin",
+        false,
+    )
+    .unwrap()
+    .id;
+    let laptop_garden = l
+        .brain
+        .add_custom_space(&other, "robin", "Garden", None)
+        .unwrap();
+    assert_eq!(home_garden, laptop_garden);
+    note(&l.brain, &laptop_garden, "The other robin: a private line");
+
+    let p = to_home.sync_once(&l.brain, util::now()).unwrap();
+    // The clash is said, and nothing crosses either way.
+    assert!(
+        p.problems
+            .iter()
+            .any(|x| x.contains(home_garden.as_str()) && x.contains("another person")),
+        "{:?}",
+        p.problems
+    );
+    assert_eq!(
+        active(&l.brain, &laptop_garden),
+        ["The other robin: a private line"]
+    );
+    assert_eq!(
+        active(&h.brain, &home_garden),
+        ["Robin at home: the apple tree"]
+    );
+}
