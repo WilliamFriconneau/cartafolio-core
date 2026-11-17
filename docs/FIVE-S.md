@@ -34,4 +34,4 @@ These names look like leftovers and are not. They are on disk, on the wire or in
 
 ## Last pass
 
-Removed: nothing was unused (no compiler warning, no unused dependency, no public item named once); one dependency moved to dev-dependencies. Merged: the two copies of the rules-list cleaner (tool and page) became `facts::clean_rules_list`. Renamed: *vault* to *space* and *bridge* to *capture program* in identifiers, comments, messages and docs.
+17 November 2026. Removed: the Hermes plugin (an assistant connects through the MCP, one way in for all), the handover notes that had no place in a public repository. Linked from the index: CRUD, CONFORMITY, this document. README: what is built and what is planned, said as it is. Renamed: *bridge* and *vault* left in the capture program's comments, messages, help and tests became *capture program* and *space* (the names kept on purpose above stay).

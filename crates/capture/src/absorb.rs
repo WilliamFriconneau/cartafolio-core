@@ -1,5 +1,5 @@
-//! Absorbing a folder of notes: the bridge reads the Markdown files of a folder the person keeps up to date (synced to
-//! this machine) and sends **what is new in them** to the inbox of a vault, tagged `inbox/absorb`. The server's janitor
+//! Absorbing a folder of notes: the capture program reads the Markdown files of a folder the person keeps up to date (synced to
+//! this machine) and sends **what is new in them** to the inbox of a space, tagged `inbox/absorb`. The server's janitor
 //! then draws short, dated facts out of each piece, in the note's own words: what is memorised is the information, not
 //! a copy of the files.
 //!
@@ -391,7 +391,7 @@ pub fn absorb(
     Ok(report)
 }
 
-/// Where proposals of a vault are put down as files: the facts under `tag` (`proposals/pro`) of `vault`, one file each, in
+/// Where proposals of a space are put down as files: the facts under `tag` (`proposals/pro`) of `space`, one file each, in
 /// `dir` (a folder an assistant that only reads files sees: the work assistant, say).
 #[derive(Clone, Debug)]
 pub struct Delivery {
@@ -477,8 +477,8 @@ pub fn deliver(
     Ok(n)
 }
 
-/// Proposes the app guide that tells the assistants of `d.vault` what a proposal for this folder is (once per text: the
-/// person approves it on the memory's page, then every assistant of the vault is told). Only for `proposals/<name>`.
+/// Proposes the app guide that tells the assistants of `d.space` what a proposal for this folder is (once per text: the
+/// person approves it on the memory's page, then every assistant of the space is told). Only for `proposals/<name>`.
 pub fn propose_guide(client: &mut Client, d: &Delivery, state_dir: &Path, report: &mut Absorbed) {
     if !d.tag.starts_with("proposals/") {
         return;

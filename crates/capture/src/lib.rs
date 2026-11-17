@@ -2,8 +2,8 @@
 //! it goes. Nothing else is stored here: no copy of the memory, no database, only the outbox.
 //!
 //! Everything goes **into « À trier »**, the person's one box for everything that comes in, which belongs to no
-//! vault: the bridge never chooses one, its key reaches only that box. The server's janitor sends each capture to the
-//! inbox of a vault and files it there; the bridge transcribes the recordings. A capture that is already text is complete: it is never rewritten.
+//! space: the capture program never chooses one, its key reaches only that box. The server's janitor sends each capture to the
+//! inbox of a space and files it there; the capture program transcribes the recordings. A capture that is already text is complete: it is never rewritten.
 //!
 //! - [`Intake::submit_text`], [`Intake::submit_file`], [`Intake::submit_audio`] write the capture to the
 //!   outbox before they return;
@@ -295,7 +295,7 @@ pub fn connection_outbox(root: &Path, url: &str) -> PathBuf {
 }
 
 /// Moves the captures left in the outbox all connections shared before (`old`, its `queue` folder) into `new`, all of
-/// them, whatever vault they were made for: they go to « À trier » like any capture. How many moved. Safe to call at
+/// them, whatever space they were made for: they go to « À trier » like any capture. How many moved. Safe to call at
 /// every start: once moved, there is nothing left to move.
 pub fn adopt_old_captures(old: &Path, new: &Path) -> Result<u32, Error> {
     let queue = old.join("queue");
@@ -316,7 +316,7 @@ pub fn adopt_old_captures(old: &Path, new: &Path) -> Result<u32, Error> {
     Ok(n)
 }
 
-/// A client of the memory for this bridge: it never refuses the person's address (they are warned instead).
+/// A client of the memory for this capture program: it never refuses the person's address (they are warned instead).
 pub fn client_for(url: &str, key: &str) -> Client {
     let mut c = Client::new(url, key);
     c.allow_clear = true;
@@ -750,7 +750,7 @@ impl Intake {
 
     fn send(&self, client: &mut Client, entry: &mut Entry) -> Result<(), ClientError> {
         let p = &entry.payload.clone();
-        // No space is named: the key reaches only « À trier ». A capture made for a vault, before, goes there too.
+        // No space is named: the key reaches only « À trier ». A capture made for a space, before, goes there too.
         match entry.kind {
             Kind::Text => {
                 for text in p["texts"]

@@ -1,4 +1,4 @@
-//! Private files and folders, on every system (the same helpers as the core's `fsx`: the bridge does not depend on
+//! Private files and folders, on every system (the same helpers as the core's `fsx`: the capture program does not depend on
 //! the core, so it keeps its own copy).
 
 use std::fs;

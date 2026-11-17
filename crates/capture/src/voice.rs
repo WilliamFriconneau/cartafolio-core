@@ -43,7 +43,7 @@ fn now() -> i64 {
         .map_or(0, |d| i64::try_from(d.as_secs()).unwrap_or(0))
 }
 
-/// What the passes remember: `{files: {file_id: {vault, name, done_at, parts, of, fails, erase_fails, erased}}}`.
+/// What the passes remember: `{files: {file_id: {space, name, done_at, parts, of, fails, erase_fails, erased}}}`.
 struct State {
     file: PathBuf,
     data: Value,
@@ -193,7 +193,7 @@ pub fn waiting(client: &mut Client) -> Result<Vec<(String, u64, i64)>, ClientErr
         .collect())
 }
 
-/// One pass over the inboxes of `vaults`: recordings transcribed, old ones erased.
+/// One pass over the inboxes of `spaces`: recordings transcribed, old ones erased.
 pub fn transcribe(
     client: &mut Client,
     vaults: &[String],
@@ -497,7 +497,7 @@ fn mark_failed(client: &mut Client, state: &mut State, id: &str, report: &mut Vo
 }
 
 /// The recordings whose text is old enough, wherever it was filed: erased. The text is found by the recording's id, which
-/// it carries (« audio <name> (<id>) »), so a note filed in another vault, or corrected since, is found too.
+/// it carries (« audio <name> (<id>) »), so a note filed in another space, or corrected since, is found too.
 fn erase_old(client: &mut Client, state: &mut State, report: &mut VoiceReport) {
     let due: Vec<(String, i64)> = state.data["files"]
         .as_object()

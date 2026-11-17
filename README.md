@@ -43,7 +43,7 @@ These hold for every part of MemCP: the server, the apps, the tools. The screens
 - **Old folders are a library.** Years of a drive or of daily notes are mounted read-only and indexed, never filed or rewritten; what is searched, opened or cited is raised into the memory. Originals keep their format.
 - **Health is the one paid part, set up by a nurse.** The free app does everything above. *MemCP Health* adds a health space already organised by a registered nurse: Apple Health synchronised, notes tagged by themselves, targets to follow, conditions followed over time, and the dashboards a nurse would read. The help screen, the red-flag checks and the export for a health professional (a PDF laid out as nurses hand over, SBAR) stay free.
 
-Planned, with a design written for each in [docs/](docs/): folders of Markdown and files mounted as spaces, locking a space with a passphrase or a key, nodes that synchronise with each other like peers (so that sync and backup are one thing), and one configuration screen that is the same on every system. Nothing in this list is built yet.
+Built: nodes that synchronise as peers (a phone holds a window of thirty days), living boards in every space, a deterministic router whose keywords the janitor improves, the map of every peer and how it is reached. Planned, with a design written for each in [docs/](docs/): locking a space with a passphrase or a key ([ENCRYPTION.md](docs/ENCRYPTION.md)), and signed sync events ([FEDERATION.md](docs/FEDERATION.md)).
 
 ## Install
 

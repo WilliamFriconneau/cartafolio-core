@@ -13,10 +13,10 @@
 //!
 //! A refused key is never queued: the assistant is told so.
 //!
-//! The bridge also has tools of its own, which are never passed on: `capture_text`, `capture_file` (the file is read
+//! The capture program also has tools of its own, which are never passed on: `capture_text`, `capture_file` (the file is read
 //! here, so its bytes never go through the assistant), `outbox_status` and `outbox_flush`. `capture_file` only reads
 //! inside the folders the person named (`with_capture_dirs`), never a hidden folder, and is not offered at all until
-//! one is named: an assistant, or a page it was told to read, cannot make the bridge send any file of the disk.
+//! one is named: an assistant, or a page it was told to read, cannot make the capture program send any file of the disk.
 
 use std::io::{BufRead, Write};
 use std::path::{Component, Path, PathBuf};
@@ -28,7 +28,7 @@ use serde_json::{Value, json};
 
 use crate::{Config, Error, Flush, Intake, State};
 
-const BUFFER_NOTE: &str = "\n\nThis connection goes through a bridge on this computer. When the network is down, `remember` (with the tag `inbox`), `deposit` and `file_put` are kept here and sent when it is back: the answer then says `queued`, not `created`, and nothing is written in the memory yet. Every other tool needs the network.";
+const BUFFER_NOTE: &str = "\n\nThis connection goes through the capture program on this computer. When the network is down, `remember` (with the tag `inbox`), `deposit` and `file_put` are kept here and sent when it is back: the answer then says `queued`, not `created`, and nothing is written in the memory yet. Every other tool needs the network.";
 
 const OFFLINE: &str = "The network is down: this tool needs it. Try again when it is back.";
 
@@ -41,7 +41,7 @@ pub struct Gateway {
     capture_roots: Vec<PathBuf>,
 }
 
-/// The tools the bridge has of its own.
+/// The tools the capture program has of its own.
 const LOCAL: [&str; 4] = [
     "capture_text",
     "capture_file",
@@ -188,7 +188,7 @@ impl Gateway {
         if !result.is_object() {
             result = offline_tools();
         }
-        // The bridge's own tools come after the memory's.
+        // The capture program's own tools come after the memory's.
         let mut local = local_tools();
         if self.capture_roots.is_empty() {
             local.retain(|t| t["name"] != "capture_file");
@@ -257,7 +257,7 @@ impl Gateway {
         }
     }
 
-    /// One of the bridge's own tools: the result of the call (never an error of the protocol).
+    /// One of the capture program's own tools: the result of the call (never an error of the protocol).
     fn local_tool(&mut self, tool: &str, args: &Value) -> Value {
         match tool {
             "capture_text" => {
@@ -344,7 +344,7 @@ impl Gateway {
     /// system resolves the path (a link that leads out is out).
     fn allowed_file(&self, path: &str) -> Result<PathBuf, String> {
         if self.capture_roots.is_empty() {
-            return Err("capture_file is off: no folder was named. Start the bridge with --capture-dir DIR.".into());
+            return Err("capture_file is off: no folder was named. Start the capture program with --capture-dir DIR.".into());
         }
         let p = Path::new(path);
         if !p.is_absolute() {
@@ -355,7 +355,7 @@ impl Gateway {
             .capture_roots
             .iter()
             .find(|r| real.starts_with(r))
-            .ok_or("this file is outside the folders the bridge may read from.")?;
+            .ok_or("this file is outside the folders the capture program may read from.")?;
         let inside = real.strip_prefix(root).unwrap_or(&real);
         let hidden = inside
             .components()
@@ -363,7 +363,7 @@ impl Gateway {
         if hidden || !real.is_file() {
             return Err("only an ordinary, visible file can be captured.".into());
         }
-        // Never the bridge's own folder (its queue, the memory's answers), never a file only its owner may read (a key, a
+        // Never the capture program's own folder (its queue, the memory's answers), never a file only its owner may read (a key, a
         // settings file: what keeps them private is exactly that), never something that holds a key.
         if self
             .intake
@@ -372,7 +372,7 @@ impl Gateway {
             .canonicalize()
             .is_ok_and(|o| real.starts_with(o))
         {
-            return Err("this file is the bridge's own.".into());
+            return Err("this file is the capture program's own.".into());
         }
         #[cfg(unix)]
         {
@@ -433,7 +433,7 @@ impl Gateway {
 
 /// What an assistant sees of the tools when it starts offline and has never seen the memory's list.
 fn offline_tools() -> Value {
-    let space = json!({ "type": "string", "description": "The vault." });
+    let space = json!({ "type": "string", "description": "The space." });
     json!({ "tools": [
         { "name": "remember", "description": "Keeps a note. Offline, only with the tag `inbox`: kept here and sent when the network is back.",
           "inputSchema": { "type": "object", "properties": { "text": { "type": "string" }, "space": space,
@@ -454,11 +454,11 @@ fn flush_json(r: &Flush) -> Value {
     })
 }
 
-/// The bridge's own tools, as an assistant sees them.
+/// The capture program's own tools, as an assistant sees them.
 fn local_tools() -> Vec<Value> {
     vec![
         json!({ "name": "capture_text",
-            "description": "Puts a note into À trier, the person's box for everything that comes in (the memory sorts it into a vault): kept on this computer first, sent at once if the memory can be reached, else when it can. The date is added. Use it for a quick idea or a fact to file later; it is never rewritten.",
+            "description": "Puts a note into À trier, the person's box for everything that comes in (the memory sorts it into a space): kept on this computer first, sent at once if the memory can be reached, else when it can. The date is added. Use it for a quick idea or a fact to file later; it is never rewritten.",
             "inputSchema": { "type": "object", "properties": { "text": { "type": "string" } }, "required": ["text"] } }),
         json!({ "name": "capture_file",
             "description": "Puts a file of this computer (a recording, a document) into the inbox: the file is read here, so give its full path, not its content. Only files inside the folders the person allowed, and never hidden ones. A recording that arrives without text is transcribed by the server.",

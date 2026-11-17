@@ -17,5 +17,7 @@
 **How it works inside**
 - [MODEL.md](MODEL.md), [STORAGE.md](STORAGE.md), [FEDERATION.md](FEDERATION.md) (peers and sync), [ENCRYPTION.md](ENCRYPTION.md) (planned), [LOCAL-TOOLS.md](LOCAL-TOOLS.md), [CONFIG-UI.md](CONFIG-UI.md).
 
+- [CRUD.md](CRUD.md): what can be created, read, changed and removed (spaces, nodes, connections, people, notes).
+
 **Project**
-- [RELAIS.md](RELAIS.md): the state of the work. [reviews/](reviews/): security and code reviews.
+- [CONFORMITY.md](CONFORMITY.md): how a Linux server meets these documents. [FIVE-S.md](FIVE-S.md): the 5S pass of the code, rerun before a release. [reviews/](reviews/): security and code reviews. [CHANGELOG.md](../CHANGELOG.md): what each version changed.

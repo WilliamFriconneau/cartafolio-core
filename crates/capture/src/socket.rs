@@ -104,7 +104,7 @@ fn serve_one(gateway: &Mutex<Gateway>, stream: UnixStream) -> std::io::Result<()
 pub fn connect(path: &Path) -> Result<(), Error> {
     let stream = UnixStream::connect(path).map_err(|e| {
         Error::Io(format!(
-            "the bridge's socket cannot be opened ({e}): is the bridge running, and is this account allowed?"
+            "the capture program's socket cannot be opened ({e}): is it running, and is this account allowed?"
         ))
     })?;
     let mut to_bridge = stream.try_clone().map_err(|e| Error::Io(e.to_string()))?;

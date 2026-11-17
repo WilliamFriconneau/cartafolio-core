@@ -1,5 +1,5 @@
 //! An assistant that knows neither the memory's address nor its key: the settings file, the socket and `connect`; and a
-//! folder absorbed into a vault, with names replaced by posts and proposals put down as files.
+//! folder absorbed into a space, with names replaced by posts and proposals put down as files.
 #![cfg(unix)]
 // A setup that fails is a test that fails: `expect` says where.
 #![allow(clippy::expect_used)]
@@ -14,7 +14,7 @@ use std::process::{Command, Stdio};
 use common::{memory, unique};
 use serde_json::{Value, json};
 
-fn bridge() -> Command {
+fn capture() -> Command {
     let mut c = Command::new(env!("CARGO_BIN_EXE_memcp-capture"));
     for v in [
         "MEMCP_URL",
@@ -56,7 +56,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     );
     // Readable by others: refused, and the address is not said.
     let open = settings(&dir, &conf_body, 0o644);
-    let o = bridge()
+    let o = capture()
         .args(["status", "--config"])
         .arg(&open)
         .output()
@@ -65,7 +65,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     assert!(String::from_utf8_lossy(&o.stderr).contains("chmod 600"));
     let conf = settings(&dir, &conf_body, 0o600);
     // An address on the command line next to the file: refused.
-    let o = bridge()
+    let o = capture()
         .args(["status", "--url", "http://127.0.0.1:1/mcp/x", "--config"])
         .arg(&conf)
         .output()
@@ -73,7 +73,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     assert_eq!(o.status.code(), Some(2));
 
     let sock = dir.join("bridge.sock");
-    let mut gw = bridge()
+    let mut gw = capture()
         .arg("--config")
         .arg(&conf)
         .arg("--socket")
@@ -100,7 +100,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     );
 
     // The assistant's side: `connect PATH`, nothing else, no key, no address.
-    let mut c = bridge()
+    let mut c = capture()
         .arg("connect")
         .arg(&sock)
         .stdin(Stdio::piped())
@@ -144,7 +144,7 @@ fn an_assistant_reaches_the_memory_through_a_socket_knowing_only_its_path() {
     let shared = unique("shared");
     std::fs::create_dir_all(&shared).expect("dir");
     std::fs::set_permissions(&shared, std::fs::Permissions::from_mode(0o777)).expect("chmod");
-    let o = bridge()
+    let o = capture()
         .arg("--config")
         .arg(&conf)
         .arg("--socket")
@@ -198,7 +198,7 @@ fn a_folder_is_absorbed_new_text_only_names_become_posts_and_proposals_come_back
         0o600,
     );
     let run = |extra: &[&str]| {
-        let o = bridge()
+        let o = capture()
             .arg("absorb")
             .args(extra)
             .arg("--config")
@@ -258,7 +258,7 @@ fn a_folder_is_absorbed_new_text_only_names_become_posts_and_proposals_come_back
         .app
         .brain
         .open_space(&memcp_core::Space::new("sam-me").expect("space"))
-        .expect("vault")
+        .expect("space")
         .query_row(
             "SELECT count(*) FROM app_guides WHERE app = 'key-0' AND text LIKE '%proposals/pro%'",
             [],

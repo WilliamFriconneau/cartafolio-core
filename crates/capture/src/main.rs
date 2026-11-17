@@ -3,7 +3,7 @@
 //! - `memcp-capture [gateway]`: the memory's tools on standard input and output, for an assistant that runs a
 //!   command. Writes without a decision are kept while the network is down.
 //! - `memcp-capture send FILE...`, `text TEXT`: put captures into « À trier », the person's one box for everything
-//!   that comes in (kept first, sent at once if the memory can be reached). The bridge never chooses a vault.
+//!   that comes in (kept first, sent at once if the memory can be reached). The capture program never chooses a space.
 //! - `memcp-capture flush`, `status`: send what waits; list what waits and what went.
 //!
 //! - `memcp-capture --config FILE --socket PATH`: the gateway on a Unix socket, run as a user of its own; `memcp-capture connect
@@ -31,8 +31,8 @@ const USAGE: &str = "usage: memcp-capture [gateway|send|text|flush|status|retry|
   status                 what waits and what was sent, with the id of each
   retry [ID]             put a refused item (or all of them) back in the queue, and send
   forget ID              drop an item that waits, or take one off the list
-  absorb [all]           with --config: send what is new in the folders of `absorb = FOLDER -> VAULT` to their inbox
-                         (the janitor draws facts from it), and put down the proposals of `deliver = VAULT TAG -> FOLDER`
+  absorb [all]           with --config: send what is new in the folders of `absorb = FOLDER -> SPACE` to their inbox
+                         (the janitor draws facts from it), and put down the proposals of `deliver = SPACE TAG -> FOLDER`
                          as files. The first pass only takes stock, unless `all`. Run it on a timer
   transcribe             with --config: read the recordings that reached the inboxes of `transcribe = SPACE, ...` (the
                          person's À trier, `<person>-a-trier`, where the devices put them) with
@@ -82,7 +82,7 @@ fn keychain(url: &str) -> Option<String> {
     })
 }
 
-/// The key from a file only its owner can read: a key in a file that others can read is no longer the bridge's alone.
+/// The key from a file only its owner can read: a key in a file that others can read is no longer the capture program's alone.
 fn read_key_file(file: &std::path::Path) -> Result<String, String> {
     private_file(file)?;
     let key = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -100,7 +100,7 @@ struct FileConfig {
     capture_dirs: Vec<PathBuf>,
     absorb: Vec<memcp_capture::AbsorbSource>,
     deliver: Vec<memcp_capture::Delivery>,
-    /// The vaults whose recordings are transcribed here, and how.
+    /// The spaces whose recordings are transcribed here, and how.
     transcribe: Vec<String>,
     voice: memcp_capture::VoiceSettings,
 }
@@ -166,11 +166,11 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
             "vault" => {}
             "outbox" => outbox = Some(home_path(&v)),
             "capture_dir" => dirs.push(home_path(&v)),
-            // `absorb = ~/Notes/Work -> work`: a folder whose new text goes to the inbox of a vault.
+            // `absorb = ~/Notes/Work -> work`: a folder whose new text goes to the inbox of a space.
             "absorb" => {
                 let (d, vlt) = v
                     .split_once("->")
-                    .ok_or(format!("{}: absorb = FOLDER -> VAULT", file.display()))?;
+                    .ok_or(format!("{}: absorb = FOLDER -> SPACE", file.display()))?;
                 absorb.push(memcp_capture::AbsorbSource {
                     dir: home_path(d.trim()),
                     vault: vlt.trim().to_string(),
@@ -201,15 +201,15 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
                     .map_err(|e| format!("absorb_roles {}: {e}", path.display()))?;
                 roles = memcp_capture::read_roles(&text);
             }
-            // `deliver = work proposals/pro -> ~/Notes/Work/Ideas`: proposals of a vault put down as files.
+            // `deliver = work proposals/pro -> ~/Notes/Work/Ideas`: proposals of a space put down as files.
             "deliver" => {
                 let (what, d) = v
                     .split_once("->")
-                    .ok_or(format!("{}: deliver = VAULT TAG -> FOLDER", file.display()))?;
+                    .ok_or(format!("{}: deliver = SPACE TAG -> FOLDER", file.display()))?;
                 let (vlt, tag) = what
                     .trim()
                     .split_once(' ')
-                    .ok_or(format!("{}: deliver = VAULT TAG -> FOLDER", file.display()))?;
+                    .ok_or(format!("{}: deliver = SPACE TAG -> FOLDER", file.display()))?;
                 deliver.push(memcp_capture::Delivery {
                     vault: vlt.trim().to_string(),
                     tag: tag.trim().to_string(),
@@ -223,7 +223,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
         a.exclude.clone_from(&exclude);
         a.protect.clone_from(&protect);
         a.roles.clone_from(&roles);
-        // What the bridge puts down in a folder it also absorbs is not sent back.
+        // What the capture program puts down in a folder it also absorbs is not sent back.
         for d in &deliver {
             if let Ok(rel) = d.dir.strip_prefix(&a.dir) {
                 a.exclude.push(rel.to_string_lossy().into_owned());
@@ -578,7 +578,7 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
     let outbox = a.outbox.clone().unwrap_or_else(|| {
         let root = default_outbox();
         let folder = memcp_capture::connection_outbox(&root, &url);
-        // Captures left in the folder all connections shared before, whatever vault they were made for, come here.
+        // Captures left in the folder all connections shared before, whatever space they were made for, come here.
         match memcp_capture::adopt_old_captures(&root, &folder) {
             Ok(0) => {}
             Ok(n) => eprintln!(
@@ -668,7 +668,7 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
         "absorb" => {
             if absorbing.0.is_empty() && absorbing.1.is_empty() {
                 return Err(
-                    "absorb needs --config with `absorb = FOLDER -> VAULT` (or `deliver = ...`)"
+                    "absorb needs --config with `absorb = FOLDER -> SPACE` (or `deliver = ...`)"
                         .into(),
                 );
             }

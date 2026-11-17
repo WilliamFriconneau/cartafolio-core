@@ -261,7 +261,7 @@ fn the_gateway_passes_the_memory_through_and_remembers_what_it_said() {
     );
     assert!(
         instr.contains("kept here and sent when it is back"),
-        "and what the bridge adds"
+        "and what the capture program adds"
     );
     assert!(
         g.handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
@@ -346,7 +346,7 @@ fn the_gateway_offline_starts_keeps_the_writes_without_a_decision_and_says_what_
             "outbox_status",
             "outbox_flush"
         ],
-        "never seen the memory's list: the three that can wait, then the bridge's own (no capture_file without a folder)"
+        "never seen the memory's list: the three that can wait, then the capture program's own (no capture_file without a folder)"
     );
 
     let q = send(
