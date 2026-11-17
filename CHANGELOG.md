@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.21
+
+- **A device joined to the swarm shares its person's Inbox and spaces**, whatever the person is called on each node: the sync works for the person who owns the spaces of this node, not for a fixed internal user. What a pass could not do is kept and shown (`last_pass` in the sync status).
+
 ## 20261117.0.19
 
 - Adding a node from any node, like Syncthing: each node has an id and a link (QR); a request shows the same three words on both sides and on every peer of the person; an introducer ticket needs no words; the page lists this node, the nodes and the requests, the older codes are under Advanced (routes and forms in docs/CHANGELOG-API.md).
