@@ -1,5 +1,12 @@
 # Changelog
 
+## 20261117.0.6
+
+- The bridge is now the capture program: crates `memcp-capture` and `memcp-capture-ffi`, binary `memcp-capture` (the commands are the same).
+- A replica can hold only the last N days (`memcp-sync --window-days N`; pruning is local and never touches what no peer has acknowledged).
+- A device the person allowed in advance joins at once, once (`/join/allow-device`).
+- The page: machines first with live peers, folders, French and English, light and dark, a first screen with two choices, keywords and targets of a space.
+
 ## 20261117.0.5
 
 - The add-on uses the host network and advertises the node (mDNS), so the apps on the same network find it without an address; option `node_name`. memcp-sync ships in the image.
