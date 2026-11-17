@@ -130,9 +130,70 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
             "counts": counts,
             "tags": tags,
             "dashboard": dashboard,
-            "rules": read_rules(&conn).1,
+            "rules": rules_view(app, ctl, me, &space, &conn),
+            "rules_history": rules_history(&conn),
         }),
     )
+}
+
+/// The rules of a space, with which keywords it shares with another of the person's spaces: a keyword only this
+/// space lists is *unique* and files a note here at once; a shared one only scores.
+fn rules_view(app: &App, ctl: &Connection, me: &User, space: &Space, conn: &Connection) -> Value {
+    let mut rules = read_rules(conn).1;
+    let mine = clean_list(rules.get("keywords"), 100, false);
+    let mut shared: Vec<String> = vec![];
+    if let Ok(reach) = users::access_of(ctl, &me.id) {
+        for other in reach.keys().filter(|s| *s != space) {
+            let Ok(c) = app.brain.open_space(other) else {
+                continue;
+            };
+            let theirs = clean_list(read_rules(&c).1.get("keywords"), 100, false);
+            shared.extend(mine.iter().filter(|k| theirs.contains(k)).cloned());
+        }
+    }
+    shared.sort();
+    shared.dedup();
+    rules["shared"] = json!(shared);
+    rules
+}
+
+/// Who changed the filing rules, when, and what the keywords and tags were each time (newest first).
+fn rules_history(conn: &Connection) -> Vec<Value> {
+    let Some(id) = read_rules(conn).0 else {
+        return vec![];
+    };
+    let chain = facts::history(conn, &id).unwrap_or_default();
+    let mut out = vec![];
+    let mut before: (Vec<String>, Vec<String>) = (vec![], vec![]);
+    let mut reason: Option<String> = None;
+    for f in &chain {
+        let doc = serde_json::from_str::<Value>(f.text.trim()).unwrap_or(Value::Null);
+        let now = (
+            clean_list(doc.get("keywords"), 100, false),
+            clean_list(doc.get("tags"), 100, true),
+        );
+        let diff = |a: &[String], b: &[String]| -> (Vec<String>, Vec<String>) {
+            (
+                b.iter().filter(|x| !a.contains(x)).cloned().collect(),
+                a.iter().filter(|x| !b.contains(x)).cloned().collect(),
+            )
+        };
+        let (kw_added, kw_removed) = diff(&before.0, &now.0);
+        let (tag_added, tag_removed) = diff(&before.1, &now.1);
+        // The reason a version was made is written on the version it replaced.
+        let janitor = f.author.contains("janitor")
+            || reason.as_deref().is_some_and(|r| r.contains("janitor"));
+        out.push(json!({
+            "by": f.author, "at": iso(f.created_at), "janitor": janitor,
+            "keywords_added": kw_added, "keywords_removed": kw_removed,
+            "tags_added": tag_added, "tags_removed": tag_removed,
+        }));
+        before = now;
+        reason = f.status_reason.clone();
+    }
+    out.reverse();
+    out.truncate(30);
+    out
 }
 
 /// The dashboard of a space, with no model: a JSON document (DASHBOARDS.md) kept in the space as an

@@ -359,6 +359,8 @@ fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
         None
     };
     let app = Arc::new(app);
+    // The peers this node keeps in step with, started again with it.
+    memcp_server::replica::resume(&app);
     let identity = match flag("--identity-listen") {
         Some(addr) => {
             let trusted: Option<std::net::IpAddr> = match flag("--identity-trust") {

@@ -6,7 +6,7 @@ A durable memory for your AI assistants (Claude, Gemini, a local model), served 
 
 1. Set the options (below) and start the add-on, then open **Memory** in the sidebar.
 2. The first Home Assistant user who opens it becomes the administrator and gets a memory of their own. **Every other Home Assistant user who opens it gets a memory of their own at once**, empty and private: nobody else reads it, and the administrator sees only that they exist. With `new_people: ask`, a user you did not add waits instead, and you let them in (or not) under "Waiting to be let in".
-3. On their page, a person makes their vaults (for instance *me*, *health*, *work*, *home*), connects assistants with "Connect an assistant", writes their instructions, and can export everything. The administrator also sees the people.
+3. A person with no memory yet sees exactly two choices: **Start a memory** (the spaces personal, health, home, finances, hobbies and work are made, the person is named, and one address that carries the key connects an assistant) or **Join a memory** (the address of another node, or one found on the network, then three words compared on both machines). Each path has at most four steps, with the progress shown. Afterwards the page opens on the machines that hold the memory, live, then the spaces, the keywords and targets of each, and "Connect an assistant". Joining another memory needs the `memcp-sync` program, shipped in this add-on. The administrator also sees the people.
 
 | option | meaning |
 |---|---|

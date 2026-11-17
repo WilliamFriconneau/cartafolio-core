@@ -1353,3 +1353,55 @@ fn the_timeline_counts_what_each_vault_received_per_slice() -> Res {
     assert_eq!(get("1")["bucket_secs"], 75);
     Ok(())
 }
+
+#[test]
+fn starting_a_memory_makes_the_default_spaces_once_and_names_the_person() -> Res {
+    let e = env()?;
+    let _ = state(&e, SAM);
+    let r = ha(
+        &e,
+        "POST",
+        "/admin/api/start",
+        SAM,
+        json!({ "name": "Sam Q" }),
+    );
+    assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
+    for s in ["personal", "health", "home", "finances", "hobbies", "work"] {
+        assert!(e.app.brain.has_space(&sp(s))?, "{s}");
+    }
+    // Again: nothing is made twice, nothing fails.
+    let again = ha(
+        &e,
+        "POST",
+        "/admin/api/start",
+        SAM,
+        json!({ "name": "Sam Q" }),
+    );
+    assert_eq!(again.status, 200);
+    assert_eq!(again.body_json()["made"], json!([]));
+    assert_eq!(state(&e, SAM)["me"]["display"], json!("Sam Q"));
+    Ok(())
+}
+
+#[test]
+fn the_page_reads_the_live_peers_and_the_nodes_found() -> Res {
+    let e = env()?;
+    let _ = state(&e, SAM);
+    let r = ha(&e, "GET", "/admin/api/sync/status", SAM, json!({}));
+    assert_eq!(r.status, 200);
+    assert!(r.body_json()["peers"].is_array());
+    let d = ha(&e, "GET", "/admin/api/discover", SAM, json!({}));
+    assert_eq!(d.status, 200);
+    assert!(d.body_json()["nodes"].is_array());
+    // A join to a bad address is refused with words, and nothing is started.
+    let j = ha(
+        &e,
+        "POST",
+        "/admin/api/join-memory",
+        SAM,
+        json!({ "address": "not an address" }),
+    );
+    assert_eq!(j.status, 400);
+    assert!(state(&e, SAM)["node"]["version"].is_string());
+    Ok(())
+}

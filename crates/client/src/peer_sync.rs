@@ -199,3 +199,55 @@ fn read(res: &mut ureq::http::Response<ureq::Body>) -> Result<Value, String> {
             .map_or_else(|| format!("HTTP {status}"), String::from))
     }
 }
+
+/// A request to join another memory, as the asking machine holds it.
+#[derive(Debug, Clone)]
+pub struct JoinAsk {
+    pub id: String,
+    pub secret: String,
+    /// The three words the person compares on both machines.
+    pub check: String,
+}
+
+fn join_agent() -> ureq::Agent {
+    ureq::Agent::config_builder()
+        .http_status_as_error(false)
+        .max_redirects(0)
+        .timeout_connect(Some(Duration::from_secs(10)))
+        .timeout_global(Some(Duration::from_secs(30)))
+        .build()
+        .into()
+}
+
+/// Asks the node at `server` to let this machine join (`POST /join`): a person there compares the three words and
+/// answers. Nothing is joined until they do.
+pub fn join_request(server: &str, device: &str) -> Result<JoinAsk, String> {
+    let server = server.trim().trim_end_matches('/');
+    let mut res = join_agent()
+        .post(&format!("{server}/join"))
+        .header("Content-Type", "application/json")
+        .send(json!({ "device": device }).to_string().as_bytes())
+        .map_err(|e| format!("unreachable: {e}"))?;
+    let v = read(&mut res)?;
+    let field = |k: &str| {
+        v[k].as_str()
+            .map(String::from)
+            .ok_or_else(|| format!("no {k} in the answer"))
+    };
+    Ok(JoinAsk {
+        id: field("id")?,
+        secret: field("secret")?,
+        check: field("check")?,
+    })
+}
+
+/// Where the request stands: `{state: waiting | denied | expired}` or `{state: approved, join: {agent, key, mcp_url}}`.
+pub fn join_poll(server: &str, ask: &JoinAsk) -> Result<Value, String> {
+    let server = server.trim().trim_end_matches('/');
+    let mut res = join_agent()
+        .get(&format!("{server}/join/{}", ask.id))
+        .header("X-Join-Secret", &ask.secret)
+        .call()
+        .map_err(|e| format!("unreachable: {e}"))?;
+    read(&mut res)
+}

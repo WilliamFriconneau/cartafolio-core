@@ -219,6 +219,21 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
+            "/sync/status" => match memcp_core::sync::status(&app.brain, now) {
+                Ok(list) => Response::json(
+                    200,
+                    &json!({ "peers": list.iter().map(crate::sync_http::status_json).collect::<Vec<_>>() }),
+                ),
+                Err(e) => fail(e),
+            },
+            "/discover" => Response::json(200, &crate::replica::discover(app)),
+            "/join-memory" => match crate::replica::join_state(
+                app,
+                req.query.get("id").map(String::as_str).unwrap_or(""),
+            ) {
+                Ok(v) => Response::json(200, &v),
+                Err(m) => err(404, &m),
+            },
             "/pairing/status" => crate::explore::pairing_status(&ctl, &me, req, now),
             "/timeline" => timeline(app, &ctl, &me, req, now),
             "/file" => file_bytes(app, &ctl, &me, req),
@@ -434,6 +449,15 @@ fn action(
             let token = access::console_token(ctl, &t.id).map_err(fail)?;
             Ok(json!({ "token": token }))
         }
+        "/start" => {
+            let name = body.get("name").and_then(Value::as_str).unwrap_or("");
+            crate::replica::start(app, ctl, me, name).map_err(fail)
+        }
+        "/join-memory" => crate::replica::join_start(
+            app,
+            body.get("address").and_then(Value::as_str).unwrap_or(""),
+        )
+        .map_err(|m| err(400, &m)),
         "/spaces" => {
             // A vault comes from a kind of the catalogue, named after the person.
             let space = app
@@ -1031,6 +1055,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                 vec![]
             },
             "public_url": app.public_url,
+            "node": { "name": app.node_name, "version": env!("CARGO_PKG_VERSION") },
             "catalogue": app.brain.catalogue()?.iter().map(|k| json!({
                 "key": k.key, "label": k.label, "description": k.description,
                 "feature": k.feature.map(|f| f.word()),

@@ -183,7 +183,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     }
 }
 
-fn status_json(p: &sync::PeerStatus) -> Value {
+pub(crate) fn status_json(p: &sync::PeerStatus) -> Value {
     let done: i64 = p.spaces.iter().map(|s| s.done).sum();
     let total: i64 = p.spaces.iter().map(|s| s.total).sum();
     json!({
