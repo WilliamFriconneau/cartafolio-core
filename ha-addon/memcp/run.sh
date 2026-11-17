@@ -22,6 +22,10 @@ fi
 
 ARGS=(--data "$DATA" --language "$LANGUAGE" serve --listen 0.0.0.0:8791 --allow-remote
       --ingress-listen 0.0.0.0:8099 --trust-ingress 172.30.32.2)
+# Found without typing an address: the node advertises itself on the local network (host network, see DOCS.md).
+NODE_NAME="MemCP"
+if bashio::config.has_value 'node_name'; then NODE_NAME="$(bashio::config 'node_name')"; fi
+ARGS+=(--advertise --node-name "$NODE_NAME")
 ADMINS=$(bashio::config 'admins' | paste -sd, -)
 # Every Home Assistant user gets a memory of their own unless asked otherwise.
 if bashio::config.has_value 'new_people'; then ARGS+=(--new-people "$(bashio::config 'new_people')"); fi

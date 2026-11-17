@@ -93,3 +93,7 @@ the bridge, where the speech model is, transcribes them.
 
 It makes its own connection, `janitor`, reaching all the person's vaults, the first time it starts; its key stays in the
 app's data. With an API, what it reads leaves the house for that service: choose one whose terms you accept.
+
+## Found without typing an address
+
+The app uses the host network, so that the node advertises itself on the local network (service `_memcp._tcp`). An app on the same network finds it by itself and asks to join; the person answers on the page after comparing three words. `node_name` is the name shown to the apps. A phone or computer on another network (another VLAN, another site) does not see the advertisement: use the tailnet address or type the address.

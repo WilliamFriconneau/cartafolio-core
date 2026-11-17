@@ -7,6 +7,8 @@ arch:
   - amd64
   - aarch64
 init: false
+# The host network lets the node advertise itself (mDNS) so that the apps find it without an address.
+host_network: true
 startup: services
 boot: auto
 ingress: true
@@ -29,6 +31,7 @@ map:
 hassio_api: false
 homeassistant_api: false
 options:
+  node_name: MemCP
   language: en
   admins: []
   new_people: auto
@@ -55,6 +58,7 @@ options:
   transcribe_api_key: ""
   transcribe_language: ""
 schema:
+  node_name: str?
   language: list(en|fr)
   admins:
     - str
