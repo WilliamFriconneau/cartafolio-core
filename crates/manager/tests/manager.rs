@@ -706,3 +706,63 @@ fn each_memory_of_the_installation_goes_by_its_name_and_says_how_it_is_reached()
     assert!(kinds.contains(&"lan"), "{kinds:?}");
     Ok(())
 }
+
+#[test]
+fn a_peer_of_a_person_who_is_not_the_first_administrator_invites_a_device() -> Res {
+    let d = Dir::new("invite-second");
+    let m = two_people(&d)?;
+    // Lou is not the first administrator; a peer of Lou's asks for a ticket.
+    let peer = key(&m, "lou", "peer-lou-mac-0001", "all")?;
+    let auth = format!("Bearer {peer}");
+    let r = m.handle(&rq(
+        "POST",
+        "/mcp/lou/peer-lou-mac-0001/join/invite",
+        &[
+            ("authorization", &auth),
+            ("content-type", "application/json"),
+        ],
+        "{}",
+    ));
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let ticket = r.body_json()["ticket"]
+        .as_str()
+        .ok_or("ticket")?
+        .to_string();
+    // The new device asks at the root with the ticket: it reaches Lou's installation, not Alice's.
+    let asked = m.handle(&rq(
+        "POST",
+        "/join",
+        &[("content-type", "application/json")],
+        &json!({ "device": "Lou's iPhone", "ticket": ticket }).to_string(),
+    ));
+    assert_eq!(asked.status, 200, "{}", asked.body_json());
+    let id = asked.body_json()["id"].as_str().ok_or("id")?.to_string();
+    let secret = asked.body_json()["secret"]
+        .as_str()
+        .ok_or("secret")?
+        .to_string();
+    let polled = m.handle(&rq(
+        "GET",
+        &format!("/join/{id}"),
+        &[("x-join-secret", &secret)],
+        "",
+    ));
+    assert_eq!(polled.status, 200, "{}", polled.body_json());
+    assert_eq!(
+        polled.body_json()["state"],
+        "approved",
+        "{}",
+        polled.body_json()
+    );
+    let agent = polled.body_json()["join"]["agent"]
+        .as_str()
+        .ok_or("agent")?
+        .to_string();
+    let lou = m.person_app("lou").ok_or("lou")?;
+    let ctl = lou.brain.open_control()?;
+    assert!(
+        access::list(&ctl)?.iter().any(|c| c.agent == agent),
+        "the device joined Lou's memory"
+    );
+    Ok(())
+}

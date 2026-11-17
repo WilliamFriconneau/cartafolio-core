@@ -268,6 +268,22 @@ pub fn decide(
     Ok(json!({ "result": "approved", "connection": paired.agent }))
 }
 
+/// Whether the ticket of a `POST /join` body is held, valid, by this installation (the manager routes the request to it).
+pub(crate) fn holds_ticket(app: &App, body: &[u8]) -> bool {
+    let Some(t) = serde_json::from_slice::<Value>(body)
+        .ok()
+        .and_then(|b| b.get("ticket").and_then(Value::as_str).map(str::to_string))
+    else {
+        return false;
+    };
+    let now = util::now();
+    app.tickets
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .get(&ticket_key(&t))
+        .is_some_and(|(_, _, until)| *until > now)
+}
+
 /// The hash a ticket is kept under (the ticket itself is never stored).
 fn ticket_key(ticket: &str) -> String {
     use sha2::{Digest, Sha256};

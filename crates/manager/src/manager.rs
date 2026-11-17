@@ -613,12 +613,13 @@ impl Handler for Manager {
             if let Some((who, after)) = rest.split_once('/')
                 && let Some(app) = self.person_app(who)
             {
-                // `<connection>`, or `<connection>/sync/<op>` (the synchronisation between peers).
+                // `<connection>`, `<connection>/sync/<op>` (the synchronisation between peers) or
+                // `<connection>/join/invite` (a peer inviting another device of the person).
                 let (agent, tail) = after.split_once('/').unwrap_or((after, ""));
                 if tail.is_empty()
                     || (base == "/mcp/"
-                        && tail.starts_with("sync/")
-                        && !tail["sync/".len()..].contains('/'))
+                        && ((tail.starts_with("sync/") && !tail["sync/".len()..].contains('/'))
+                            || tail == "join/invite"))
                 {
                     let mut inner = req.clone();
                     inner.path = if tail.is_empty() {
@@ -653,8 +654,19 @@ impl Handler for Manager {
                     &self.node_name.read().map(|n| n.clone()).unwrap_or_default(),
                 ),
             ),
-            ("POST", "/join") => reply(&self.joiner()),
-            ("GET", p) if p.starts_with("/join/") => reply(&self.joiner()),
+            // An invitation ticket is kept by the person's installation that made it: the request goes there, else a
+            // ticket made for anyone but the first administrator was « unknown ». The polls follow their request.
+            ("POST", "/join") => match self.holder(|a| a.holds_join_ticket(&req.body)) {
+                Some(app) => reply(&app),
+                None => reply(&self.joiner()),
+            },
+            ("GET", p) if p.starts_with("/join/") => {
+                let id = &p["/join/".len()..];
+                match self.holder(|a| a.holds_join_request(id)) {
+                    Some(app) => reply(&app),
+                    None => reply(&self.joiner()),
+                }
+            }
             _ => reply(&self.by_secret(req)),
         }
     }

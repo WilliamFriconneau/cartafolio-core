@@ -545,6 +545,19 @@ impl App {
         crate::pair::holds(self, body)
     }
 
+    /// The invitation ticket of a `POST /join` body, still valid here (each person's installation keeps its own).
+    pub fn holds_join_ticket(&self, body: &[u8]) -> bool {
+        crate::join::holds_ticket(self, body)
+    }
+
+    /// A join request this installation answered (`GET /join/<id>`).
+    pub fn holds_join_request(&self, id: &str) -> bool {
+        self.joins
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(id)
+    }
+
     /// The code or refresh token of an OAuth token request.
     pub fn holds_oauth_grant(&self, body: &[u8]) -> bool {
         crate::oauth::holds_grant(self, body)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.10
+
+- **Device invitation on a multi-person installation:** the invite of a peer reached at `/mcp/<person>/<connection>/join/invite` is passed to that person's memory, and `POST /join` with a ticket (and its polls) goes to the memory that made the ticket. Before, a ticket was looked for in the first administrator's memory only and was « unknown » for everyone else.
+
 ## 20261117.0.9
 
 - **Peer directory, as the apps read it:** the node's internal connections are not listed among the assistants; a connection used through Tailscale Funnel is in the cloud; each memory of a multi-person installation goes by the installation's name and says how it can be reached.
