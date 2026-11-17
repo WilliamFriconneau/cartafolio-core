@@ -5,10 +5,8 @@ Thank you for looking. This is a small project with a clear purpose: a memory fo
 ## Build and test
 
 ```sh
-cargo fmt --all --check
-cargo clippy --all-targets -- -D warnings
-cargo test --workspace
-cargo deny check        # advisories, licences, bans, sources (deny.toml)
+scripts/check.sh          # format, lints, tests, dependency checks (the same steps as the CI)
+scripts/check.sh quick    # format and lints only
 ```
 
 These must pass. The add-on binaries are built with `ha-addon/build.sh` (needs `cross` and Docker).

@@ -1,7 +1,7 @@
-# Reviews by the server session, 2 and 3 November 2026
+# Code reviews, 2 and 3 November 2026
 
-Three read-only reviews (the server and core changes, the janitor, the bridge) were run on 2 November, next to the Mac
-session's review (`memcp-capture/docs/reviews/2026-11-02-code-review.md`). Their results were not reported to the owner at
+Three read-only reviews (the server and core changes, the janitor, the bridge) were run on 2 November, next to another
+review (`memcp-capture/docs/reviews/2026-11-02-code-review.md`). Their results were not reported to the owner at
 the time; this file is that report, with what was done since.
 
 ## Fixed
@@ -32,4 +32,4 @@ the time; this file is that report, with what was done since.
 - Core: migrations are not run in an immediate transaction; multi-step file writes are not atomic; an export fails on a
   leftover temporary file; a few silent discards (`let _ =`) hide storage errors.
 - CI: third-party actions pinned by tag, not by commit.
-- The rest of the low items of the Mac session's review.
+- The rest of the low items of the Mac review.
