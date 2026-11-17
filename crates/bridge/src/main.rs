@@ -616,7 +616,6 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
                     return Err("--socket needs a Unix socket: use --listen on this system".into());
                 }
             } else if let Some(addr) = &a.listen {
-                eprintln!("memcp-bridge: serving POST /mcp on {addr}, this machine only");
                 serve_http(&mut gateway, addr).map_err(|e| e.to_string())?;
             } else {
                 gateway

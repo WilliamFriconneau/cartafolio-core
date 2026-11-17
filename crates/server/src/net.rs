@@ -245,7 +245,8 @@ fn serve_server<H: Handler>(
             }));
         }
     }
-    eprintln!("{banner} listening on http://{}", l.listen);
+    // The address really bound: the port is the system's when `listen` asks for port 0.
+    eprintln!("{banner} listening on http://{}", server.server_addr());
     let mut workers = vec![];
     for _ in 0..l.threads.clamp(1, 16) {
         let (server, app) = (Arc::clone(&server), Arc::clone(&app));

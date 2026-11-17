@@ -545,6 +545,35 @@ fn the_bank_statement_tools_follow_the_money_vault_and_its_rights() -> Res {
 
 // --- the binary on a real socket -----------------------------------------------------------
 
+/// Starts `memcp serve` on port 0 and returns the child and the port it was given (read from its first line on the
+/// standard error), so no port is chosen here and left free for another program to take.
+fn serve_on_a_free_port(
+    bin: &str,
+    dir: &std::path::Path,
+    extra: &[&str],
+) -> Result<(std::process::Child, u16), Box<dyn Error>> {
+    use std::io::{BufRead, BufReader};
+    let mut child = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(dir)
+        .args(["serve", "--listen", "127.0.0.1:0"])
+        .args(extra)
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let mut reader = BufReader::new(child.stderr.take().ok_or("no stderr")?);
+    let mut line = String::new();
+    reader.read_line(&mut line)?;
+    // Keep reading: a closed pipe would make the server's next message fail.
+    std::thread::spawn(move || for _ in reader.lines() {});
+    let port = line
+        .trim()
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.parse().ok())
+        .ok_or_else(|| format!("no port in {line:?}"))?;
+    Ok((child, port))
+}
+
 struct Child(std::process::Child, PathBuf);
 
 impl Drop for Child {
@@ -605,22 +634,8 @@ fn the_real_server_on_a_real_socket() -> Res {
         "unknown space"
     );
 
-    let port = std::net::TcpListener::bind("127.0.0.1:0")?
-        .local_addr()?
-        .port();
-    let child = std::process::Command::new(bin)
-        .arg("--data")
-        .arg(&dir)
-        .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
     let srv = Child(child, dir.clone());
-    for _ in 0..50 {
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
     let (head, body) = http(
         port,
         "GET /health HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n",
@@ -1238,28 +1253,8 @@ fn a_slow_or_keyless_big_body_holds_no_worker() -> Res {
             .status
             .success()
     );
-    let port = std::net::TcpListener::bind("127.0.0.1:0")?
-        .local_addr()?
-        .port();
-    let child = std::process::Command::new(bin)
-        .arg("--data")
-        .arg(&dir)
-        .args([
-            "serve",
-            "--listen",
-            &format!("127.0.0.1:{port}"),
-            "--threads",
-            "1",
-        ])
-        .stderr(std::process::Stdio::null())
-        .spawn()?;
+    let (child, port) = serve_on_a_free_port(bin, &dir, &["--threads", "1"])?;
     let _srv = Child(child, dir.clone());
-    for _ in 0..50 {
-        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            break;
-        }
-        std::thread::sleep(Duration::from_millis(100));
-    }
     // A big body with no key: refused from its declared size, before it is sent.
     let (head, _) = http(
         port,
