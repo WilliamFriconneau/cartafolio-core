@@ -30,7 +30,8 @@ mod overview;
 mod sorting;
 mod tagging;
 
-const WRITE_TOOLS: [&str; 14] = [
+const WRITE_TOOLS: [&str; 15] = [
+    "notes_move",
     "space_create",
     "space_move",
     "living_set",
@@ -227,6 +228,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "label": { "type": "string" }, "parent": { "type": "string" } }, "required": ["space"] }),
             });
         }
+        out.push(ToolDef {
+            name: "notes_move",
+            description: "Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. Write access on both spaces is needed.".into(),
+            schema: json!({ "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "tag": { "type": "string" }, "dry_run": { "type": "boolean", "description": "Default true: preview only." } }, "required": ["from", "to", "tag"] }),
+        });
         out.push(ToolDef {
             name: "rules_set",
             description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.".into(),
@@ -1162,6 +1168,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         "tags_suggest" => crate::tools::tagging::tags_suggest(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
+        "notes_move" => crate::tools::sorting::notes_move(brain, caller, name, args),
         "rules_get" | "rules_set" => crate::tools::sorting::rules(brain, caller, name, args),
         "space_create" | "space_move" => space_layout(brain, caller, name, args),
         "library_search" => {

@@ -142,3 +142,9 @@ to-sort box on Linux).
 - **Fields**: a level or a measure said in the text is a field, stored as a tag `field/<name>/<value>` (`/` in the value is a path level, the decimal point is `_`: `field/level/2/10`, `field/tension/12/8`, `field/poids/72_5`). Every fact returned by the tools now has `"fields": {name: value}` read back from those tags (`recall`, `read_fact`, `living_get` cards and delta, the journal rows).
 - **Learning**: a change of tags (page, `tags_set`, `supersede` with different tags) or a send from À trier teaches the node; two corrections make a word sure. `learn: false` on `tags_set` keeps a correction from teaching.
 - **MCP `living_get`**: `first_pass: true` while no pass was ever recorded (then `behind` counts every note of the space). `living_set`: a pass that does not say `covers` has read up to the moment it writes.
+
+## 20261117.0.18
+
+- **MCP `notes_move`** (write) `{from, to, tag, dry_run?}` -> `{from, to, tag, dry_run, matched, moved, left, failed, sample}`: moves the notes under a tag from one space to another (copy, then the original is retired with the reason « moved to … »), as the page's « move this tag ». `dry_run` defaults to true. Write access on both spaces is needed.
+- **MCP `space_create` / `space_move`**: documented in docs/TOOLS.md (they were already in 0.17).
+- The keyword learning ignores a larger list of empty words (French, English, Spanish).

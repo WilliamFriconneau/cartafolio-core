@@ -571,3 +571,108 @@ fn a_connection_to_all_spaces_makes_and_moves_a_sub_space() -> Res {
     assert!(tools::call(&b, &one, "space_create", &json!({ "label": "X" })).is_err());
     Ok(())
 }
+
+#[test]
+fn notes_move_previews_then_moves_the_notes_of_a_tag_and_keeps_the_originals() -> Res {
+    let t = Temp::new("notes-move");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let a = tools::call(&b, &c, "space_create", &json!({ "label": "Alpha" }))?;
+    // A connection sees the spaces that exist when it authenticates: connect again after each one.
+    let c = caller(&b, "assistant1", "all")?;
+    let z = tools::call(&b, &c, "space_create", &json!({ "label": "Zulu" }))?;
+    let (a, z) = (
+        a["space"]["space"]
+            .as_str()
+            .or(a["space"]["name"].as_str())
+            .ok_or("a")?
+            .to_string(),
+        z["space"]["space"]
+            .as_str()
+            .or(z["space"]["name"].as_str())
+            .ok_or("z")?
+            .to_string(),
+    );
+    let c = caller(&b, "assistant2", "all")?;
+    remember(
+        &b,
+        &c,
+        &a,
+        "2026-11-17, first fire drill report",
+        &["drills"],
+    )?;
+    remember(
+        &b,
+        &c,
+        &a,
+        "2026-11-18, ladder inspection and pump pressure results",
+        &["drills"],
+    )?;
+    remember(
+        &b,
+        &c,
+        &a,
+        "2026-11-19, a note about groceries and bread",
+        &["other"],
+    )?;
+    let preview = tools::call(
+        &b,
+        &c,
+        "notes_move",
+        &json!({ "from": a, "to": z, "tag": "drills" }),
+    )?;
+    assert_eq!(preview["dry_run"], true);
+    assert_eq!(preview["matched"], 2, "{preview}");
+    assert_eq!(preview["moved"], 0, "a preview moves nothing: {preview}");
+    let done = tools::call(
+        &b,
+        &c,
+        "notes_move",
+        &json!({ "from": a, "to": z, "tag": "drills", "dry_run": false }),
+    )?;
+    assert_eq!(done["moved"], 2, "{done}");
+    let there = tools::call(
+        &b,
+        &c,
+        "recall",
+        &json!({ "space": z, "query": "", "tags": ["drills"], "limit": 10 }),
+    )?;
+    assert_eq!(
+        there["results"].as_array().map(Vec::len),
+        Some(2),
+        "{there}"
+    );
+    let left = tools::call(
+        &b,
+        &c,
+        "recall",
+        &json!({ "space": a, "query": "", "tags": ["drills"], "limit": 10 }),
+    )?;
+    assert!(
+        left["results"]
+            .as_array()
+            .is_none_or(|r| r.iter().all(|x| x["status"] != "active")),
+        "the originals are retired, not erased: {left}"
+    );
+    // The same space on both sides, and a key that cannot write on both, are refused.
+    assert!(
+        tools::call(
+            &b,
+            &c,
+            "notes_move",
+            &json!({ "from": a, "to": a, "tag": "x" })
+        )
+        .is_err()
+    );
+    let one = caller(&b, "one", &format!("{a}:rw"))?;
+    assert!(
+        tools::call(
+            &b,
+            &one,
+            "notes_move",
+            &json!({ "from": a, "to": z, "tag": "x" })
+        )
+        .is_err()
+    );
+    Ok(())
+}

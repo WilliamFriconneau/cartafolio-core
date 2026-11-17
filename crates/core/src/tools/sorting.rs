@@ -262,3 +262,38 @@ pub(super) fn transcription_failed(
     let f = crate::files::mark_transcription_failed(brain, &space, id, failed)?;
     Ok(json!({ "result": if failed { "marked" } else { "cleared" }, "file": f.to_json() }))
 }
+
+/// `notes_move`: the notes under a tag go to another space (copy and retire), as the page does.
+#[allow(unused_variables)]
+pub(super) fn notes_move(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    let get = |k: &str| {
+        args.get(k)
+            .and_then(Value::as_str)
+            .ok_or_else(|| ToolError::Invalid(format!("{k}: required")))
+    };
+    let from = Space::new(get("from")?)?;
+    let to = Space::new(get("to")?)?;
+    let tag = get("tag")?;
+    if from == to {
+        return Err(ToolError::Invalid(
+            "a note cannot move to the space it is in".into(),
+        ));
+    }
+    for s in [&from, &to] {
+        if !caller.can_write(s) || caller.read_paths(s).is_some() {
+            return Err(ToolError::Invalid(format!("no write access to {s}")));
+        }
+    }
+    let dry = args.get("dry_run").and_then(Value::as_bool).unwrap_or(true);
+    let moved = brain.move_by_tag(&from, &to, tag, &caller.agent, dry)?;
+    Ok(json!({
+        "from": from.as_str(), "to": to.as_str(), "tag": tag, "dry_run": dry,
+        "matched": moved.matched, "moved": moved.moved, "left": moved.left,
+        "failed": moved.failed, "sample": moved.sample,
+    }))
+}

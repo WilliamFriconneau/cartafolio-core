@@ -555,6 +555,32 @@ Example call and answer:
 { "result": "updated", "space": { "name": "firefighting", "label": "Fire", "parent": null, "kind": "custom", "position": 0 } }
 ```
 
+### `notes_move`
+
+Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. Write access on both spaces is needed.
+
+- **Seen with:** write access on at least one space; not offered to a key limited to paths.
+- **Answer:** `{ from, to, tag, dry_run, matched, moved, left, failed, sample }`.
+- **Errors:** `invalid` for the same space on both sides or a bad tag; `denied` without write access on both.
+- **Effects:** with `dry_run: false`, writes the copies in the target and retires the originals.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `dry_run` | boolean | no | default true |
+| `from` | string | yes | - |
+| `tag` | string | yes | - |
+| `to` | string | yes | - |
+
+Example call and answer:
+
+```json
+{ "name": "notes_move", "arguments": { "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": true } }
+```
+
+```json
+{ "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": true, "matched": 12, "moved": 0, "left": 0, "failed": 0, "sample": [] }
+```
+
 ### `rules_set`
 
 Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.
