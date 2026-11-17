@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.19
+
+- Adding a node from any node, like Syncthing: each node has an id and a link (QR); a request shows the same three words on both sides and on every peer of the person; an introducer ticket needs no words; the page lists this node, the nodes and the requests, the older codes are under Advanced (routes and forms in docs/CHANGELOG-API.md).
+
 ## 20261117.0.18
 
 - `notes_move`: move the notes of a tag to another space by MCP; `space_create` and `space_move` documented.
