@@ -158,3 +158,24 @@ fn a_note_filed_on_two_nodes_before_they_meet_is_one_note() -> Res {
     }
     Ok(())
 }
+
+#[test]
+fn a_box_offered_by_a_peer_of_another_person_never_takes_a_space_of_this_one() -> Res {
+    let t = Temp::new("swarm-other-box");
+    let (a, own_box) = node(&t, "alma")?;
+    let garage = a.add_custom_space(OWNER, "alma", "Garage", None)?;
+    let bob = memcp_core::users::create_user(&a.open_control()?, OWNER, "bob", "Bob", false)?;
+    // A peer of Bob, who has no box here, offers « À trier » under the names of the owner's spaces.
+    for name in [&garage, &own_box] {
+        let offer = Offer::from_json(&serde_json::json!({
+            "space": name.as_str(), "kind": memcp_core::catalogue::TRIAGE,
+            "label": null, "parent": null, "position": 0, "since": 1,
+        }))?;
+        assert!(swarm::accept(&a, &bob.id, &offer).is_err(), "{name} taken");
+    }
+    // The owner's space keeps its kind, and the owner's box stays the one it was.
+    assert_eq!(a.space_kind(&garage)?, "custom");
+    assert_eq!(triage::of(&a, OWNER)?, Some(own_box));
+    assert_eq!(triage::of(&a, &bob.id)?, None);
+    Ok(())
+}
