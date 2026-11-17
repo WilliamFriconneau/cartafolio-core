@@ -45,7 +45,12 @@ fn texts(b: &Brain, space: &Space) -> Vec<String> {
 
 /// The server node: one person, one space, a peer connection; served over HTTP on a free port.
 fn server() -> (Brain, String, String, std::path::PathBuf) {
-    let dir = temp("server");
+    // One folder per server: the tests run side by side.
+    static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let dir = temp(&format!(
+        "server-{}",
+        N.fetch_add(1, std::sync::atomic::Ordering::SeqCst)
+    ));
     let brain = Brain::init(&dir, &[], Language::English).expect("init");
     let token = {
         let ctl = brain.open_control().expect("control");
@@ -143,4 +148,44 @@ fn two_nodes_end_with_the_same_memory_and_a_second_pass_changes_nothing() {
 
     let _ = std::fs::remove_dir_all(sdir);
     let _ = std::fs::remove_dir_all(mdir);
+}
+
+/// After a copy larger than a page (the peer's own events are never sent back), a note written here leaves on the
+/// next pass, not dozens of passes later: a page holding only the peer's events does not end the push.
+#[test]
+fn a_note_written_after_a_large_copy_leaves_on_the_next_pass() {
+    let (srv, address, token, _sdir) = server();
+    let space = Space::new("sam-me").expect("space");
+    // Words that never repeat, so no note is held as a near duplicate of another.
+    let word = |n: usize| -> String {
+        let mut n = n * 2654435761 % 1_000_003;
+        (0..6)
+            .map(|_| {
+                let c = (b'a' + (n % 26) as u8) as char;
+                n /= 26;
+                c
+            })
+            .collect()
+    };
+    for i in 0..1200 {
+        write(
+            &srv,
+            &space,
+            &format!("{} {} {}", word(i * 3), word(i * 3 + 1), word(i * 3 + 2)),
+        );
+    }
+    let mdir = temp("mac-large");
+    let mac = Brain::init(&mdir, &[], Language::English).expect("mac");
+    let peer = Peer::new(&address, &token, "peer-server");
+    let first = peer.sync_once(&mac, NOW).expect("first pass");
+    assert!(first.problems.is_empty(), "{:?}", first.problems);
+    assert_eq!(first.pulled, 1200);
+    write(&mac, &space, "Written on the Mac after the large copy");
+    let second = peer.sync_once(&mac, NOW + 60).expect("second pass");
+    assert_eq!(second.pushed, 1, "{second:?}");
+    assert!(
+        texts(&srv, &space)
+            .iter()
+            .any(|t| t.contains("after the large copy"))
+    );
 }

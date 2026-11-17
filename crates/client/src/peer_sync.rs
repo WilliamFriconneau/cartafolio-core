@@ -200,6 +200,11 @@ impl Peer {
                     sync::set_cursor(brain, &self.name, space, Cursor::Pushed, page.next)
                         .map_err(|e| e.to_string())?;
                 }
+                // A page of events that came from this peer (none to send back) is not the end: after a large copy
+                // from it, this node's own notes wait further on.
+                if page.more && page.next > pushed {
+                    continue;
+                }
                 let _ = sync::note_transfer(
                     brain, &self.name, space, "sending", page.head, page.head, now,
                 );

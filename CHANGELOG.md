@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.12
+
+- **Sync:** after a copy larger than a page, a note written on this node leaves on the next pass. A page holding only the peer's own events no longer ended the push, so a new note waited dozens of passes (found by an end-to-end test against a real memory; a test now copies 1 200 notes then writes one).
+
 ## 20261117.0.11
 
 - **The page in four sections**, the same as every app (docs/UI-SPEC.md, rewritten): *Trace or drop* (write, record or attach, into À trier, which every memory now has from the start), *Journal*, *Spaces* (health is a space among them), *Settings* (machines, assistants, tools, safety, activity, files, advanced).
