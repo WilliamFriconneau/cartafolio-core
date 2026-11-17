@@ -698,8 +698,16 @@ CREATE TABLE folder_state (
 /// read conservatively: `console` for the admin page's keys; `oauth` for the connections an OAuth consent made (they
 /// hold a refresh token, whose row follows a rename); `peer` only for the connections a pairing code or a join request
 /// made, which the node recorded itself: the code's row names the connection it made (`pairings.agent`), and the audit
-/// says `paired` or `joined` with its name, followed through every later `rename` (`detail` holds the old name). Every
-/// other row, whatever its name, is an `assistant`: a machine the node cannot prove joins again.
+/// says `paired` or `joined` with its name, followed through every later `rename` (`detail` holds the old name).
+///
+/// The code's row is deleted a day after the code expires, and a machine made by `memcp connect peer-…` or by the page
+/// has no such audit line, so a second, durable proof keeps the machines already in step: a connection that synced as
+/// a machine. Its `peer-…` name is in `sync_state` (this node noted a transfer or a cursor with it) or is the `link` of
+/// a node of `peer_directory` (it told this node its directory), followed through renames like the first proof; and
+/// it holds what a machine holds: every space, whole, and may write. Such a connection already ran the sync as a full
+/// machine before this migration, so keeping it one stops nothing that works; the name alone, or sync rows alone,
+/// prove nothing.
+/// Every other row is an `assistant`: a machine the node cannot prove joins again.
 const CONTROL_V25: &str = r"
 ALTER TABLE connections ADD COLUMN kind TEXT NOT NULL DEFAULT 'assistant'
   CHECK (kind IN ('assistant','oauth','peer','console'));
@@ -715,4 +723,15 @@ WITH RECURSIVE made(agent) AS (
 )
 UPDATE connections SET kind = 'peer'
   WHERE kind = 'assistant' AND agent IN (SELECT agent FROM made);
+WITH RECURSIVE synced(agent) AS (
+  SELECT peer FROM sync_state WHERE substr(peer, 1, 5) = 'peer-'
+  UNION
+  SELECT link FROM peer_directory WHERE substr(link, 1, 5) = 'peer-'
+  UNION
+  SELECT a.agent FROM auth_audit a JOIN synced s ON a.event = 'rename' AND a.detail = s.agent
+)
+UPDATE connections SET kind = 'peer'
+  WHERE kind = 'assistant' AND console = 0 AND all_spaces = 1 AND read_only_forced = 0
+    AND agent IN (SELECT agent FROM synced)
+    AND NOT EXISTS (SELECT 1 FROM grant_paths g WHERE g.connection_id = connections.id);
 ";
