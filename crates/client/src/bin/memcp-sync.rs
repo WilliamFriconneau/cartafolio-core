@@ -67,6 +67,20 @@ fn join(data: &str, address: &str, status_file: &str, name: &str) -> ExitCode {
     ExitCode::from(1)
 }
 
+/// Whether the node that started this loop is gone: this process has another parent now (the system took it over).
+/// Not on Windows, where a process is not told that its parent ended: there a loop still outlives its node.
+fn orphaned(parent: Option<u32>) -> bool {
+    #[cfg(unix)]
+    {
+        parent.is_some_and(|p| std::os::unix::process::parent_id() != p)
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = parent;
+        false
+    }
+}
+
 /// `scheme://host:port` of an address, in lower case: what tells two nodes apart.
 fn origin(address: &str) -> String {
     let (scheme, rest) = address.split_once("://").unwrap_or(("", address));
@@ -213,7 +227,15 @@ fn main() -> ExitCode {
             }
         }
     }
+    // `MEMCP_SYNC_PARENT`: the node that started this loop (it sets it). When that node is gone (killed, crashed),
+    // the loop ends: a node started again starts its own, and two loops with one peer must never pile up.
+    let parent = std::env::var("MEMCP_SYNC_PARENT")
+        .ok()
+        .and_then(|p| p.trim().parse::<u32>().ok());
     loop {
+        if orphaned(parent) {
+            return ExitCode::SUCCESS;
+        }
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_or(0, |d| d.as_secs() as i64);
@@ -244,7 +266,17 @@ fn main() -> ExitCode {
             }
         };
         match every {
-            Some(s) if code != 1 => std::thread::sleep(Duration::from_secs(s.max(5))),
+            Some(s) if code != 1 => {
+                for _ in 0..s.max(5) {
+                    if orphaned(parent) {
+                        eprintln!(
+                            "memcp-sync: the node that started this loop is gone; it ends with it"
+                        );
+                        return ExitCode::SUCCESS;
+                    }
+                    std::thread::sleep(Duration::from_secs(1));
+                }
+            }
             _ => return ExitCode::from(code),
         }
     }
