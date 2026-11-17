@@ -353,10 +353,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ),
         ("backup", _) => cli::backup(
             &data,
-            Path::new(need("--to")?),
-            flag("--keep").map_or(Ok(14), |k| {
-                k.parse().map_err(|_| cli::bad("--keep needs a number"))
-            })?,
+            Path::new(
+                &flag("--to")
+                    .map(String::from)
+                    .unwrap_or_else(|| settings.text_or_default("backup_dir")),
+            ),
+            flag("--keep").map_or(
+                Ok(settings.int("backup_keep").map_or(14, |n| n as usize)),
+                |k| k.parse().map_err(|_| cli::bad("--keep needs a number")),
+            )?,
         ),
         (other, _) => Err((2, format!("unknown command {other:?}\n\n{USAGE}"))),
     }

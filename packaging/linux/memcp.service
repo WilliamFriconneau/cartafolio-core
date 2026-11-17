@@ -1,0 +1,56 @@
+# The MemCP server, as a system service run by its own unprivileged user.
+# Settings: /etc/memcp/memcp.toml (docs/LINUX.md). First run: sudo memcp setup --system
+[Unit]
+Description=MemCP, a durable memory for AI assistants
+Documentation=https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/LINUX.md
+After=network-online.target
+Wants=network-online.target
+# Nothing to serve before `memcp setup` has made the memory.
+ConditionPathExists=/var/lib/memcp/control.sqlite
+
+[Service]
+Type=simple
+User=memcp
+Group=memcp
+Environment=MEMCP_CONFIG=/etc/memcp/memcp.toml
+ExecStart=/usr/bin/memcp serve
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=20
+
+# The data directory: /var/lib/memcp, private to the service user.
+StateDirectory=memcp
+StateDirectoryMode=0700
+UMask=0077
+
+# Hardening. The server needs its data folder and the network, nothing else.
+# If `data` in memcp.toml is another folder, add it to ReadWritePaths with a drop-in (systemctl edit memcp).
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateUsers=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+ProtectProc=invisible
+ProcSubset=pid
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX AF_NETLINK
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RemoveIPC=true
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+SystemCallFilter=~@privileged @resources
+
+[Install]
+WantedBy=multi-user.target

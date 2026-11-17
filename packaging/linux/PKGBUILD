@@ -1,0 +1,47 @@
+# Maintainer: the MemCP project
+# `makepkg -si` in this folder builds the source of the tag below. For a local checkout instead of a tag,
+# run it with MEMCP_SRC=/path/to/memcp-core (the sources are then not downloaded again).
+pkgname=memcp
+pkgver=20261117.0.8
+pkgrel=1
+pkgdesc='A durable memory for AI assistants over MCP, kept on your own machine'
+arch=('x86_64' 'aarch64')
+url='https://github.com/WilliamFriconneau/memcp-core'
+license=('AGPL-3.0-or-later')
+depends=('gcc-libs' 'systemd')
+makedepends=('cargo')
+backup=('etc/memcp/memcp.toml')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+# Run `updpkgsums` once the tag is published.
+sha256sums=('SKIP')
+
+_src() {
+  if [ -n "${MEMCP_SRC:-}" ]; then echo "$MEMCP_SRC"; else echo "$srcdir/memcp-core-$pkgver"; fi
+}
+
+build() {
+  cd "$(_src)"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-capture
+}
+
+check() {
+  cd "$(_src)"
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cargo test --release --locked -p memcp-server
+}
+
+package() {
+  cd "$(_src)"
+  local t="$srcdir/target/release"
+  install -Dm755 "$t/memcp" "$t/memcp-janitor" "$t/memcp-capture" -t "$pkgdir/usr/bin"
+  local p=packaging/linux
+  install -Dm644 $p/memcp.service $p/memcp-backup.service $p/memcp-backup.timer \
+    $p/memcp-janitor.service $p/memcp-transcribe.service $p/memcp-transcribe.timer \
+    -t "$pkgdir/usr/lib/systemd/system"
+  install -Dm644 $p/memcp.sysusers "$pkgdir/usr/lib/sysusers.d/memcp.conf"
+  install -Dm644 $p/memcp.tmpfiles "$pkgdir/usr/lib/tmpfiles.d/memcp.conf"
+  install -Dm644 $p/memcp.toml "$pkgdir/etc/memcp/memcp.toml"
+  install -Dm644 docs/LINUX.md "$pkgdir/usr/share/doc/memcp/LINUX.md"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
