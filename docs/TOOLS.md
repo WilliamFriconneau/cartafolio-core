@@ -504,6 +504,57 @@ Example call and answer:
 }
 ```
 
+### `space_create`
+
+Makes a space of the person, or a sub-space inside another (`parent`, the name of an existing space of the person), with its label and, if wanted, the keywords and tags that file notes there. Every node of the person gets it at the next exchange. Returns the space with its name.
+
+- **Seen with:** a connection that reaches all the person's spaces and is not read-only.
+- **Answer:** `{ result: "created", space: { name, label, parent, kind, position } }`.
+- **Errors:** `invalid` for an unknown parent, a bad label (64 characters at most) or a depth beyond eight levels; `denied`.
+- **Effects:** adds the space to the layout; writes its `rules` note when keywords or tags are given; syncs to the other nodes of the person.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `keywords` | array of string | no | - |
+| `label` | string | yes | 64 characters |
+| `parent` | string | no | an existing space of the person |
+| `tags` | array of string | no | - |
+
+Example call and answer:
+
+```json
+{ "name": "space_create", "arguments": { "label": "Firefighting", "parent": "hobbies", "keywords": ["vsav"] } }
+```
+
+```json
+{ "result": "created", "space": { "name": "firefighting", "label": "Firefighting", "parent": "hobbies", "kind": "custom", "position": 0 } }
+```
+
+### `space_move`
+
+Renames a space of the person (`label`) or moves it inside another (`parent`; an empty string puts it at the top level). Its notes stay with it; every node follows.
+
+- **Seen with:** a connection that reaches all the person's spaces and is not read-only.
+- **Answer:** `{ result: "updated", space: {...} }`.
+- **Errors:** `invalid` for a cycle (a space inside itself or its children), an unknown space or parent; `denied`.
+- **Effects:** changes the layout only; no note moves.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `label` | string | no | 64 characters |
+| `parent` | string | no | empty string: top level |
+| `space` | string | yes | - |
+
+Example call and answer:
+
+```json
+{ "name": "space_move", "arguments": { "space": "firefighting", "label": "Fire", "parent": "" } }
+```
+
+```json
+{ "result": "updated", "space": { "name": "firefighting", "label": "Fire", "parent": null, "kind": "custom", "position": 0 } }
+```
+
 ### `rules_set`
 
 Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.

@@ -540,11 +540,18 @@ fn a_connection_to_all_spaces_makes_and_moves_a_sub_space() -> Res {
     let t = Temp::new("space-tools");
     let b = brain(&t)?;
     let c = caller(&b, "assistant", "all")?;
+    // The parent is a space of the person too: make it first.
+    let top = tools::call(&b, &c, "space_create", &json!({ "label": "Hobbies" }))?;
+    let parent = top["space"]["space"]
+        .as_str()
+        .or(top["space"]["name"].as_str())
+        .ok_or("parent name")?
+        .to_string();
     let made = tools::call(
         &b,
         &c,
         "space_create",
-        &json!({ "label": "Firefighting", "parent": "hobbies", "keywords": ["vsav"] }),
+        &json!({ "label": "Firefighting", "parent": parent, "keywords": ["vsav"] }),
     )?;
     assert_eq!(made["result"], "created", "{made}");
     let name = made["space"]["space"]
