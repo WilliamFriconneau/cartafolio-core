@@ -15,7 +15,7 @@ use memcp_client::Error as ClientError;
 use serde_json::{Value, json};
 
 use crate::models::{self, Models};
-use crate::router::Rules;
+use crate::router::{Place, Rules, clean_keyword};
 use crate::{Janitor, Report, learn, now, tags_of, time};
 
 /// A note of « À trier » that no rule could place.
@@ -146,6 +146,57 @@ impl Janitor {
             if let Some((_, id, rules)) = newest {
                 self.rules.insert(v.clone(), rules);
                 self.rule_ids.insert(v.clone(), id.to_string());
+            }
+        }
+        problems
+    }
+
+    /// Reads the labels and parents of the vaults (the `spaces` tool); with no answer, each vault stands at the top under
+    /// its own name.
+    pub(crate) fn load_layout(&mut self, vaults: &[String]) {
+        let listed = self.client.call("spaces", json!({})).ok();
+        self.layout = vaults
+            .iter()
+            .map(|v| {
+                let row = listed
+                    .as_ref()
+                    .and_then(|l| l["spaces"].as_array())
+                    .and_then(|a| a.iter().find(|s| s["name"].as_str() == Some(v)));
+                let text = |k: &str| row.and_then(|r| r[k].as_str()).map(String::from);
+                Place {
+                    name: v.clone(),
+                    label: text("label").unwrap_or_else(|| v.clone()),
+                    parent: text("parent").filter(|p| vaults.contains(p)),
+                }
+            })
+            .collect();
+    }
+
+    /// A sub-space with no `rules` note gets one, with its label and its name as keywords (the person's page can change
+    /// them later). Returns the problems met.
+    pub(crate) fn seed_sub_space_rules(&mut self) -> Vec<String> {
+        let mut problems = vec![];
+        for place in self.layout.clone() {
+            if place.parent.is_none() || self.rule_ids.contains_key(&place.name) {
+                continue;
+            }
+            let short = place
+                .name
+                .split_once('-')
+                .map_or(place.name.as_str(), |x| x.1);
+            let keywords: BTreeSet<String> = [place.label.as_str(), short]
+                .into_iter()
+                .filter_map(clean_keyword)
+                .collect();
+            if keywords.is_empty() {
+                continue;
+            }
+            let rules = Rules {
+                tags: vec![],
+                keywords: keywords.into_iter().collect(),
+            };
+            if let Err(e) = self.write_rules(&place.name, &rules, "keywords of a sub-space") {
+                problems.push(format!("the rules of {} cannot be seeded: {e}", place.name));
             }
         }
         problems

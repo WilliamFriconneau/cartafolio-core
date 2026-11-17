@@ -32,6 +32,9 @@ pub use config::Config;
 use keywords::Unplaced;
 use models::{Choice, system_prompt};
 
+/// The tag of a copy the janitor made for a note filed in several spaces.
+const COPY_TAG: &str = "janitor/copy";
+
 /// The kind the memory gives « À trier » in `stats`.
 const TRIAGE: &str = "a-trier";
 
@@ -65,6 +68,8 @@ pub struct Janitor {
     /// This pass holds leases on notes of « À trier » (given back at its end).
     claimed: bool,
     rule_ids: BTreeMap<String, String>,
+    /// The vaults as the person's layout shows them: label and parent (see [`router::Place`]).
+    layout: Vec<router::Place>,
 }
 
 fn now() -> i64 {
@@ -137,6 +142,7 @@ impl Janitor {
         Ok(Janitor {
             state: state::State::open(&config.state_dir)?,
             rules: BTreeMap::new(),
+            layout: Vec::new(),
             vocab: BTreeMap::new(),
             claimed: false,
             rule_ids: BTreeMap::new(),
@@ -378,6 +384,9 @@ impl Janitor {
         let models = models::Models::new(&config);
         let problems = self.load_rules(vaults);
         report.problems.extend(problems);
+        self.load_layout(vaults);
+        let problems = self.seed_sub_space_rules();
+        report.problems.extend(problems);
         // « À trier » first: what it sends on is filed in its vault in the same pass.
         let before = budget;
         let mut waiting = BTreeMap::new();
@@ -462,21 +471,37 @@ impl Janitor {
                     }
                     continue;
                 }
-                // The keywords: a note that clearly belongs to another vault goes to the inbox of that vault.
-                if let Some(to) = router::route(text, &tags_of(note), &self.routing_rules())
-                    .filter(|t| *t != vault && vaults.contains(t))
-                {
-                    match self.send_one(note, id, text, &vault, &to, "the keywords") {
+                // The keywords: a note that clearly belongs to another vault goes to the inbox of that vault; one the person
+                // asks to file in several spaces is copied to each. A copy made by the janitor is never copied again.
+                let copy = tags_of(note).contains(&COPY_TAG);
+                let routed: Vec<String> = if copy {
+                    vec![]
+                } else {
+                    router::route(text, &tags_of(note), &self.routing_rules(), &self.layout)
+                        .into_iter()
+                        .filter(|t| vaults.contains(t))
+                        .collect()
+                };
+                let others: Vec<String> = routed.iter().filter(|t| **t != vault).cloned().collect();
+                if !others.is_empty() {
+                    let stays = routed.contains(&vault);
+                    match self.send_many(note, id, text, &vault, &others, stays, "the keywords") {
                         Ok(()) => report.sent += 1,
                         Err(e) => {
                             self.state.note_failed(id);
-                            self.fail(report, &format!("{id} cannot be sent to {to}"), &e);
+                            self.fail(
+                                report,
+                                &format!("{id} cannot be sent to {}", others.join(", ")),
+                                &e,
+                            );
                         }
                     }
                     if report.key_refused {
                         return;
                     }
-                    continue;
+                    if !stays {
+                        continue;
+                    }
                 }
                 // What it has learned first: a note it is sure of is filed without the model (one time in ten the model is
                 // asked anyway, and a disagreement lowers the score of the words that misled it).
@@ -616,29 +641,35 @@ impl Janitor {
                 continue;
             }
             // The person's rule for work: a meeting, or a note about their work, goes to `work`.
-            let (to, by) = if vaults.iter().any(|v| v == work_rule::WORK)
+            let (to, by): (Vec<String>, &str) = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(text, &self.config.work_words)
             {
-                (Some(work_rule::WORK.to_string()), "the person's work rule")
+                (vec![work_rule::WORK.to_string()], "the person's work rule")
             } else {
                 (
-                    router::route(text, &tags_of(note), &self.routing_rules())
-                        .filter(|t| t != triage && vaults.contains(t)),
+                    router::route(text, &tags_of(note), &self.routing_rules(), &self.layout)
+                        .into_iter()
+                        .filter(|t| t != triage && vaults.contains(t))
+                        .collect(),
                     "the keywords",
                 )
             };
-            let Some(to) = to else {
+            if to.is_empty() {
                 report.unsure += 1;
                 unplaced.push(Unplaced {
                     text: text.to_string(),
                 });
                 continue;
-            };
-            match self.send_one(note, id, text, triage, &to, by) {
+            }
+            match self.send_many(note, id, text, triage, &to, false, by) {
                 Ok(()) => report.sent += 1,
                 Err(e) => {
                     self.state.note_failed(id);
-                    self.fail(report, &format!("{id} cannot be sent to {to}"), &e);
+                    self.fail(
+                        report,
+                        &format!("{id} cannot be sent to {}", to.join(", ")),
+                        &e,
+                    );
                 }
             }
             if report.key_refused {
@@ -710,15 +741,19 @@ impl Janitor {
             .find_map(health_rule::wake_from_day)
     }
 
-    /// Writes a note of « À trier » in the inbox of `to`, its text and tags unchanged, then retires it from « À trier »
-    /// once the write is certain.
-    fn send_one(
+    /// Writes a note of « À trier » in the inbox of each space of `to`, its text and tags unchanged, then retires it from
+    /// « À trier » once every write is certain. With several spaces the first gets the note and the others a copy (all tagged
+    /// `janitor/copy`, so that it is not copied again); the reason of the retirement says where the copies went.
+    /// `keep`: the note is not retired (it already sits in an inbox that keeps it); only copies are made.
+    #[allow(clippy::too_many_arguments)]
+    fn send_many(
         &mut self,
         note: &Value,
         id: &str,
         text: &str,
         triage: &str,
-        to: &str,
+        to: &[String],
+        keep: bool,
         by: &str,
     ) -> Result<(), ClientError> {
         let mut tags_out: Vec<String> = tags_of(note).into_iter().map(String::from).collect();
@@ -729,22 +764,50 @@ impl Janitor {
             tags_out.push("inbox".into());
         }
         let kind = note["kind"].as_str().unwrap_or("fact");
-        let r = self.client.call(
-            "remember",
-            json!({ "space": to, "kind": kind, "text": text, "tags": tags_out }),
-        )?;
-        let new = r["fact"]["id"]
-            .as_str()
-            .filter(|n| *n != id && matches!(r["result"].as_str(), Some("created" | "duplicate")))
-            .map(String::from)
-            .ok_or_else(|| {
-                ClientError::Unreadable(format!("nothing was written: {}", r["result"]))
-            })?;
-        self.client.call(
-            "retire",
-            json!({ "id": id, "reason": format!("sent from {triage} by the janitor ({by}) to the inbox of {to} as {new}") }),
-        )?;
-        self.voice_command(text, to, &new);
+        let several = to.len() > 1 || keep;
+        let mut written = vec![];
+        for space in to {
+            let mut tags = tags_out.clone();
+            if several {
+                tags.push(COPY_TAG.into());
+            }
+            let r = self.client.call(
+                "remember",
+                json!({ "space": space, "kind": kind, "text": text, "tags": tags }),
+            )?;
+            let new = r["fact"]["id"]
+                .as_str()
+                .filter(|n| {
+                    *n != id && matches!(r["result"].as_str(), Some("created" | "duplicate"))
+                })
+                .map(String::from)
+                .ok_or_else(|| {
+                    ClientError::Unreadable(format!("nothing was written: {}", r["result"]))
+                })?;
+            written.push((space.clone(), new));
+        }
+        if !keep {
+            let places: Vec<String> = written
+                .iter()
+                .map(|(s, n)| format!("the inbox of {s} as {n}"))
+                .collect();
+            let reason = if written.len() > 1 {
+                format!(
+                    "sent from {triage} by the janitor ({by}) to {}; the person asked for it in each of these spaces, so the note is copied, nothing is erased",
+                    places.join(" and ")
+                )
+            } else {
+                format!(
+                    "sent from {triage} by the janitor ({by}) to {}",
+                    places.join("")
+                )
+            };
+            self.client
+                .call("retire", json!({ "id": id, "reason": reason }))?;
+        }
+        if let Some((space, new)) = written.first() {
+            self.voice_command(text, space, new);
+        }
         Ok(())
     }
 

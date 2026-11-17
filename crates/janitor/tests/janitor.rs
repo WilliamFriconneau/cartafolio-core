@@ -23,6 +23,11 @@ struct Rig {
 /// The engine (vaults `sam-me`, `sam-health`, `sam-work`, and `sam-a-trier`, where the devices write), the two keys,
 /// and the model server.
 fn rig(tag: &str) -> Rig {
+    rig_with(tag, &|_, _| {})
+}
+
+/// The same, after `setup` has added spaces or changed the layout (it gets the engine and the person's id).
+fn rig_with(tag: &str, setup: &dyn Fn(&memcp_core::Brain, &str)) -> Rig {
     use memcp_core::access::{self, Rights};
     use memcp_core::text::Language;
     use memcp_core::{Brain, users};
@@ -42,6 +47,7 @@ fn rig(tag: &str) -> Rig {
             brain.add_vault(&sam, "sam", kind).expect("vault");
         }
         memcp_core::triage::ensure(&brain, &sam, "sam").expect("À trier");
+        setup(&brain, &sam);
         [("edge", "sam-a-trier/inbox:rw"), ("janitor", "all")]
             .iter()
             .map(|(agent, spec)| {
@@ -123,7 +129,7 @@ fn models() -> String {
                             .strip_prefix("PROPOSE:")
                     })
                     .filter_map(|p| p.split_once(':'))
-                    .map(|(s, k)| json!({"coffre": s, "mots_cles": [k], "tags": []}))
+                    .map(|(s, k)| json!({"coffre": s.replace('Q', "-"), "mots_cles": [k], "tags": []}))
                     .collect();
                 json!({ "espaces": list })
             } else if extracting {
@@ -527,7 +533,7 @@ fn the_model_proposes_keywords_written_as_a_new_rules_version_and_the_router_run
     let r = rig("propose");
     let mut o = owner(&r);
     rules_note(&mut o, "sam-work", &["zephyr"]);
-    drop_note(&r, "Le chantier orion avance. PROPOSE:sam-work:orion");
+    drop_note(&r, "Le chantier orion avance. PROPOSE:samQwork:orion");
     let mut j = janitor_with(
         &r,
         &r.base.replace("/mcp", "/mcp/janitor"),
@@ -633,4 +639,83 @@ fn a_note_said_as_a_command_names_its_board() {
         Some(("targets", false))
     );
     assert_eq!(command_board("La réunion s'est bien passée"), None);
+}
+
+/// Spaces for the name tests: `sam-finances` (with its sub-space `sam-cars`) and `sam-health`, labelled « Santé ».
+fn name_spaces(brain: &memcp_core::Brain, sam: &str) {
+    use memcp_core::layout::Change;
+    let finances = brain
+        .add_custom_space(sam, "sam", "Finances", None)
+        .expect("finances");
+    brain
+        .add_custom_space(sam, "sam", "Cars", Some(&finances))
+        .expect("cars");
+    let health = brain
+        .layout(sam)
+        .expect("layout")
+        .into_iter()
+        .find(|p| p.space.as_str() == "sam-health")
+        .expect("health")
+        .space;
+    let change = Change {
+        label: Some("Santé".into()),
+        ..Change::default()
+    };
+    brain.set_layout(sam, &health, &change).expect("label");
+}
+
+#[test]
+fn the_name_of_a_space_is_a_tag_and_a_sub_space_wins_over_its_parent() {
+    let r = rig_with("names", &name_spaces);
+    let mut o = owner(&r);
+    drop_note(&r, "Facture de l'assurance du mois #finances");
+    drop_note(&r, "Une note sans rien");
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!((report.sent, report.unsure), (1, 1), "{report:?}");
+    assert_eq!(texts(&mut o, "sam-finances", &[], "assurance").len(), 1);
+    // The janitor seeded the rules of the sub-space with its label and its name.
+    let rules = texts(&mut o, "sam-cars", &["rules"], "");
+    assert_eq!(rules.len(), 1, "{rules:?}");
+    assert!(rules[0].contains("cars"), "{rules:?}");
+    // The parent's name and the child's name in one note: the child.
+    drop_note(&r, "Un devis pour les finances, tag #cars");
+    let report = j.run_once();
+    assert_eq!(report.sent, 1, "{report:?}");
+    assert_eq!(texts(&mut o, "sam-cars", &[], "devis").len(), 1);
+    assert!(
+        texts(&mut o, "sam-finances", &[], "devis").is_empty(),
+        "the parent is only used when no child matches"
+    );
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
+fn a_note_to_file_in_two_spaces_is_copied_to_each_and_nothing_is_erased() {
+    let r = rig_with("two", &name_spaces);
+    let mut o = owner(&r);
+    drop_note(
+        &r,
+        "Remboursement de la mutuelle, à ranger dans finances et santé",
+    );
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!((report.sent, report.unsure), (1, 0), "{report:?}");
+    assert!(texts(&mut o, "sam-a-trier", &["inbox"], "").is_empty());
+    assert_eq!(texts(&mut o, "sam-finances", &[], "mutuelle").len(), 1);
+    assert_eq!(texts(&mut o, "sam-health", &[], "mutuelle").len(), 1);
+    // Nothing is erased: the original is retired with a reason that says where the copies went.
+    let gone = o
+        .call(
+            "recall",
+            json!({"space": "sam-a-trier", "query": "", "tags": ["inbox"], "include_retired": true, "limit": 20}),
+        )
+        .expect("recall");
+    assert!(gone.to_string().contains("copied"), "{gone}");
+    // A second pass copies nothing more.
+    let again = j.run_once();
+    assert_eq!(again.sent, 0, "{again:?}");
+    assert_eq!(texts(&mut o, "sam-finances", &[], "mutuelle").len(), 1);
+    assert_eq!(texts(&mut o, "sam-health", &[], "mutuelle").len(), 1);
+    let _ = std::fs::remove_dir_all(&r.dir);
 }
