@@ -119,7 +119,7 @@ fn search_finds_text_title_and_name_and_leaves_hidden_folders_out() -> Res {
     assert_eq!(hits.len(), 1);
     assert_eq!(hits[0].title, "Roof repair");
     assert!(hits[0].snippet.contains("tiles"));
-    assert!(hits[0].path.ends_with("Projects/Roof.md"));
+    assert!(std::path::Path::new(&hits[0].path).ends_with("Projects/Roof.md"));
     assert_eq!(
         library::search(&conn, "yearly budget", 10)?[0].title,
         "Yearly budget"

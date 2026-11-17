@@ -244,7 +244,15 @@ mod tests {
         assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
         assert!(answer.contains(r#""result":{}"#), "{answer}");
         server.stop();
-        let again = super::HttpServer::start(gateway(), &addr);
+        // The port may take a moment to be given back: try again for a short while.
+        let mut again = super::HttpServer::start(gateway(), &addr);
+        for _ in 0..40 {
+            if again.is_ok() {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+            again = super::HttpServer::start(gateway(), &addr);
+        }
         assert!(again.is_ok());
         drop(again);
         let _ = std::fs::remove_dir_all(&dir);
