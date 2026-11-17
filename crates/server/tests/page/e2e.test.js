@@ -161,6 +161,9 @@ function clean(name, text) {
   await go("#settings");
   check("Settings is the section shown", await until(() => $("#sections button.on").textContent.trim() === "Réglages"));
   check("Settings shows the machines", shown(w, $("#machines-section")) && /Machines/.test($("#machines-section h2").textContent));
+  check("the Machines block is this node (with its id), the nodes and one field to add a node: the codes are folded away",
+    await until(() => /^[A-Z2-7]{4}-[A-Z2-7]{4}-[A-Z2-7]{4}$/.test(($("#this-id") || {}).textContent || "")) && shown(w, $("#show-link")) && shown(w, $("#add-link")) && $$("#machines-section form").length === 1);
+  check("the older codes are under Advanced", !!$("#advanced #pair-form") && !!$("#advanced #code-form"));
   check("Settings offers to connect an assistant", shown(w, $("#open-wizard")) && $("#open-wizard").textContent.trim() === "Connecter un assistant");
   check("Settings hides the spaces' tiles", $$("#spaces .tile").every(t => !shown(w, t)) && !shown(w, $("#layout-section")));
   const empty = ["#attention-section", "#app-guides-section", "#revoked-section", "#internal-section"].filter(s => shown(w, $(s)));

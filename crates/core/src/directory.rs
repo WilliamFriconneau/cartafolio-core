@@ -53,6 +53,8 @@ pub struct Entry {
     pub revoked_at: Option<i64>,
     /// How the node can be reached: `[{kind, address?}]`, `kind` one of [`KINDS`]. Empty when not known.
     pub exposures: Vec<Value>,
+    /// The node's identity (`ABCD-EFGH-IJKL`, see [`node_id`]); empty for a node that does not tell it yet.
+    pub node_id: String,
 }
 
 /// The ways a node can be reached: this machine only, the local network, the tailnet, the internet.
@@ -190,6 +192,7 @@ impl Entry {
             "revoked": self.revoked,
             "revoked_at": self.revoked_at,
             "exposures": self.exposures,
+            "id": (!self.node_id.is_empty()).then_some(&self.node_id),
         })
     }
 }
@@ -280,10 +283,11 @@ fn read_entry(r: &rusqlite::Row<'_>) -> rusqlite::Result<Entry> {
         revoked: r.get::<_, i64>(7)? != 0,
         revoked_at: r.get(8)?,
         exposures: serde_json::from_str(&r.get::<_, String>(9)?).unwrap_or_default(),
+        node_id: r.get(10)?,
     })
 }
 
-const COLUMNS: &str = "name, last_seen, version, first_seen, learned_from, stamp, link, revoked, revoked_at, exposures";
+const COLUMNS: &str = "name, last_seen, version, first_seen, learned_from, stamp, link, revoked, revoked_at, exposures, node_id";
 
 fn entry_of(ctl: &Connection, name: &str) -> Result<Option<Entry>> {
     Ok(ctl
@@ -313,24 +317,26 @@ pub fn touch_self(brain: &Brain, now: i64) -> Result<()> {
     let version = own_version();
     let stamp = format!("{now:015}.{name}");
     let exposures = own_exposures(&ctl)?;
+    let id = node_id_in(&ctl)?;
     match entry_of(&ctl, &name)? {
         Some(e)
             if e.version == version
+                && e.node_id == id
                 && serde_json::to_string(&e.exposures).is_ok_and(|t| t == exposures)
                 && (0..TOUCH_EVERY).contains(&(now - e.last_seen)) => {}
         Some(_) => {
             ctl.execute(
                 "UPDATE peer_directory SET last_seen = ?2, version = ?3, stamp = ?4, learned_from = NULL,
-                   exposures = ?5
+                   exposures = ?5, node_id = ?6
                  WHERE name = ?1",
-                params![name, now, version, stamp, exposures],
+                params![name, now, version, stamp, exposures, id],
             )?;
         }
         None => {
             ctl.execute(
-                "INSERT INTO peer_directory (name, last_seen, version, first_seen, learned_from, stamp, exposures)
-                 VALUES (?1, ?2, ?3, ?2, NULL, ?4, ?5)",
-                params![name, now, version, stamp, exposures],
+                "INSERT INTO peer_directory (name, last_seen, version, first_seen, learned_from, stamp, exposures, node_id)
+                 VALUES (?1, ?2, ?3, ?2, NULL, ?4, ?5, ?6)",
+                params![name, now, version, stamp, exposures, id],
             )?;
         }
     }
@@ -353,9 +359,14 @@ pub fn merge(brain: &Brain, from: &str, entries: &[Value], now: i64) -> Result<u
         let Some(name) = v["name"].as_str().filter(|n| valid_name(n)) else {
             continue;
         };
-        if name == own || is_self(&ctl, name)? {
+        let told_id = valid_id(v["id"].as_str().unwrap_or(""));
+        if name == own
+            || is_self(&ctl, name)?
+            || told_id.as_deref() == Some(node_id_in(&ctl)?.as_str())
+        {
             continue;
         }
+        let told_id = told_id.unwrap_or_default();
         let version: String = v["version"]
             .as_str()
             .unwrap_or("")
@@ -376,8 +387,8 @@ pub fn merge(brain: &Brain, from: &str, entries: &[Value], now: i64) -> Result<u
             None => {
                 ctl.execute(
                     "INSERT INTO peer_directory
-                       (name, last_seen, version, first_seen, learned_from, stamp, revoked, revoked_at, exposures)
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                       (name, last_seen, version, first_seen, learned_from, stamp, revoked, revoked_at, exposures, node_id)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
                     params![
                         name,
                         told_seen,
@@ -388,6 +399,7 @@ pub fn merge(brain: &Brain, from: &str, entries: &[Value], now: i64) -> Result<u
                         i64::from(told_revoked),
                         told_revoked.then_some(told_revoked_at),
                         told_exposures,
+                        told_id,
                     ],
                 )?;
                 changed += 1;
@@ -407,6 +419,14 @@ pub fn merge(brain: &Brain, from: &str, entries: &[Value], now: i64) -> Result<u
                             format!("{told_seen:015}.{from}"),
                             told_exposures
                         ],
+                    )?;
+                    did = true;
+                }
+                // The identity of a node never changes: it is taken once, from whoever tells it first.
+                if e.node_id.is_empty() && !told_id.is_empty() {
+                    ctl.execute(
+                        "UPDATE peer_directory SET node_id = ?2 WHERE name = ?1",
+                        params![name, told_id],
                     )?;
                     did = true;
                 }
@@ -550,6 +570,9 @@ pub fn union(brain: &Brain, now: i64, locals: Vec<Local>) -> Result<Vec<Value>> 
             "gone": last_seen.is_some_and(|s| now - s > GONE_AFTER),
             "behind": entry.is_some_and(|e| behind(&e.version)),
             "exposures": entry.map_or_else(Vec::new, |e| e.exposures.clone()),
+            "id": entry.map(|e| e.node_id.clone()).filter(|i| !i.is_empty()),
+            "addresses": entry.map_or_else(Vec::new, |e| addresses_of(&e.exposures)),
+            "via": entry.and_then(|e| via(&ctl, &e.name)),
             "only_local": entry.is_some_and(|e| only_local(&e.exposures)),
             "note": entry.filter(|e| only_local(&e.exposures)).map(|_| SYNCS_ON_OPEN),
             "direction": l.direction,
@@ -583,6 +606,9 @@ pub fn union(brain: &Brain, now: i64, locals: Vec<Local>) -> Result<Vec<Value>> 
             "gone": now - e.last_seen > GONE_AFTER,
             "behind": behind(&e.version),
             "exposures": e.exposures,
+            "id": (!e.node_id.is_empty()).then(|| e.node_id.clone()),
+            "addresses": addresses_of(&e.exposures),
+            "via": via(&ctl, &e.name),
             "only_local": only_local(&e.exposures),
             "note": only_local(&e.exposures).then_some(SYNCS_ON_OPEN),
             "direction": Value::Null,
@@ -603,6 +629,7 @@ pub fn node_json(brain: &Brain, now: i64) -> Result<Value> {
     let exposures: Vec<Value> = serde_json::from_str(&own_exposures(&ctl)?).unwrap_or_default();
     Ok(json!({
         "name": name,
+        "id": node_id_in(&ctl)?,
         "version": own_version(),
         "last_seen": now,
         "exposures": exposures,
@@ -659,4 +686,373 @@ pub fn connections(brain: &Brain, user: &str) -> Result<Vec<Value>> {
         }));
     }
     Ok(out)
+}
+
+// --- the identity of a node ---------------------------------------------------------------------------------------
+
+const ID_KEY: &str = "node_id";
+const ID_LEN: usize = 12;
+
+/// An id as it may be typed or scanned: dashes and spaces dropped, capitals. `None` when it is not one (12 characters
+/// of the base32 alphabet, `A-Z` and `2-7`), else the way it is shown, `ABCD-EFGH-IJKL`.
+pub fn valid_id(text: &str) -> Option<String> {
+    let c: String = text
+        .chars()
+        .filter(|c| !matches!(c, '-' | ' '))
+        .map(|c| c.to_ascii_uppercase())
+        .collect();
+    (c.len() == ID_LEN && c.bytes().all(|b| matches!(b, b'A'..=b'Z' | b'2'..=b'7')))
+        .then(|| format!("{}-{}-{}", &c[..4], &c[4..8], &c[8..]))
+}
+
+/// This node's identity: made once, random (60 bits), kept in the control database and told to every peer. It names
+/// the node, it proves nothing: whoever knows it can say it. What lets a node in is always a person's answer or a
+/// ticket, never the id.
+pub fn node_id(brain: &Brain) -> Result<String> {
+    node_id_in(&brain.open_control()?)
+}
+
+fn node_id_in(ctl: &Connection) -> Result<String> {
+    if let Some(i) = meta_get(ctl, ID_KEY)? {
+        return Ok(i);
+    }
+    let id =
+        valid_id(&util::random_base32(ID_LEN)).ok_or_else(|| Error::Schema("node id".into()))?;
+    ctl.execute(
+        "INSERT OR IGNORE INTO meta (k, v) VALUES (?1, ?2)",
+        params![ID_KEY, id],
+    )?;
+    meta_get(ctl, ID_KEY)?.ok_or_else(|| Error::Schema("node id not written".into()))
+}
+
+/// The entry of the node with this id, when this node knows it (its own entry too).
+pub fn find_by_id(brain: &Brain, id: &str) -> Result<Option<Entry>> {
+    let Some(id) = valid_id(id) else {
+        return Ok(None);
+    };
+    let ctl = brain.open_control()?;
+    Ok(ctl
+        .query_row(
+            &format!(
+                "SELECT {COLUMNS} FROM peer_directory WHERE node_id = ?1 ORDER BY last_seen DESC"
+            ),
+            [id],
+            read_entry,
+        )
+        .optional()?)
+}
+
+// --- addresses, links, the choice of a way in ---------------------------------------------------------------------
+
+/// An address as a base address: a bare `host:port` (a listener) is read as plain HTTP, the way a listener serves.
+fn base_url(address: &str) -> String {
+    let a = address.trim().trim_end_matches('/');
+    if a.contains("://") {
+        a.to_string()
+    } else {
+        format!("http://{a}")
+    }
+}
+
+/// The addresses a node can be asked at, best first: the internet, the tailnet, the local network, this machine.
+pub fn addresses_of(exposures: &[Value]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for kind in ["public", "tailnet", "lan", "loopback"] {
+        for e in exposures.iter().filter(|e| e["kind"] == kind) {
+            if let Some(a) = e["address"].as_str() {
+                let u = base_url(a);
+                if !out.contains(&u) {
+                    out.push(u);
+                }
+            }
+        }
+    }
+    out
+}
+
+const VIA_PREFIX: &str = "node_via:";
+
+/// The address the person chose for asking the node `name`, if they chose one.
+pub fn via(ctl: &Connection, name: &str) -> Option<String> {
+    meta_get(ctl, &format!("{VIA_PREFIX}{name}")).ok().flatten()
+}
+
+/// The person chooses by which address this node asks the node `name` (one of the addresses it told), or clears the
+/// choice (`None`).
+pub fn set_via(brain: &Brain, name: &str, address: Option<&str>) -> Result<()> {
+    let ctl = brain.open_control()?;
+    let key = format!("{VIA_PREFIX}{name}");
+    let Some(address) = address else {
+        ctl.execute("DELETE FROM meta WHERE k = ?1", [&key])?;
+        return Ok(());
+    };
+    let entry = entry_of(&ctl, name)?
+        .ok_or_else(|| Error::Invalid(format!("no node called {name} is known")))?;
+    let wanted = base_url(address);
+    if !addresses_of(&entry.exposures).contains(&wanted) {
+        return Err(Error::Invalid(
+            "that address is not one this node told: choose one of its addresses".into(),
+        ));
+    }
+    ctl.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        params![key, wanted],
+    )?;
+    Ok(())
+}
+
+/// Where a node can be asked, in the order to try: the chosen address first.
+pub fn ways_in(brain: &Brain, entry: &Entry) -> Result<Vec<String>> {
+    let ctl = brain.open_control()?;
+    let mut out: Vec<String> = via(&ctl, &entry.name).into_iter().collect();
+    for a in addresses_of(&entry.exposures) {
+        if !out.contains(&a) {
+            out.push(a);
+        }
+    }
+    Ok(out)
+}
+
+/// What a person shows or scans to add a node: `memcp://node?id=…&name=…&addr=…&addr=…[&t=ticket]`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NodeLink {
+    /// The node's id (`ABCD-EFGH-IJKL`), when the link says it.
+    pub id: Option<String>,
+    /// The node's name.
+    pub name: Option<String>,
+    /// The addresses to try, in order.
+    pub addresses: Vec<String>,
+    /// A one-time ticket from a node the person already holds: with it, nobody has to compare three words.
+    pub ticket: Option<String>,
+}
+
+fn pct_encode(text: &str) -> String {
+    text.bytes()
+        .map(|b| match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                (b as char).to_string()
+            }
+            _ => format!("%{b:02X}"),
+        })
+        .collect()
+}
+
+fn pct_decode(text: &str) -> String {
+    let b = text.as_bytes();
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        let hex = |x: u8| (x as char).to_digit(16);
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2]))
+        {
+            out.push((h * 16 + l) as u8);
+            i += 3;
+        } else {
+            out.push(b[i]);
+            i += 1;
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+impl NodeLink {
+    /// The link, as it is shown and put in a QR code.
+    pub fn to_link(&self) -> String {
+        let mut parts: Vec<String> = Vec::new();
+        if let Some(i) = &self.id {
+            parts.push(format!("id={}", pct_encode(i)));
+        }
+        if let Some(n) = &self.name {
+            parts.push(format!("name={}", pct_encode(n)));
+        }
+        for a in &self.addresses {
+            parts.push(format!("addr={}", pct_encode(a)));
+        }
+        if let Some(t) = &self.ticket {
+            parts.push(format!("t={}", pct_encode(t)));
+        }
+        format!("memcp://node?{}", parts.join("&"))
+    }
+
+    /// Reads what a person pasted or scanned: a node link, a bare id, an address, or the older join link
+    /// (`memcp://join?server=…`, whose server is the address).
+    pub fn parse(text: &str) -> Result<NodeLink> {
+        let t = text.trim();
+        let bad = || Error::Invalid("not a node link, an id (ABCD-EFGH-IJKL) or an address".into());
+        if t.is_empty() || t.len() > 2000 || t.chars().any(char::is_control) {
+            return Err(bad());
+        }
+        let lower = t.to_ascii_lowercase();
+        if lower.starts_with("memcp://node?") || lower.starts_with("memcp://join?") {
+            let q = &t[t.find('?').map_or(0, |i| i + 1)..];
+            let mut link = NodeLink::default();
+            for pair in q.split('&') {
+                let (k, v) = pair.split_once('=').unwrap_or((pair, ""));
+                let v = pct_decode(v);
+                match k {
+                    "id" => link.id = Some(valid_id(&v).ok_or_else(bad)?),
+                    "name" if !v.is_empty() => link.name = Some(v.chars().take(64).collect()),
+                    "addr" | "server" if link.addresses.len() < 8 => {
+                        if !(v.starts_with("https://") || v.starts_with("http://"))
+                            || v.contains(char::is_whitespace)
+                        {
+                            return Err(bad());
+                        }
+                        link.addresses.push(v.trim_end_matches('/').to_string());
+                    }
+                    "t" if !v.is_empty() => link.ticket = Some(v),
+                    _ => {}
+                }
+            }
+            if link.id.is_none() && link.addresses.is_empty() {
+                return Err(bad());
+            }
+            return Ok(link);
+        }
+        if let Some(id) = valid_id(t) {
+            return Ok(NodeLink {
+                id: Some(id),
+                ..NodeLink::default()
+            });
+        }
+        if (lower.starts_with("https://") || lower.starts_with("http://"))
+            && !t.contains(char::is_whitespace)
+        {
+            return Ok(NodeLink {
+                addresses: vec![t.trim_end_matches('/').to_string()],
+                ..NodeLink::default()
+            });
+        }
+        Err(bad())
+    }
+}
+
+/// This node's link: its id, its name and its addresses (`public_url` first, then what it exposes), with a ticket
+/// when the person made one.
+pub fn own_link(brain: &Brain, public_url: &str, ticket: Option<&str>) -> Result<NodeLink> {
+    let ctl = brain.open_control()?;
+    let exposures: Vec<Value> = serde_json::from_str(&own_exposures(&ctl)?).unwrap_or_default();
+    let mut addresses: Vec<String> = Vec::new();
+    for a in std::iter::once(base_url(public_url)).chain(addresses_of(&exposures)) {
+        if !addresses.contains(&a) {
+            addresses.push(a);
+        }
+    }
+    Ok(NodeLink {
+        id: Some(node_id_in(&ctl)?),
+        name: Some(own_name_in(&ctl)?),
+        addresses,
+        ticket: ticket.map(str::to_string),
+    })
+}
+
+// --- requests to join, told by peers -------------------------------------------------------------------------------
+//
+// A request to join waits on the node that was asked. That node tells its peers (in the exchange `GET /sync/peers`), so
+// that the person can answer from any of their nodes; an answer given elsewhere goes back with the next exchange
+// (`POST /sync/peers`, `answers`). A request that is gone from the asked node's list is gone here at the next exchange.
+
+/// Keeps the requests `node` told (`[{id, device, check, expires_in}]`): the ones it no longer lists are dropped, an
+/// answer given here and not yet delivered stays.
+pub fn store_remote_joins(brain: &Brain, node: &str, list: &[Value], now: i64) -> Result<()> {
+    if !valid_name(node) {
+        return Ok(());
+    }
+    let ctl = brain.open_control()?;
+    let clip =
+        |t: &str, n: usize| -> String { t.chars().filter(|c| !c.is_control()).take(n).collect() };
+    let mut kept: Vec<String> = Vec::new();
+    for v in list.iter().take(16) {
+        let (Some(id), Some(device), Some(words)) =
+            (v["id"].as_str(), v["device"].as_str(), v["check"].as_str())
+        else {
+            continue;
+        };
+        let expires = now + v["expires_in"].as_i64().unwrap_or(0).clamp(0, 3600);
+        ctl.execute(
+            "INSERT INTO remote_joins (node, id, device, words, expires_at) VALUES (?1, ?2, ?3, ?4, ?5)
+             ON CONFLICT(node, id) DO UPDATE SET expires_at = excluded.expires_at",
+            params![node, clip(id, 40), clip(device, 60), clip(words, 60), expires],
+        )?;
+        kept.push(clip(id, 40));
+    }
+    let mut st = ctl.prepare("SELECT id FROM remote_joins WHERE node = ?1 AND answer IS NULL")?;
+    let held: Vec<String> = st
+        .query_map([node], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    for id in held.into_iter().filter(|i| !kept.contains(i)) {
+        ctl.execute(
+            "DELETE FROM remote_joins WHERE node = ?1 AND id = ?2",
+            params![node, id],
+        )?;
+    }
+    ctl.execute(
+        "DELETE FROM remote_joins WHERE expires_at < ?1 - 3600",
+        [now],
+    )?;
+    Ok(())
+}
+
+/// The requests of other nodes waiting for this person's answer: `{id, device, check, node, expires_in, remote}`.
+pub fn remote_joins(brain: &Brain, now: i64) -> Result<Vec<Value>> {
+    let ctl = brain.open_control()?;
+    let mut st = ctl.prepare(
+        "SELECT node, id, device, words, expires_at FROM remote_joins
+         WHERE answer IS NULL AND expires_at > ?1 ORDER BY expires_at, id",
+    )?;
+    let rows = st.query_map([now], |r| {
+        Ok(json!({
+            "node": r.get::<_, String>(0)?, "id": r.get::<_, String>(1)?,
+            "device": r.get::<_, String>(2)?, "check": r.get::<_, String>(3)?,
+            "expires_in": r.get::<_, i64>(4)? - now, "remote": true,
+        }))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// The person answers a request told by another node (`result`: `approved` or `denied`): it leaves the list here at
+/// once and the answer is kept for that node. Returns the node's name, or `None` when no such request is held.
+pub fn answer_remote_join(
+    brain: &Brain,
+    id: &str,
+    result: &str,
+    now: i64,
+) -> Result<Option<String>> {
+    let ctl = brain.open_control()?;
+    let node: Option<String> = ctl
+        .query_row(
+            "SELECT node FROM remote_joins WHERE id = ?1 AND answer IS NULL AND expires_at > ?2",
+            params![id, now],
+            |r| r.get(0),
+        )
+        .optional()?;
+    if let Some(n) = &node {
+        ctl.execute(
+            "UPDATE remote_joins SET answer = ?3 WHERE node = ?1 AND id = ?2",
+            params![n, id, result],
+        )?;
+    }
+    Ok(node)
+}
+
+/// The answers waiting to be told to `node`: `[{id, result}]`.
+pub fn answers_for(brain: &Brain, node: &str) -> Result<Vec<Value>> {
+    let ctl = brain.open_control()?;
+    let mut st =
+        ctl.prepare("SELECT id, answer FROM remote_joins WHERE node = ?1 AND answer IS NOT NULL")?;
+    let rows = st.query_map([node], |r| {
+        Ok(json!({ "id": r.get::<_, String>(0)?, "result": r.get::<_, String>(1)? }))
+    })?;
+    Ok(rows.collect::<rusqlite::Result<_>>()?)
+}
+
+/// The answers to `node` were told: they are forgotten.
+pub fn answers_delivered(brain: &Brain, node: &str) -> Result<()> {
+    brain.open_control()?.execute(
+        "DELETE FROM remote_joins WHERE node = ?1 AND answer IS NOT NULL",
+        [node],
+    )?;
+    Ok(())
 }

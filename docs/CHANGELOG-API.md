@@ -2,6 +2,19 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Adding a node by its id or link, from any node (next version)
+
+Added only; nothing existing changes except one more key in two answers. Details and the rules: [FEDERATION.md](FEDERATION.md), *Adding a node*.
+
+- **Node id**: random, `ABCD-EFGH-IJKL`, made once. It names a node and proves nothing. It is in `GET /.well-known/memcp` (`id`), in `node` of `GET /sync/status` and `GET /sync/peers` (`node.id`), in each directory entry on the wire (`id`) and in each row of `GET /sync/status` `peers` (`id`, `addresses` best first, `via`).
+- **`GET /admin/api/node`**: `{ id, name, version, addresses, exposures, link, qr }`; `link` is `memcp://node?id=…&name=…&addr=…[&addr=…][&t=ticket]`, `qr` an SVG.
+- **`POST /admin/api/nodes/add`** `{ "link": "<link | id | address>" }` (administrator): this node asks THAT node to join, with `POST /join`. Answers `{ "id": "<request>", "state": "asking", "node": { "id", "name" } }`; follow it with `GET /admin/api/join-memory?id=` (`asking`, `waiting` + `check`, `approved`, `denied`, `expired`, `failed` + `error`). Refused (400) with words: not a link, this node, already linked, not known (an id nobody told). The link's `t` is a one-time ticket: the node lets this one in at once, with no words. `POST /admin/api/join-memory` also accepts a `memcp://` link in `address`.
+- **`POST /admin/api/nodes/invite`** `{}` → `{ "link", "qr", "expires_in": 600, "single_use": true }`; `POST /mcp/<peer>/join/invite` answers one more key, `link`.
+- **`POST /admin/api/nodes/via`** `{ "name" | "id" | "peer", "address": "<one it told>" | null }` → `{ "ok": true, "name" }`: the address this node asks that node at first.
+- **Requests on every peer**: `GET /sync/peers` → `node.pending: [{ id, device, check, node_id, waited, expires_in }]` (to a peer of the person only). A peer lists them in its `join/pending` (`GET /admin/api/join/pending`, `GET /mcp/<peer>/join/pending`) with `node` and `remote: true`; every request now carries `node_id` (the id of the asking node, when it says it, in `POST /join` `{ device, node_id?, ticket? }`). Answering a remote one (`POST …/join/approve|deny` `{ id }`) answers `{ "result", "via": "<node>", "queued": true }`; the answer goes to the asked node in `POST /sync/peers` → `answers: [{ id, result: "approved" | "denied" }]`.
+- `memcp-sync --join ADDRESS [--join ADDRESS…] [--expect-id ID]` (ticket in `MEMCP_JOIN_TICKET`); the kept peer is now named after the node that answered (`peer-<node name>`). `MEMCP_JOIN_TTL` (seconds, 2 to 3600) shortens how long a request waits; the default stays 120.
+- Migration 23 of the control database: `peer_directory.node_id`, table `remote_joins`.
+
 ## « À trier » is called Inbox (next version)
 
 Only words change; no route, field, kind or stored name does.

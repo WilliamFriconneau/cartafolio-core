@@ -2,7 +2,7 @@
 
 ## Finding
 
-A node that listens beyond the loopback **advertises itself** on the local network (mDNS, the service `_memcp._tcp`) with its name and its version, and answers `GET /.well-known/memcp` with the same, so that what a device finds can be checked. The node and the manager turn it on with `--advertise --node-name NAME`.
+A node that listens beyond the loopback **advertises itself** on the local network (mDNS, the service `_memcp._tcp`) with its name and its version, and answers `GET /.well-known/memcp` with the same and its node id (`id`, `ABCD-EFGH-IJKL`: it names the node and opens nothing; see FEDERATION.md, « Adding a node »), so that what a device finds can be checked. The node and the manager turn it on with `--advertise --node-name NAME`.
 
 A Home Assistant app runs in a container, which cannot advertise itself on the network: a device finds it by the names a Home Assistant installation answers to (`homeassistant.local`, `memcp.local`), which `discover` tries, and by the tailnet. Advertising by the app itself would need the host network, and is not done.
 

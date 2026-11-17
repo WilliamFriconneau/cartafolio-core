@@ -23,6 +23,14 @@ pub fn well_known(name: &str) -> Value {
     })
 }
 
+/// [`well_known`] with the node's id (`ABCD-EFGH-IJKL`): a person who scanned a link checks that the node that answers
+/// is the one the link names. The id names a node; it opens nothing.
+pub fn well_known_with_id(name: &str, id: &str) -> Value {
+    let mut v = well_known(name);
+    v["id"] = json!(id);
+    v
+}
+
 /// A label that is safe in a DNS name: letters, digits and dashes.
 fn host_label(name: &str) -> String {
     let s: String = name
