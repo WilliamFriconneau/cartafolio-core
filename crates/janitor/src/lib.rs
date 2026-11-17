@@ -7,10 +7,10 @@
 //!    keywords for the spaces (`keywords`), and the router runs again when they changed.
 //! 1. **Every note of an inbox is filed, in the space of that inbox**: a model picks tags and a title, and the note's text
 //!    is written there **as it is**. If no model answers, the note stays.
-//! 2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
+//! 2. **A piece of a note that the capture program absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
 //!    space, never a person's name.
 //!
-//! Recordings are not its business: the bridge, where the speech model is, reads them and erases them. A model only ever
+//! Recordings are not its business: the capture program, where the speech model is, reads them and erases them. A model only ever
 //! picks a place or draws facts: it calls no tool and writes nothing.
 
 use std::collections::BTreeMap;
@@ -446,7 +446,7 @@ impl Janitor {
                     continue;
                 }
                 budget -= 1;
-                // A piece of a note the bridge absorbed: its facts are drawn out, in this space, and the piece leaves.
+                // A piece of a note the capture program absorbed: its facts are drawn out, in this space, and the piece leaves.
                 if tags_of(note).contains(&"inbox/absorb") {
                     let space_tags = tags.get(&space).cloned().unwrap_or_default();
                     self.extract_one(&models, note, id, text, &space, &space_tags, &today, report);

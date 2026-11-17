@@ -62,7 +62,7 @@ To bring in the memory of an installation that ran as another app (a former HemC
 
 On the page of a space, **Record** keeps a voice note, **Attach files** keeps photos, PDF, text and recordings; each is a note of the space, with its file. The microphone needs the page to be served over https (Home Assistant's own address is, in the app or through Nabu Casa or your own certificate).
 
-A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the same space and the recording is erased a week later. Without a service here, a computer that runs the desktop bridge with a local speech model reads the same recordings, and nothing leaves your network.
+A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the same space and the recording is erased a week later. Without a service here, a computer that runs the desktop capture program with a local speech model reads the same recordings, and nothing leaves your network.
 
 | Option | Meaning |
 |---|---|
@@ -80,7 +80,7 @@ into an inbox has calmed down (`janitor_quiet` seconds after the last write, 120
 what the devices sent to **À trier** (the person's one box for everything that comes in, which belongs to no space) goes to
 the inbox of the right space, or waits on the person's page when the janitor is unsure; each note of a space's inbox is filed,
 its text unchanged, in that space; and a piece of a note absorbed from a folder becomes a few short, dated facts. It reads recordings no more:
-the bridge, where the speech model is, transcribes them.
+the capture program, where the speech model is, transcribes them.
 
 | option | what |
 |---|---|

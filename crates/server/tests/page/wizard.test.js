@@ -83,7 +83,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("a space row offers to connect an assistant", $$("#spaces button").some(b => b.textContent === "Connect an assistant"));
 
   // --- Connect a bridge: no space to choose, everything goes to À trier
-  check("no space is offered to a bridge", $("#pair-all") === null && $("#pair-spaces") === null);
+  check("no space is offered to a capture program", $("#pair-all") === null && $("#pair-spaces") === null);
   $("#pair-form").dispatchEvent(new w.Event("submit", { cancelable: true }));
   await sleep(100);
   check("one code, asked for no space", JSON.stringify(world.paired) === "{}" && $("#pair-dlg").hasAttribute("open"), JSON.stringify(world.paired));

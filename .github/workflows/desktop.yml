@@ -1,5 +1,5 @@
 # The desktop node, installed for real on a Mac and on Windows: the installers of packaging/ run with the programs of
-# this commit, the node and the bridge start as tasks of the user, a note and a file reach « À trier » through the bridge,
+# this commit, the node and the capture program start as tasks of the user, a note and a file reach « À trier » through the capture program,
 # an assistant's request goes through `memcp-capture connect`, then everything is removed.
 name: desktop
 
@@ -23,7 +23,7 @@ jobs:
         run: cargo build --release --locked -p memcp-server -p memcp-capture -p memcp-janitor
       - name: Install
         run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791 --bridge-port 18792
-      - name: A note, a file and an assistant's request through the bridge
+      - name: A note, a file and an assistant's request through the capture program
         run: |
           B="$HOME/Library/Application Support/MemCP/bin/memcp-capture"
           CONF="$HOME/Library/Application Support/MemCP/bridge/bridge.conf"
@@ -56,7 +56,7 @@ jobs:
       - name: Install
         shell: pwsh
         run: ./packaging/windows/install.ps1 -Yes -From target\release -Port 18791 -BridgePort 18792
-      - name: A note, a file and an assistant's request through the bridge
+      - name: A note, a file and an assistant's request through the capture program
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -75,7 +75,7 @@ jobs:
           ) -join "`n"
           $answers = $requests | & $b connect 127.0.0.1:18792
           $answers
-          if (-not ($answers -match '"tools"')) { throw 'no tools through the bridge' }
+          if (-not ($answers -match '"tools"')) { throw 'no tools through the capture program' }
           $spaces = & (Join-Path $root 'bin\memcp.exe') --data (Join-Path $root 'data') space list
           $spaces
           if (-not ($spaces -match 'owner-a-trier')) { throw 'no À trier' }

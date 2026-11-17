@@ -18,11 +18,11 @@ like any other client, with a connection of its own, and does three jobs:
    a space it did not name rightly becomes the inbox's own, a tag that is not a plain path (64 characters at most) or that aims at `inbox`, `sources`,
    `dossier`, `guide`, `proposals`, `index`, `code`, `decision`, `journal` or `ticket` is dropped. If no model answers, the
    note stays; a note that cannot be written three times is left alone.
-2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into facts.** At most eight short, dated facts in
+2. **A piece of a note that the capture program absorbed (`inbox/absorb`) is turned into facts.** At most eight short, dated facts in
    the note's words, never a person's name (the post instead), never health or social data of someone a service supports;
    each ends with where it came from and is written in the space of that inbox, tagged `absorb`. Then the piece leaves.
 
-**Recordings are not its business.** The bridge, where the speech model is, transcribes them, puts their text in the inbox,
+**Recordings are not its business.** The capture program, where the speech model is, transcribes them, puts their text in the inbox,
 and erases them a week after the text was filed (`memcp-capture transcribe`).
 
 ## Keywords
@@ -120,6 +120,6 @@ own network.
 ## The connection
 
 Create it with `memcp connect janitor --all` (or `--grant <space>:rw,…` to limit what it files into). The capturing
-devices (phone, laptop, the Bridge) keep a key limited to the inbox of À trier: they can drop a note, a file or a recording
+devices (phone, laptop, the capture program) keep a key limited to the inbox of À trier: they can drop a note, a file or a recording
 there, and read nothing back.
 The janitor is internal to the memory's owner: it reads and files everywhere his connection allows, so give it `--all`.

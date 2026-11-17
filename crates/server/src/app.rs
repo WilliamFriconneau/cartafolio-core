@@ -496,7 +496,7 @@ impl App {
             .is_some()
     }
 
-    /// The code of a bridge's pairing request.
+    /// The code of a capture program's pairing request.
     pub fn holds_pairing_code(&self, body: &[u8]) -> bool {
         crate::pair::holds(self, body)
     }

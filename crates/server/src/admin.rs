@@ -467,7 +467,7 @@ fn action(
             Ok(json!({ "space": space.as_str(), "owner": me.id }))
         }
         "/pairing" => {
-            // A code a bridge exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
+            // A code a capture program exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
             // never chooses a space, the janitor or the person sorts what it sends.
             let (code, triage) =
                 memcp_core::pairing::create_for_triage(&app.brain, &me.id, &me.name, util::now())

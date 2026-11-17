@@ -1,5 +1,5 @@
 #!/bin/sh
-# MemCP on a Mac: the node (`memcp serve`) and the bridge (`memcp-capture`) as background tasks of your user, started at
+# MemCP on a Mac: the node (`memcp serve`) and the capture program (`memcp-capture`) as background tasks of your user, started at
 # login and again after a crash, with their logs. Nothing runs as root and nothing is put outside your home folder.
 #
 #   sh install-mac.sh               install or update (asks a few questions)
@@ -8,10 +8,10 @@
 # What goes where:
 #   ~/Library/Application Support/MemCP/bin      memcp, memcp-capture, memcp-janitor
 #   ~/Library/Application Support/MemCP/data     the memory (a folder of databases: back it up, it is yours)
-#   ~/Library/Application Support/MemCP/bridge   the bridge's settings and what waits to be sent
+#   ~/Library/Application Support/MemCP/bridge   the capture program's settings and what waits to be sent
 #   ~/Library/Logs/MemCP                         node.log, bridge.log, transcribe.log
 #   ~/Library/LaunchAgents/org.memcp.*.plist     the tasks (launchd agents of your user)
-#   Keychain, service memcp-capture               the keys of the bridge and of this Mac (never written in a file)
+#   Keychain, service memcp-capture               the keys of the capture program and of this Mac (never written in a file)
 #
 # Options (or the same words as environment variables, in capitals, prefixed MEMCP_):
 #   --yes                take every default, ask nothing
@@ -20,12 +20,12 @@
 #   --language en|fr     the language of search and of the page (default en)
 #   --spaces LIST        the first spaces (default personal,work,health)
 #   --port N             the node's port on the loopback (default 8791)
-#   --bridge-port N      the bridge's port on the loopback, for assistants (default 8792)
+#   --bridge-port N      the capture program's port on the loopback, for assistants (default 8792)
 #   --whisper-model FILE voice notes read on this Mac by whisper.cpp (`brew install whisper-cpp ffmpeg`) with this model
 #   --speech-api URL     or by a speech service of the OpenAI kind (key in MEMCP_SPEECH_API_KEY): the recordings leave
 #                        this Mac for it
 #   --no-agents          install the programs and the memory, start nothing
-#   --uninstall          remove the tasks, the programs and the bridge's key; the memory and the logs are kept
+#   --uninstall          remove the tasks, the programs and the capture program's key; the memory and the logs are kept
 #   --purge              with --uninstall: also delete the memory and the logs (asks first, unless --yes)
 #   --help
 set -eu
@@ -110,7 +110,7 @@ if [ "$ACTION" = uninstall ]; then
   security delete-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1 || true
   security delete-generic-password -s memcp-capture -a "$NODE_URL/mcp/this-mac" >/dev/null 2>&1 || true
   rm -rf "$BIN" "$BRIDGE"
-  say "the tasks, the programs and the bridge's key are removed."
+  say "the tasks, the programs and the capture program's key are removed."
   if [ "$PURGE" = 1 ]; then
     if [ "$YES" = 1 ] || confirm "Delete the memory in $DATA and the logs? This cannot be undone" n; then
       rm -rf "$DATA" "$LOGS"
@@ -133,11 +133,11 @@ step "1/5  Choices"
 ask "Language of search and of the page (en or fr)?" "$LANGUAGE"; LANGUAGE="$ANSWER"
 ask "First spaces, comma separated (a space is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
 ask "Port of the node on this Mac?" "$PORT"; PORT="$ANSWER"
-ask "Port of the bridge on this Mac, for assistants?" "$BRIDGE_PORT"; BRIDGE_PORT="$ANSWER"
+ask "Port of the capture program on this Mac, for assistants?" "$BRIDGE_PORT"; BRIDGE_PORT="$ANSWER"
 for p in "$PORT" "$BRIDGE_PORT"; do
   case "$p" in ''|*[!0-9]*) die "a port must be a number" ;; esac
 done
-[ "$PORT" != "$BRIDGE_PORT" ] || die "the node and the bridge need two ports"
+[ "$PORT" != "$BRIDGE_PORT" ] || die "the node and the capture program need two ports"
 NODE_URL="http://127.0.0.1:$PORT"
 BRIDGE_URL="$NODE_URL/mcp/$CONNECTION"
 
@@ -189,7 +189,7 @@ else
 fi
 
 # --- the node, running ---------------------------------------------------------------------------------------
-step "4/5  The node and the bridge's key"
+step "4/5  The node and the capture program's key"
 plist() { # label, interval (0: always on), program arguments...
   label=$1; interval=$2; shift 2
   {
@@ -266,9 +266,9 @@ if ! security find-generic-password -s memcp-capture -a "$DEVICE_ACCOUNT" >/dev/
   say "this Mac is paired with its memory: its captures go to À trier."
 fi
 
-# The bridge's own connection: the memory's tools for the assistants on this Mac, and the voice notes to read.
+# The capture program's own connection: the memory's tools for the assistants on this Mac, and the voice notes to read.
 if security find-generic-password -s memcp-capture -a "$BRIDGE_URL" >/dev/null 2>&1; then
-  say "the bridge already has its key in the Keychain."
+  say "the capture program already has its key in the Keychain."
 else
   OUT=$("$BIN/memcp" --data "$DATA" connect "$CONNECTION" --all --public-url "$NODE_URL" 2>&1 ||
         "$BIN/memcp" --data "$DATA" connect "$CONNECTION" --all --rotate --public-url "$NODE_URL" 2>&1) ||
@@ -277,9 +277,9 @@ else
   [ -n "$KEY" ] || die "no key in the node's answer"
   security add-generic-password -U -s memcp-capture -a "$BRIDGE_URL" -l "MemCP bridge" -w "$KEY"
   KEY=
-  say "a key for the bridge is in the Keychain (service memcp-capture)."
+  say "a key for the capture program is in the Keychain (service memcp-capture)."
 fi
-# The bridge's settings: the address only; the key stays in the Keychain.
+# The capture program's settings: the address only; the key stays in the Keychain.
 {
   echo "# Written by install-mac.sh; the key is in the Keychain (service memcp-capture, account the url)."
   echo "url = $BRIDGE_URL"
@@ -316,7 +316,7 @@ if [ "$AGENTS_ON" = 1 ]; then
   for label in org.memcp.bridge org.memcp.transcribe; do
     [ -f "$AGENTS/$label.plist" ] && launchctl bootstrap "$DOMAIN" "$AGENTS/$label.plist"
   done
-  say "the node answers on $NODE_URL, the bridge on 127.0.0.1:$BRIDGE_PORT; they start again at login."
+  say "the node answers on $NODE_URL, the capture program on 127.0.0.1:$BRIDGE_PORT; they start again at login."
 else
   [ -z "$NODE_PID" ] || kill "$NODE_PID" 2>/dev/null || true
   say "nothing left running (--no-agents). Start them with:"
@@ -332,7 +332,7 @@ EOF
 [ -z "$TOKEN" ] || printf 'Its console key (shown once; it opens the page, never the memory):\n  %s\n' "$TOKEN"
 cat <<EOF
 
-An assistant that runs a command reaches the memory through the bridge, knowing neither its address nor its key:
+An assistant that runs a command reaches the memory through the capture program, knowing neither its address nor its key:
   $BIN/memcp-capture connect 127.0.0.1:$BRIDGE_PORT
 For Claude Code:
   claude mcp add memcp -- "$BIN/memcp-capture" connect 127.0.0.1:$BRIDGE_PORT

@@ -39,7 +39,7 @@ jobs:
           path: dist/*
 
   native:
-    # The server and the bridge for the computers: macOS and Windows build on their own runners.
+    # The server and the capture program for the computers: macOS and Windows build on their own runners.
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:

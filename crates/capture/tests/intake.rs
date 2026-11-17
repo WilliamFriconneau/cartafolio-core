@@ -261,7 +261,7 @@ fn the_gateway_passes_the_memory_through_and_remembers_what_it_said() {
     );
     assert!(
         instr.contains("kept here and sent when it is back"),
-        "and what the bridge adds"
+        "and what the capture program adds"
     );
     assert!(
         g.handle(&json!({"jsonrpc":"2.0","method":"notifications/initialized"}))
@@ -346,7 +346,7 @@ fn the_gateway_offline_starts_keeps_the_writes_without_a_decision_and_says_what_
             "outbox_status",
             "outbox_flush"
         ],
-        "never seen the memory's list: the three that can wait, then the bridge's own (no capture_file without a folder)"
+        "never seen the memory's list: the three that can wait, then the capture program's own (no capture_file without a folder)"
     );
 
     let q = send(
@@ -466,7 +466,8 @@ fn local(g: &mut Gateway, id: u64, tool: &str, args: &Value) -> (bool, Value) {
 }
 
 #[test]
-fn the_bridges_own_tools_capture_a_file_by_its_path_so_its_bytes_never_cross_the_assistant() {
+fn the_capture_programs_own_tools_capture_a_file_by_its_path_so_its_bytes_never_cross_the_assistant()
+ {
     let mem = memory("local-tools", &["sam-me:rw", "sam-me:rw"]);
     mem.up();
     let work = unique("allowed");
@@ -610,7 +611,7 @@ fn without_a_named_folder_capture_file_is_not_even_offered() {
 }
 
 #[test]
-fn offline_the_bridges_own_tools_keep_and_the_status_and_flush_tools_tell_and_send() {
+fn offline_the_capture_programs_own_tools_keep_and_the_status_and_flush_tools_tell_and_send() {
     let mem = memory("local-offline", &["sam-me:rw", "sam-me:rw"]);
     let work = unique("files");
     let outbox = unique("outbox");

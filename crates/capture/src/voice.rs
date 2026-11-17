@@ -357,7 +357,7 @@ fn one(
             // Nothing to wait for: the recording leaves the inbox (its bytes stay: `file_retire` erases nothing).
             let _ = client.call(
                 "file_retire",
-                json!({ "id": id, "reason": "nothing audible in it (silence or noise), said the bridge" }),
+                json!({ "id": id, "reason": "nothing audible in it (silence or noise), said the capture program" }),
             );
             report.nothing_audible += 1;
         }

@@ -48,7 +48,7 @@ pub fn display(code: &str) -> String {
     }
 }
 
-/// The rights a bridge gets for the spaces ticked: the inbox of each, nothing else.
+/// The rights a capture program gets for the spaces ticked: the inbox of each, nothing else.
 pub fn rights_for(spaces: &[String]) -> Result<Rights> {
     if spaces.is_empty() {
         return Err(Error::Invalid("tick at least one space".into()));

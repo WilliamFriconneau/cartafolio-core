@@ -3,7 +3,7 @@
 //! - `memcp-capture [gateway]`: the memory's tools on standard input and output, for an assistant that runs a
 //!   command. Writes without a decision are kept while the network is down.
 //! - `memcp-capture send FILE...`, `text TEXT`: put captures into « À trier », the person's one box for everything
-//!   that comes in (kept first, sent at once if the memory can be reached). The bridge never chooses a space.
+//!   that comes in (kept first, sent at once if the memory can be reached). The capture program never chooses a space.
 //! - `memcp-capture flush`, `status`: send what waits; list what waits and what went.
 //!
 //! - `memcp-capture --config FILE --socket PATH`: the gateway on a Unix socket, run as a user of its own; `memcp-capture connect
@@ -82,7 +82,7 @@ fn keychain(url: &str) -> Option<String> {
     })
 }
 
-/// The key from a file only its owner can read: a key in a file that others can read is no longer the bridge's alone.
+/// The key from a file only its owner can read: a key in a file that others can read is no longer the capture program's alone.
 fn read_key_file(file: &std::path::Path) -> Result<String, String> {
     private_file(file)?;
     let key = std::fs::read_to_string(file).map_err(|e| format!("{}: {e}", file.display()))?;
@@ -223,7 +223,7 @@ fn read_config(file: &std::path::Path) -> Result<FileConfig, String> {
         a.exclude.clone_from(&exclude);
         a.protect.clone_from(&protect);
         a.roles.clone_from(&roles);
-        // What the bridge puts down in a folder it also absorbs is not sent back.
+        // What the capture program puts down in a folder it also absorbs is not sent back.
         for d in &deliver {
             if let Ok(rel) = d.dir.strip_prefix(&a.dir) {
                 a.exclude.push(rel.to_string_lossy().into_owned());
@@ -457,7 +457,7 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
     let mut a = parse(raw)?;
     if a.mode == "connect" {
         let [path] = a.rest.as_slice() else {
-            return Err("connect needs the path of the bridge's socket".into());
+            return Err("connect needs the path of the capture program's socket".into());
         };
         // An address (127.0.0.1:PORT) is an HTTP gateway, on every system; a path is a Unix socket.
         if memcp_capture::relay::is_address(path) {

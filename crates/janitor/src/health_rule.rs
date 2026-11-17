@@ -251,7 +251,7 @@ mod tests {
             with_origin("migraine #sante", "Obsidian"),
             "migraine #sante\n\n(source : Obsidian)"
         );
-        let bridge = json!({"text": "x", "tags": ["inbox"], "author": "bridge-laptop"});
-        assert_eq!(origin(&bridge), "bridge-laptop");
+        let app = json!({"text": "x", "tags": ["inbox"], "author": "bridge-laptop"});
+        assert_eq!(origin(&app), "bridge-laptop");
     }
 }

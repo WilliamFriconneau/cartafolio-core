@@ -1,4 +1,4 @@
-//! Absorbing a folder of notes: the bridge reads the Markdown files of a folder the person keeps up to date (synced to
+//! Absorbing a folder of notes: the capture program reads the Markdown files of a folder the person keeps up to date (synced to
 //! this machine) and sends **what is new in them** to the inbox of a space, tagged `inbox/absorb`. The server's janitor
 //! then draws short, dated facts out of each piece, in the note's own words: what is memorised is the information, not
 //! a copy of the files.

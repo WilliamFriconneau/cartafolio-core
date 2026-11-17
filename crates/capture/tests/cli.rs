@@ -11,7 +11,7 @@ use std::process::{Command, Output, Stdio};
 use common::{memory, unique, write};
 use serde_json::{Value, json};
 
-fn bridge(args: &[&str], key: &str, stdin: Option<&str>) -> Output {
+fn capture_cmd(args: &[&str], key: &str, stdin: Option<&str>) -> Output {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_memcp-capture"));
     cmd.args(args)
         .env("MEMCP_TOKEN", key)
@@ -49,7 +49,7 @@ fn a_note_is_kept_while_offline_listed_and_sent_when_the_memory_is_back() {
     let (url, o) = (mem.url(0), outbox.to_str().expect("path"));
     let args = |mode: &'static str| vec![mode, "--url", &url, "--outbox", o, "--utc-offset", "60"];
     let _ = args;
-    let offline = bridge(
+    let offline = capture_cmd(
         &[
             "text",
             "Une idée du terminal.",
@@ -67,7 +67,7 @@ fn a_note_is_kept_while_offline_listed_and_sent_when_the_memory_is_back() {
         "{}",
         out(&offline)
     );
-    let status = bridge(
+    let status = capture_cmd(
         &["status", "--url", &url, "--outbox", o],
         &mem.tokens[0],
         None,
@@ -79,7 +79,7 @@ fn a_note_is_kept_while_offline_listed_and_sent_when_the_memory_is_back() {
     );
 
     mem.up();
-    let flushed = bridge(
+    let flushed = capture_cmd(
         &["flush", "--url", &url, "--outbox", o],
         &mem.tokens[0],
         None,
@@ -95,7 +95,7 @@ fn a_note_is_kept_while_offline_listed_and_sent_when_the_memory_is_back() {
             .iter()
             .any(|t| t.ends_with("Une idée du terminal."))
     );
-    let after = bridge(
+    let after = capture_cmd(
         &["status", "--url", &url, "--outbox", o],
         &mem.tokens[0],
         None,
@@ -112,7 +112,7 @@ fn files_are_sent_and_a_file_the_memory_refuses_exits_with_three() {
     let good = write(&work, "devis.txt", b"un devis");
     let bad = write(&work, "binaire.dat", &[0xFF, 0x00, 0xFE, 0x01]);
     let (url, o) = (mem.url(0), outbox.to_str().expect("path"));
-    let ok = bridge(
+    let ok = capture_cmd(
         &[
             "send",
             good.to_str().expect("p"),
@@ -128,7 +128,7 @@ fn files_are_sent_and_a_file_the_memory_refuses_exits_with_three() {
     );
     assert_eq!(ok.status.code(), Some(0), "{}{}", out(&ok), err(&ok));
     assert!(out(&ok).contains("sent 1"));
-    let refused = bridge(
+    let refused = capture_cmd(
         &[
             "send",
             bad.to_str().expect("p"),
@@ -151,7 +151,7 @@ fn a_refused_key_exits_with_one_and_wrong_use_with_two() {
     mem.up();
     let outbox = unique("outbox");
     let (url, o) = (mem.url(0), outbox.to_str().expect("path"));
-    let r = bridge(
+    let r = capture_cmd(
         &["text", "x", "--url", &url, "--outbox", o],
         "mtm_wrong",
         None,
@@ -159,22 +159,22 @@ fn a_refused_key_exits_with_one_and_wrong_use_with_two() {
     assert_eq!(r.status.code(), Some(1), "{}", out(&r));
     assert!(out(&r).contains("REFUSED OR REVOKED") && out(&r).contains("waiting 1"));
     // Wrong use: no address, a space named (there is none to choose), no key; an address in clear is only warned about.
-    let none = bridge(&["status"], "k", None);
+    let none = capture_cmd(&["status"], "k", None);
     assert_eq!(none.status.code(), Some(2));
     assert!(err(&none).contains("missing --url"));
-    let clear = bridge(
+    let clear = capture_cmd(
         &["status", "--url", "http://example.com/mcp/x", "--outbox", o],
         "k",
         None,
     );
-    // Taken, with a warning: the bridge is the person's own relay, never a wall.
+    // Taken, with a warning: the capture program is the person's own relay, never a wall.
     assert_eq!(clear.status.code(), Some(0), "{}", err(&clear));
     assert!(
         err(&clear).contains("WARNING") && err(&clear).contains("in clear"),
         "{}",
         err(&clear)
     );
-    let space = bridge(
+    let space = capture_cmd(
         &[
             "text", "x", "--url", &url, "--vault", "sam-me", "--outbox", o,
         ],
@@ -183,7 +183,7 @@ fn a_refused_key_exits_with_one_and_wrong_use_with_two() {
     );
     assert_eq!(space.status.code(), Some(2));
     assert!(err(&space).contains("À trier"), "{}", err(&space));
-    let nokey = bridge(
+    let nokey = capture_cmd(
         &[
             "status",
             "--url",
@@ -218,7 +218,7 @@ fn the_default_mode_is_the_gateway_on_standard_input_and_output() {
     .collect::<Vec<_>>()
     .join("\n")
         + "\n";
-    let r = bridge(
+    let r = capture_cmd(
         &["--url", &url, "--outbox", o],
         &mem.tokens[0],
         Some(&lines),
@@ -250,7 +250,7 @@ fn the_default_mode_is_the_gateway_on_standard_input_and_output() {
     let _ = std::fs::remove_dir_all(outbox);
 }
 
-/// A bridge serving over HTTP, killed when the test ends.
+/// A capture program serving over HTTP, killed when the test ends.
 struct Serving(std::process::Child);
 
 impl Drop for Serving {
@@ -262,7 +262,7 @@ impl Drop for Serving {
 
 fn serve_over_http(url: &str, key: &str, outbox: &str) -> (Serving, u16) {
     use std::io::{BufRead, BufReader};
-    // Port 0: the system picks one, and the bridge says which on its standard error. No port is chosen here and
+    // Port 0: the system picks one, and the capture program says which on its standard error. No port is chosen here and
     // left free for another program to take.
     let mut child = Command::new(env!("CARGO_BIN_EXE_memcp-capture"))
         .args(["--url", url, "--outbox", outbox, "--listen", "127.0.0.1:0"])
@@ -276,7 +276,7 @@ fn serve_over_http(url: &str, key: &str, outbox: &str) -> (Serving, u16) {
     let mut reader = BufReader::new(stderr);
     let mut line = String::new();
     reader.read_line(&mut line).expect("banner");
-    // Keep reading: a closed pipe would make the bridge's next message fail.
+    // Keep reading: a closed pipe would make the capture program's next message fail.
     std::thread::spawn(move || for _ in reader.lines() {});
     let port: u16 = line
         .rsplit(':')
@@ -303,7 +303,7 @@ fn over_http_on_this_machine_a_program_uses_the_tools_without_holding_the_key() 
     let outbox = unique("outbox");
     let (_serving, port) =
         serve_over_http(&mem.url(0), &mem.tokens[0], outbox.to_str().expect("path"));
-    // Any MCP client may use it, and it needs no key: the bridge has it.
+    // Any MCP client may use it, and it needs no key: the capture program has it.
     let mut c = memcp_client::Client::new(&format!("http://127.0.0.1:{port}/mcp"), "no key needed");
     c.retry.tries = 1;
     let sent = c
@@ -355,7 +355,7 @@ fn the_bridge_refuses_to_listen_anywhere_but_on_this_machine() {
     let outbox = unique("outbox");
     let o = outbox.to_str().expect("path");
     for addr in ["0.0.0.0:9999", "10.0.0.20:9999"] {
-        let r = bridge(
+        let r = capture_cmd(
             &["--url", &mem.url(0), "--outbox", o, "--listen", addr],
             &mem.tokens[0],
             None,
@@ -394,12 +394,12 @@ fn the_key_can_come_from_a_file_only_its_owner_reads_and_that_file_wins_over_the
     };
     // A file the group can read is refused, and nothing is sent.
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o640)).expect("chmod");
-    let open = bridge(&args(&[]), "ignored", None);
+    let open = capture_cmd(&args(&[]), "ignored", None);
     assert_eq!(open.status.code(), Some(2), "{}", out(&open));
     assert!(err(&open).contains("chmod 600"), "{}", err(&open));
     // Mode 600: it works, with a wrong key in the environment (the file is what is used).
     std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o600)).expect("chmod");
-    let sent = bridge(&args(&[]), "mtm_wrong", None);
+    let sent = capture_cmd(&args(&[]), "mtm_wrong", None);
     assert_eq!(sent.status.code(), Some(0), "{}", err(&sent));
     assert!(
         mem.texts("inbox", &["fichier"])
@@ -407,7 +407,7 @@ fn the_key_can_come_from_a_file_only_its_owner_reads_and_that_file_wins_over_the
             .any(|t| t.ends_with("Une note par fichier de clé."))
     );
     // A missing file is an error, not a fall back to the environment.
-    let missing = bridge(
+    let missing = capture_cmd(
         &[
             "text",
             "x",

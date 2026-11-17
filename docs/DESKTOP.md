@@ -11,9 +11,9 @@ leaves it unless a speech service is chosen for the voice notes.
 | installer | `packaging/macos/install-mac.sh` | `packaging/windows/install.ps1` |
 | programs | `~/Library/Application Support/MemCP/bin` | `%LOCALAPPDATA%\MemCP\bin` |
 | memory | `~/Library/Application Support/MemCP/data` | `%LOCALAPPDATA%\MemCP\data` |
-| bridge (settings, what waits) | `~/Library/Application Support/MemCP/bridge` | `%LOCALAPPDATA%\MemCP\bridge` |
+| capture program (settings, what waits) | `~/Library/Application Support/MemCP/bridge` | `%LOCALAPPDATA%\MemCP\bridge` |
 | logs | `~/Library/Logs/MemCP` | `%LOCALAPPDATA%\MemCP\logs` |
-| tasks | launchd agents `~/Library/LaunchAgents/org.memcp.{node,bridge,transcribe}.plist` | Task Scheduler, folder `\MemCP\` |
+| tasks | launchd agents `~/Library/LaunchAgents/org.memcp.{node,capture program,transcribe}.plist` | Task Scheduler, folder `\MemCP\` |
 | keys | Keychain, service `memcp-capture`, account the connection's address | `bridge.key`, `device.key` in the capture program folder, readable by the person only |
 | assistants | `memcp-capture connect 127.0.0.1:8792` | `memcp-capture.exe connect 127.0.0.1:8792` (no Unix socket on Windows) |
 

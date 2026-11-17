@@ -1,9 +1,9 @@
 //! `memcp-capture connect ADDRESS`: carries standard input and output to a gateway served over HTTP on this machine
 //! (`--listen`), the way `connect SOCKET` does for a Unix socket. It is how an assistant that runs a command reaches
-//! the bridge on Windows, which has no Unix socket, and works the same everywhere.
+//! the capture program on Windows, which has no Unix socket, and works the same everywhere.
 //!
 //! One JSON-RPC message per line goes in; the answer, when there is one, comes out as one line. Only a loopback
-//! address is accepted: the bridge's gateway is never served to the network.
+//! address is accepted: the capture program's gateway is never served to the network.
 
 use std::io::{self, BufRead, Write};
 use std::time::Duration;

@@ -51,7 +51,7 @@ async function open(browser, n, viewport, opts = {}) {
 }
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name), fullPage: true }); };
 const wide = page => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
-const FORBIDDEN = /\b(bridges?|prox(y|ies)|spaces?)\b/i;
+const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
 
 (async () => {
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ["--no-sandbox"], headless: true });

@@ -1,7 +1,7 @@
 //! The gateway over HTTP, for a program on this computer that only speaks HTTP (an assistant's app, an internal
 //! tool): `POST /mcp` with one JSON-RPC message (or a batch), answered as JSON. It listens **on this machine only**
 //! (a loopback address is the one thing accepted), and refuses a request that a web page could have made: the
-//! `Host` and the `Origin` must be this machine. There is no key to give: the bridge holds it, which is the point,
+//! `Host` and the `Origin` must be this machine. There is no key to give: the capture program holds it, which is the point,
 //! and the reason it never listens anywhere else.
 
 use std::io::Read;
@@ -42,7 +42,7 @@ fn loopback_addr(addr: &str) -> Result<SocketAddr, Error> {
     match fixed.parse::<SocketAddr>() {
         Ok(a) if a.ip().is_loopback() => Ok(a),
         _ => Err(Error::Invalid(format!(
-            "{addr} is refused: the bridge listens on this machine only (127.0.0.1 or [::1])"
+            "{addr} is refused: the capture program listens on this machine only (127.0.0.1 or [::1])"
         ))),
     }
 }

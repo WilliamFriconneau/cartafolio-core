@@ -248,7 +248,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             )
             .expect("rules");
     }
-    // Pieces of a note the bridge absorbed: facts are drawn out, in their own space, and the pieces leave.
+    // Pieces of a note the capture program absorbed: facts are drawn out, in their own space, and the pieces leave.
     for t in [
         "D'après la note Projets/Alpha.md, modifiée le 2026-11-03 : Alpha — Suite : la directrice des opérations valide le budget le 2026-11-10.",
         "D'après la note Projets/Vide.md, modifiée le 2026-11-03 : RIEN à retenir.",

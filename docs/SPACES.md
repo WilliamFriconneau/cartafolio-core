@@ -23,14 +23,14 @@ A **space** is the unit of rights (one SQLite file). A person organises their sp
 
 A space can be fed by **several folders scattered on the machine** (Markdown, text), as a drive does.
 
-- A *mount* is a **logical folder** attached to a space (or a sub-space): it has an id and a name, and each node that holds it says **where it is on its own disk** (or that it does not hold it). The same folder is `~/Drive/Work` on one computer and `D:\\Work` on another, and a bridge picks, on its own machine, the path and the space it feeds. The mount has a mode: **source** (the folder is the truth: changes made by hand are picked up, the facts follow) or **export** (the memory is the truth: the folder is rewritten from it). Both modes exist. A space may have several mounts of either mode.
+- A *mount* is a **logical folder** attached to a space (or a sub-space): it has an id and a name, and each node that holds it says **where it is on its own disk** (or that it does not hold it). The same folder is `~/Drive/Work` on one computer and `D:\\Work` on another, and a capture program picks, on its own machine, the path and the space it feeds. The mount has a mode: **source** (the folder is the truth: changes made by hand are picked up, the facts follow) or **export** (the memory is the truth: the folder is rewritten from it). Both modes exist. A space may have several mounts of either mode.
 - Picking up changes: a scan at start and at an interval, then file notifications where the system gives them. A file is one passage, tagged by its relative path. A deleted file retires its passage; nothing is erased.
 - The first uses: an Obsidian vault, a `Code` folder of notes and specs, a Drive folder synchronised to disk.
 - Safety: a mount is added only by the person, from the page; a path is resolved and refused if it leaves the mounted root (links included); files above a size are skipped and listed.
 
 ### One synchroniser per folder
 
-When the same folder is held by several nodes (a laptop's bridge and the Home Assistant hub), the files are replicated between them the way Syncthing does it: by content hash, in chunks, a file only when it changed, a conflict kept as a copy. MemCP does not become a second drive:
+When the same folder is held by several nodes (a laptop's capture program and the Home Assistant hub), the files are replicated between them the way Syncthing does it: by content hash, in chunks, a file only when it changed, a conflict kept as a copy. MemCP does not become a second drive:
 
 - A folder already synchronised by a drive (Google Drive, OneDrive, iCloud) is marked *managed elsewhere* on that node: MemCP only reads it there. Two synchronisers writing the same files make echoes and conflicts.
 - Replication is per mount and per pair of nodes, chosen by the person: *files and passages*, *passages only* (the files stay where they are), or *nothing*.
@@ -52,15 +52,15 @@ MemCP is also a manager of folders that other programs synchronise (Google Drive
 
 ## 3. Running on Windows (phase 4)
 
-- **State.** The whole workspace (the server, the bridge, the janitor and the Swift interface) builds on Windows in CI, and the releases carry a Windows build of `memcp`, `memcp-capture` and `memcp-janitor` next to the macOS and Linux ones. What is not done: the **test suites** do not run on Windows yet (several use Unix file modes), and the bridge's gateway over a Unix socket is Unix only: on Windows, run the gateway with `memcp-capture --listen 127.0.0.1:PORT` and give the assistant `memcp-capture connect 127.0.0.1:PORT`, which carries its standard input and output to it (this form works on every system, and only on the loopback).
+- **State.** The whole workspace (the server, the capture program, the janitor and the Swift interface) builds on Windows in CI, and the releases carry a Windows build of `memcp`, `memcp-capture` and `memcp-janitor` next to the macOS and Linux ones. What is not done: the **test suites** do not run on Windows yet (several use Unix file modes), and the capture program's gateway over a Unix socket is Unix only: on Windows, run the gateway with `memcp-capture --listen 127.0.0.1:PORT` and give the assistant `memcp-capture connect 127.0.0.1:PORT`, which carries its standard input and output to it (this form works on every system, and only on the loopback).
 - **Private files.** Unix keeps a data folder at `0700` and its files at `0600`. Windows has no such bits: a folder takes the access list of the folder it is made in, so the data directory belongs **under the person's own profile** (for example `%LOCALAPPDATA%\MemCP`), never in a shared folder. The code treats these calls as no-ops there (`fsx`), and `memcp doctor` does not check modes on Windows.
 - **Running.** `memcp serve` as a plain program, or as a service of the person's own account. The folders it mounts are any local or synchronised folder; paths with spaces, drive letters and long names are the next thing to test.
 
-## 4. Backup with the bridges (phase 5)
+## 4. Backup with the capture programs (phase 5)
 
-- The memory already exports a consistent snapshot. A **bridge** (a small local client) asks for it on a schedule and writes it to a folder the person chose: another disk, a Drive folder, a NAS.
+- The memory already exports a consistent snapshot. A **capture program** (a small local client) asks for it on a schedule and writes it to a folder the person chose: another disk, a Drive folder, a NAS.
 - A snapshot is one archive of the spaces the person owns, with a manifest of hashes, so that a restore can be checked. It carries the layout (the tree), the guides and the history.
-- A bridge never needs more than the right to read for backup; restoring is a deliberate act on the server by the person.
+- A capture program never needs more than the right to read for backup; restoring is a deliberate act on the server by the person.
 
 ## Order
 
@@ -68,4 +68,4 @@ MemCP is also a manager of folders that other programs synchronise (Google Drive
 2. Merge and retire.
 3. Folder-backed spaces.
 4. Windows.
-5. Backup with the bridges.
+5. Backup with the capture programs.

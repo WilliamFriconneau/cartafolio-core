@@ -1,5 +1,5 @@
-//! The bridge, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
-//! bridge's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
+//! The capture program, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
+//! capture program's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
 //! is read from the Keychain by Swift and handed over for the length of the run, never stored here.
 //!
 //! `Intake.flush()` blocks while it sends: call it from a background task, after each `submit…` and every
@@ -30,7 +30,7 @@ pub enum ItemKind {
     Text,
     Document,
     Audio,
-    /// A call of a tool of the memory kept by the bridge's gateway.
+    /// A call of a tool of the memory kept by the capture program's gateway.
     Call,
 }
 
@@ -124,7 +124,7 @@ impl std::fmt::Display for PairError {
 
 impl std::error::Error for PairError {}
 
-/// Pairs this device with a memory: `server` is the address the person's page shows ("Connect a bridge"), `code` the
+/// Pairs this device with a memory: `server` is the address the person's page shows ("Connect a capture program"), `code` the
 /// one-time code it gave, `device` this computer's name (it names the connection). **Blocks** (a network call, 30 s at
 /// most): call it from a background task. Once only per code.
 #[uniffi::export]

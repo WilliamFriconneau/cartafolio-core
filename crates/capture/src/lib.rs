@@ -2,8 +2,8 @@
 //! it goes. Nothing else is stored here: no copy of the memory, no database, only the outbox.
 //!
 //! Everything goes **into « À trier »**, the person's one box for everything that comes in, which belongs to no
-//! space: the bridge never chooses one, its key reaches only that box. The server's janitor sends each capture to the
-//! inbox of a space and files it there; the bridge transcribes the recordings. A capture that is already text is complete: it is never rewritten.
+//! space: the capture program never chooses one, its key reaches only that box. The server's janitor sends each capture to the
+//! inbox of a space and files it there; the capture program transcribes the recordings. A capture that is already text is complete: it is never rewritten.
 //!
 //! - [`Intake::submit_text`], [`Intake::submit_file`], [`Intake::submit_audio`] write the capture to the
 //!   outbox before they return;

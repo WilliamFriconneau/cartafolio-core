@@ -112,9 +112,9 @@ if bashio::config.true 'janitor'; then
 fi
 
 # Voice notes, optional: a recording kept in a space (recorded on the page, sent by a phone) waits under `inbox/audio`.
-# With a speech service named here (an API of the OpenAI kind: `…/v1/audio/transcriptions`), the bridge reads each
+# With a speech service named here (an API of the OpenAI kind: `…/v1/audio/transcriptions`), the capture program reads each
 # recording, puts its text in the same space, and erases the recording a week later. The recording LEAVES this machine
-# for that service: turn it on only for a service you trust. Computers that run their own bridge with a local speech
+# for that service: turn it on only for a service you trust. Computers that run their own capture program with a local speech
 # model do the same without any service.
 if bashio::config.true 'transcribe'; then
   TPERSON=$(bashio::config 'transcribe_person')

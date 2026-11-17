@@ -391,7 +391,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
             );
         }
         // A console key is never handed to a connector; and a connection made another way (an app's key, a key by hand,
-        // a bridge) is not taken over by signing in at its address: that would cut the app off and give its rights away.
+        // a capture program) is not taken over by signing in at its address: that would cut the app off and give its rights away.
         let made_by_signing_in = ctl
             .query_row(
                 "SELECT 1 FROM oauth_refresh WHERE agent = ?1 AND user_id = ?2 LIMIT 1",

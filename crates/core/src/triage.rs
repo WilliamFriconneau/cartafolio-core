@@ -45,7 +45,7 @@ pub fn is_triage(brain: &Brain, space: &Space) -> bool {
     brain.space_kind(space).is_ok_and(|k| k == TRIAGE)
 }
 
-/// What waits in an « À trier »: its notes (a recording's own description apart: the bridge reads the recording and puts
+/// What waits in an « À trier »: its notes (a recording's own description apart: the capture program reads the recording and puts
 /// its text here) and its files, newest first.
 pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
     let conn = brain.open_space(space)?;
@@ -64,7 +64,7 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
         })
         .collect();
     notes.sort_by(|a, b| b["created_at"].as_str().cmp(&a["created_at"].as_str()));
-    // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the bridge
+    // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the capture program
     // erases it. Only what nothing has read yet, and what is not a recording, is for the person to look at.
     let mut transcribed = 0usize;
     let kept: Vec<Value> = files::list(brain, space, None, limit.max(1000))?

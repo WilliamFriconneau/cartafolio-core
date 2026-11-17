@@ -1,5 +1,5 @@
 <#
-MemCP on Windows: the node (`memcp serve`) and the bridge (`memcp-capture`) as tasks of your user, started at logon and
+MemCP on Windows: the node (`memcp serve`) and the capture program (`memcp-capture`) as tasks of your user, started at logon and
 again after a crash, with their logs. Nothing needs an administrator and nothing is put outside your own folders.
 
   powershell -ExecutionPolicy Bypass -File install.ps1               install or update
@@ -8,11 +8,11 @@ again after a crash, with their logs. Nothing needs an administrator and nothing
 What goes where:
   %LOCALAPPDATA%\MemCP\bin      memcp.exe, memcp-capture.exe, memcp-janitor.exe
   %LOCALAPPDATA%\MemCP\data     the memory (a folder of databases: back it up, it is yours)
-  %LOCALAPPDATA%\MemCP\bridge   the bridge's settings, its key (readable by you only) and what waits to be sent
+  %LOCALAPPDATA%\MemCP\bridge   the capture program's settings, its key (readable by you only) and what waits to be sent
   %LOCALAPPDATA%\MemCP\logs     node.log, bridge.log, transcribe.log
   Task Scheduler, folder \MemCP  the tasks MemCP node, MemCP bridge, MemCP transcribe
 
-There is no Unix socket on Windows: assistants reach the memory through the bridge on this machine,
+There is no Unix socket on Windows: assistants reach the memory through the capture program on this machine,
 `memcp-capture connect 127.0.0.1:PORT`, and know neither its address nor its key.
 #>
 [CmdletBinding()]
@@ -89,7 +89,7 @@ if ($Uninstall) {
     Step 'Removing MemCP from this computer'
     Stop-Tasks
     foreach ($d in @($Bin, $Bridge)) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
-    Say 'the tasks, the programs and the bridge (its key with it) are removed.'
+    Say 'the tasks, the programs and the capture program (its key with it) are removed.'
     if ($Purge) {
         $ok = $Yes -or ((Ask "Delete the memory in $Data and the logs? This cannot be undone (y/n)" 'n') -match '^(y|yes|o|oui)$')
         if ($ok) {
@@ -111,8 +111,8 @@ Step '1/5  Choices'
 $Language = Ask 'Language of search and of the page (en or fr)?' $Language
 $Spaces = Ask 'First spaces, comma separated (a space is one box for one part of your life)' $Spaces
 $Port = [int](Ask 'Port of the node on this computer?' $Port)
-$BridgePort = [int](Ask 'Port of the bridge on this computer, for assistants?' $BridgePort)
-if ($Port -eq $BridgePort) { Die 'the node and the bridge need two ports' }
+$BridgePort = [int](Ask 'Port of the capture program on this computer, for assistants?' $BridgePort)
+if ($Port -eq $BridgePort) { Die 'the node and the capture program need two ports' }
 $NodeUrl = "http://127.0.0.1:$Port"
 $BridgeUrl = "$NodeUrl/mcp/$Connection"
 
@@ -194,7 +194,7 @@ function Register-MemcpTask($name, $program, [string[]]$arguments, $log, [int]$e
     }
 }
 
-Step '4/5  The node and the bridge''s key'
+Step '4/5  The node and the capture program''s key'
 if (Get-NetTCPConnection -LocalPort $Port -State Listen -ErrorAction SilentlyContinue) {
     Die "port $Port is taken by another program; choose another with -Port"
 }
@@ -218,7 +218,7 @@ if (-not $console) { Die 'no console key could be made' }
 $headers = @{ Authorization = "Bearer $console"; 'X-Requested-With' = 'memcp' }
 
 # This computer joins its own memory as a device, as a phone does: that makes the person's « À trier », where every
-# capture goes. Its key writes only to À trier and reads nothing; it is kept beside the bridge's, readable by you only.
+# capture goes. Its key writes only to À trier and reads nothing; it is kept beside the capture program's, readable by you only.
 $deviceKey = Join-Path $Bridge 'device.key'
 if (-not (Test-Path $deviceKey)) {
     $code = (Invoke-RestMethod -Method Post -Uri "$NodeUrl/admin/api/pairing" -Headers $headers -ContentType 'application/json' -Body '{}').code
@@ -231,10 +231,10 @@ if (-not (Test-Path $deviceKey)) {
     Say 'this computer is paired with its memory: its captures go to À trier.'
 }
 
-# The bridge's own connection: the memory's tools for the assistants here, and the voice notes to read.
+# The capture program's own connection: the memory's tools for the assistants here, and the voice notes to read.
 $bridgeKey = Join-Path $Bridge 'bridge.key'
 if (Test-Path $bridgeKey) {
-    Say 'the bridge already has its key.'
+    Say 'the capture program already has its key.'
 } else {
     $out = & $Memcp --data $Data connect $Connection --all --public-url $NodeUrl 2>&1
     if ($LASTEXITCODE -ne 0) { $out = & $Memcp --data $Data connect $Connection --all --rotate --public-url $NodeUrl 2>&1 }
@@ -243,7 +243,7 @@ if (Test-Path $bridgeKey) {
     Set-Content -NoNewline -Encoding ascii -Path $bridgeKey -Value $key
     Make-PrivateFile $bridgeKey
     $key = $null
-    Say "a key for the bridge is in $bridgeKey (readable by you only)."
+    Say "a key for the capture program is in $bridgeKey (readable by you only)."
 }
 
 $conf = @(
@@ -282,7 +282,7 @@ if ($NoTasks) {
 } else {
     Start-ScheduledTask -TaskPath $TaskPath -TaskName 'MemCP bridge'
     if ($WhisperModel -or $SpeechApi) { Start-ScheduledTask -TaskPath $TaskPath -TaskName 'MemCP transcribe' }
-    Say "the node answers on $NodeUrl, the bridge on 127.0.0.1:${BridgePort}; they start again at logon."
+    Say "the node answers on $NodeUrl, the capture program on 127.0.0.1:${BridgePort}; they start again at logon."
 }
 
 Write-Host @"
@@ -292,7 +292,7 @@ The page of your memory, on this computer only:
 Its console key (shown once; it opens the page, never the memory):
   $console
 
-An assistant that runs a command reaches the memory through the bridge, knowing neither its address nor its key:
+An assistant that runs a command reaches the memory through the capture program, knowing neither its address nor its key:
   "$MemcpBridge" connect 127.0.0.1:$BridgePort
 For Claude Code:
   claude mcp add memcp -- "$MemcpBridge" connect 127.0.0.1:$BridgePort

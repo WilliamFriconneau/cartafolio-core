@@ -4,7 +4,7 @@ ARG BUILD_ARCH
 # Set in build.yaml, and kept equal to `version` in config.yaml (the CI checks it).
 ARG MEMCP_VERSION
 # The static (musl) programs of the release of this version, checked against the SHA256SUMS published with it:
-# the manager, the engine (whose commands work on one person's directory), the optional janitor and the bridge
+# the manager, the engine (whose commands work on one person's directory), the optional janitor and the capture program
 # (which reads voice notes by a speech service when that is turned on).
 # curl stays: the base image's own tools (bashio, which reads the options) need it.
 RUN apk add --no-cache tzdata curl \

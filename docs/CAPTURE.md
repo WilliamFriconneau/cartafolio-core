@@ -184,7 +184,7 @@ side (the memory's `SPACES.md`, « Folder-backed spaces » and « One synchronis
 
 A **mount** is a logical folder: an id and a name, the same on every node, attached to a space or a sub-space. Each node
 says where it is on its own disk, or that it does not hold it. The same folder is `~/Drive/Work` on a laptop and
-`/data/work` on the hub; each bridge picks its own path and the space it feeds. In the settings file, one
+`/data/work` on the hub; each capture program picks its own path and the space it feeds. In the settings file, one
 `mount.<id>.<field> = value` a line:
 
 ```text
@@ -292,7 +292,7 @@ Build `memcp` from the memory's repository and run a throwaway one:
 ```text
 memcp --data /tmp/try init --spaces legacy
 memcp --data /tmp/try space new me --user owner
-memcp --data /tmp/try connect bridge --grant owner-me/inbox:rw        # prints the key once (a key made by hand: one inbox)
+memcp --data /tmp/try connect capture program --grant owner-me/inbox:rw        # prints the key once (a key made by hand: one inbox)
 memcp --data /tmp/try serve --listen 127.0.0.1:8791
 ```
 

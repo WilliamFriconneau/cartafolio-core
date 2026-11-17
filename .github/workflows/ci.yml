@@ -42,7 +42,7 @@ jobs:
           [ "$crate" = "$addon" ] && [ "$addon" = "$arg" ]
 
   portable:
-    # The server and the bridge must build on the systems they are for: macOS and Windows as well as Linux.
+    # The server and the capture program must build on the systems they are for: macOS and Windows as well as Linux.
     strategy:
       fail-fast: false
       matrix:

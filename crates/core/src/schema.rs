@@ -388,7 +388,7 @@ const CONTROL_V12: &str = r"
 ALTER TABLE oauth_codes ADD COLUMN agent TEXT NOT NULL DEFAULT '';
 ";
 
-/// A bridge paired for « all my spaces »: it writes to the inbox of each, and of the ones the person makes later.
+/// A capture program paired for « all my spaces »: it writes to the inbox of each, and of the ones the person makes later.
 const CONTROL_V15: &str = r"
 ALTER TABLE connections ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE bridge_pairings ADD COLUMN all_inboxes INTEGER NOT NULL DEFAULT 0;
