@@ -11,9 +11,13 @@ license=('AGPL-3.0-or-later')
 depends=('gcc-libs' 'systemd')
 makedepends=('cargo')
 backup=('etc/memcp/memcp.toml')
+# ring (TLS) builds C and assembly that LTO flags from makepkg.conf break.
+options=('!lto')
 source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Run `updpkgsums` once the tag is published.
 sha256sums=('SKIP')
+# A local checkout (MEMCP_SRC) needs no download: CI builds the package this way.
+if [ -n "${MEMCP_SRC:-}" ]; then source=(); sha256sums=(); fi
 
 _src() {
   if [ -n "${MEMCP_SRC:-}" ]; then echo "$MEMCP_SRC"; else echo "$srcdir/memcp-core-$pkgver"; fi
