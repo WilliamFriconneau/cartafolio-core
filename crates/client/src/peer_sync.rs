@@ -4,7 +4,7 @@
 //! one row (see `memcp_core::sync`). Over HTTP to the peer's `/sync/` routes, at the address of the connection.
 //!
 //! Both ways for the spaces themselves (see `memcp_core::swarm`): a space of the person that the peer lacks is offered to
-//! it (`POST /sync/spaces`) and then exchanged like the others; the person's « À trier » here is paired with theirs
+//! it (`POST /sync/spaces`) and then exchanged like the others; the person's Inbox here is paired with theirs
 //! there, whatever its name; an archive on either side archives the other's copy. A peer of an older version, which
 //! takes no offers, is kept in step as before, and the pass says what it could not give it.
 
@@ -144,7 +144,7 @@ impl Peer {
     }
 
     /// Which spaces this pass exchanges: `(here, there, writable there)`. The peer's archives are applied here, the
-    /// peer's spaces are made here, the person's « À trier » is paired with the peer's, and the spaces of the person the
+    /// peer's spaces are made here, the person's Inbox is paired with the peer's, and the spaces of the person the
     /// peer lacks are offered to it.
     fn spaces(
         &self,
@@ -170,7 +170,7 @@ impl Peer {
                 Err(e) => pass.problems.push(format!("{space}: archive: {e}")),
             }
         }
-        // 2. The peer's spaces. Its « À trier » (the one it names as the person's, else the first) goes with the box of
+        // 2. The peer's spaces. Its Inbox (the one it names as the person's, else the first) goes with the box of
         // the person here, whatever the names; its other boxes are its own janitor's.
         let mine = triage::of(brain, &self.person).map_err(fail)?;
         let theirs = entries
@@ -228,7 +228,7 @@ impl Peer {
             swarm::adopt(brain, &self.person, &space, kind, since.unwrap_or(now)).map_err(fail)?;
             pairs.push((space, name.to_string(), writable));
         }
-        // 3. The spaces of the person the peer lacks are offered to it. « À trier » only when the peer has none.
+        // 3. The spaces of the person the peer lacks are offered to it. Inbox only when the peer has none.
         let offers: Vec<swarm::Offer> = swarm::offers(brain, &self.person)
             .map_err(fail)?
             .into_iter()

@@ -54,3 +54,23 @@ fn the_spaces_file_is_written_whole_and_read_back() {
     assert!(parse_spaces("{\"format\":\"autre/1\",\"spaces\":[]}", "Notes").is_err());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn a_tree_saved_when_the_inbox_was_called_a_trier_reads_as_inbox() {
+    let mut tree = Tree::default();
+    tree.save(Space::default_notes(FORMER_DEFAULT_LABEL))
+        .unwrap();
+    let mut pro = Space::default_notes(FORMER_DEFAULT_LABEL);
+    pro.id = new_id();
+    pro.path = "pro".into();
+    let pro_id = pro.id.clone();
+    tree.save(pro).unwrap();
+    let read = parse_spaces(&spaces_text(&tree), "Notes").unwrap();
+    let inbox = read.get(DEFAULT_SPACE).unwrap();
+    assert_eq!(
+        (inbox.name.as_str(), inbox.path.as_str()),
+        ("Inbox", "notes")
+    );
+    // Only the default space is relabelled: a space a person named so keeps its name.
+    assert_eq!(read.get(&pro_id).unwrap().name, FORMER_DEFAULT_LABEL);
+}

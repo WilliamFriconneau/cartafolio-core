@@ -4,7 +4,7 @@
 //   cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 //   CHROMIUM=/usr/bin/chromium node french.test.js
 //
-// The page is loaded in French and walked through its main views and dialogs (home, administration, triage, a
+// The page is loaded in French and walked through its main views and dialogs (home, the people of the node, the Inbox, a
 // space and its tabs, the wizard for each assistant, the guide editor, the add-a-node window, the confirmation and
 // the secret windows, empty states, toasts and errors). Two things fail the test:
 //   1. an element that still holds one of the English sentences in ENGLISH below (the list to keep up to date: when a
@@ -141,7 +141,7 @@ async function leftovers(page, rootSel) {
   await scan("the triage view with nothing matching");
   await page.fill("#tr-filter", "");
   await page.evaluate(() => { location.hash = "#admin"; }); await sleep(400);
-  await scan("the administration view");
+  await scan("the people of this node");
   await page.evaluate(() => { location.hash = "#space/owner-work"; }); await page.waitForSelector("#space-tabs button"); await sleep(400);
   for (const tab of await page.locator("#space-tabs button").allInnerTexts()) {
     await page.locator("#space-tabs button", { hasText: tab }).first().click(); await sleep(500);

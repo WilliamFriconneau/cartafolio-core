@@ -884,7 +884,7 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
 
 /// Whether the connection `id` is a machine of the person that joined before a peer reached every space by itself
 /// (`pairing::create_for_peer` now gives `all`): named `peer-…`, limited by no path, and holding read and write on the
-/// person's « À trier » and on at least one other space, as a join gave it. A device paired to capture holds the box
+/// person's Inbox and on at least one other space, as a join gave it. A device paired to capture holds the box
 /// alone and stays limited to it.
 fn is_machine(ctl: &Connection, agent: &str, id: &str) -> Result<bool> {
     if !agent.starts_with(crate::sync::PEER_PREFIX) {

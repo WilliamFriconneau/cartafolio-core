@@ -17,7 +17,7 @@ deterministic tagger in `memcp-core` (module `autotag`), the same for the node a
 Rules of the write:
 
 - The tags the caller gives **stay**. The node only adds; it never removes the caller's tags.
-- Nothing is added in « À trier » (it belongs to no vault), to a key limited to paths, or to a write that carries a plumbing
+- Nothing is added in Inbox (its notes belong to no space yet), to a key limited to paths, or to a write that carries a plumbing
   tag (`rules`, `index`, `guide`, `dashboard`, `living/…`, `living-meta/…`, `janitor/…`).
 - At most 16 tags are added besides the tag of the space; a note holds 64 tags at most.
 - It applies to `remember`, `deposit` (each record), the description of `file_put` (its note and the words of the file
@@ -103,7 +103,7 @@ The node learns from **the person's corrections**, and only from them, in a smal
 - **Tags.** The person puts a tag on a note, or takes one off (the page, `tags_set`, a `supersede` that changes the tags): each
   word of the note (four letters or more, at most 30) counts for the tags added (`t`) and against the tags removed (`x`), **per
   space**. Plumbing tags (inbox, sources, janitor…) are never learned.
-- **Moves.** The person sends a note or a file of « À trier » to a space (the page's *Send*): each word counts for that space
+- **Moves.** The person sends a note or a file of Inbox to a space (the page's *Send*): each word counts for that space
   (`routes`).
 - **Scores.** The person is right by definition: a word counts once it was corrected **twice**, and a tag is suggested when two
   words agree (or one word was corrected four times). A tag taken off cancels what was put on; twice taken off, it is
@@ -114,7 +114,7 @@ The node learns from **the person's corrections**, and only from them, in a smal
   passes `learn: false`.
 
 The learned tags enter the suggestion like any other (the write, `tags_suggest`); the learned routes are answered by
-`tags_suggest` (`route`) and used by the janitor for a note of À trier no keyword places.
+`tags_suggest` (`route`) and used by the janitor for a note of Inbox no keyword places.
 
 ## The JSON forms
 

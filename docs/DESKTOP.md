@@ -1,6 +1,6 @@
 # MemCP on a computer: the desktop node
 
-The same memory as the server under Home Assistant, on a Mac or a Windows computer: the node (`memcp serve`) keeps the
+The same memory as the node under Home Assistant, on a Mac or a Windows computer: the node (`memcp serve`) keeps the
 memory, serves its page, reads the voice notes and watches the folders the person named ([INTAKE.md](INTAKE.md)). It is the one
 program: it runs as a task of the person's own user, starts at login, starts again after a crash and writes a log. Nothing needs an
 administrator, nothing listens beyond this computer (127.0.0.1 only), and nothing leaves it unless a speech service is chosen for
@@ -36,7 +36,7 @@ powershell -ExecutionPolicy Bypass -File install.ps1
 Both download the release's programs and check them against its `SHA256SUMS` (or take them from a build of your own:
 `--from DIR`, `-From DIR`), make the memory (`--spaces`, `--language`), write the settings file, start the node, then:
 
-1. **pair this computer with its own memory**, as a phone does. That makes the person's « À trier », the one box every
+1. **pair this computer with its own memory**, as a phone does. That makes the person's Inbox, the one box every
    capture goes to; the computer's key writes only there and reads nothing;
 2. **make the connection of the assistants of this computer** (`desktop`, all rights): the memory's tools at the node's address.
    Its key is in the Keychain on a Mac, in a file only the person can read on Windows.
@@ -53,7 +53,7 @@ is its name). `--bridge-port` and `MEMCP_BRIDGE_PORT` are read, said to be unuse
 
 ## Voice notes and files
 
-A recording sent by a phone, an app, or `memcp intake send note.m4a` waits in « À trier » under `inbox/audio`. The node reads it every
+A recording sent by a phone, an app, or `memcp intake send note.m4a` waits in Inbox with the tag `inbox/audio`. The node reads it every
 minute and puts its text beside it (« Dictée du … : … »), then erases the recording a week after its text was filed. Two ways:
 
 - **on this computer**, nothing leaves it: whisper.cpp and ffmpeg, with a model.
@@ -69,7 +69,7 @@ Both write `transcribe = true` and its settings into `memcp.toml`; edit it to ch
 **Watched folders**: add `watch = ["~/Dictation -> personal"]` to `memcp.toml`. A file added to the folder becomes a note, a recording or a
 file of that space ([INTAKE.md](INTAKE.md#folders-watched)).
 
-A file (`memcp intake send devis.pdf`) is kept in « À trier » as it is, and the person or the janitor sends it to a space from the page.
+A file (`memcp intake send devis.pdf`) is kept in Inbox as it is, and the person or the janitor sends it to a space from the page.
 
 ## Assistants
 
@@ -94,7 +94,7 @@ An assistant that only runs commands can use `memcp --data DIR mcp` (standard in
 ## Tested
 
 `.github/workflows/desktop.yml` installs both for real on the CI's Mac and Windows machines with the programs of the
-commit, sends a note and a file to « À trier » with `memcp intake text` and `intake send`, asks for the tools at the node's address
+commit, sends a note and a file to Inbox with `memcp intake text` and `intake send`, asks for the tools at the node's address
 with the key of the `desktop` connection, then removes everything. A voice note read by whisper.cpp was checked by hand on a Mac (the CI
 has no speech model); `crates/client/tests/real_nodes.rs` runs the real programs on Linux, with a speech service and with `ffmpeg` and
 `whisper-cli` stood in for by two scripts.

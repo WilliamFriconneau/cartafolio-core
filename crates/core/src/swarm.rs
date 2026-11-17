@@ -4,7 +4,7 @@
 //! - **A space made on one node is offered to the others** ([`offers`], [`accept`]): its name, kind, label, parent and
 //!   position. The node that receives it makes it for the same person and from then on its events travel like those
 //!   of any space, layout included (`layout_changed` events, the newest stamp wins per field).
-//! - **« À trier » is one box across the swarm.** Each node has one for the person, perhaps under another name: the
+//! - **Inbox is one box across the swarm.** Each node has one for the person, perhaps under another name: the
 //!   exchange pairs the person's box here with the peer's ([`accept`] answers [`Answer::Triage`]), so a note captured
 //!   on any node lands in the box of every node.
 //! - **Archiving travels as an archive, never as a deletion.** A node that archives a space keeps a mark (the space,
@@ -118,7 +118,7 @@ pub fn tombstones(brain: &Brain, owner: &str) -> Result<Vec<(Space, i64)>> {
 /// A space as one node offers it to another.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Offer {
-    /// Its name, the same on every node (« À trier » excepted, see [`Answer::Triage`]).
+    /// Its name, the same on every node (Inbox excepted, see [`Answer::Triage`]).
     pub space: Space,
     /// Its kind (`custom` when it was made without one; `a-trier` for the box).
     pub kind: String,
@@ -175,7 +175,7 @@ pub enum Answer {
     Created(Space),
     /// Already here, the same person's.
     Held(Space),
-    /// The offer was the person's « À trier »: this node's box is that one, under this name. The two are paired.
+    /// The offer was the person's Inbox: this node's box is that one, under this name. The two are paired.
     Triage(Space),
     /// This node archived the space after the offering node's copy began: the offering node archives its copy too.
     Archived(i64),
@@ -212,7 +212,7 @@ impl Answer {
 }
 
 /// The spaces of `user` this node offers to a peer, parents before their children: every space the person owns here,
-/// « À trier » excepted (it is paired, not offered, unless the peer has none: see the caller).
+/// Inbox excepted (it is paired, not offered, unless the peer has none: see the caller).
 pub fn offers(brain: &Brain, user: &str) -> Result<Vec<Offer>> {
     let ctl = brain.open_control()?;
     let mut out = vec![];
@@ -243,7 +243,7 @@ pub fn offers(brain: &Brain, user: &str) -> Result<Vec<Offer>> {
 pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -> Result<bool> {
     let set_kind = |brain: &Brain| -> Result<()> {
         if kind == TRIAGE {
-            // « À trier » is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here.
+            // Inbox is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here.
             brain.open_control()?.execute(
                 "UPDATE spaces SET kind = ?2 WHERE name = ?1",
                 [space.as_str(), TRIAGE],
@@ -323,7 +323,7 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
 }
 
 /// A peer says `space` was archived at `at`: this node archives its copy of it, as an archive (exported, set aside,
-/// never erased), when the copy is `user`'s and began before then. « À trier » is never archived. When the space is not
+/// never erased), when the copy is `user`'s and began before then. Inbox is never archived. When the space is not
 /// here the mark is kept, so it travels on to the next node. `true` when this node archived it now.
 pub fn archive_here(brain: &Brain, user: &str, space: &Space, at: i64) -> Result<bool> {
     if !brain.has_space(space)? {

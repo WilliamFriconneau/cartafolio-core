@@ -1,5 +1,5 @@
 # The desktop node, installed for real on a Mac and on Windows: the installers of packaging/ run with the programs of
-# this commit, the node starts as a task of the user, a note and a file reach « À trier » through the node's own commands,
+# this commit, the node starts as a task of the user, a note and a file reach Inbox through the node's own commands,
 # an assistant's request goes through the node's address with the key of its connection, then everything is removed.
 name: desktop
 
@@ -81,7 +81,7 @@ jobs:
           if (-not $answers.result.tools) { throw 'no tools through the node' }
           $spaces = & $m --data $data space list
           $spaces
-          if (-not ($spaces -match 'owner-a-trier')) { throw 'no À trier' }
+          if (-not ($spaces -match 'owner-a-trier')) { throw 'no Inbox' }
       - name: Logs
         if: always()
         shell: pwsh

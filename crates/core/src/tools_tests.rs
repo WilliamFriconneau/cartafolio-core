@@ -1,4 +1,4 @@
-//! The leases of « À trier »: a note is held by one sorter at a time, a lease ends, and a note that leaves the box while it is
+//! The leases of Inbox: a note is held by one sorter at a time, a lease ends, and a note that leaves the box while it is
 //! held is not given again.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 

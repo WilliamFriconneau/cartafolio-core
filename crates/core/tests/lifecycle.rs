@@ -412,7 +412,7 @@ fn children_go_to_the_grandparent_by_default_and_one_cannot_delete_what_is_not_t
     let l = b.layout(OWNER)?;
     let moved = l.iter().find(|p| p.space == leaf).ok_or("leaf")?;
     assert_eq!(moved.parent, Some(sp("work")), "up to the grandparent");
-    // « À trier » is never deleted.
+    // Inbox is never deleted.
     let tri = memcp_core::triage::ensure(&b, OWNER, "owner")?;
     assert!(
         b.delete_space(OWNER, &tri, &Disposition::Archive, &Children::Top, true, 5)

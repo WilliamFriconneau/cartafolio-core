@@ -1166,7 +1166,7 @@ fn doctor_reads_an_installation_and_changes_nothing() -> Res {
         "the public address ends with a slash",
         "the public address is not HTTPS",
         "only works on your own network",
-        "connection wide-key reaches every vault",
+        "connection wide-key reaches every space",
         "nothing answers on 127.0.0.1:1",
     ] {
         assert!(text.contains(want), "missing {want:?} in:\n{text}");

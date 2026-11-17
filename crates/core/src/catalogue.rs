@@ -16,7 +16,7 @@ use crate::space::Space;
 /// of their own. It carries no built-in tools.
 pub const CUSTOM: &str = "custom";
 
-/// The kind of the person's « À trier »: the one box every capturing device writes to, which belongs to no vault. The
+/// The kind of the person's Inbox: the one box every capturing device writes to, which belongs to no vault. The
 /// janitor sends what lands there to the inbox of a vault, or leaves it for the person to decide. Never in a catalogue.
 pub const TRIAGE: &str = "a-trier";
 

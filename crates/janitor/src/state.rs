@@ -71,7 +71,7 @@ impl State {
         self.save();
     }
 
-    /// The note the janitor keeps for `kind` and `space` (`waiting` in « À trier »), if one was written.
+    /// The note the janitor keeps for `kind` and `space` (`waiting` in Inbox), if one was written.
     pub fn note_id(&self, kind: &str, space: &str) -> Option<String> {
         self.data["note_ids"][kind][space]
             .as_str()

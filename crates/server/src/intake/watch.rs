@@ -2,7 +2,7 @@
 //!
 //! The folder is a drop box. A Markdown or text file becomes a note (cut at 3500 characters), an audio file becomes a
 //! recording the node reads (see `voice`), any other file is kept as it is. All of it lands in the **inbox** of the
-//! chosen space (the person's « À trier » when none is named), where the janitor files it like any other note.
+//! chosen space (the person's Inbox when none is named), where the janitor files it like any other note.
 //!
 //! - The file stays where it is: nothing in a watched folder is moved, changed or deleted.
 //! - A file is taken once its last change is a few seconds old (a copy in progress is waited for); a name that says it

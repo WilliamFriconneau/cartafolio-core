@@ -403,7 +403,7 @@ fn action(
             {
                 return Err(err(
                     400,
-                    "you cannot remove your own administration or disable yourself: ask another administrator",
+                    "you cannot remove your own administrator role or disable yourself: ask another administrator",
                 ));
             }
             if body.get("dry_run").and_then(Value::as_bool) == Some(true) {
@@ -493,7 +493,7 @@ fn action(
             Ok(json!({ "space": space.as_str(), "owner": me.id }))
         }
         "/pairing" => {
-            // A code a device exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
+            // A code a device exchanges once, within ten minutes, for a key to the person's Inbox only: a device
             // never chooses a vault, the janitor or the person sorts what it sends.
             let (code, triage) =
                 memcp_core::pairing::create_for_peer(&app.brain, &me.id, &me.name, util::now())
@@ -514,10 +514,10 @@ fn action(
             }))
         }
         "/triage/send" => {
-            // The person decides where a capture of « À trier » goes: the inbox of one of their vaults.
+            // The person decides where a capture of Inbox goes: the inbox of one of their vaults.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
-                .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
+                .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
             let to = Space::new(arg(body, "space")?).map_err(fail)?;
             if !users::access_of(ctl, &me.id)
                 .map_err(fail)?
@@ -525,7 +525,7 @@ fn action(
                 .is_some_and(|g| g.write)
             {
                 return Err(fail(Error::Invalid(format!(
-                    "{to} is not one of your vaults"
+                    "{to} is not one of your spaces"
                 ))));
             }
             let id =
@@ -534,11 +534,11 @@ fn action(
             Ok(json!({ "ok": true, "id": id, "space": to.as_str() }))
         }
         "/triage/send-many" => {
-            // Several captures of « À trier » at once, to the inbox of one vault. Each one is sent on its own:
+            // Several captures of Inbox at once, to the inbox of one vault. Each one is sent on its own:
             // one that fails stays where it is and is named in the answer, the others still go.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
-                .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
+                .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
             let to = Space::new(arg(body, "space")?).map_err(fail)?;
             if !users::access_of(ctl, &me.id)
                 .map_err(fail)?
@@ -546,7 +546,7 @@ fn action(
                 .is_some_and(|g| g.write)
             {
                 return Err(fail(Error::Invalid(format!(
-                    "{to} is not one of your vaults"
+                    "{to} is not one of your spaces"
                 ))));
             }
             let ids: Vec<&str> = body
@@ -572,7 +572,7 @@ fn action(
             // A recording the node gave up on: the tag comes off, the node tries again at its next pass.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
-                .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
+                .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
             memcp_core::files::mark_transcription_failed(
                 &app.brain,
                 &from,
@@ -803,7 +803,7 @@ fn guide_scope(ctl: &Connection, me: &User, raw: &str) -> Result<String, Respons
         if !me.admin && !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
             return Err(err(
                 403,
-                "only the owner of a vault, or an administrator, writes its guide",
+                "only the owner of a space, or an administrator, writes its guide",
             ));
         }
     } else {
@@ -818,7 +818,7 @@ fn guide_owner(ctl: &Connection, me: &User, name: &str) -> Result<Space, Respons
     if !me.admin && !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
         return Err(err(
             403,
-            "only the owner of a vault, or an administrator, approves its app guides",
+            "only the owner of a space, or an administrator, approves its app guides",
         ));
     }
     Ok(space)
@@ -1069,7 +1069,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
         let all_users = users::list_users(ctl)?;
         let visible = |id: &str| id == me.id;
         let reach = users::access_of(ctl, &me.id)?;
-        // Every memory has its « À trier » from the start: it is where Note writes (docs/UI-SPEC.md, Note).
+        // Every memory has its Inbox from the start: it is where Note writes (docs/UI-SPEC.md, Note).
         let triage = Some(memcp_core::triage::ensure(&app.brain, &me.id, &me.name)?);
         let spaces: Vec<Value> = app
             .brain
@@ -1135,7 +1135,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                 j
             }).collect::<Vec<_>>(),
             "spaces": spaces,
-            // What waits in « À trier », for the person to decide when the janitor did not.
+            // What waits in Inbox, for the person to decide when the janitor did not.
             "triage": match &triage {
                 Some(t) => memcp_core::triage::waiting(&app.brain, t, 300)?,
                 None => Value::Null,

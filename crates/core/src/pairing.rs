@@ -1,5 +1,5 @@
 //! Pairing a device: the person asks their page for a code, types it into the app on a device, and the
-//! app exchanges it once for a connection of its own, limited to the person's « À trier » (see [`crate::triage`]).
+//! app exchanges it once for a connection of its own, limited to the person's Inbox (see [`crate::triage`]).
 //!
 //! The code is short so that it can be typed (eight characters from an alphabet without look-alikes,
 //! about 40 bits). That is enough because it lives ten minutes, works once, and the route that takes it

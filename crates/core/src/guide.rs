@@ -182,13 +182,13 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
     let ctl = brain.open_control()?;
     let mut out = String::from(INSTRUCTIONS);
     out.push_str(
-        " To keep a map of a vault, write one fact tagged `index` that says what is in it and \
+        " To keep a map of a space, write one fact tagged `index` that says what is in it and \
          where, and `supersede` it when it changes: it is read first by whoever connects.",
     );
 
     let mut spaces = caller.readable();
     spaces.sort();
-    // Notes waiting in « À trier » mean the janitor has not done its work: the first assistant to
+    // Notes waiting in Inbox mean the janitor has not done its work: the first assistant to
     // connect says so, and asks the person whether it should do the sorting.
     for s in &spaces {
         if crate::triage::is_triage(brain, s) {
@@ -200,7 +200,7 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
                 .unwrap_or(0);
             if waiting > 0 {
                 out.push_str(&format!(
-                    " ATTENTION: {waiting} notes wait in `{}` (nothing has sorted them). Tell the person at \
+                    " ATTENTION: {waiting} notes wait in the person's Inbox (`{}`; nothing has sorted them). Tell the person at \
                      once, and ask whether you should sort them now: read them, then `supersede` each into \
                      the right space with its real tags, or `retire` it.",
                     s.as_str()

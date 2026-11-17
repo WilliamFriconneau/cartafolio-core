@@ -65,7 +65,7 @@ impl Memory {
             .map_err(|e| Failure(e.to_string()))
     }
 
-    /// The person's « À trier », made if it is not there yet.
+    /// The person's Inbox, made if it is not there yet.
     pub fn triage_space(&self) -> Result<String, Failure> {
         let person = self.person()?;
         memcp_core::triage::ensure(&self.brain, &self.user_id, &person)

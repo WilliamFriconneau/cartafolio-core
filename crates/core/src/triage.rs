@@ -1,4 +1,4 @@
-//! « À trier »: the one box every capturing device of a person writes to. It belongs to no vault and is no vault: a
+//! Inbox: the one box every capturing device of a person writes to. It belongs to no vault and is no vault: a
 //! device never chooses where a capture goes. The janitor sends each note to the inbox of a vault, then files it there;
 //! what it is unsure of, and the files, wait here until the person decides on their page.
 //!
@@ -14,7 +14,7 @@ use crate::catalogue::{self, TRIAGE};
 use crate::facts::{self, NewFact, RecallOptions, Remembered};
 use crate::{Brain, Error, Result, Space, files};
 
-/// The person's « À trier », if it was made.
+/// The person's Inbox, if it was made.
 pub fn of(brain: &Brain, user_id: &str) -> Result<Option<Space>> {
     let name: Option<String> = brain
         .open_control()?
@@ -28,7 +28,7 @@ pub fn of(brain: &Brain, user_id: &str) -> Result<Option<Space>> {
     name.map(|n| Space::new(&n)).transpose()
 }
 
-/// The person's « À trier », made now if they have none.
+/// The person's Inbox, made now if they have none.
 pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
     if let Some(s) = of(brain, user_id)? {
         return Ok(s);
@@ -42,7 +42,7 @@ pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
     Ok(space)
 }
 
-/// Whether `space` is an « À trier ».
+/// Whether `space` is an Inbox.
 pub fn is_triage(brain: &Brain, space: &Space) -> bool {
     brain.space_kind(space).is_ok_and(|k| k == TRIAGE)
 }
@@ -72,7 +72,7 @@ fn reasons(conn: &rusqlite::Connection) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-/// What waits in an « À trier » **for a decision**: its notes (a recording's own description apart: the node reads the
+/// What waits in an Inbox **for a decision**: its notes (a recording's own description apart: the node reads the
 /// recording and puts its text here) and its files, newest first, each with its `age_seconds` and the `reason` the janitor
 /// left (why it could not place it). Not counted as waiting: a recording whose text is already here (`transcribed`), and one
 /// whose transcription failed three times and carries the tag [`files::FAILED_TRANSCRIPTION`] (`failed_transcription`, a
@@ -151,7 +151,7 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
     }))
 }
 
-/// Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves
+/// Sends one note or one file of `from` (an Inbox) to the inbox of the vault `to`, as it is; then it leaves
 /// `from`, once the write is certain. The id of what holds it now.
 /// `user_id` is the person the space belongs to: the note gets the tags of `to` and what its text says there, as if it
 /// had been written in it (the same as `remember`), with what that person taught the node.
@@ -164,12 +164,12 @@ pub fn send(
     user_id: &str,
 ) -> Result<String> {
     if !is_triage(brain, from) {
-        return Err(Error::Invalid(format!("{from} is not an « À trier »")));
+        return Err(Error::Invalid(format!("{from} is not the person's Inbox")));
     }
     if is_triage(brain, to) || !brain.has_space(to)? {
         return Err(Error::Invalid(format!("{to} is not a space")));
     }
-    let reason = |new: &str| format!("sent from À trier to the inbox of {to} ({new}) by {author}");
+    let reason = |new: &str| format!("sent from the Inbox to {to} ({new}) by {author}");
     if let Some(f) = files::info(brain, from, id)?.filter(|f| f.status == "active") {
         let (_, bytes) =
             files::get(brain, from, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))?;
@@ -232,14 +232,14 @@ pub fn send(
     Ok(new_id)
 }
 
-/// The id of note `id` of « À trier » once filed in `to`: derived from both, so it is the same on every node.
+/// The id of note `id` of Inbox once filed in `to`: derived from both, so it is the same on every node.
 pub fn filed_id(id: &str, to: &Space) -> String {
     use sha2::{Digest, Sha256};
     let digest = Sha256::digest(format!("{id}\u{0}{}", to.as_str()).as_bytes());
     format!("f_t{}", &crate::text::hex(&digest)[..20])
 }
 
-/// The person chose where a note of « À trier » goes: the node learns it (the words of the note lead to that space).
+/// The person chose where a note of Inbox goes: the node learns it (the words of the note lead to that space).
 /// What the janitor sends is its own choice, never learned from.
 fn learn_route(brain: &Brain, author: &str, text: &str, to: &Space) {
     if !author.to_lowercase().contains("janitor") {

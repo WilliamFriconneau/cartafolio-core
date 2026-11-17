@@ -40,7 +40,7 @@ When the same folder is held by several nodes (a laptop and the Home Assistant h
 
 MemCP is also a manager of folders that other programs synchronise (Google Drive, Syncthing, iCloud, OneDrive). Those programs move, duplicate and half-write files at any time, so the rules are strict:
 
-- **The memory's own data never lives in a synchronised folder.** The SQLite files, the keys and the control database stay on a local disk of the machine that runs the server. A database copied by a sync tool while it is written is a corrupted database. Only the mounted folders and the backup archives may be in a synchronised folder. The server refuses to start with its data directory inside a mount, and says why.
+- **The memory's own data never lives in a synchronised folder.** The SQLite files, the keys and the control database stay on a local disk of the machine that runs the node. A database copied by a sync tool while it is written is a corrupted database. Only the mounted folders and the backup archives may be in a synchronised folder. A node refuses to start with its data directory inside a mount, and says why.
 - **Settle before reading.** A file is read only once its size and modification time have not changed for a few seconds, so a file being written or uploaded is not ingested half-done.
 - **Online-only files are not deletions.** A drive may show a file without holding its content (a placeholder). Such a file is listed as *not available* and is neither read nor treated as gone; a read has a time limit.
 - **A vanished folder is not a mass deletion.** A passage is retired only when its file has been missing across several scans. If a whole mount becomes unreadable, or a large share of its files disappears at once (a drive unmounted, a sync restarting), the mount is paused and the person is told. Nothing is retired in that case.
@@ -60,7 +60,7 @@ MemCP is also a manager of folders that other programs synchronise (Google Drive
 
 - The memory already exports a consistent snapshot. A **node** on another machine asks for it on a schedule and writes it to a folder the person chose: another disk, a Drive folder, a NAS.
 - A snapshot is one archive of the spaces the person owns, with a manifest of hashes, so that a restore can be checked. It carries the layout (the tree), the guides and the history.
-- Such a node never needs more than the right to read for backup; restoring is a deliberate act on the server by the person.
+- Such a node never needs more than the right to read for backup; restoring is a deliberate act of the person, on the node being restored.
 
 ## Order
 

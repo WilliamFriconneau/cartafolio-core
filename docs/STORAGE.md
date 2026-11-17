@@ -25,9 +25,9 @@ fact in another space the caller can read, a text too long. It is computed, neve
 applied: the agent or the person decides with `supersede` or `retire`. The memory
 calls no model for it, and a space the caller cannot read is never mentioned.
 
-Some tables are no longer used (`devices`, `device_*`, `outbox`, `record`, `embeddings`, `groups`, `group_*`, `pairing_codes`, the `upstream` columns and the per-connection `writes_per_day`): the server no longer reads or writes them. They stay because they may hold data (an old
-health vault holds what the HealthApp app pushed before 0.12), and they go at a clean break that exports it first. Nothing is
+Some tables are no longer used (`devices`, `device_*`, `outbox`, `record`, `embeddings`, `groups`, `group_*`, `pairing_codes`, the `upstream` columns and the per-connection `writes_per_day`): the node no longer reads or writes them. They stay because they may hold data (an old
+health space holds what the HealthApp app pushed before 0.12), and they go at a clean break that exports it first. Nothing is
 lost by leaving them.
 
-An app's guide (`app_guides`, one per connection and vault) is kept apart from the facts: no search finds it, it sits in
+An app's guide (`app_guides`, one per connection and space) is kept apart from the facts: no search finds it, it sits in
 no layer. What the person approved of it is in `control.sqlite` (`guide_approvals`, by digest of the text).

@@ -623,11 +623,11 @@ fn the_sorting_tools_only_touch_the_triage_space_of_a_connection_that_writes_it(
         "A loose idea about the shed roof.",
         &["inbox"],
     )?;
-    // Writes work, not À trier: it claims nothing (and is not an error).
+    // Writes work, not Inbox: it claims nothing (and is not an error).
     let one = caller(&w, "sorter-work", "work:rw", false)?;
     let got = tools::call(&w.brain, &one, "triage_claim", &json!({}))?;
     assert_eq!(got["claimed"].as_array().map(Vec::len), Some(0));
-    // Reads À trier only: the sorting tools are not shown.
+    // Reads Inbox only: the sorting tools are not shown.
     let ro = caller(&w, "sorter-ro", &format!("{}:r", tri.as_str()), false)?;
     assert!(matches!(
         tools::call(&w.brain, &ro, "triage_claim", &json!({})),
@@ -637,7 +637,7 @@ fn the_sorting_tools_only_touch_the_triage_space_of_a_connection_that_writes_it(
         tools::call(&w.brain, &ro, "triage_release", &json!({})),
         Err(ToolError::Unknown)
     ));
-    // Writes À trier: it claims, and releasing gives it back.
+    // Writes Inbox: it claims, and releasing gives it back.
     let rw = caller(&w, "sorter-rw", &format!("{}:rw", tri.as_str()), false)?;
     let got = tools::call(&w.brain, &rw, "triage_claim", &json!({}))?;
     assert_eq!(got["claimed"].as_array().map(Vec::len), Some(1));

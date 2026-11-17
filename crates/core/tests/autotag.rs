@@ -498,7 +498,7 @@ fn a_note_sent_out_of_a_triage_space_is_tagged_like_one_written_there() -> Res {
     let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
     let device = caller(&b, "peer-phone-y", &format!("{box_name}:rw"))?;
     let janitor = caller(&b, "memcp-janitor", "all")?;
-    // A device writes with no space: the note waits in À trier, untagged by the space it will go to.
+    // A device writes with no space: the note waits in Inbox, untagged by the space it will go to.
     let r = tools::call(
         &b,
         &device,

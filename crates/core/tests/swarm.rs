@@ -1,6 +1,6 @@
 //! The swarm of one person's nodes, without a network: a space offered by a peer is made with its layout, the person's
-//! « À trier » is paired rather than copied, an archive wins over an older copy and loses to a newer one, and a note of
-//! « À trier » filed on two nodes is one note.
+//! Inbox is paired rather than copied, an archive wins over an older copy and loses to a newer one, and a note of
+//! Inbox filed on two nodes is one note.
 
 mod common;
 
@@ -126,7 +126,7 @@ fn a_note_filed_on_two_nodes_before_they_meet_is_one_note() -> Res {
     let t = Temp::new("swarm-filed-once");
     let (a, box_a) = node(&t, "alma")?;
     let (b, _) = node(&t, "bea")?;
-    // The same space on both nodes, and the same note in À trier on both (as a pass leaves them).
+    // The same space on both nodes, and the same note in Inbox on both (as a pass leaves them).
     let home = a.add_custom_space(OWNER, "alma", "Home", None)?;
     let offer = swarm::offers(&a, OWNER)?
         .into_iter()

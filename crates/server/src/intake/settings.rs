@@ -16,7 +16,7 @@ pub const VOICE_EVERY: u64 = 60;
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Watched {
     pub dir: PathBuf,
-    /// The space that gets what comes in; `None`: the person's « À trier ».
+    /// The space that gets what comes in; `None`: the person's Inbox.
     pub space: Option<String>,
 }
 
@@ -26,7 +26,7 @@ pub struct Settings {
     /// The person the intake works for (a login name); `None`: the first administrator.
     pub person: Option<String>,
     pub transcribe: bool,
-    /// The spaces whose recordings are read (`all`, or names); empty: the person's « À trier ».
+    /// The spaces whose recordings are read (`all`, or names); empty: the person's Inbox.
     pub transcribe_spaces: Vec<String>,
     pub voice: VoiceSettings,
     /// Seconds between two passes over the recordings.

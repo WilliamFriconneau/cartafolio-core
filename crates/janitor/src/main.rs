@@ -9,8 +9,8 @@ use memcp_janitor::{Config, Janitor};
 
 const USAGE: &str = "usage: memcp-janitor [--config FILE] [run]
 
-One pass: every note and file of À trier is sent to the inbox of a vault (or left there when it is unsure), every note of an inbox is
-filed in the vault of that inbox, its
+One pass: every note and file of the Inbox is sent to a space, tagged `inbox` (or left there when it is unsure), every note
+tagged `inbox` in a space is filed in that space, its
 text unchanged; a piece of a note the node absorbed is turned into short, dated facts. If no model answers, the notes stay.
 With --watch FILE (the memory's mark of the last write into an inbox), it stays: a pass once the writing has calmed down
 (--quiet SECONDS, 120 by default) and one a night (--night HH:MM, 03:00 by default). How the Home Assistant app runs it. The settings are in FILE (default ~/.config/memcp-janitor/janitor.conf); see docs/JANITOR.md.";
@@ -80,7 +80,7 @@ fn main() -> ExitCode {
     let Some(mark) = watch else {
         let r = janitor.run_once();
         println!(
-            "sent on from À trier {}, left there for you {}; filed {}, left in the inbox {}",
+            "sent on from the Inbox {}, left there for you {}; filed {}, left in the inbox {}",
             r.sent + r.files_sent,
             r.unsure,
             r.filed,
@@ -129,7 +129,7 @@ fn main() -> ExitCode {
             || !r.problems.is_empty()
         {
             println!(
-                "{why}: sent on from À trier {}, left there for you {}; filed {} ({} without the model), left in the inbox {}, keywords added {}",
+                "{why}: sent on from the Inbox {}, left there for you {}; filed {} ({} without the model), left in the inbox {}, keywords added {}",
                 r.sent + r.files_sent,
                 r.unsure,
                 r.filed,

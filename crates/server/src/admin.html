@@ -328,7 +328,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
   <div id="app" hidden>
     <header>
       <h1>MemCP <button type="button" class="link" id="back-people" hidden>← My memory</button></h1>
-      <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this installation, who is waiting to be let in">Administration</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every space you own, with a readable version. No key, connection or right in it.">export my data</button> <span class="switches" data-switches></span></div>
+      <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this node, who is waiting to be let in">People of this node</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every space you own, with a readable version. No key, connection or right in it.">export my data</button> <span class="switches" data-switches></span></div>
     </header>
     <nav class="tabs sections" id="sections" aria-label="Sections"></nav>
     <p class="err" id="err" role="alert"></p>
@@ -337,12 +337,12 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     <div id="view-people">
     <section data-admin id="requests-section" hidden>
       <h2>Waiting to be let in</h2>
-      <p class="mute small">A Home Assistant account this installation does not know yet. The names are what the account claims, not checked. Nothing is made until you accept.</p>
+      <p class="mute small">A Home Assistant account this node does not know yet. The names are what the account claims, not checked. Nothing is made until you accept.</p>
       <div class="scroll"><table id="requests"></table></div>
     </section>
 
     <section data-admin id="people-section">
-      <h2>Administration</h2>
+      <h2>People of this node</h2>
       <p class="mute small">Each person has a memory of their own: their own spaces, keys and connections. Nobody reads another's. An account deleted in Home Assistant leaves its person here, with their memory: nothing is ever erased for you.</p>
       <div id="people" class="bento"></div>
       <form data-act="users">
@@ -385,7 +385,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
         <div class="acts"><button type="button" class="primary" id="open-wizard">Connect an assistant</button></div>
       </div>
       <div class="tile t3" id="triage-tile" hidden>
-        <h3>À trier <span class="badge" id="triage-count"></span></h3>
+        <h3>Inbox <span class="badge" id="triage-count"></span></h3>
         <p class="mute small" style="margin:0">What waits for your decision: what your devices sent and the janitor could not place.</p>
         <div class="acts"><button type="button" class="primary" onclick="location.hash='#triage'">Sort them</button></div>
       </div>
@@ -548,8 +548,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 
     <div id="view-triage" hidden>
     <section>
-      <h2>À trier</h2>
-      <p class="mute small">What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the space, send: each capture lands in that space's inbox as it is, and the janitor files it there.</p>
+      <h2>Inbox</h2>
+      <p class="mute small">What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the space, send: each capture lands in that space as it is, and the janitor files it there.</p>
       <div class="bar" id="triage-bar">
         <label class="inline"><input type="checkbox" id="tr-all"> <span id="tr-all-lbl">Select all</span></label>
         <input id="tr-filter" type="search" placeholder="Filter…" size="18">
@@ -627,7 +627,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
   <div id="pair-waiting">
     <p class="mute small">On the new node: choose “Join a memory” and scan this code, or type the address and the code. It works once, for <b id="pair-left">10:00</b>.</p>
     <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
-    <div class="small mute">Address of the server</div>
+    <div class="small mute">Address of this node</div>
     <div class="pair-row"><code id="pair-server"></code><button type="button" class="link" data-copy="pair-server">copy</button></div>
     <div class="small mute">Code</div>
     <div class="pair-row"><code id="pair-code" class="pair-code"></code><button type="button" class="link" data-copy="pair-code">copy</button></div>
@@ -728,14 +728,14 @@ const FR = {
   "A person's recovery key lets a new Home Assistant account take their memory over, once.": "La clé de récupération d’une personne permet à un nouveau compte Home Assistant de reprendre sa mémoire, une seule fois.",
   "Use the key": "Utiliser la clé",
   "← My memory": "← Ma mémoire",
-  "Administration": "Administration",
+  "People of this node": "Les personnes de ce nœud",
   "my instructions": "mes consignes",
   "my instructions ✓": "mes consignes ✓",
   "export my data": "exporter mes données",
   "A copy of every space you own, with a readable version. No key, connection or right in it.": "Une copie de chaque espace qui est à vous, avec une version lisible. Ni clé, ni connexion, ni droit dedans.",
-  "The people of this installation, who is waiting to be let in": "Les personnes de cette installation, et qui attend d’être accepté",
+  "The people of this node, who is waiting to be let in": "Les personnes de ce nœud, et qui attend d’être accepté",
   "Waiting to be let in": "En attente d’être accepté",
-  "A Home Assistant account this installation does not know yet. The names are what the account claims, not checked. Nothing is made until you accept.": "Un compte Home Assistant que cette installation ne connaît pas encore. Les noms sont ceux que le compte déclare, sans vérification. Rien n’est créé tant que vous n’acceptez pas.",
+  "A Home Assistant account this node does not know yet. The names are what the account claims, not checked. Nothing is made until you accept.": "Un compte Home Assistant que ce nœud ne connaît pas encore. Les noms sont ceux que le compte déclare, sans vérification. Rien n’est créé tant que vous n’acceptez pas.",
   "Each person has a memory of their own: their own spaces, keys and connections. Nobody reads another's. An account deleted in Home Assistant leaves its person here, with their memory: nothing is ever erased for you.": "Chaque personne a sa propre mémoire : ses espaces, ses clés et ses connexions. Personne ne lit celle d’un autre. Un compte supprimé dans Home Assistant laisse sa personne ici, avec sa mémoire : rien n’est jamais effacé à votre place.",
   "login name": "identifiant",
   "display name": "nom affiché",
@@ -762,7 +762,7 @@ const FR = {
   "Join a memory: this machine asks another one to let it in, and keeps a copy in step. Add a machine: show a code that a computer or a phone types or scans to join this memory.": "Rejoindre une mémoire : cette machine demande à une autre de l’accueillir et garde une copie à jour. Ajouter une machine : afficher un code qu’un ordinateur ou un téléphone saisit ou scanne pour rejoindre cette mémoire.",
   "Connect an assistant": "Connecter un assistant",
   "Claude, ChatGPT, OpenCode… One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.": "Claude, ChatGPT, OpenCode… Une seule adresse porte la clé. Chaque assistant n’obtient que les espaces que vous cochez. Vous pourrez changer cela plus tard sans rien refaire.",
-  "À trier": "À trier",
+  "Inbox": "Inbox",
   "What your devices sent and the janitor has not sent on yet.": "Ce que vos appareils ont envoyé et que le rangeur n’a pas encore classé.",
   "Sort them": "Les trier",
   "What waits for your decision: what your devices sent and the janitor could not place.": "Ce qui attend votre décision : ce que vos appareils ont envoyé et que le rangeur n’a pas su classer.",
@@ -881,14 +881,14 @@ const FR = {
   "Tree": "Arbre",
   "Boards": "Tableaux",
   "Keywords and targets": "Mots-clés et cibles",
-  "À trier": "À trier",
+  "Inbox": "Inbox",
   "Filter…": "Filtrer…",
   "Everything": "Tout",
   "Select all": "Tout sélectionner",
   "Send": "Envoyer",
   "Send to…": "Envoyer vers…",
-  "Tick what goes together, choose the space, send: each capture lands in that space's inbox as it is, and the janitor files it there.": "Cochez ce qui va ensemble, choisissez l’espace, envoyez : chaque capture arrive telle quelle dans la boîte de réception de cet espace, et le rangeur la classe là.",
-  "What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the space, send: each capture lands in that space's inbox as it is, and the janitor files it there.": "Ce que vos appareils ont envoyé et que le rangeur n’a pas encore classé. Cochez ce qui va ensemble, choisissez l’espace, envoyez : chaque capture arrive telle quelle dans la boîte de réception de cet espace, et le rangeur la classe là.",
+  "Tick what goes together, choose the space, send: each capture lands in that space as it is, and the janitor files it there.": "Cochez ce qui va ensemble, choisissez l’espace, envoyez : chaque capture arrive telle quelle dans cet espace, et le rangeur l’y classe.",
+  "What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the space, send: each capture lands in that space as it is, and the janitor files it there.": "Ce que vos appareils ont envoyé et que le rangeur n’a pas encore classé. Cochez ce qui va ensemble, choisissez l’espace, envoyez : chaque capture arrive telle quelle dans cet espace, et le rangeur l’y classe.",
   "Nothing waits here.": "Rien n’attend ici.",
   "Join a memory": "Rejoindre une mémoire",
   "Close": "Fermer",
@@ -909,7 +909,7 @@ const FR = {
   "Move them": "Les déplacer",
   "Join a MemCP network": "Rejoindre un réseau MemCP",
   "On the new node: choose “Join a memory” and scan this code, or type the address and the code. It works once, for": "Sur le nouveau nœud : choisissez « Rejoindre une mémoire » et scannez ce code, ou saisissez l’adresse et le code. Il ne sert qu’une fois, pendant",
-  "Address of the server": "Adresse du serveur",
+  "Address of this node": "Adresse de ce nœud",
   "copy": "copier",
   "Code": "Code",
   "The new node holds the same memory as this one, kept in step: every space, both ways.": "Le nouveau nœud tient la même mémoire que celui-ci, synchronisée : tous les espaces, dans les deux sens.",
@@ -992,7 +992,7 @@ const FR = {
   "Good morning": "Bonjour",
   "Good afternoon": "Bon après-midi",
   "Good evening": "Bonsoir",
-  "Your memory. Nobody else on this server reads it.": "Votre mémoire. Personne d’autre sur ce serveur ne la lit.",
+  "Your memory. Nobody else on this node reads it.": "Votre mémoire. Personne d’autre sur ce nœud ne la lit.",
   "space": "espace",
   "spaces": "espaces",
   "connections": "connexions",
@@ -1170,7 +1170,7 @@ const FR = {
   "Preselected, nothing to tick. This key reaches only these paths of your ": "Présélectionné, rien à cocher. Cette clé n’atteint que ces chemins de votre espace ",
   "Open claude.ai, then Settings, then Connectors. Menu names change from time to time: look for Connectors or MCP.": "Ouvrez claude.ai, puis Réglages, puis Connecteurs. Les noms des menus changent de temps en temps : cherchez Connecteurs ou MCP.",
   "Add a custom connector. Give it any name and this address:": "Ajoutez un connecteur personnalisé. Donnez-lui le nom de votre choix et cette adresse :",
-  "Connect it. A page of this server opens in your browser: tick the spaces it may reach, then Allow.": "Connectez-le. Une page de ce serveur s’ouvre dans votre navigateur : cochez les espaces qu’il peut atteindre, puis Autoriser.",
+  "Connect it. A page of this node opens in your browser: tick the spaces it may reach, then Allow.": "Connectez-le. Une page de ce nœud s’ouvre dans votre navigateur : cochez les espaces qu’il peut atteindre, puis Autoriser.",
   "Come back here: this page notices the connection.": "Revenez ici : cette page remarque la connexion.",
   "In the Claude app, open Settings, then Connectors (or look for MCP).": "Dans l’application Claude, ouvrez Réglages, puis Connecteurs (ou cherchez MCP).",
   "Connect it, then tick the spaces it may reach on the page that opens, and Allow.": "Connectez-le, puis cochez les espaces qu’il peut atteindre sur la page qui s’ouvre, et autorisez.",
@@ -1183,7 +1183,7 @@ const FR = {
   "Look for MCP servers, connectors or tools in the assistant's settings, and add a remote server (Streamable HTTP) with this address. It carries the key: keep it private.": "Cherchez les serveurs MCP, connecteurs ou outils dans les réglages de l’assistant, et ajoutez un serveur distant (Streamable HTTP) avec cette adresse. Elle porte la clé : gardez-la privée.",
   "If it asks for the address and the key apart, use this address:": "S’il demande l’adresse et la clé séparément, utilisez cette adresse :",
   "and this header:": "et cet en-tête :",
-  "If it only offers a sign-in (OAuth) with no header, leave the key empty: it will open the consent page of this server.": "S’il ne propose qu’une connexion (OAuth) sans en-tête, laissez la clé vide : il ouvrira la page de consentement de ce serveur.",
+  "If it only offers a sign-in (OAuth) with no header, leave the key empty: it will open the consent page of this node.": "S’il ne propose qu’une connexion (OAuth) sans en-tête, laissez la clé vide : il ouvrira la page de consentement de ce nœud.",
   "One address to paste (it carries the key)": "Une adresse à coller (elle porte la clé)",
   "Address of the MCP server": "Adresse du serveur MCP",
   "Any other MCP client": "Tout autre client MCP",
@@ -1193,16 +1193,16 @@ const FR = {
   "Connected": "Connecté",
   "Nothing after 10 minutes. Check that the address opens from outside your network, and that the consent page appeared.": "Rien au bout de 10 minutes. Vérifiez que l’adresse s’ouvre depuis l’extérieur de votre réseau, et que la page de consentement est apparue.",
   "Once the assistant is connected, paste this to it. It will look at your memory, propose how to organise it, and ask you a few questions, one at a time. It writes nothing you did not approve.": "Une fois l’assistant connecté, collez-lui ceci. Il regardera votre mémoire, proposera comment l’organiser et vous posera quelques questions, une à la fois. Il n’écrit rien que vous n’ayez approuvé.",
-  "This server's address is not HTTPS. Claude on the web and most apps need an HTTPS address.": "L’adresse de ce serveur n’est pas en HTTPS. Claude sur le web et la plupart des applications exigent une adresse HTTPS.",
+  "This node's address is not HTTPS. Claude on the web and most apps need an HTTPS address.": "L’adresse de ce nœud n’est pas en HTTPS. Claude sur le web et la plupart des applications exigent une adresse HTTPS.",
   "This looks like a Tailscale name: it is reachable from the internet only if Funnel is turned on for it.": "Cela ressemble à un nom Tailscale : il n’est joignable depuis Internet que si Funnel est activé pour lui.",
-  "Claude on the web calls your server from the internet: an address that only works on your private network will not do (a public HTTPS address, such as Tailscale Funnel, is needed).": "Claude sur le web appelle votre serveur depuis Internet : une adresse qui ne fonctionne que sur votre réseau privé ne convient pas (il faut une adresse HTTPS publique, comme Tailscale Funnel).",
+  "Claude on the web calls your node from the internet: an address that only works on your private network will not do (a public HTTPS address, such as Tailscale Funnel, is needed).": "Claude sur le web appelle votre nœud depuis Internet : une adresse qui ne fonctionne que sur votre réseau privé ne convient pas (il faut une adresse HTTPS publique, comme Tailscale Funnel).",
   "A connection already has this name: pick another.": "Une connexion porte déjà ce nom : choisissez-en un autre.",
   "Give it a name.": "Donnez-lui un nom.",
   "Told to every assistant you connect, whatever it reaches. Written by you; no assistant can change it.": "Dites à chaque assistant que vous connectez, quoi qu’il atteigne. Écrit par vous ; aucun assistant ne peut le modifier.",
   "Told to every assistant opened on this space, and only on it. Kept by the assistants that write this space (tool guide_set): read here, not edited. Every earlier text stays in the history.": "Communiqué à chaque assistant ouvert sur cet espace, et seulement sur lui. Tenu par les assistants qui écrivent dans cet espace (outil guide_set) : lu ici, non modifié. Chaque texte précédent reste dans l’historique.",
   "no instructions yet": "pas encore de consignes",
   "Notification": "Notification",
-  "Check that the device shows the same three words, then allow it. It reaches À trier only.": "Vérifiez que l’appareil affiche les mêmes trois mots, puis autorisez-le. Il n’atteint que À trier.",
+  "Check that the device shows the same three words, then allow it. It reaches Inbox only.": "Vérifiez que l’appareil affiche les mêmes trois mots, puis autorisez-le. Il n’atteint que l’Inbox.",
   "Allow": "Autoriser",
   "Deny": "Refuser",
   "Allowed": "Autorisé",
@@ -1320,6 +1320,7 @@ const FRX = [
   [/^(\d+|—) spaces · (\d+|—) connections$/, (a, b) => a + " espaces · " + b + " connexions"],
   [/^(\d+) selected of (\d+)$/, (a, b) => a + " sélectionnées sur " + b],
   [/^(\d+) waiting$/, n => n + " en attente"],
+  [/^People of this node · (\d+) waiting$/, n => "Les personnes de ce nœud · " + n + " en attente"],
   [/^Select the (\d+) shown$/, n => "Sélectionner les " + n + " affichées"],
   [/^Send (\d+)$/, n => "Envoyer " + n],
   [/^(\d+) spaces: (.*)\.$/, (n, l) => n + " espaces : " + l + "."],
@@ -1363,7 +1364,7 @@ const FRX = [
   [/^nobody$/, () => "personne"],
   [/^A recovery key exists\. Making a new one cancels it\.$/, () => "Une clé de récupération existe. En créer une nouvelle l’annule."],
   [/^You have no recovery key yet\.$/, () => "Vous n’avez pas encore de clé de récupération."],
-  [/^(\d+) keys? (?:was|were) refused in the last 24 hours\..*$/, (n) => n + (n === "1" ? " clé a été refusée" : " clés ont été refusées") + " ces dernières 24 heures. Une clé fausse ou révoquée qui essaie le serveur ; si ce n’est pas l’une des vôtres, rien à faire."],
+  [/^(\d+) keys? (?:was|were) refused in the last 24 hours\..*$/, (n) => n + (n === "1" ? " clé a été refusée" : " clés ont été refusées") + " ces dernières 24 heures. Une clé fausse ou révoquée qui essaie ce nœud ; si ce n’est pas l’une des vôtres, rien à faire."],
   [/^(.+) is (.+) \(last used (.+)\)\.$/, (a, why, w) => a + " : " + why + " (dernière utilisation " + w + ")."],
   [/^(.+) is (.+) \(made (.+)\)\.$/, (a, why, w) => a + " : " + why + " (créée " + w + ")."],
   [/^(.+) has not opened the page for (\d+) days\.$/, (n, d) => n + " n’a pas ouvert la page depuis " + d + " jours."],
@@ -1522,7 +1523,7 @@ async function pollJoins() {
   box.hidden = list.length === 0;
   box.replaceChildren(...list.map(j => el("section", { style: "border:2px solid var(--primary)" },
     el("h2", { style: "margin:0 0 6px" }, "📱 " + j.device + " wants to join"),
-    el("p", { class: "mute small", style: "margin:0 0 8px" }, "Check that the device shows the same three words, then allow it. It reaches À trier only."),
+    el("p", { class: "mute small", style: "margin:0 0 8px" }, "Check that the device shows the same three words, then allow it. It reaches Inbox only."),
     el("div", { style: "font-size:30px;letter-spacing:.04em;margin:6px 0 12px" }, el("b", {}, j.check)),
     el("div", { class: "row" },
       el("button", { type: "button", class: "primary", onclick: async () => { try { await api("join/approve", { id: j.id }); toast("Allowed"); pollJoins(); load(); } catch (x) { fail(x); } } }, "Allow"),
@@ -1565,7 +1566,7 @@ function renderRuleLine(ov) {
 }
 function renderSpace() {
   const ov = SP.ov;
-  // Note (docs/UI-SPEC.md): À trier as the place a capture lands, without the inside of a space: a title, the box to
+  // Note (docs/UI-SPEC.md): Inbox as the place a capture lands, without the inside of a space: a title, the box to
   // write, record or attach, and what came in.
   const note = location.hash === "#note";
   $("#space-crumb").hidden = $("#space-sub").hidden = $("#space-tabs").hidden = note;
@@ -2161,7 +2162,7 @@ function route() {
   const inSpace = location.hash.match(/^#space\/([a-z][a-z0-9-]*)$/);
   const inFolder = location.hash.match(/^#folder\/([a-z][a-z0-9-]*)$/);
   const global = location.hash === "#journal" || location.hash === "#graph";
-  // The four sections of every app (docs/UI-SPEC.md): Note, Journal, Spaces, Settings. Note opens À trier, where a
+  // The four sections of every app (docs/UI-SPEC.md): Note, Journal, Spaces, Settings. Note opens Inbox, where a
   // capture lands; health is a space among the others; Settings is the machines, the assistants and the rest.
   const triage = S && S.triage && S.triage.space ? { name: S.triage.space } : null;
   const section = location.hash === "#note" ? "note" : global ? "journal"
@@ -2187,7 +2188,7 @@ function route() {
   $("#back-people").hidden = page !== "admin";
   $("#nav-admin").hidden = !(admin && page === "memory");
   $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
-  document.title = page === "space" ? "MemCP · " + (inSpace ? spacePath(inSpace[1]) : tr("Trace or drop")) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
+  document.title = page === "space" ? "MemCP · " + (inSpace ? spacePath(inSpace[1]) : tr("Trace or drop")) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · " + tr("People of this node") : page === "triage" ? "MemCP · Inbox" : "MemCP";
 }
 $("#back-people").addEventListener("click", () => { location.hash = ""; });
 $("#nav-admin").addEventListener("click", () => { location.hash = "#admin"; });
@@ -2250,7 +2251,7 @@ function options(select) {
   if (items.some(([v]) => v === keep)) select.value = keep;
 }
 
-// « À trier »: each capture waiting. Its text is what a device sent: shown as text, never as markup.
+// Inbox: each capture waiting. Its text is what a device sent: shown as text, never as markup.
 const TR = { picked: new Set(), last: null };
 const trItems = () => {
   const t = S.triage;
@@ -2342,7 +2343,7 @@ function renderHero() {
   $("#hero").replaceChildren(
     el("div", { class: "avatar" }, name.slice(0, 1).toUpperCase()),
     el("div", {}, el("h2", {}, hello + ", " + name),
-      el("p", { class: "lead" }, el("span", { class: "lock" }), "Your memory. Nobody else on this server reads it.")),
+      el("p", { class: "lead" }, el("span", { class: "lock" }), "Your memory. Nobody else on this node reads it.")),
     el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "space" : "spaces"), stat(facts, facts === 1 ? "note" : "notes"),
       stat(assistantConns().length, "connections"), last ? el("div", {}, el("b", { style: "font-size:15px;padding-top:9px" }, ago(last)), el("span", {}, "last write")) : null));
 }
@@ -2361,7 +2362,7 @@ function render() {
 
   const waiting = (S.installation ? S.installation.requests : S.requests) || [];
   $("#requests-section").hidden = !isAdmin() || waiting.length === 0;
-  $("#nav-admin").textContent = "Administration" + (waiting.length ? " · " + waiting.length + " waiting" : "");
+  $("#nav-admin").textContent = "People of this node" + (waiting.length ? " · " + waiting.length + " waiting" : "");
   $("#requests").replaceChildren(
     el("tr", {}, el("th", {}, "Login"), el("th", {}, "First seen"), el("th", {}, "Status"), el("th", {}, "")),
     ...waiting.map(r => el("tr", {},
@@ -2420,7 +2421,7 @@ function render() {
       g.standing === "waiting" ? null : el("button", { class: "link danger", onclick: () => confirmThen("Stop using the instructions of " + g.app + "?", () => act("app-guides/withdraw", { space: g.space, app: g.app })) }, "Withdraw")))));
   const att = S.attention || { idle: [], refused_24h: 0 };
   const worth = [];
-  if (att.refused_24h > 0) worth.push(el("p", {}, att.refused_24h + (att.refused_24h === 1 ? " key was" : " keys were") + " refused in the last 24 hours. A wrong or revoked key trying the server; if it is not one of yours, nothing to do."));
+  if (att.refused_24h > 0) worth.push(el("p", {}, att.refused_24h + (att.refused_24h === 1 ? " key was" : " keys were") + " refused in the last 24 hours. A wrong or revoked key trying this node; if it is not one of yours, nothing to do."));
   for (const c of att.idle) worth.push(el("p", {}, el("b", { title: c.agent }, shownName(c.agent)), " is " + c.why + (c.last_used_at ? " (last used " + fmt(c.last_used_at) + ")" : " (made " + fmt(c.created_at) + ")") + ". ",
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "revoke")));
   if (att.idle.length > 1) worth.push(el("p", {},
@@ -2435,7 +2436,7 @@ function render() {
       el("td", {}, f.name, el("div", { class: "mute small" }, (f.note || "") + " · " + size(f.size))),
       el("td", {}, spaceLabel(f.space)), el("td", { class: "small" }, fmt(f.created_at) + " · " + f.author),
       el("td", {}, el("button", { class: "link", onclick: () => openFile(f) }, "open"),
-        el("button", { class: "link danger", onclick: () => confirmThen("Retire " + f.name + "?", () => act("files/retire", { space: f.space, id: f.id, reason: "retired from the admin page" })) }, "retire")))));
+        el("button", { class: "link danger", onclick: () => confirmThen("Retire " + f.name + "?", () => act("files/retire", { space: f.space, id: f.id, reason: "retired from the node page" })) }, "retire")))));
 
   const reach = c => {
     const r = c.rights === "all" ? ["all your spaces"] : c.rights.split(",").map(x => spaceLabel(x.split("/")[0].split(":")[0]) + (x.includes("/") ? "/" + x.split(":")[0].split("/").slice(1).join("/") : "") + (/:r$/.test(x) ? " (read only)" : ""));
@@ -2611,7 +2612,7 @@ const PLATFORMS = [
       "Open claude.ai, then Settings, then Connectors. Menu names change from time to time: look for Connectors or MCP.",
       "Add a custom connector. Give it any name and this address:",
       { pre: addr() },
-      "Connect it. A page of this server opens in your browser: tick the spaces it may reach, then Allow.",
+      "Connect it. A page of this node opens in your browser: tick the spaces it may reach, then Allow.",
       "Come back here: this page notices the connection."] },
   { id: "claude-desktop", name: "Claude Desktop or Cowork", oauth: true, where: "local",
     steps: () => [
@@ -2644,7 +2645,7 @@ const PLATFORMS = [
       { pre: addr() },
       "and this header:",
       { pre: "Authorization: Bearer " + c.token },
-      "If it only offers a sign-in (OAuth) with no header, leave the key empty: it will open the consent page of this server.",
+      "If it only offers a sign-in (OAuth) with no header, leave the key empty: it will open the consent page of this node.",
       "Ask it something from your memory: this page notices its first request."] },
 ];
 // The address of a connection is its name: /mcp/<name>. The key (or the consent) says what it reaches;
@@ -2661,7 +2662,7 @@ const ORGANISE_PROMPT = `You are connected to my memory (MemCP, over MCP). It ma
 - Tags are paths in lowercase, up to 4 levels, up to 8 per fact (\`work/projects/alpha\`, \`health/allergies\`, \`people/family\`, \`home/server\`). Reuse the paths \`stats\` lists. \`@space\` also files a fact under another space you can read.
 - Layers: plain facts are the sorted memory. Tag \`inbox\` = quick notes to sort later (a plain \`recall\` leaves them out). \`sources/<app>\` = raw records an app deposited (left out of a plain \`recall\`; ask by tag). \`dossier/<app>\` = the sorted summary an app wrote. Never write into another app's paths.
 - Tag \`index\`: one fact per space saying what is in it and where; whoever connects reads it first. Keep it current with \`supersede\`.
-- My instructions (the guide) are written by me alone, on the admin page. You cannot write them; you may propose text.
+- My instructions (the guide) are written by me alone, on the page of my memory. You cannot write them; you may propose text.
 
 2. WHAT EACH SPACE IS FOR
 - me: who I am, my values and preferences, how to work with me, what assistants may and may not do.
@@ -2678,7 +2679,7 @@ a. Call \`stats\`. Tell me which spaces you reach, how many facts each holds, an
 b. For each space, \`recall\` a few broad queries and read its \`index\` (tag \`index\`). Tell me what exists and what is missing.
 c. Propose 5 to 10 tag paths per space and the text of its index. Wait for my OK, then write the indexes.
 d. Interview me briefly, ONE question at a time, space by space, starting with me. For each answer, propose the fact(s) and write them after my OK. Write what I said as I said it; mark an inference as one. If I tire of questions, save the rest as quick notes (tag \`inbox\`) to sort later.
-e. Propose the text of my instructions, for me and for each space, short: who to be, which language, what never to do. I will paste them on the admin page myself.
+e. Propose the text of my instructions, for me and for each space, short: who to be, which language, what never to do. I will paste them on the page of my memory myself.
 f. Finish with one paragraph: what you wrote, how many facts per space, what is left in the inbox.
 
 4. RULES WHILE YOU WORK
@@ -2696,7 +2697,7 @@ const ORGANISE_PROMPT_FR = `Tu es connecté à ma mémoire (MemCP, via MCP). Ell
 - Les étiquettes sont des chemins en minuscules, sur 4 niveaux au plus, 8 par fait au plus (\`work/projects/alpha\`, \`health/allergies\`, \`people/family\`, \`home/server\`). Réutilise les chemins que \`stats\` liste. \`@space\` range aussi un fait dans un autre espace que tu peux lire.
 - Les couches : les faits simples sont la mémoire triée. L’étiquette \`inbox\` = notes rapides à trier plus tard (un \`recall\` simple les laisse de côté). \`sources/<app>\` = enregistrements bruts déposés par une application (laissés de côté par un \`recall\` simple ; demande-les par étiquette). \`dossier/<app>\` = le résumé trié écrit par une application. N’écris jamais dans les chemins d’une autre application.
 - L’étiquette \`index\` : un fait par espace qui dit ce qu’il contient et où ; quiconque se connecte le lit en premier. Garde-le à jour avec \`supersede\`.
-- Mes consignes (le guide) sont écrites par moi seul, sur la page d’administration. Tu ne peux pas les écrire ; tu peux proposer un texte.
+- Mes consignes (le guide) sont écrites par moi seul, sur la page de ma mémoire. Tu ne peux pas les écrire ; tu peux proposer un texte.
 
 2. À QUOI SERT CHAQUE ESPACE
 - moi : qui je suis, mes valeurs et préférences, comment travailler avec moi, ce que les assistants peuvent faire ou non.
@@ -2713,7 +2714,7 @@ a. Appelle \`stats\`. Dis-moi quels espaces tu atteins, combien de faits chacun 
 b. Pour chaque espace, fais quelques \`recall\` larges et lis son \`index\` (étiquette \`index\`). Dis-moi ce qui existe et ce qui manque.
 c. Propose 5 à 10 chemins d’étiquettes par espace et le texte de son index. Attends mon accord, puis écris les index.
 d. Interroge-moi brièvement, UNE question à la fois, espace par espace, en commençant par moi. Pour chaque réponse, propose le ou les faits et écris-les après mon accord. Écris ce que j’ai dit comme je l’ai dit ; marque une déduction comme telle. Si je me lasse des questions, garde le reste en notes rapides (étiquette \`inbox\`) à trier plus tard.
-e. Propose le texte de mes consignes, pour moi et pour chaque espace, court : qui être, quelle langue, ce qu’il ne faut jamais faire. Je les collerai moi-même sur la page d’administration.
+e. Propose le texte de mes consignes, pour moi et pour chaque espace, court : qui être, quelle langue, ce qu’il ne faut jamais faire. Je les collerai moi-même sur la page de ma mémoire.
 f. Termine par un paragraphe : ce que tu as écrit, combien de faits par espace, ce qui reste dans la boîte de réception.
 
 4. RÈGLES PENDANT LE TRAVAIL
@@ -2753,8 +2754,8 @@ function openWizard(pre = {}) {
 
 function addressWarnings(oauth) {
   const w = [];
-  if (!/^https:/.test(S.public_url)) w.push("This server's address is not HTTPS. Claude on the web and most apps need an HTTPS address.");
-  if (oauth) w.push("Claude on the web calls your server from the internet: an address that only works on your private network will not do (a public HTTPS address, such as Tailscale Funnel, is needed).");
+  if (!/^https:/.test(S.public_url)) w.push("This node's address is not HTTPS. Claude on the web and most apps need an HTTPS address.");
+  if (oauth) w.push("Claude on the web calls your node from the internet: an address that only works on your private network will not do (a public HTTPS address, such as Tailscale Funnel, is needed).");
   if (/\.ts\.net/.test(S.public_url)) w.push("This looks like a Tailscale name: it is reachable from the internet only if Funnel is turned on for it.");
   return w;
 }
@@ -3096,7 +3097,8 @@ function connKind(agent) {
   const base = agent.replace(/-\d+$/, "");
   return { claudeai: "cloud", "claude-web": "cloud", chatgpt: "cloud", "claude-desktop": "local", "claude-code": "local", opencode: "local", kalios: "local" }[base] || "";
 }
-const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : name; };
+// The person's Inbox is shown by its label, never by its stored name (`<person>-a-trier`, the name it always had).
+const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : S && S.triage && S.triage.space === name ? "Inbox" : name; };
 const spaceByName = n => (FT.l || []).find(x => x.space === n);
 // The folders above a space, outermost first.
 function ancestors(name) {

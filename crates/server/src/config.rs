@@ -72,7 +72,7 @@ static WHERE: [Opt; 8] = [
         "/var/lib/memcp",
         None,
         Some("--data"),
-        "The data directory: one SQLite file per space, the control database, the files. Private to its owner (0700). Back it up with `memcp backup`, never by copying it while the server runs.",
+        "The data directory: one SQLite file per space, the control database, the files. Private to its owner (0700). Back it up with `memcp backup`, never by copying it while the node runs.",
     ),
     o(
         "listen",
@@ -80,7 +80,7 @@ static WHERE: [Opt; 8] = [
         "127.0.0.1:8791",
         None,
         Some("--listen"),
-        "The address the server listens on. The loopback by default: put a TLS proxy or Tailscale serve in front (docs/LINUX.md).",
+        "The address this node listens on. The loopback by default: put a TLS proxy or Tailscale serve in front (docs/LINUX.md).",
     ),
     o(
         "allow_remote",
@@ -96,7 +96,7 @@ static WHERE: [Opt; 8] = [
         "4",
         None,
         Some("--threads"),
-        "Worker threads of the server (1 to 1024).",
+        "Worker threads of this node's HTTP server (1 to 1024).",
     ),
     o(
         "advertise",
@@ -112,7 +112,7 @@ static WHERE: [Opt; 8] = [
         "",
         None,
         Some("--allow-origin"),
-        "Web origins a browser page may call this server from (a list of URLs). Empty: none.",
+        "Web origins a browser page may call this node from (a list of URLs). Empty: none.",
     ),
     o(
         "console_admin",

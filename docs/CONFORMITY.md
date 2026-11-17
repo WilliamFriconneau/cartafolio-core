@@ -1,6 +1,6 @@
-# Conformity of the Linux server app
+# Conformity of a node on Linux and Home Assistant
 
-What the documents require of the server side (the `memcp` binary, `memcp-manager`, and the Home Assistant app in `ha-addon/`), one line per requirement, and where it is checked. Scope: UI-SPEC.md, FEDERATION.md, CONCEPTS.md, DISCOVERY.md, TOOLS.md, SECURITY.md. The desktop and phone apps are out of scope, so the rows of UI-SPEC about them are not listed. `crates/server/tests/page/*.test.js` are optional browser tests (not run by `cargo test`).
+What the documents require of a node on Linux and Home Assistant (the `memcp` binary, `memcp-manager`, and the Home Assistant app in `ha-addon/`), one line per requirement, and where it is checked. Scope: UI-SPEC.md, FEDERATION.md, CONCEPTS.md, DISCOVERY.md, TOOLS.md, SECURITY.md. The desktop and phone apps are out of scope, so the rows of UI-SPEC about them are not listed. `crates/server/tests/page/*.test.js` are optional browser tests (not run by `cargo test`).
 
 Status: **done** (code and a test), **partial** (code, or part of the rule), **missing**, **n/a** (a plan the document itself marks as not built).
 
@@ -35,7 +35,7 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Doc and section | Requirement | Status | Test or code |
 |---|---|---|---|
 | The idea | Nodes synchronise with each other; a node away for days catches up | done | `client/tests/e2e.rs::three_nodes_writing_everywhere_end_with_the_same_memory`, `peer_sync_ways.rs` |
-| The idea | The same program does every step, no "simple" and "server" versions | done | one `memcp` binary (`crates/server`) |
+| The idea | The same program does every step, no "simple" and "bigger" versions | done | one `memcp` binary (`crates/server`) |
 | Facts are events | A fact is never overwritten; a space is an append-only log with stable ids and a hybrid logical clock | done | `core/tests/sync.rs::every_change_is_logged_with_a_stable_id_and_a_rising_clock`, `core/src/sync.rs` (`hlc`) |
 | Rules table | A fact added on two nodes: both kept | done | `core/tests/sync.rs::the_same_text_written_on_two_nodes_is_kept_twice` |
 | Rules table | The same fact replaced on two nodes: both kept, in dispute | done | `core/tests/sync.rs::the_same_fact_replaced_on_two_nodes_is_kept_both_ways_and_in_dispute`, `peer_sync_ways.rs::the_same_note_changed_on_both_sides_is_kept_both_ways_and_listed_as_a_dispute` |
@@ -58,9 +58,9 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Rules that improve themselves | Every assistant change is an event with the assistant's name and reason, revertible, limited per day | partial | history keeps name and reason; no daily limit |
 | Window | A node may hold only a window; write first, prune later; nothing pruned before another node acknowledged | done | `core/tests/window.rs` (8 tests) |
 | Window | `GET /sync/status` and `peers` carry `window` | done | `core/src/sync.rs` status, `core/tests/window.rs::the_window_is_off_by_default_and_checked` |
-| Window | Write-only connectors | missing | no connector of this kind on the server |
+| Window | Write-only connectors | missing | no connector of this kind in a node |
 | Window | Offline: the node answers from what it holds | done | `core/tests/window.rs::the_journal_and_a_board_still_work_on_the_window` |
-| Security, identity | Ed25519 key pair per node in the system keystore; membership signed by administrator nodes; roles administrator, member, blind, read-only | missing | not built (peers are connections with tokens and read or write rights) |
+| Security, identity | Ed25519 key pair per node in the system keystore; membership signed by an administrator; node roles member, blind, read-only | missing | not built (peers are connections with tokens and read or write rights) |
 | Security, joining | A one-use ten-minute code; a short check code both screens show | partial | `core/tests/pairing.rs::a_code_expires_and_cannot_reach_beyond_the_person`, `server/tests/join.rs`; the check phrase is derived from a random draw, not from the two keys |
 | Security, revocation | Revoked node refused at its next contact | done | `peer_sync_ways.rs` (see above) |
 | Security, events | Every event signed by its node; signature, author and form checked; failures counted against the sender | partial | form checked and refused: `core/tests/sync.rs::bad_events_are_refused_and_change_nothing`; no signature, no count |
@@ -70,7 +70,7 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Security, rights | A peer's rights are those of its connection; a sensitive space only if turned on | done | `core/tests/pairing.rs`, `core/tests/permissions_matrix.rs` |
 | Security, audit | The audit log records who joined, who was revoked, what was refused, and the page shows it | partial | `auth_audit` (`core/src/access.rs`) and the activity list of the page; quarantine is absent |
 | Managing | Join, revoke, pause a node; change a role; choose what each node holds | partial | join and revoke done (`server/tests/join.rs`, `peer_sync_ways.rs`); no pause, no roles, no per-node choice |
-| Managing | A node gone for long is flagged after a delay; admin rights can move | partial | last activity shown; no delay, and the administrator is a person, not a node |
+| Managing | A node gone for long is flagged after a delay and can be revoked without it | partial | last activity shown and revoking works; no delay |
 | Managing | Backups are nodes; restoring is joining a new node | done | `core/tests/backup.rs`, `client/tests/e2e.rs::a_new_node_catches_up_with_two_thousand_notes_in_pages` |
 | Managing | Splits keep working and merge when they meet; nothing blocks writing | done | `client/tests/e2e.rs::many_writers_at_once_over_http_lose_nothing`, `peer_sync_ways.rs::writes_on_both_nodes_meet_and_a_pass_with_nothing_new_changes_nothing` |
 | Conflicts | A note corrected on two nodes shows *in dispute* with both versions; the person picks; resolving is an event seen on the others | partial | disputes listed: `core/src/sync.rs::disputes`; resolving on the page is not found |
@@ -88,21 +88,21 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Doc and section | Requirement | Status | Test or code |
 |---|---|---|---|
 | A trace | Never overwritten: a correction replaces it and keeps the old one | done | `core/tests/facts.rs`, `server/tests/explore.rs::a_note_is_listed_searched_corrected_and_removed_with_its_history` |
-| A trace | Context of a trace: a place and the day's appointments, kept with it | missing | no calendar read on the server |
+| A trace | Context of a trace: a place and the day's appointments, kept with it | missing | no calendar read in a node |
 | A space | A space is a boundary of rights: an assistant opened on Work cannot read Health | done | `server/tests/server.rs::isolation_between_agents_through_the_protocol`, `core/tests/permissions_matrix.rs` |
 | A space | Spaces nest as folders | done | `core/src/layout.rs`, `core/tests/layout.rs` |
-| Sorting | A word that belongs to one space files the note there at once; ordinary words score; nothing decisive stays in À trier; deterministic | done | `crates/janitor/src/router.rs` tests (`a_unique_keyword_routes_at_once`), `crates/spaces/tests/router.rs` |
-| Sorting | Voice commands are keywords too (idea box, what's next, targets) | partial | `crates/spaces/src/defaults.rs`; not run on the server's path |
-| The janitor | Proposes keywords from what stays in À trier and what the person refiled; reruns the router | done | `crates/janitor/tests/janitor.rs`, `janitor/src/learn.rs` |
+| Sorting | A word that belongs to one space files the note there at once; ordinary words score; nothing decisive stays in Inbox; deterministic | done | `crates/janitor/src/router.rs` tests (`a_unique_keyword_routes_at_once`), `crates/spaces/tests/router.rs` |
+| Sorting | Voice commands are keywords too (idea box, what's next, targets) | partial | `crates/spaces/src/defaults.rs`; not run on the node's write path |
+| The janitor | Proposes keywords from what stays in Inbox and what the person refiled; reruns the router | done | `crates/janitor/tests/janitor.rs`, `janitor/src/learn.rs` |
 | Living boards | Four boards per space; cards added and moved one by one; each keeps its history | done | `core/tests/living.rs`, `server/tests/explore.rs::a_stored_dashboard_counts_the_signs_and_lists_the_targets` |
 | Living boards | Named lists (`list-shopping`...), open then done, each card with its source | partial | `living_get` pages; named lists are not covered by a test |
 | Living boards | Each board remembers its last pass and shows its delta | done | `core/src/tools.rs` (`living-meta/<page>`), `core/tests/living.rs` |
 | Living boards | Targets group signs and symptoms, counted day by day on the dashboards | done | `server/tests/explore.rs::a_stored_dashboard_counts_the_signs_and_lists_the_targets` |
-| 5S of a memory | À trier empties; what is wrong is retired and kept in history | done | `core/tests/inbox.rs`, `core/tests/triage_audio.rs` |
+| 5S of a memory | Inbox empties; what is wrong is retired and kept in history | done | `core/tests/inbox.rs`, `core/tests/triage_audio.rs` |
 | Peers and versions | Machines of different versions work together on one protocol; an older one that meets a newer protocol stops and says *update this machine* | done | `client/tests/peer_sync_ways.rs::a_peer_with_a_newer_protocol_is_refused_with_a_clear_message_and_nothing_is_touched`, `a_peer_with_an_older_protocol_or_none_is_still_served_as_the_first_one` |
 | Peers and versions | Updates start with the Home Assistant node | n/a | an order of operation for the person, not a rule of the program |
 | Local first | A remote service is a choice, never a default | done | `crates/janitor/src/models.rs` (no model unless named), `ha-addon/memcp/run.sh` (`transcribe` off by default) |
-| From a note to the calendar | The memory never pushes into a calendar | done | no calendar code on the server |
+| From a note to the calendar | The memory never pushes into a calendar | done | no calendar code in a node |
 
 ## DISCOVERY.md
 
@@ -114,7 +114,7 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Finding | Advertising says nothing of what a node holds and gives no access | done | `conformity.rs` (the answer holds four keys) |
 | Joining 2 | The node shows the request on its page with three words; the device shows the same | done | `server/tests/join.rs` (`check.split('-').count() == 3`) |
 | Joining 3 | The person presses Allow; nothing is typed | done | `server/tests/join.rs` |
-| Joining 4 | The device gets its own connection once; À trier only until the person says otherwise | done | `server/tests/join.rs::a_device_asks_the_person_compares_a_phrase_and_allows_and_the_key_comes_once`, `server/tests/join.rs::a_device_the_person_allowed_in_advance_joins_at_once_and_only_once` |
+| Joining 4 | The device gets its own connection once; Inbox only until the person says otherwise | done | `server/tests/join.rs::a_device_asks_the_person_compares_a_phrase_and_allows_and_the_key_comes_once`, `server/tests/join.rs::a_device_the_person_allowed_in_advance_joins_at_once_and_only_once` |
 | Joining | A request lives two minutes | done | `conformity.rs::a_join_request_lives_two_minutes` (`join.rs::TTL`) |
 | Joining | A few requests a minute per address and a few waiting at once; a wrong secret learns nothing | done | `server/tests/join.rs::requests_are_limited_per_address_and_in_all`, `only_the_device_that_asked_can_poll_and_only_a_signed_in_person_can_answer` |
 | Joining | A QR code on the page carries the address and a one-time code | done | `server/tests/explore.rs::joining_a_network_gives_a_link_and_a_qr_code_to_scan` |
@@ -147,13 +147,13 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 |---|---|---|---|
 | What it does | Tokens are shown once; only their digest is stored | done | `conformity.rs::a_token_is_kept_only_as_a_digest` |
 | What it does | Failed attempts are rate limited per address | done | `server/tests/server.rs::too_many_refusals_from_one_address_block_even_the_right_token` |
-| What it does | The server listens on the loopback unless `--allow-remote` | done | `server/tests/server.rs::refuses_to_listen_on_a_non_local_address_without_consent` |
-| What it does | Rights are explicit and never more than the person's; administrators do not read content on the admin page | done | `server/tests/admin.rs::the_page_shows_counters_for_each_space_and_never_the_content`, `a_member_cannot_open_a_space_they_do_not_reach` |
+| What it does | A node listens on the loopback unless `--allow-remote` | done | `server/tests/server.rs::refuses_to_listen_on_a_non_local_address_without_consent` |
+| What it does | Rights are explicit and never more than the person's; administrators do not read content on the node page | done | `server/tests/admin.rs::the_page_shows_counters_for_each_space_and_never_the_content`, `a_member_cannot_open_a_space_they_do_not_reach` |
 | What it does | What comes back to an agent is flagged as data | done | `server/tests/server.rs::write_search_and_replace_through_the_protocol` (the `notice`) |
 | What it does | Files typed by content, stored once by SHA-256, served with `sandbox` and `nosniff` | done | `server/src/admin.rs` (headers), `server/tests/server.rs::a_kept_photo_comes_back_as_an_image`, `core/tests/files.rs` |
-| What it does | The server proxies nothing | done | no outbound call on behalf of an assistant in `crates/server` |
-| What it does | The admin page is not on the network listener; not through Funnel; failed console tokens counted | done | `server/tests/admin.rs::the_admin_is_not_served_on_the_main_listener_unless_enabled`, `the_admin_is_never_served_through_funnel`, `failed_console_tokens_are_counted_and_then_blocked`, `ingress_headers_are_ignored_on_the_normal_listener` |
-| What it does | The person's guide is written only on the admin page; a space's guide by a connection that writes it whole; each write audited | done | `server/tests/admin.rs::a_person_writes_their_own_guide_and_the_guides_of_their_spaces`, `core/tests/guide.rs`, `core/tests/app_guides.rs` |
+| What it does | A node proxies nothing | done | no outbound call on behalf of an assistant in `crates/server` |
+| What it does | The node page is not on the network listener; not through Funnel; failed console tokens counted | done | `server/tests/admin.rs::the_admin_is_not_served_on_the_main_listener_unless_enabled`, `the_admin_is_never_served_through_funnel`, `failed_console_tokens_are_counted_and_then_blocked`, `ingress_headers_are_ignored_on_the_normal_listener` |
+| What it does | The person's guide is written only on the node page; a space's guide by a connection that writes it whole; each write audited | done | `server/tests/admin.rs::a_person_writes_their_own_guide_and_the_guides_of_their_spaces`, `core/tests/guide.rs`, `core/tests/app_guides.rs` |
 | What it does | The index is told as data with the section marker broken inside it | done | `core/tests/guide.rs` |
 | What it does | A connection reaches only what was chosen; OAuth consent grants nothing unticked; `/mcp/<space>` gets that space only; a new sign-in waits for an administrator | done | `server/tests/oauth.rs` (consent), `server/tests/server.rs::a_key_used_at_the_address_of_a_space_reaches_that_space_and_no_other`, `manager/tests/manager.rs::a_second_login_waits_and_the_administrator_lets_it_in` |
 | What it does | `export` has a fingerprint of every file and no key, connection or right; `adopt` checks everything first and undoes itself | done | `core/tests/export.rs::an_export_holds_only_what_the_person_owns_and_no_key`, `an_altered_export_is_caught_and_nothing_is_adopted` |
@@ -169,7 +169,7 @@ The documents above say little of the add-on directly; what they require of it i
 
 | Doc and section | Requirement | Status | Test or code |
 |---|---|---|---|
-| SECURITY, admin page | Served on the Home Assistant ingress | done | `ha-addon/memcp/config.yaml` (`ingress: true`), `server/tests/admin.rs` |
+| SECURITY, node page | Served on the Home Assistant ingress | done | `ha-addon/memcp/config.yaml` (`ingress: true`), `server/tests/admin.rs` |
 | DISCOVERY, Finding | No host network in the app | done | `ha-addon/memcp/config.yaml` |
 | UI-SPEC / CONCEPTS | One memory per person, a new Home Assistant account waits or gets its own | done | `manager/tests/manager.rs::by_default_every_new_home_assistant_account_gets_a_memory_of_its_own`, `a_second_login_waits_and_the_administrator_lets_it_in` |
 | SECURITY, leaving | The memory can be backed up and exported | done | `config.yaml` (`backup: cold`), `core/tests/backup.rs` |
@@ -177,7 +177,7 @@ The documents above say little of the add-on directly; what they require of it i
 | Manager | `GET /health` answers | done | `crates/manager/src/manager.rs` |
 | The add-on starts | `run.sh` builds the settings from the options and starts the node and the manager | partial | `ha-addon/memcp/run.sh`; shell, no automated test |
 
-## The Linux server app
+## A node on Linux
 
 What [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md) promise, and where it is checked.
 

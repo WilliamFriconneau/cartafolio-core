@@ -253,7 +253,7 @@ impl Brain {
     fn not_triage(&self, space: &Space) -> Result<()> {
         if triage::is_triage(self, space) {
             return Err(Error::Invalid(
-                "« À trier » is not a space to change or delete".into(),
+                "the Inbox is not a space to change or delete".into(),
             ));
         }
         Ok(())
@@ -291,7 +291,7 @@ impl Brain {
         let kind = new.kind.clone().filter(|k| k != crate::catalogue::CUSTOM);
         if let Some(k) = &kind {
             if k == crate::catalogue::TRIAGE {
-                return Err(Error::Invalid("« À trier » is made for you already".into()));
+                return Err(Error::Invalid("the Inbox is made for you already".into()));
             }
             if !self.catalogue()?.iter().any(|c| &c.key == k) {
                 return Err(Error::Invalid(format!("unknown kind {k:?}")));
@@ -336,7 +336,7 @@ impl Brain {
         self.not_triage(space)?;
         if let Some(k) = &u.kind {
             if k == crate::catalogue::TRIAGE {
-                return Err(Error::Invalid("a space cannot become « À trier »".into()));
+                return Err(Error::Invalid("a space cannot become the Inbox".into()));
             }
             self.set_space_kind(space, k)?;
         }

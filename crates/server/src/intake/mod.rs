@@ -227,7 +227,7 @@ fn run(intake: &mut Intake, stop: &AtomicBool) {
         eprintln!(
             "intake: watching {} for {}",
             w.dir.display(),
-            w.space.as_deref().unwrap_or("À trier")
+            w.space.as_deref().unwrap_or("Inbox")
         );
     }
     while !stop.load(Ordering::SeqCst) {

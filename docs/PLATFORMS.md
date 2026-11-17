@@ -5,7 +5,7 @@ its device has. Every device is a node: it writes into its own copy and the sync
 
 | Platform | State | What is its own |
 |---|---|---|
-| Node page (Home Assistant, Linux, any node) | built, four sections, golden paths tested in CI | administration of the node |
+| Node page (Home Assistant, Linux, any node) | built, four sections, golden paths tested in CI | managing the node (people, connections, peers, updates) |
 | Mac | built, four sections, its own node, peer sync, join requests answered by notification | recording meetings (everyone told and agreeing); folders connected to a space, a cloud folder told to stay on the Mac |
 | iPhone | built, four sections | a window of thirty days; Apple Health read and proposals written to it; Siri, Spotlight |
 | iPad | the iPhone app, a sidebar instead of tabs (`.sidebarAdaptable`) | the same as the iPhone, a larger window |

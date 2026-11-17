@@ -1,4 +1,4 @@
-//! « À trier » lists what waits for a person, not the recordings whose text is already there.
+//! Inbox lists what waits for a person, not the recordings whose text is already there.
 
 mod common;
 

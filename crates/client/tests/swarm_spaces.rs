@@ -1,7 +1,7 @@
 #![cfg(feature = "sync")]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 //! The nodes of one person are one swarm: a space made on any node, its label and its place in the tree, a rename or a
-//! move, a note left in « À trier », the filing of that note and an archive reach every node. Every node is a real one;
+//! move, a note left in Inbox, the filing of that note and an archive reach every node. Every node is a real one;
 //! the one the others reach is served on a socket opened by the test (port 0).
 
 use std::sync::Arc;
@@ -27,7 +27,7 @@ fn temp(name: &str) -> std::path::PathBuf {
     dir
 }
 
-/// A node of the person, with its own « À trier » (named after what the node calls the person: every node a
+/// A node of the person, with its own Inbox (named after what the node calls the person: every node a
 /// different name, as on a real installation).
 struct Node {
     brain: Brain,

@@ -46,7 +46,7 @@ fn rig_with(tag: &str, setup: &dyn Fn(&memcp_core::Brain, &str)) -> Rig {
         for kind in ["me", "health", "work"] {
             brain.add_vault(&sam, "sam", kind).expect("vault");
         }
-        memcp_core::triage::ensure(&brain, &sam, "sam").expect("À trier");
+        memcp_core::triage::ensure(&brain, &sam, "sam").expect("Inbox");
         setup(&brain, &sam);
         [("edge", "sam-a-trier/inbox:rw"), ("janitor", "all")]
             .iter()
@@ -215,7 +215,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     let mut edge = Client::new(&format!("{}/edge", r.base), &r.edge);
     let note = |edge: &mut Client, text: &str| {
         edge.call("remember", json!({"text": text, "tags": ["inbox"]}))
-            .expect("a note, into À trier: the device names no space");
+            .expect("a note, into Inbox: the device names no space");
     };
     // Notes: a plain one, one the model places outside the frame, one the API fails on, one nobody can place.
     note(
@@ -242,7 +242,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             json!({"space": "sam-work", "text": "Tension dans l'équipe sur le planning de jeudi.", "tags": ["inbox"]}),
         )
         .expect("a work note");
-    // The keywords of the spaces (their `rules` notes) are what places a note from À trier: no model is asked for it.
+    // The keywords of the spaces (their `rules` notes) are what places a note from Inbox: no model is asked for it.
     for (space, words) in [
         ("sam-health", r#"["étourdi","enfants"]"#),
         ("sam-work", r#"["alpha"]"#),
@@ -300,7 +300,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             .any(|t| t.contains("la deuxième idée pour alpha")),
         "{work:?}"
     );
-    // Out of the frame (a vault it may not name): no vault by default, it stays in À trier, the same words.
+    // Out of the frame (a vault it may not name): no vault by default, it stays in Inbox, the same words.
     assert!(texts(&mut all, "sam-me", &[], "range").is_empty());
     let stayed = texts(&mut all, "sam-work", &["janitor"], "planning");
     assert_eq!(stayed.len(), 1, "{stayed:?}");
@@ -345,7 +345,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             .iter()
             .any(|t| t.contains("tension des enfants"))
     );
-    // What is left in À trier: the notes no keyword could place, for the person, who is told by a note there.
+    // What is left in Inbox: the notes no keyword could place, for the person, who is told by a note there.
     let told = texts(&mut all, "sam-a-trier", &["janitor/waiting"], "");
     assert_eq!(told.len(), 1, "{told:?}");
     assert!(told[0].contains("2 note(s) attendent"), "{told:?}");
@@ -498,7 +498,7 @@ fn rules_note(c: &mut Client, space: &str, keywords: &[&str]) {
 fn drop_note(r: &Rig, text: &str) {
     let mut edge = Client::new(&format!("{}/edge", r.base), &r.edge);
     edge.call("remember", json!({"text": text, "tags": ["inbox"]}))
-        .expect("a note into À trier");
+        .expect("a note into Inbox");
 }
 
 fn owner(r: &Rig) -> Client {
@@ -745,15 +745,15 @@ fn a_note_to_file_in_two_spaces_is_copied_to_each_and_nothing_is_erased() {
     let _ = std::fs::remove_dir_all(&r.dir);
 }
 
-/// Puts files into the person's « À trier » (what a device would have sent): `(name, note, bytes)`.
+/// Puts files into the person's Inbox (what a device would have sent): `(name, note, bytes)`.
 fn put_files(brain: &memcp_core::Brain, sam: &str, files: &[(&str, &str, &[u8])], tags: &[&str]) {
     let space = memcp_core::triage::of(brain, sam)
-        .expect("À trier")
+        .expect("Inbox")
         .expect("made");
     let tags: Vec<String> = tags.iter().map(|t| (*t).to_string()).collect();
     for (name, note, bytes) in files {
         memcp_core::files::put_tagged(brain, &space, "edge", name, note, bytes, &tags)
-            .expect("a file into À trier");
+            .expect("a file into Inbox");
     }
 }
 
@@ -839,14 +839,14 @@ fn files_are_routed_by_name_text_and_description_and_the_rest_waits_with_a_reaso
         why("boiler.txt")
     );
     assert!(w["files"][0]["age_seconds"].is_number());
-    // The count of « À trier » in `spaces` is what waits for a decision.
+    // The count of Inbox in `spaces` is what waits for a decision.
     let spaces = o.call("spaces", json!({})).expect("spaces");
     let row = spaces["spaces"]
         .as_array()
         .expect("spaces")
         .iter()
         .find(|s| s["name"] == "sam-a-trier")
-        .expect("À trier");
+        .expect("Inbox");
     assert_eq!(row["facts"], 2, "{row}");
     let _ = std::fs::remove_dir_all(&r.dir);
 }
@@ -881,7 +881,7 @@ fn a_recording_given_up_on_is_tagged_and_counted_apart_from_what_waits_for_the_p
         .expect("spaces")
         .iter()
         .find(|s| s["name"] == "sam-a-trier")
-        .expect("À trier");
+        .expect("Inbox");
     assert_eq!(
         (row["facts"].as_u64(), row["failed_transcription"].as_u64()),
         (Some(0), Some(1))

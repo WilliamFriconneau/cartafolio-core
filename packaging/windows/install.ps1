@@ -117,7 +117,7 @@ Say 'A durable memory for your AI assistants, kept on this computer.'
 # --- choices -------------------------------------------------------------------------------------------------
 Step '1/5  Choices'
 $Language = Ask 'Language of search and of the page (en or fr)?' $Language
-$Spaces = Ask 'First vaults, comma separated (a vault is one box for one part of your life)' $Spaces
+$Spaces = Ask 'First spaces, comma separated (a space is one box for one part of your life)' $Spaces
 $Port = [int](Ask 'Port of the node on this computer?' $Port)
 if ($BridgePort -ne 0) { Say "note: -BridgePort / MEMCP_BRIDGE_PORT is no longer used: the assistants reach the node on port $Port." }
 $NodeUrl = "http://127.0.0.1:$Port"
@@ -279,8 +279,8 @@ $console = (& $Memcp --data $Data console-token owner 2>$null | Select-String -P
 if (-not $console) { Die 'no console key could be made' }
 $headers = @{ Authorization = "Bearer $console"; 'X-Requested-With' = 'memcp' }
 
-# This computer joins its own memory as a device, as a phone does: that makes the person's « À trier », where every
-# capture goes. Its key writes only to À trier and reads nothing; it is kept in `keys`, readable by you only.
+# This computer joins its own memory as a device, as a phone does: that makes the person's Inbox, where every
+# capture goes. Its key writes only to the Inbox and reads nothing; it is kept in `keys`, readable by you only.
 $deviceKey = Join-Path $Keys 'device.key'
 if (-not (Test-Path $deviceKey)) {
     $code = (Invoke-RestMethod -Method Post -Uri "$NodeUrl/admin/api/pairing" -Headers $headers -ContentType 'application/json' -Body '{}').code
@@ -290,7 +290,7 @@ if (-not (Test-Path $deviceKey)) {
     if (-not $paired.key) { Die 'no key in the pairing''s answer' }
     Set-Content -NoNewline -Encoding ascii -Path $deviceKey -Value $paired.key
     Make-PrivateFile $deviceKey
-    Say 'this computer is paired with its memory: its captures go to À trier.'
+    Say 'this computer is paired with its memory: its captures go to the Inbox.'
 }
 
 # The connection of the assistants here. A connection made by an earlier version keeps its name.

@@ -7,10 +7,10 @@
 
 # The data directory: one SQLite file per space, the control database, the
 # files. Private to its owner (0700). Back it up with `memcp backup`, never by
-# copying it while the server runs.
+# copying it while the node runs.
 # data = "/var/lib/memcp"
 
-# The address the server listens on. The loopback by default: put a TLS proxy
+# The address this node listens on. The loopback by default: put a TLS proxy
 # or Tailscale serve in front (docs/LINUX.md).
 # listen = "127.0.0.1:8791"
 
@@ -19,15 +19,15 @@
 # through, or with a proxy on the same machine.
 # allow_remote = false
 
-# Worker threads of the server (1 to 1024).
+# Worker threads of this node's HTTP server (1 to 1024).
 # threads = 4
 
 # Announce this node on the local network (mDNS) so that another machine finds
 # it without typing an address.
 # advertise = false
 
-# Web origins a browser page may call this server from (a list of URLs).
-# Empty: none.
+# Web origins a browser page may call this node from (a list of URLs). Empty:
+# none.
 # allow_origin = []
 
 # Serve the node page (`/admin`) on `listen` with a console token. On by

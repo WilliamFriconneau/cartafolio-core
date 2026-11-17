@@ -65,7 +65,7 @@ pub trait NodeAudioDecoder: Send + Sync {
 pub struct NodeWatchedFolder {
     /// The folder.
     pub path: String,
-    /// The space that gets what comes in; `None`: the person's « À trier ».
+    /// The space that gets what comes in; `None`: the person's Inbox.
     pub space: Option<String>,
 }
 

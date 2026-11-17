@@ -141,7 +141,7 @@ say "A durable memory for your AI assistants, kept on this Mac."
 # --- choices -------------------------------------------------------------------------------------------------
 step "1/5  Choices"
 ask "Language of search and of the page (en or fr)?" "$LANGUAGE"; LANGUAGE="$ANSWER"
-ask "First vaults, comma separated (a vault is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
+ask "First spaces, comma separated (a space is one box for one part of your life)" "$SPACES"; SPACES="$ANSWER"
 ask "Port of the node on this Mac?" "$PORT"; PORT="$ANSWER"
 case "$PORT" in ''|*[!0-9]*) die "a port must be a number" ;; esac
 [ -z "$OLD_BRIDGE_PORT" ] || say "note: --bridge-port / MEMCP_BRIDGE_PORT is no longer used: the assistants reach the node on port $PORT."
@@ -310,8 +310,8 @@ keychain_move() {
   fi
 }
 for name in $CONNECTION $OLD_CONNECTION this-mac; do keychain_move "$NODE_URL/mcp/$name"; done
-# This Mac joins its own memory as a device, as a phone does: that makes the person's « À trier », where every capture
-# goes. The device's key (it writes only to À trier, reads nothing) is kept in the Keychain under its address.
+# This Mac joins its own memory as a device, as a phone does: that makes the person's Inbox, where every capture
+# goes. The device's key (it writes only to the Inbox, reads nothing) is kept in the Keychain under its address.
 DEVICE_ACCOUNT="$NODE_URL/mcp/this-mac"
 if ! keychain_has "$SERVICE" "$DEVICE_ACCOUNT"; then
   CODE=$(curl -fsS -X POST -H "Authorization: Bearer $CONSOLE" -H "X-Requested-With: memcp" \
@@ -324,7 +324,7 @@ if ! keychain_has "$SERVICE" "$DEVICE_ACCOUNT"; then
   [ -n "$DEVICE_KEY" ] || die "no key in the pairing's answer"
   security add-generic-password -U -s "$SERVICE" -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
   DEVICE_KEY=
-  say "this Mac is paired with its memory: its captures go to À trier."
+  say "this Mac is paired with its memory: its captures go to the Inbox."
 fi
 
 # The connection of the assistants on this Mac. A connection made by an earlier version keeps its name.

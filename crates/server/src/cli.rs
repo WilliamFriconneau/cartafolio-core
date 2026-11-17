@@ -77,7 +77,7 @@ pub fn vault_add(data: &Path, kind: &str, user: Option<&str>) -> Result<(), Fail
     let space = brain
         .add_vault(&owner.id, &owner.name, kind)
         .map_err(fail)?;
-    println!("vault {space} created for {}, kind {kind}.", owner.name);
+    println!("space {space} created for {}, kind {kind}.", owner.name);
     Ok(())
 }
 
@@ -213,7 +213,7 @@ pub fn open_vault(
     let (agent, token) =
         access::open_space_connection(&ctl, &who.id, &space, !read_only, days).map_err(fail)?;
     println!(
-        "Vault {space} opened to {agent:?}, {}.",
+        "Space {space} opened to {agent:?}, {}.",
         if read_only {
             "read-only"
         } else {
@@ -393,7 +393,7 @@ pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
     let token = std::env::var(token_env).map_err(|_| {
         (
             2,
-            format!("set {token_env} to a key (make one with `memcp open VAULT`)"),
+            format!("set {token_env} to a key (make one with `memcp open SPACE`)"),
         )
     })?;
     let brain = open(data)?;

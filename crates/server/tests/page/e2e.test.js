@@ -59,6 +59,9 @@ async function until(cond, ms = 5000) {
 function clean(name, text) {
   check(name + ": no « null » or « undefined »", !/\b(null|undefined|NaN)\b/.test(text), (text.match(/.{0,40}\b(null|undefined|NaN)\b.{0,40}/) || [""])[0]);
   check(name + ": no forbidden word (bridge, capture program, capture app, vault)", !/\bbridge|capture (app|program)|\bvaults?\b/i.test(text), (text.match(/.{0,40}(bridge|capture (app|program)|vaults?).{0,40}/i) || [""])[0]);
+  // Every node is equal: none is « the server » or « the administration », and the box of captures is the Inbox.
+  const old = /à trier|a-trier|\bhemcp\b|administration|\b(server|serveur)\b(?! MCP)/i;
+  check(name + ": no old word (À trier, administration, server, HemCP)", !old.test(text), (text.match(new RegExp(".{0,40}(" + old.source + ").{0,40}", "i")) || [""])[0]);
 }
 
 (async () => {
@@ -117,7 +120,7 @@ function clean(name, text) {
   await sleep(500);
   clean("Boards of a space", visibleText(w));
 
-  // Trace or drop: the À trier space in its simple view; a note written there is in the list.
+  // Trace or drop: the Inbox in its simple view; a note written there is in the list.
   await go("#note");
   check("Trace or drop opens its own view", await until(() => shown(w, $("#view-space")) && $("#space-title").textContent === "Tracer ou déposer"), $("#space-title").textContent);
   check("the browser tab names Trace or drop", /^MemCP · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
@@ -134,7 +137,7 @@ function clean(name, text) {
   clean("Trace or drop", visibleText(w));
 
   // A note written straight into each space, to see the journal gather every space. (The journal reads the spaces,
-  // not the sorting box: what waits in À trier is shown in Trace or drop.)
+  // not the sorting box: what waits in Inbox is shown in Trace or drop.)
   const gardenName = $$("#spaces .tile[data-space]").find(t => /Jardin/.test(t.textContent)).getAttribute("data-space");
   run("note", "add", workName, "Réunion projet alpha : envoyer le devis");
   run("note", "add", gardenName, "Tailler les rosiers avant l'hiver");

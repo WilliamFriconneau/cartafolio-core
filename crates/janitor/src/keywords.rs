@@ -6,7 +6,7 @@
 //! - **The model proposes**: it reads a sample of the notes filed in each space and the notes the router could not place,
 //!   and proposes keywords and tags. It writes nothing: the janitor checks the proposals and writes them.
 //! - Every change is a new version of the `rules` note (`supersede`): the history keeps the old ones, nothing is erased.
-//! - What is left in « À trier » after that is announced to the person by one note there, tagged `janitor/waiting`.
+//! - What is left in Inbox after that is announced to the person by one note there, tagged `janitor/waiting`.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
@@ -18,7 +18,7 @@ use crate::models::{self, Models};
 use crate::router::{Place, Rules, clean_keyword};
 use crate::{Janitor, Report, learn, now, tags_of, time};
 
-/// A note or a file of « À trier » that waits for the person, and why.
+/// A note or a file of Inbox that waits for the person, and why.
 #[derive(Clone, Debug)]
 pub struct Unplaced {
     /// The id of the note or of the file.
@@ -361,7 +361,7 @@ impl Janitor {
             for (space, notes) in &samples {
                 let rules = self.rules.get(space).cloned().unwrap_or_default();
                 shown.push_str(&format!(
-                    "## Coffre {space}\nMots-clés actuels : {}\nÉtiquettes actuelles : {}\nNotes déjà rangées :\n",
+                    "## Espace {space}\nMots-clés actuels : {}\nÉtiquettes actuelles : {}\nNotes déjà rangées :\n",
                     rules.keywords.join(", "),
                     rules.tags.join(", ")
                 ));
@@ -371,7 +371,7 @@ impl Janitor {
                 shown.push('\n');
             }
             if !unplaced.is_empty() {
-                shown.push_str("## Notes qu'aucun coffre n'a pu prendre\n");
+                shown.push_str("## Notes qu'aucun espace n'a pu prendre\n");
                 for n in unplaced.iter().take(SHOWN_UNPLACED) {
                     shown.push_str(&format!("- {}\n", extract(&n.text, 200)));
                 }
@@ -481,7 +481,7 @@ impl Janitor {
         }
     }
 
-    /// In each « À trier »: one note to tell the person what waits (notes and files), and one note of reasons (tag
+    /// In each Inbox: one note to tell the person what waits (notes and files), and one note of reasons (tag
     /// `janitor/reasons`) that the `triage_waiting` tool and the page read; none when nothing waits.
     pub(crate) fn leave_waiting_notes(
         &mut self,
@@ -504,7 +504,7 @@ impl Janitor {
                 String::new()
             };
             let text = format!(
-                "{y:04}-{m:02}-{d:02}, {notes} note(s) attendent dans À trier{and_files} : aucun mot-clé ne les place (la raison de chacun est donnée par triage_waiting). Ajoute des mots-clés au coffre concerné, ou envoie-les depuis ta page. Premiers : {}.",
+                "{y:04}-{m:02}-{d:02}, {notes} note(s) attendent dans l'Inbox{and_files} : aucun mot-clé ne les place (la raison de chacun est donnée par triage_waiting). Ajoute des mots-clés à l'espace concerné, ou envoie-les depuis ta page. Premiers : {}.",
                 first.join(" | ")
             );
             self.keep_note("waiting", space, "janitor/waiting", Some(text), report);

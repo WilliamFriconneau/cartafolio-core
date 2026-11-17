@@ -10,11 +10,11 @@ pub struct Config {
     pub url: String,
     /// The connection's key, read from `key_file`.
     pub key: String,
-    /// The vaults whose inbox the janitor files. Empty (the default): every vault its key reaches. « À trier » is always
+    /// The vaults whose inbox the janitor files. Empty (the default): every vault its key reaches. Inbox is always
     /// read: it is where the devices write, and no vault is a default.
     pub inbox_vaults: Vec<String>,
     /// Words that mark a note as being about the person's work (a product, a company, a colleague's team): such a note
-    /// goes to the vault `work` from « À trier » before any model. Empty by default: it is the person's own list.
+    /// goes to the vault `work` from Inbox before any model. Empty by default: it is the person's own list.
     pub work_words: Vec<String>,
     pub utc_offset_minutes: i32,
     /// The models to try, in order: `local` (Ollama, on this machine or another) and `api` (any OpenAI-compatible service, only when named).
@@ -99,7 +99,7 @@ impl Config {
         let known = [
             "url",
             "key_file",
-            // No longer used: « À trier » replaced the default vault. Accepted, so that an old file still works.
+            // No longer used: Inbox replaced the default vault. Accepted, so that an old file still works.
             "default_vault",
             "inbox_vaults",
             "work_words",

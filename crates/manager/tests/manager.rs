@@ -625,7 +625,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
         let app = m.person_app(p).ok_or("person")?;
         app.brain.add_vault(users::OWNER, p, "health")?;
     }
-    // Lou asks her page for a code: no vault to choose, everything goes to her À trier.
+    // Lou asks her page for a code: no vault to choose, everything goes to her Inbox.
     let r = m.handle(&ingress("ha-l", "lou", "POST", "/admin/api/pairing", "{}"));
     assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
     let made = r.body_json();
@@ -664,7 +664,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
             .all(|v| !v.as_str().unwrap_or("").starts_with("alice-")),
         "{vaults:?}"
     );
-    // A peer: it writes into Lou's À trier without naming it, reads Lou's spaces, and never reaches Alice.
+    // A peer: it writes into Lou's Inbox without naming it, reads Lou's spaces, and never reaches Alice.
     let mut req = mcp(key, "remember", json!({ "text": "Une note du Mac." }));
     req.path = format!("/mcp/{agent}");
     let w = tool_text(&m.handle(&req));

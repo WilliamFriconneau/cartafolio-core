@@ -1,18 +1,18 @@
 # Depositing health data: what an app should send
 
 For the makers of a health app (a tracker, a workout log, a journal) who want a person's data
-to reach their MemCP vault, and for the person who wires it up. An app such as Bevel or
+to reach their MemCP space, and for the person who wires it up. An app such as Bevel or
 HealthFit could do this with an export of its data and statistics; nothing here is specific to
 one app.
 
-## What the vault is, and is not
+## What the space is, and is not
 
-The vault **stores**. It imposes no health format, makes no judgement about the data and
+The space **stores**. It imposes no health format, makes no judgement about the data and
 fetches nothing. Your app keeps its expertise (how it computes a baseline, a trend, a score);
-the vault keeps what you deposit, dated and attributed, so that any assistant the person
+the space keeps what you deposit, dated and attributed, so that any assistant the person
 connects (Claude, a local model) can read it later.
 
-Because a person may use several apps, a vault receives from several **sources**. Each source
+Because a person may use several apps, a space receives from several **sources**. Each source
 files its data under its own path, `sources/<app>`, and never touches another source's.
 
 There are two layers, and they are not read the same way:
@@ -25,7 +25,7 @@ There are two layers, and they are not read the same way:
   what a plain `recall` finds. If no one has written a dossier yet, the sources are still there,
   and the assistant is told so.
 
-An app that only deposits writes to the sources. The vault does not merge anything itself.
+An app that only deposits writes to the sources. The space does not merge anything itself.
 
 ## What to send
 
@@ -47,19 +47,19 @@ period.
 
 ## How to connect
 
-Over MCP (Streamable HTTP), at the address of the person's health vault:
+Over MCP (Streamable HTTP), at the address of the person's health space:
 
 ```
-https://<server>/mcp/<your connection's name>
+https://<node>/mcp/<your connection's name>
 ```
 
-with a key limited to **your own path** in that vault. The person makes it with
+with a key limited to **your own path** in that space. The person makes it with
 
 ```
 memcp connect bevel --grant health/sources/bevel:rw
 ```
 
-(or the "A key by hand" form of the admin page, with `health/sources/bevel:rw` as the rights).
+(or the "A key by hand" form of the node page, with `health/sources/bevel:rw` as the rights).
 Such a key reads and writes only the facts filed under `sources/bevel`: it cannot see the
 person's other records, nor another app's, and a write is filed under its path whatever tags it
 asks for. It has five tools: `remember`, `recall`, `retire`, `file_put`, `stats`; `stats` shows only
@@ -93,7 +93,7 @@ Give every record the id **your app** has for it, and the instant of the data po
 - `at`: when the data point happened, ISO 8601 (`2026-11-01` or `2026-11-01T07:30:00Z`). Left
   out, it is the time of the call.
 
-What the vault does with it:
+What the space does with it:
 
 | you send | the answer's `result` |
 |---|---|
@@ -114,7 +114,7 @@ So a day's summary can be completed as the day goes on without piling up copies:
 text, and a thinner later reading never erases a fuller one. A feed of alike records (one per day) is never asked "is this a duplicate of that?".
 
 **The cursor.** Every answer carries `cursor: { app, last_at, received_at, facts }`: the latest data point
-the vault holds for your app, and how many active records. `stats` lists the same for each
+the space holds for your app, and how many active records. `stats` lists the same for each
 source under `sources`. Resume from `last_at` instead of keeping your own account of what was
 delivered; with no cursor yet, send everything, oldest first. If your app was reinstalled or
 lost its state, the cursor is still there.
@@ -138,16 +138,16 @@ the unit in the text as people read it). Some LOINC codes, to be checked against
 LOINC release before you rely on them: heart rate `8867-4`, systolic blood pressure `8480-6`,
 diastolic `8462-4`, body weight `29463-7`, body height `8302-2`, body temperature `8310-5`.
 
-The vault carries no table of codes and checks only the shape of `system:code`, so there is no
-licence to carry. FHIR itself (its resources and JSON) is not the vault's storage format; it is a
-good format for an export or an import, which an app or a later version of the vault may offer.
+The space carries no table of codes and checks only the shape of `system:code`, so there is no
+licence to carry. FHIR itself (its resources and JSON) is not the space's storage format; it is a
+good format for an export or an import, which an app or a later version of MemCP may offer.
 
 To read one measure across sources, ask for the code and the raw layer together:
 `recall` with the tags `code/loinc/8867-4` and `sources`.
 
 ## Duplicates between sources are expected
 
-The same measurement often reaches the vault from two apps (both read it from the phone's
+The same measurement often reaches the space from two apps (both read it from the phone's
 health store). **Do not try to remove it.** Each source keeps its own, filed under its own path,
 and no data is lost. Choosing one source per measure, or saying which one was used, is the
 reader's job. Better a duplicate than a gap.
@@ -157,12 +157,12 @@ entry: *Heart rate 2026-10-31 14:56: 62 bpm (2 sources: 61 Bevel, 63 HealthFit)*
 `origin.layer` set to `dossier` (filed under `dossier/<app>`, read first), under a stable id such
 as `2026-10-31T14:56/hr`, so that rewriting it when a third source arrives updates the entry in
 place. Deciding that two readings are the same measurement (how close in time, which unit) takes
-health knowledge, so it is the reader's, never the vault's.
+health knowledge, so it is the reader's, never the space's.
 
 ## Many records at once: `deposit`
 
 A feed that sends hundreds of records should not make one request each (the round trips cost more than the memory does, and each call counts for the ceiling):
-`deposit` takes any number of records of one vault in a single call, each `{text, tags, kind, valid_from, valid_to, origin}` with the same rules as
+`deposit` takes any number of records of one space in a single call, each `{text, tags, kind, valid_from, valid_to, origin}` with the same rules as
 `remember` (the `origin` is required, the key's paths apply). The answer lists every record by its position (`created`,
 `updated`, `unchanged`, or `error` with the reason): a refused record does not stop the others, and the cursor of each app
 and layer comes back for resuming. Send the whole history in batches of 500.
@@ -173,11 +173,11 @@ An app can tell the person's assistants the form of what it keeps (its paths, ho
 laid out so they are read right, how to write for it, what to avoid). Form only, never a task. That needs one more right, which the person
 gives or not, app by app: the path `guide` (`health/guide:rw,health/sources/bevel:rw`). A key
 with it gets a sixth tool, `guide_propose` (`text`, of any length, one guide per
-connection and vault; calling again replaces it).
+connection and space; calling again replaces it).
 
 It is **a proposal, not an instruction**. It is kept apart from the facts (no search finds it, it
 sits in no layer). The person reads it on their page and approves it, as it reads: only then are
-assistants that reach that vault told it, in a block the program writes (the app's name, who
+assistants that reach that space told it, in a block the program writes (the app's name, who
 approved and when, and that it reaches no further than what is written for that app). If you
 change the text, it waits for the person again. No tool of any assistant can approve it, so an
 assistant in a "yolo" mode cannot either. Write it descriptively, for a reader that follows only
@@ -209,7 +209,7 @@ history.
 
 ## Checklist
 
-- [ ] A key limited to the health vault, with a write budget that fits a feed.
+- [ ] A key limited to the health space, with a write budget that fits a feed.
 - [ ] Every record has `origin.app`, a stable `origin.id` and `origin.at`.
 - [ ] On start, read `cursor.last_at` (or `stats`) and send only what is newer.
 - [ ] A readable summary refreshed under the same id (`<date>/summary`), for assistants without your tools.

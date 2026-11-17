@@ -1,4 +1,4 @@
-//! The tools that sort: the reservation of notes of « À trier », the filing rules of a space and its vocabularies.
+//! The tools that sort: the reservation of notes of Inbox, the filing rules of a space and its vocabularies.
 
 use super::*;
 

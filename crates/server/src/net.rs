@@ -234,7 +234,9 @@ fn serve_server<H: Handler>(
                 .map_err(|e| (1, format!("cannot listen on {identity}: {e}")))?,
         );
         let trusted = *trusted;
-        eprintln!("consent and admin pages for the tailnet on http://{identity}");
+        eprintln!(
+            "the consent page and the page of this node for the tailnet on http://{identity}"
+        );
         for _ in 0..2 {
             let (srv, app) = (Arc::clone(&srv), Arc::clone(&app));
             ingress_workers.push(std::thread::spawn(move || {
@@ -260,7 +262,7 @@ fn serve_server<H: Handler>(
                 .map_err(|e| (1, format!("cannot listen on {ingress}: {e}")))?,
         );
         let trusted = *trusted;
-        eprintln!("admin page through ingress on http://{ingress} (trusted proxy {trusted})");
+        eprintln!("the page through ingress on http://{ingress} (trusted proxy {trusted})");
         for _ in 0..2 {
             let (srv, app) = (Arc::clone(&srv), Arc::clone(&app));
             ingress_workers.push(std::thread::spawn(move || {

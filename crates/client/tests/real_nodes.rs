@@ -879,14 +879,14 @@ fn peer_connection(p: &Peering) -> String {
     p.address.rsplit('/').next().unwrap().to_string()
 }
 
-// --- (g) the lease of À trier between two sorters ----------------------------------------------------------------
+// --- (g) the lease of Inbox between two sorters ----------------------------------------------------------------
 
 #[test]
 fn two_sorters_share_a_trie_box_by_lease_over_http() {
     let root = Root::new("g");
     let mut a = Node::init(&root, "alpha", true);
     a.serve();
-    // A device pairs with the code of the page and drops three notes, into À trier.
+    // A device pairs with the code of the page and drops three notes, into Inbox.
     let (status, pairing) = a.admin_post("/pairing", &json!({}));
     assert_eq!(status, 200, "{pairing}");
     let triage = pairing["triage"].as_str().unwrap().to_string();
@@ -901,7 +901,7 @@ fn two_sorters_share_a_trie_box_by_lease_over_http() {
         .unwrap();
     let (status, paired) = read_json(&mut r);
     assert_eq!(status, 200, "{paired}");
-    // The device holds its own connection, which writes to À trier only.
+    // The device holds its own connection, which writes to Inbox only.
     let mut device = Client::new(
         paired["mcp_url"].as_str().unwrap(),
         paired["key"].as_str().unwrap(),
@@ -1625,7 +1625,7 @@ fn a_sub_space_made_on_one_node_and_a_dictation_on_another_reach_all_three() {
     b.serve();
     let mut c = Node::init(&root, "gamma", false);
     c.serve();
-    // Each node has its own « À trier » before it joins: the page makes it the first time it is opened.
+    // Each node has its own Inbox before it joins: the page makes it the first time it is opened.
     let box_of = |n: &mut Node| -> String {
         let (status, v) = n.admin_get("/state");
         assert_eq!(status, 200, "{v}");
@@ -1648,7 +1648,7 @@ fn a_sub_space_made_on_one_node_and_a_dictation_on_another_reach_all_three() {
     let mut cc = c.client("claude", "all");
     remember(&mut cc, &pompiers, &words(9100, 6));
 
-    // On B, a phone paired with B's page leaves a dictation in À trier.
+    // On B, a phone paired with B's page leaves a dictation in Inbox.
     let (status, pairing) = b.admin_post("/pairing", &json!({}));
     assert_eq!(status, 200, "{pairing}");
     let mut r = http()

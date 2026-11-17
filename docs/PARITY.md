@@ -1,6 +1,6 @@
 # Configuration parity: Home Assistant app and Linux
 
-Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a counterpart on Linux, in `memcp.toml` and, where it changes how the server starts, on the command line (a flag wins over the file). The table is kept true by a test (`crates/server/tests/parity.rs`): it fails when an add-on option has no `memcp.toml` key, when this table forgets one, or when the example file `packaging/linux/memcp.toml` is out of date. The options themselves are described once, in `crates/server/src/config.rs`, which also writes the documented file (`memcp config example`).
+Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a counterpart on Linux, in `memcp.toml` and, where it changes how the node starts, on the command line (a flag wins over the file). The table is kept true by a test (`crates/server/tests/parity.rs`): it fails when an add-on option has no `memcp.toml` key, when this table forgets one, or when the example file `packaging/linux/memcp.toml` is out of date. The options themselves are described once, in `crates/server/src/config.rs`, which also writes the documented file (`memcp config example`).
 
 | Add-on option | `memcp.toml` | Command line | Note |
 |---|---|---|---|

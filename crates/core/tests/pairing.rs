@@ -91,7 +91,7 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(1));
     assert!(
         memcp_core::triage::send(&brain, &work, &note.id, &box_, "owner", "owner").is_err(),
-        "only out of À trier"
+        "only out of Inbox"
     );
     let new = memcp_core::triage::send(&brain, &box_, &note.id, &work, "owner", "owner")?;
     let moved = facts::read_fact(&brain.open_space(&work)?, &new)?.ok_or("moved")?;
@@ -119,7 +119,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
     };
     let note = json!({ "text": "2026-11-03, a note from a device", "tags": ["inbox"] });
     let file = json!({ "name": "memo.txt", "data_base64": "aGVsbG8=", "tags": ["inbox"] });
-    // Several spaces and no « À trier »: the write is refused, as it always was.
+    // Several spaces and no Inbox: the write is refused, as it always was.
     let all = key("assistant", "all")?;
     for (tool, args) in [("remember", &note), ("file_put", &file)] {
         assert!(
@@ -130,7 +130,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
             "{tool}: no space named, none to fall back on"
         );
     }
-    // The person's « À trier » now exists: a key on all spaces writes there, and nowhere else.
+    // The person's Inbox now exists: a key on all spaces writes there, and nowhere else.
     let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
     let all = key("assistant-2", "all")?;
@@ -153,7 +153,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
     let r = tools::call(&brain, &all, "remember", &named)?;
     let id = r["fact"]["id"].as_str().ok_or("id")?.to_string();
     assert!(facts::read_fact(&brain.open_space(&common::sp("home"))?, &id)?.is_some());
-    // Several vaults and no right on « À trier »: still refused.
+    // Several vaults and no right on Inbox: still refused.
     let two = key("two", "home:rw,work:rw")?;
     assert!(matches!(
         tools::call(&brain, &two, "remember", &note),

@@ -227,7 +227,7 @@ pub fn intake(
                 println!(
                     "watching {} for {}",
                     w.dir.display(),
-                    w.space.as_deref().unwrap_or("À trier")
+                    w.space.as_deref().unwrap_or("Inbox")
                 );
             }
             Ok(())

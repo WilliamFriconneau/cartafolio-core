@@ -4,7 +4,7 @@
 //! - A recording whose file name says `reunion` or `meeting` (a meeting captured by the browser, a call…) is a meeting.
 //! - A note that holds one of the person's own work words (`work_words` in the janitor's settings: a product, a
 //!   company, a team) is work. The list is the person's: none is built in.
-//! - Only « À trier » is concerned: the note is sent to the inbox of `work`, which files it as it files any note.
+//! - Only Inbox is concerned: the note is sent to the inbox of `work`, which files it as it files any note.
 //! - A health note (`#santé`) is never taken: the health rule comes first.
 
 /// The vault work notes go to.

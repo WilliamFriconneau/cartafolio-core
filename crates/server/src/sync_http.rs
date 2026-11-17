@@ -5,7 +5,7 @@
 //! - `GET  /mcp/<connection>/sync/peers`: this node's peer directory (`{node, peers: [{name, last_seen, version, ...}]}`).
 //! - `POST /mcp/<connection>/sync/peers` `{node: {name}, peers: [...]}`: the peer's directory, merged here.
 //! - `GET  /mcp/<connection>/sync/spaces`: the spaces this key reaches, with their kind, layout, the time the copy began
-//!   and the head of their log; which one is the person's « À trier »; the archives this node knows of; whether it takes
+//!   and the head of their log; which one is the person's Inbox; the archives this node knows of; whether it takes
 //!   offers.
 //! - `POST /mcp/<connection>/sync/spaces` `{space, kind, label, parent, position, since}`: a space of the person that the
 //!   peer has and this node lacks (see `memcp_core::swarm`); or `{space, archived_at}`: the peer archived it.

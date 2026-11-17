@@ -6,14 +6,14 @@ as background tasks configured in `memcp.toml` (or the app's options). There is 
 install, and no key to hand over: the node works on its own memory with the rights of the person it works for.
 
 A phone or a computer app embeds a node and writes into it (MCP, in the same process). It does not keep a queue of its own:
-a node is local, it is always there. The same code runs on a Home Assistant box, a Linux server, a Mac, a PC or a phone.
+a node is local, it is always there. The same code runs on a Home Assistant box, a Linux machine, a Mac, a PC or a phone.
 
 Three things, one after the other. The command line has them too (`memcp transcribe`, `memcp watch`, `memcp intake ...`), for a
 pass now.
 
 ## Voice notes: recordings read where the speech model is
 
-A recording that reached an inbox with no text waits under the tag `inbox/audio`. The node reads it, once, by one of:
+A recording that arrived with no text, in the person's Inbox or in a space, waits under the tag `inbox/audio`. The node reads it, once, by one of:
 
 - **a speech model on this machine**: `whisper-cli` (whisper.cpp) and `ffmpeg`, with `transcribe_model` (a `ggml-*.bin` file).
   Nothing leaves the machine;
@@ -38,12 +38,12 @@ transcribe_every = 60                                 # seconds between two pass
 How it goes:
 
 - The job reads every space the person can write to (`all`, the default: a space made later is read too), or the list given. A
-  voice note recorded on the page lands in the inbox of the space it was recorded in, and is read like the others.
-- The text becomes a note of the **same** inbox, tagged `inbox` and `dictee` (« Dictée du … audio <name> (<id>) : … », cut into
+  voice note recorded on the page lands in the space it was recorded in, tagged `inbox/audio`, and is read like the others.
+- The text becomes a note of the **same** space (or Inbox), tagged `inbox` and `dictee` (« Dictée du … audio <name> (<id>) : … », cut into
   parts if long, resumed if a pass stops halfway). The janitor files it like any note.
 - **A capture already in text is complete**: a recording received with a note that names it is not read again ("a note received
   means it is already done").
-- Silence, and a text that is only what the model makes up on silence, give nothing: that recording leaves the inbox. A recording
+- Silence, and a text that is only what the model makes up on silence, give nothing: that recording no longer waits. A recording
   that cannot be read is tried three times, then the node leaves it, tagged `inbox/audio/failed`, with the recording's id. The
   page shows each voice note as waiting, transcribed or failed; its Retry button takes the tag off, and the next pass reads it again.
 - A week after its text was filed (wherever the janitor filed it), the recording is erased from the memory.
@@ -56,13 +56,13 @@ How it goes:
 A folder watched is a drop box: what is added to it becomes a note or a file of a space.
 
 ```text
-watch = ["~/Dictation -> personal", "/data/scans -> work", "~/Inbox"]    # FOLDER -> SPACE; no space: À trier
+watch = ["~/Dictation -> personal", "/data/scans -> work", "~/Inbox"]    # FOLDER -> SPACE; no space: Inbox
 watch_every = 10                                                          # seconds between two looks
 ```
 
-- A Markdown or text file becomes a note (cut at 3500 characters) in the **inbox** of the space; an audio file becomes a recording
+- A Markdown or text file becomes a note (cut at 3500 characters) of the space, tagged **`inbox`**; an audio file becomes a recording
   (named `<yyyy-mm-dd>-<HHhMM>-<name>.<ext>` after the file's date, read as above); any other file is kept as it is. The janitor files
-  them from the inbox like everything else. Without a space they go to the person's **À trier**, which belongs to no space.
+  them from there like everything else. Without a space they go to the person's **Inbox**.
 - The file stays where it is: nothing in a watched folder is moved, changed or deleted.
 - A file is taken once its last change is a few seconds old (a copy in progress is waited for). A hidden file or folder, a link, a
   name that says it is not finished (`.part`, `.crdownload`, `.tmp`) are never taken. Folders are read six levels deep.
@@ -78,7 +78,7 @@ A folder of notes kept up to date on this machine (synced from elsewhere) can be
 its records.
 
 ```text
-absorb = ["~/Notes/Work -> work"]        # the folder and the space whose inbox receives what is new in it
+absorb = ["~/Notes/Work -> work"]        # the folder and the space that receives what is new in it (tagged inbox)
 absorb_exclude = ["Raw", "Archive"]      # folders never read (relative to the folder)
 absorb_protect = ["confidential"]        # a file whose name holds one of these words is never opened
 absorb_roles = "~/Notes/Work/People.md"  # a table « Name | Post »: a name is never sent, its post is
@@ -86,7 +86,7 @@ absorb_every = 15                        # minutes between two passes
 deliver = ["work proposals/pro -> ~/Notes/Work/Ideas"]   # SPACE TAG -> FOLDER: proposals put down as files
 ```
 
-- Each note is cut at its headings; only the passages whose text is new are sent, to the inbox of the space, tagged `inbox/absorb`,
+- Each note is cut at its headings; only the passages whose text is new are sent to the space, tagged `inbox/absorb`,
   starting with « D'après la note <path>, modifiée le <date> : ». The janitor draws short, dated facts out of each and the piece
   leaves: what is kept is the information, not a copy of the files.
 - The first pass only takes stock (a folder imported before is not sent twice); `memcp intake absorb all` sends everything.
@@ -120,10 +120,10 @@ read. Deleting it makes the node look again; the memory still ignores what it al
 ## The commands
 
 ```text
-memcp transcribe [--user PERSON]            one pass over the recordings waiting in the inboxes
+memcp transcribe [--user PERSON]            one pass over the recordings waiting in Inbox and the spaces
 memcp watch [--once] [--user PERSON]        looks at the watched folders, every few seconds until stopped, or once
-memcp intake send FILE... [--space SPACE]   puts files into a space's inbox (À trier by default): a note, a recording or a file
-memcp intake text TEXT | - [--space SPACE]  puts a note into the inbox (`-` reads standard input)
+memcp intake send FILE... [--space SPACE]   puts files into a space, tagged inbox (Inbox by default): a note, a recording or a file
+memcp intake text TEXT | - [--space SPACE]  puts a note the same way (`-` reads standard input)
 memcp intake absorb [all]                   one pass over the absorbed folders and the proposals
 memcp intake status                         recordings waiting per space, and the folders watched
 memcp intake discover [--seconds N]         nodes found on this network and on the tailnet
@@ -134,8 +134,8 @@ work on the data folder directly, so they run next to a node that serves.
 
 ## What a paired device can do
 
-A phone or a computer that joins a memory by a **code** (`POST <server>/pair {"code", "device"}`, or `memcp_client::pair`) gets a
-connection of its own, limited to the person's **À trier** (the one box for everything that comes in, which belongs to no space):
+A phone or a computer that joins a memory by a **code** (`POST <node>/pair {"code", "device"}`, or `memcp_client::pair`) gets a
+connection of its own, limited to the person's **Inbox** (the one box for everything that comes in):
 `{agent, key, mcp_url, spaces}`, with the rights `<person>-a-trier/inbox:rw`. (An older node said `vaults` instead of `spaces`; both are
 read.) The key goes into the Keychain at once. A key made by hand for `<space>/inbox:rw` does the same for one space. A key limited to
 `inbox` sees `recall`, `stats`, `remember`, `retire` and `file_put`, nothing else:

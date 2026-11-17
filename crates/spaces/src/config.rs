@@ -12,6 +12,8 @@ use crate::rules::{Change, Rule};
 use crate::space::{DEFAULT_SPACE, Space, Tree};
 
 pub const SPACES_FORMAT: &str = "kalios.spaces/1";
+/// The label the default space had before it became the Inbox; a tree that still holds it is read as « Inbox ».
+pub const FORMER_DEFAULT_LABEL: &str = "À trier";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct File {
@@ -38,6 +40,13 @@ pub fn parse_spaces(text: &str, default_name: &str) -> Result<Tree, ConfigError>
         return Err(ConfigError::Unreadable(format!("format {}", file.format)));
     }
     let mut spaces = file.spaces;
+    // The default space was labelled « À trier » before it became the Inbox: a tree saved then shows the new label.
+    // Only the label changes; its id and its path stay, so nothing else moves.
+    for s in spaces.iter_mut() {
+        if s.id == DEFAULT_SPACE && s.name == FORMER_DEFAULT_LABEL {
+            s.name = "Inbox".into();
+        }
+    }
     if !spaces.iter().any(|s| s.id == DEFAULT_SPACE) {
         spaces.insert(0, Space::default_notes(default_name));
     }

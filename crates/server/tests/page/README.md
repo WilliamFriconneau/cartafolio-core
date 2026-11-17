@@ -26,8 +26,8 @@ cd crates/server/tests/page && npm install jsdom --no-save && node e2e.test.js
 
 ## The logic of the page, against a fake server
 
-`wizard.test.js` loads the admin page in a fake browser (jsdom) against a fake server and
-walks through the "Connect an assistant" steps, the triage view and the instructions editors. It is not part of `cargo test`; it needs
+`wizard.test.js` loads the node page (`admin.html`) in a fake browser (jsdom) against a fake server and
+walks through the "Connect an assistant" steps, the Inbox view and the instructions editors. It is not part of `cargo test`; it needs
 Node.js:
 
 ```sh
@@ -40,7 +40,7 @@ It is a check of the page's logic, not of a real browser: the clipboard and the 
 ## In a real browser
 
 `browser.test.js` drives the real page, served by the real program, in a real headless Chromium
-(through `playwright-core`): signing in with a console key, the vault list, the "connect an
+(through `playwright-core`): signing in with a console key, the space list, the "connect an
 assistant" steps and the wait for the first request, copying to the clipboard, the instructions
 editor, the download of the export, the activity list, and that nothing breaks the page's content
 security policy or logs an error.
@@ -72,7 +72,7 @@ CHROMIUM=/usr/bin/chromium node onboarding.test.js
 ## French completeness
 
 `french.test.js` opens the page in French against the real program and walks its main views (home with every fold open,
-triage, administration, a space and each of its tabs), every wizard platform before and after the connection is made, the
+Inbox, the people of the node, a space and each of its tabs), every wizard platform before and after the connection is made, the
 instruction editors, the add-a-node, confirmation and secret windows, an error shown by the page, and the start screen with
 its join step. It fails when an element still holds one of the English sentences of the short `ENGLISH` list at the top of the
 file, when a visible text still reads as English (stop words) after the page's own translator has run, or when the translator

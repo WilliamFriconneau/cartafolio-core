@@ -47,7 +47,7 @@ A folder mounted in a space (SPACES.md) has a mode that says how it is kept on t
 
 ## Peers and blind nodes
 
-- Events, files and layout travel and are stored encrypted with the space key. A node that does not hold the space key can store and forward them but cannot read them: a **blind node**. A backup at a friend's, in a cloud bucket or on a rented server learns nothing but sizes and times. It cannot search; restoring means unlocking on a node that holds the key.
+- Events, files and layout travel and are stored encrypted with the space key. A node that does not hold the space key can store and forward them but cannot read them: a **blind node**. A backup at a friend's, in a cloud bucket or on a rented machine learns nothing but sizes and times. It cannot search; restoring means unlocking on a node that holds the key.
 - A new node gets a space key only from the person: the key is sealed to the new node's public key after the person confirms that node (the code or QR code of FEDERATION.md). A node revoked from the swarm stops receiving; the space key is **rotated** for new events (old events stay readable with the old key, which the nodes that had it still hold: the page says so).
 - The relay of a transport, if any, sees encrypted traffic between keys, and who talks to whom.
 

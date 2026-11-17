@@ -38,7 +38,7 @@ Run again, `setup` leaves an existing memory and settings alone.
 
 The node page (`/admin`) is the same page as in Home Assistant, outside Home Assistant. Two ways in, both private:
 
-1. **Console key.** On the machine, `memcp console-token owner` (or the one `setup` printed) gives a key that starts with `hcpc_`. Open `http://127.0.0.1:8791/admin` and paste it. It opens the page and never the memory over MCP; an assistant's key does not open the page. The page is served on the listen address while that is the loopback (`console_admin = true` serves it on another one), never through Tailscale Funnel; wrong keys are counted and then blocked. To reach it from another computer without opening a port, use an SSH tunnel: `ssh -L 8791:127.0.0.1:8791 server`.
+1. **Console key.** On the machine, `memcp console-token owner` (or the one `setup` printed) gives a key that starts with `hcpc_`. Open `http://127.0.0.1:8791/admin` and paste it. It opens the page and never the memory over MCP; an assistant's key does not open the page. The page is served on the listen address while that is the loopback (`console_admin = true` serves it on another one), never through Tailscale Funnel; wrong keys are counted and then blocked. To reach it from another computer without opening a port, use an SSH tunnel: `ssh -L 8791:127.0.0.1:8791 that-machine`.
 2. **Tailnet identity.** With Tailscale, the page knows who you are. In `memcp.toml`:
 
    ```toml
@@ -78,7 +78,7 @@ The databases are brought up to date by themselves the first time the new versio
 
 ## Backup and restore
 
-`memcp backup` makes `backup_dir/backup-<date>/` (each database copied with SQLite's own copy and checked, the stored files, the settings of the memory), safe while the server runs. Keep a copy on another disk or machine: `rsync -a /var/backups/memcp/ other:/backups/memcp/`.
+`memcp backup` makes `backup_dir/backup-<date>/` (each database copied with SQLite's own copy and checked, the stored files, the settings of the memory), safe while the node runs. Keep a copy on another disk or machine: `rsync -a /var/backups/memcp/ other:/backups/memcp/`.
 
 To restore, with the service stopped:
 
@@ -104,7 +104,7 @@ The package never removes your memory, your backups or `memcp.toml`, even when p
 
 ## Firewall and network
 
-The server listens on the loopback (`127.0.0.1:8791`) and nothing else, so with the defaults **no port is open** and no rule is needed. Keys travel in clear on that port: an assistant that is not on the machine reaches it through an HTTPS proxy on the same machine. Open only the proxy's port:
+The node listens on the loopback (`127.0.0.1:8791`) and nothing else, so with the defaults **no port is open** and no rule is needed. Keys travel in clear on that port: an assistant that is not on the machine reaches it through an HTTPS proxy on the same machine. Open only the proxy's port:
 
 ```sh
 sudo ufw allow 443/tcp                                   # ufw
@@ -165,14 +165,14 @@ Do not publish `/admin` through a public proxy: it is served on the loopback for
 - `vault-file`: every space has its file.
 - `vault-version`: every space is at the version of this program.
 - `vault-integrity`: SQLite's quick check of every space.
-- `inbox`: quick notes waiting to be sorted.
+- `inbox`: notes tagged `inbox` waiting to be filed.
 - `people`: there is a person who can open the page.
 - `connections`: how many connections are active and revoked.
 - `connection-all`: a connection that reaches every space (prefer one limited to what it needs).
 - `connection-idle`: a connection unused for 30 days.
 - `connection-expired`: a connection past its date.
 - `public-address`: the public address is HTTPS, has no slash at the end, and works from outside your network (with `--public-url`, or `public_url`).
-- `server-answers`: something answers on the listen address like this server does (with `--listen`, or `listen`).
+- `server-answers`: something answers on the listen address like this node does (with `--listen`, or `listen`).
 - `settings`: `memcp.toml` reads, and what has no effect in it is said.
 - `backup`: the newest backup is recent (three days at most).
 
@@ -192,4 +192,4 @@ Do not publish `/admin` through a public proxy: it is served on the loopback for
 | `database ... newer than this program` | You started an older version after a newer one. Install the newer one again, or restore a backup. |
 | Nothing works after the machine restarted | `systemctl is-enabled memcp`; `journalctl -u memcp -b`. |
 
-`journalctl -u memcp -f` follows the server. `memcp doctor` is the first thing to run.
+`journalctl -u memcp -f` follows the node. `memcp doctor` is the first thing to run.

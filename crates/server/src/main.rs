@@ -1,4 +1,4 @@
-//! The `memcp` binary: the owner's command line and the server (MCP, admin page, OAuth).
+//! The `memcp` binary: the owner's command line and the node (MCP, the page, OAuth, sync with its peers).
 
 use memcp_server::{app, cli, config, net, setup};
 
@@ -26,14 +26,15 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   transcribe [--user PERSON]             one pass over the recordings waiting in the inboxes (the node does it by itself
                                          while it serves, as set by `transcribe` in memcp.toml)
   watch [--once] [--user PERSON]         looks at the folders of `watch` in memcp.toml, every few seconds until stopped
-  intake send FILE... [--space SPACE]    puts files into a space's inbox (À trier by default): a text file becomes a note,
+  intake send FILE... [--space SPACE]    puts files into a space, tagged `inbox` (the Inbox by default): a text file becomes a note,
                                          audio a recording, the rest a file
   intake text TEXT | - [--space SPACE]   puts a note into the inbox
   intake absorb [all]                    one pass over the folders of `absorb` (and the proposals of `deliver`)
   intake status                          the recordings waiting for a text per space, and the folders watched
   intake discover [--seconds N]          nodes found on this network and on the tailnet
-  catalogue                              lists the kinds of vault this installation offers
-  vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
+  catalogue                              lists the kinds of space this node offers
+  space make KIND [--user PERSON]        creates a person's space of a kind of the catalogue (named after them;
+                                         `vault add KIND`, its former name, still works)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
   vocabulary import FILE --space NAME --name NAME [--source TEXT]
@@ -56,27 +57,27 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   note add|show|list|edit|retire|restore SPACE [TEXT|ID] [--tag T] [--reason R]
   library remove FOLDER --space NAME [--dry-run] | vocabulary term-add|term-remove NAME TERM... --space NAME
                                          every command above takes --user PERSON (default: the first administrator)
-  console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
+  console-token PERSON                   a token that opens the page of this node (/admin) where it is served, never MCP
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
-        [--console-admin]                the admin page on this listener, with a console token: on by
+        [--console-admin]                the page on this listener, with a console token: on by
                                          default on the loopback only, never through Tailscale Funnel
         [--public-url URL] [--ingress-listen ADDR --trust-ingress IP --admins ha_login,...]
-                                         admin page through Home Assistant ingress
+                                         the page through Home Assistant ingress
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL] [--oauth-redirect URL]
                                          OAuth for Claude on the web: consent page behind Tailscale serve
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
         [--days N] [--read-only] [--rotate] [--internal] [--public-url URL]
                                          creates an MCP connection and shows its token once
-  open VAULT [--user PERSON] [--read-only] [--days N] [--public-url URL]
-                                         opens one vault to an assistant: a connection limited to it,
+  open SPACE [--user PERSON] [--read-only] [--days N] [--public-url URL]
+                                         opens one space to an assistant: a connection limited to it,
                                          token shown once
-  mcp [--token-env NAME]                 the MCP server on standard input and output, for an assistant that
+  mcp [--token-env NAME]                 MCP on standard input and output, for an assistant that
                                          runs a command: the key is read from MEMCP_TOKEN (or NAME)
-  export [--user PERSON] --to DIR        writes a person's memory to a directory: each vault they own (a copy,
+  export [--user PERSON] --to DIR        writes a person's memory to a directory: each space they own (a copy,
                                          its files, a readable Markdown version), their instructions, a
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
-  adopt DIR [--user PERSON] [--prefix P] takes the vaults of an export into this installation
+  adopt DIR [--user PERSON] [--prefix P] takes the spaces of an export into this node
   merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
                                          reads another memory (an export) and writes a plan: for each of its spaces,
                                          the space it joins, copy or skip, and a preview; writes nothing here
@@ -93,8 +94,8 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   readonly AGENT on|off                  forces read-only
   person-guide AGENT on|off              off: the person's own guide is not told to this connection (a work assistant)
   limit AGENT rate|max-text N     sets a limit
-  import --vault DIR --rules FILE [--dry-run] [--yes] [--only DIR] [--protect word,word]
-                                         indexes a Markdown folder (first run: --dry-run)
+  import --folder DIR --rules FILE [--dry-run] [--yes] [--only DIR] [--protect word,word]
+                                         indexes a Markdown folder (first run: --dry-run; --vault DIR still works)
   backup --to DIR [--keep 14]            consistent copy of every database (safe while serving), outside the data dir
 
 Settings come from memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp/memcp.toml, /etc/memcp/memcp.toml); a flag wins.
@@ -136,6 +137,7 @@ const VALUE_FLAGS: &[&str] = &[
     "--public-url",
     "--space",
     "--vault",
+    "--folder",
     "--rules",
     "--only",
     "--protect",
@@ -312,7 +314,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ("space", Some("kind")) => {
             cli::space_kind(&data, arg(2, "the space")?, arg(3, "the kind")?)
         }
-        ("vault", Some("add")) => cli::vault_add(&data, arg(2, "the kind")?, flag("--user")),
+        // `vault add`: the former name of `space make`, kept so that a script written for it still works.
+        ("space", Some("make")) | ("vault", Some("add")) => {
+            cli::vault_add(&data, arg(2, "the kind")?, flag("--user"))
+        }
         ("library", Some("add")) => {
             cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
         }
@@ -368,7 +373,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ),
         ("open", _) => cli::open_vault(
             &data,
-            arg(1, "the vault")?,
+            arg(1, "the space")?,
             flag("--user"),
             sw("--read-only"),
             flag("--days").and_then(|d| d.parse().ok()),
@@ -418,7 +423,10 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ("console-token", _) => cli::console_token(&data, arg(1, "the person")?),
         ("import", _) => cli::import(
             &data,
-            Path::new(need("--vault")?),
+            Path::new(match flag("--vault") {
+                Some(old) if flag("--folder").is_none() => old,
+                _ => need("--folder")?,
+            }),
             Path::new(need("--rules")?),
             flag("--only"),
             sw("--dry-run"),

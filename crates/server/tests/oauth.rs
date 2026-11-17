@@ -561,7 +561,7 @@ fn nothing_ticked_grants_nothing() -> Res {
     let n = nonce(&e, &q)?;
     let r = decide_with(&e, &q, &n, "allow", &[], "");
     assert_eq!(r.status, 400);
-    assert!(String::from_utf8(r.body)?.contains("Tick at least one vault"));
+    assert!(String::from_utf8(r.body)?.contains("Tick at least one space"));
     let ctl = e.app.brain.open_control()?;
     let codes: i64 = ctl.query_row("SELECT count(*) FROM oauth_codes", [], |r| r.get(0))?;
     assert_eq!(codes, 0, "no code was issued");
@@ -667,7 +667,7 @@ fn a_code_that_chose_no_vault_is_refused() -> Res {
     assert!(
         r.body_json()["error_description"]
             .as_str()
-            .is_some_and(|d| d.contains("chose no vault"))
+            .is_some_and(|d| d.contains("chose no space"))
     );
     Ok(())
 }
@@ -700,7 +700,7 @@ fn an_address_that_names_a_vault_gives_a_connector_for_that_vault_only() -> Res 
     let q = authorize_query_for(&client, "https://memory.example.net/mcp/health");
     let (status, html) = page_of(&e, &q);
     assert_eq!(status, 200);
-    assert!(html.contains("added for the vault <b>health</b>"), "{html}");
+    assert!(html.contains("added for the space <b>health</b>"), "{html}");
     assert!(
         html.contains("name=v_health") && !html.contains("name=v_personal"),
         "no other vault offered"
