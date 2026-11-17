@@ -1,7 +1,7 @@
 # Page tests (optional)
 
 `wizard.test.js` loads the admin page in a fake browser (jsdom) against a fake server and
-walks through the "Connect an assistant" steps. It is not part of `cargo test`; it needs
+walks through the "Connect an assistant" steps, the triage view and the instructions editors. It is not part of `cargo test`; it needs
 Node.js:
 
 ```sh
@@ -43,5 +43,19 @@ cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node onboarding.test.js
 ```
 
-`wizard.test.js` and `browser.test.js` predate the page's separate views (`#triage-section`, `.vault` cards) and need
-their selectors brought up to date.
+## French completeness
+
+`french.test.js` opens the page in French against the real program and walks its main views (home with every fold open,
+triage, administration, a space and each of its tabs), every wizard platform before and after the connection is made, the
+instruction editors, the add-a-node, confirmation and secret windows, an error shown by the page, and the start screen with
+its join step. It fails when an element still holds one of the English sentences of the short `ENGLISH` list at the top of the
+file, when a visible text still reads as English (stop words) after the page's own translator has run, or when the translator
+knows a text that was left in English. A new English string in `admin.html` goes into `FR` (exact text) or `FRX` (text with a
+number or a name in it); if it is a sentence worth guarding, add its first words to `ENGLISH`. The long assistant prompt is
+written once in each language (`ORGANISE_PROMPT` and `ORGANISE_PROMPT_FR`), not translated line by line.
+
+```sh
+cargo build -p memcp-server
+cd crates/server/tests/page && npm install jsdom playwright-core --no-save
+CHROMIUM=/usr/bin/chromium node french.test.js
+```
