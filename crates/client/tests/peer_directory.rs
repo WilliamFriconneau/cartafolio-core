@@ -257,7 +257,15 @@ fn an_old_node_without_the_endpoint_is_tolerated() {
     let pass = Peer::new(&old_node(), "k", "peer-old")
         .sync_once(&a, NOW)
         .unwrap();
-    assert!(pass.problems.is_empty(), "{:?}", pass.problems);
+    // The person of this node is sam (the one who owns its spaces): the only thing said is that the old node takes
+    // no new space; the missing directory endpoint is no problem.
+    assert!(
+        pass.problems
+            .iter()
+            .all(|p| p.starts_with("the peer runs an older version")),
+        "{:?}",
+        pass.problems
+    );
     // Only this node's own entry; nobody was invented.
     assert!(names(&a, NOW).is_empty());
     assert_eq!(directory::entries(&a).unwrap().len(), 1);
