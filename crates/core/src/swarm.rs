@@ -240,6 +240,9 @@ pub fn offers(brain: &Brain, user: &str) -> Result<Vec<Offer>> {
 /// Makes `space` here for `user` when a peer has it and this node does not, as the peer's copy: its kind, and the time
 /// its copy began (so an archive decided between the two is judged the same way everywhere). Its layout comes with its
 /// events. `true` when it was made now.
+///
+/// # Errors
+/// [`Error::Invalid`] when a space of that name here belongs to another person: the two are never paired.
 pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -> Result<bool> {
     let set_kind = |brain: &Brain| -> Result<()> {
         if kind == TRIAGE {
@@ -253,12 +256,19 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
             brain.set_space_kind(space, kind)
         }
     };
+    let other_person = || {
+        Error::Invalid(format!(
+            "{space} is the name of a space of another person here: it is not exchanged"
+        ))
+    };
     if brain.has_space(space)? {
-        // A box that an earlier version made `custom` here is put right (a space of this person only).
-        if kind == TRIAGE
-            && brain.space_kind(space)? == CUSTOM
-            && is_space_owner(&brain.open_control()?, space, user)?
-        {
+        // A space of that name that is not this person's is never paired with theirs: its notes would cross from one
+        // person to another.
+        if !is_space_owner(&brain.open_control()?, space, user)? {
+            return Err(other_person());
+        }
+        // A box that an earlier version made `custom` here is put right.
+        if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
             set_kind(brain)?;
         }
         return Ok(false);
