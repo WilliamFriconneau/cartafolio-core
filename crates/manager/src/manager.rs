@@ -533,7 +533,7 @@ impl Manager {
     /// The installation to answer a request that carries a secret of its own.
     fn by_secret(&self, req: &Request) -> Arc<App> {
         let path = req.path.trim_end_matches('/');
-        let bearer = memcp_server::http::bearer_of(req.header("authorization"));
+        let bearer = req.key();
         let found = match path {
             "/oauth/token" => self.holder(|a| a.holds_oauth_grant(&req.body)),
             "/admin" | "/admin/api/state" => bearer

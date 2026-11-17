@@ -56,7 +56,7 @@ pub struct App {
 }
 
 fn bearer(req: &Request) -> Option<String> {
-    bearer_of(req.header("authorization"))
+    req.key()
 }
 
 pub(crate) fn rpc_ok(id: &Value, result: Value) -> Value {

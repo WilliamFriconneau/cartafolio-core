@@ -528,6 +528,7 @@ fn action(
                 "token": token,
                 "rights": format!("{space}:{}", if write { "rw" } else { "r" }),
                 "mcp_url": format!("{}/mcp/{agent}", app.public_url),
+                "mcp_url_with_key": format!("{}/mcp/{agent}?key={token}", app.public_url),
                 "claude_code": format!("claude mcp add --transport http {agent} {}/mcp/{agent} --header \"Authorization: Bearer {token}\"", app.public_url),
             }))
         }
@@ -550,6 +551,7 @@ fn action(
             Ok(json!({
                 "token": token,
                 "mcp_url": format!("{}/mcp/{agent}", app.public_url),
+                "mcp_url_with_key": format!("{}/mcp/{agent}?key={token}", app.public_url),
                 "claude_code": format!("claude mcp add --transport http {agent} {}/mcp/{agent} --header \"Authorization: Bearer {token}\"", app.public_url),
             }))
         }

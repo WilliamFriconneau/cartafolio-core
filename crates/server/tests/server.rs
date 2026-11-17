@@ -1288,3 +1288,24 @@ fn a_slow_or_keyless_big_body_holds_no_worker() -> Res {
     drop(slow);
     Ok(())
 }
+
+#[test]
+fn the_key_can_ride_in_the_address_so_one_url_is_enough() -> Res {
+    let e = env()?;
+    let token = connect(&e, "one-url", "health:rw", false)?;
+    let mut r = rq(
+        "POST",
+        &address_of(&e, &token),
+        &[],
+        &json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }).to_string(),
+    );
+    r.query.insert("key".into(), token.clone());
+    assert_eq!(
+        e.app.handle(&r).status,
+        200,
+        "the key in the address opens it"
+    );
+    r.query.insert("key".into(), "wrong".into());
+    assert_eq!(e.app.handle(&r).status, 401, "a wrong key does not");
+    Ok(())
+}

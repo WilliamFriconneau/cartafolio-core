@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261117.0.3
+
+- One address is enough to connect an assistant: the key can ride in the address (`/mcp/<connection>?key=…`), and the page shows that address when a connection is made.
+- CI no longer builds the Metal-only speech feature on Linux and Windows.
+
 ## 20261117.0.2
 
 - Voice commands by keywords: a note that starts « j'ai une idée », « il faut », « je dois », « problème », « il manque », « acheter »… also becomes a card of the space's ideas, what's next or targets, or of the home shopping list, with the note as its source.

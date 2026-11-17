@@ -1863,6 +1863,7 @@ $$("form[data-act]").forEach(f => f.addEventListener("submit", async e => {
   const r = await act(path, body);
   if (!r) return;
   if (path === "connections") secret("Token for " + body.agent, [
+    ["One address to paste (it carries the key)", r.mcp_url_with_key],
     ["Token", r.token], ["Address of the MCP server", r.mcp_url],
     ["Claude Code", r.claude_code],
     ["Any other MCP client", "Address: " + r.mcp_url + "\nHeader: Authorization: Bearer " + r.token]]);

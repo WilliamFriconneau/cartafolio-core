@@ -23,6 +23,17 @@ impl Request {
     pub fn header(&self, name: &str) -> &str {
         self.headers.get(name).map_or("", String::as_str)
     }
+
+    /// The key of a connection: `Authorization: Bearer …`, or `?key=…` in the address, so that one address
+    /// carries everything (the person pastes it once, in the assistant).
+    pub fn key(&self) -> Option<String> {
+        bearer_of(self.header("authorization")).or_else(|| {
+            self.query
+                .get("key")
+                .map(|k| k.trim().to_string())
+                .filter(|k| !k.is_empty())
+        })
+    }
 }
 
 #[derive(Clone, Debug)]
