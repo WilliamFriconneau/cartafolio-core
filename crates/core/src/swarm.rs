@@ -263,7 +263,18 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
         }
         return Ok(false);
     }
-    brain.add_space_for(space, user)?;
+    if let Err(e) = brain.add_space_for(space, user) {
+        // Another pass of this node (it runs one per peer, each its own process) may be making the same space at this
+        // moment: once it is made, it is held here, as above.
+        let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !brain.has_space(space)? && std::time::Instant::now() < end {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        if brain.has_space(space)? && is_space_owner(&brain.open_control()?, space, user)? {
+            return Ok(false);
+        }
+        return Err(e);
+    }
     // A kind this node's catalogue does not know stays `custom`.
     let _ = set_kind(brain);
     let ctl = brain.open_control()?;
