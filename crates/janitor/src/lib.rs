@@ -60,6 +60,8 @@ pub struct Janitor {
     state: state::State,
     /// The rules of each vault (its `rules` note), and the id of that note.
     rules: BTreeMap<String, router::Rules>,
+    /// The terms of the vocabularies of each vault (read after its rules, never written back into them).
+    vocab: BTreeMap<String, Vec<String>>,
     rule_ids: BTreeMap<String, String>,
 }
 
@@ -133,6 +135,7 @@ impl Janitor {
         Ok(Janitor {
             state: state::State::open(&config.state_dir)?,
             rules: BTreeMap::new(),
+            vocab: BTreeMap::new(),
             rule_ids: BTreeMap::new(),
             client,
             config,
@@ -452,7 +455,7 @@ impl Janitor {
                     continue;
                 }
                 // The keywords: a note that clearly belongs to another vault goes to the inbox of that vault.
-                if let Some(to) = router::route(text, &tags_of(note), &self.rules)
+                if let Some(to) = router::route(text, &tags_of(note), &self.routing_rules())
                     .filter(|t| *t != vault && vaults.contains(t))
                 {
                     match self.send_one(note, id, text, &vault, &to, "the keywords") {
@@ -589,7 +592,7 @@ impl Janitor {
                 (Some(work_rule::WORK.to_string()), "the person's work rule")
             } else {
                 (
-                    router::route(text, &tags_of(note), &self.rules)
+                    router::route(text, &tags_of(note), &self.routing_rules())
                         .filter(|t| t != triage && vaults.contains(t)),
                     "the keywords",
                 )

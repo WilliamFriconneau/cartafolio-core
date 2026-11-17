@@ -36,7 +36,8 @@ const WRITE_TOOLS: [&str; 10] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 12] = [
+const READ_TOOLS: [&str; 13] = [
+    "vocabulary_terms",
     "living_get",
     "peers",
     "rules_get",
@@ -134,6 +135,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             name: "living_get",
             description: "A living board of a space: `next` (what's next: now, next, later, done), `ideas` (the idea box: new, kept, done), `targets` (long-term problems and risks, each grouping signs and symptoms: open, reached), `index` (where things stand: current), or a named list `list-<name>` (open, done), such as the shopping list of a home space, fed from notes of any space. Its cards by column (one note each), its last pass (when, by whom) and its delta: the notes filed since that pass, oldest first, with `behind` their count. Keep it from the delta only, then `living_set`.".into(),
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["space", "page"] }),
+        });
+        out.push(ToolDef {
+            name: "vocabulary_terms",
+            description: "The terms of the vocabularies a person imported into a space (lists of signs, symptoms, project words) that the router reads after the `rules` note: `{space, limit?}` gives the distinct terms, lower case, and the vocabularies with their source.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["space"] }),
         });
         out.push(ToolDef {
             name: "rules_get",
@@ -1397,6 +1403,29 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             Ok(
                 json!({ "space": space_name, "page": page, "added": added, "moved": moved, "dropped": dropped, "covers": covers }),
+            )
+        }
+        "vocabulary_terms" => {
+            let space_name = args
+                .get("space")
+                .and_then(Value::as_str)
+                .ok_or_else(|| ToolError::Invalid("space: the name of a space".into()))?;
+            let space = Space::new(space_name)?;
+            if !caller.readable().contains(&space) || caller.read_paths(&space).is_some() {
+                return Err(ToolError::Invalid(format!("no access to {space_name}")));
+            }
+            let limit = args
+                .get("limit")
+                .and_then(Value::as_u64)
+                .unwrap_or(5000)
+                .clamp(1, 50_000) as usize;
+            let conn = brain.open_space(&space)?;
+            let vocabularies: Vec<Value> = crate::vocabulary::list(&conn)?
+                .into_iter()
+                .map(|v| json!({ "name": v.name, "source": v.source, "terms": v.terms, "imported_at": crate::util::iso(v.imported_at) }))
+                .collect();
+            Ok(
+                json!({ "space": space_name, "vocabularies": vocabularies, "terms": crate::vocabulary::terms(&conn, limit)? }),
             )
         }
         "rules_get" | "rules_set" => {

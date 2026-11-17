@@ -613,3 +613,56 @@ pub fn library_list(data: &Path) -> Result<(), Failure> {
     }
     Ok(())
 }
+
+/// `vocabulary import FILE --space NAME --name NAME [--source TEXT]`: a list of terms the router reads after the
+/// space's own keywords. One term per line, or `term<TAB>group<TAB>code`. The same name again replaces it.
+pub fn vocabulary_import(
+    data: &Path,
+    file: &Path,
+    space: &str,
+    name: &str,
+    source: &str,
+) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    if !brain.has_space(&space).map_err(fail)? {
+        return Err(bad(&format!("unknown space {space}")));
+    }
+    let text =
+        std::fs::read_to_string(file).map_err(|e| bad(&format!("{}: {e}", file.display())))?;
+    let terms = memcp_core::vocabulary::parse(&text);
+    let mut conn = brain.open_space(&space).map_err(fail)?;
+    let kept =
+        memcp_core::vocabulary::import(&mut conn, name, source, &terms, now()).map_err(fail)?;
+    println!("vocabulary {name} on {space}: {kept} terms");
+    Ok(())
+}
+
+/// `vocabulary list [--space NAME]`.
+pub fn vocabulary_list(data: &Path, space: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let spaces = match space {
+        Some(s) => vec![Space::new(s).map_err(fail)?],
+        None => brain.spaces().map_err(fail)?,
+    };
+    for s in spaces {
+        let conn = brain.open_space(&s).map_err(fail)?;
+        for v in memcp_core::vocabulary::list(&conn).map_err(fail)? {
+            println!("{s}\t{}\t{} terms\t{}", v.name, v.terms, v.source);
+        }
+    }
+    Ok(())
+}
+
+/// `vocabulary remove NAME --space NAME`.
+pub fn vocabulary_remove(data: &Path, space: &str, name: &str) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    let mut conn = brain.open_space(&space).map_err(fail)?;
+    if memcp_core::vocabulary::remove(&mut conn, name).map_err(fail)? {
+        println!("removed {name} from {space}");
+        Ok(())
+    } else {
+        Err(bad(&format!("no vocabulary {name} on {space}")))
+    }
+}

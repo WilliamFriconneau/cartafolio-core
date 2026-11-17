@@ -102,8 +102,23 @@ impl Janitor {
     pub(crate) fn load_rules(&mut self, vaults: &[String]) -> Vec<String> {
         self.rules.clear();
         self.rule_ids.clear();
+        self.vocab.clear();
         let mut problems = vec![];
         for v in vaults {
+            // The vocabularies a person imported into this vault: an old node has no such tool, which is no problem.
+            if let Ok(t) = self
+                .client
+                .call("vocabulary_terms", json!({ "space": v, "limit": 20000 }))
+                && let Some(list) = t["terms"].as_array()
+            {
+                let terms: Vec<String> = list
+                    .iter()
+                    .filter_map(|x| x.as_str().map(String::from))
+                    .collect();
+                if !terms.is_empty() {
+                    self.vocab.insert(v.clone(), terms);
+                }
+            }
             let found = match self.client.call(
                 "recall",
                 json!({ "space": v, "query": "", "tags": ["rules"], "limit": 5 }),
@@ -134,6 +149,19 @@ impl Janitor {
             }
         }
         problems
+    }
+
+    /// The rules the router reads: each vault's own keywords and tags, then the terms of its vocabularies. A term
+    /// that is also a keyword counts once; the `rules` notes themselves are never changed by it.
+    pub(crate) fn routing_rules(&self) -> BTreeMap<String, Rules> {
+        let mut all = self.rules.clone();
+        for (space, terms) in &self.vocab {
+            let r = all.entry(space.clone()).or_default();
+            let known: BTreeSet<String> = r.keywords.iter().cloned().collect();
+            r.keywords
+                .extend(terms.iter().filter(|t| !known.contains(*t)).cloned());
+        }
+        all
     }
 
     /// Writes the rules of a space: a new version of its `rules` note (the old one stays in the history), or the first note.

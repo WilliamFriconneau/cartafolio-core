@@ -26,6 +26,7 @@ pub mod tools;
 pub mod triage;
 pub mod users;
 pub mod util;
+pub mod vocabulary;
 
 pub use brain::{Brain, default_config};
 pub use error::{Error, Result};

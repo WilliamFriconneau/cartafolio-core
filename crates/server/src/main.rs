@@ -20,6 +20,9 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
                                          a space named by hand, for an operator; it has no kind unless given one
+  vocabulary import FILE --space NAME --name NAME [--source TEXT]
+  vocabulary list [--space NAME] | remove NAME --space NAME
+                                         a list of terms (signs, symptoms…) the router reads after the keywords
   library add PATH --space NAME          mounts an existing folder on a space, read-only: the node indexes it (path,
                                          title, dates, text of .md and .txt, [[links]]) and never copies or changes it
   library scan [--space NAME] | library list
@@ -66,7 +69,9 @@ const USAGE: &str = "usage: memcp --data DIR <command>
 
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
-const VALUE_FLAGS: [&str; 33] = [
+const VALUE_FLAGS: [&str; 35] = [
+    "--name",
+    "--source",
     "--plan",
     "--apply",
     "--out",
@@ -216,6 +221,17 @@ fn run(args: &[String]) -> Result<(), Failure> {
         }
         ("library", Some("scan")) => cli::library_scan(&data, flag("--space")),
         ("library", Some("list")) => cli::library_list(&data),
+        ("vocabulary", Some("import")) => cli::vocabulary_import(
+            &data,
+            Path::new(arg(2, "the file")?),
+            need("--space")?,
+            need("--name")?,
+            flag("--source").unwrap_or(""),
+        ),
+        ("vocabulary", Some("list")) => cli::vocabulary_list(&data, flag("--space")),
+        ("vocabulary", Some("remove")) => {
+            cli::vocabulary_remove(&data, need("--space")?, arg(2, "the name")?)
+        }
         ("catalogue", _) => cli::catalogue_list(&data),
         ("serve", _) => serve(&data, &a, flag("--listen").unwrap_or("127.0.0.1:8791")),
         ("connect", _) => cli::connect(

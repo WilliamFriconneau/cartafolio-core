@@ -4,7 +4,7 @@
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
     SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
-    SPACE_V10,
+    SPACE_V10, SPACE_V11,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -508,6 +508,24 @@ CREATE TABLE sync_disputes (
   fact_id TEXT NOT NULL, alt TEXT NOT NULL, at INTEGER NOT NULL,
   PRIMARY KEY (fact_id, alt)
 ) STRICT, WITHOUT ROWID;
+";
+
+/// Vocabularies: lists of terms a person brings, read by the router after the `rules` note.
+const SPACE_V11: &str = r"
+CREATE TABLE vocabularies (
+  name        TEXT PRIMARY KEY,
+  source      TEXT NOT NULL DEFAULT '',
+  imported_at INTEGER NOT NULL,
+  terms       INTEGER NOT NULL DEFAULT 0
+) STRICT;
+CREATE TABLE vocabulary_terms (
+  name TEXT NOT NULL,
+  term TEXT NOT NULL,
+  grp  TEXT NOT NULL DEFAULT '',
+  code TEXT NOT NULL DEFAULT '',
+  PRIMARY KEY (name, term)
+) STRICT, WITHOUT ROWID;
+CREATE INDEX vocabulary_terms_term ON vocabulary_terms(term);
 ";
 
 /// What this node knows of each peer, per space: how far it has read the peer's log (`pulled`), how far the

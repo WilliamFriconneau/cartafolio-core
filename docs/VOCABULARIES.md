@@ -1,6 +1,6 @@
 # Vocabularies (a database of terms for the keywords)
 
-Status: design. Nothing here is built yet.
+Status: built (table, `memcp vocabulary import|list|remove`, MCP `vocabulary_terms`, the janitor reads it after the keywords). The page block and the format adapters are not built.
 
 ## What it is for
 
