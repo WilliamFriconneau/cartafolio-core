@@ -327,7 +327,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
             flag("--policy"),
         ),
         ("connections", _) => cli::connections(&data),
-        ("doctor", _) => memcp_server::doctor::run(&data, flag("--public-url"), flag("--listen")),
+        ("doctor", _) => memcp_server::doctor::run_with(
+            &data,
+            flag("--public-url"),
+            flag("--listen"),
+            Some(&memcp_server::doctor::Extra {
+                settings_file: cfg_path.as_deref(),
+                settings: &settings,
+            }),
+        ),
         ("regrant", _) => cli::regrant(&data, arg(1, "the agent name")?, &rights()?),
         ("revoke", _) => cli::revoke(&data, arg(1, "the agent name")?),
         ("readonly", _) => cli::readonly(&data, arg(1, "the agent name")?, arg(2, "on or off")?),
