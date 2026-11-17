@@ -574,3 +574,175 @@ fn a_tag_dragged_onto_a_sub_space_moves_its_notes_after_a_preview_and_files_ther
     assert_eq!(same.status, 400);
     Ok(())
 }
+
+/// Gives the person a second space.
+fn second_space(e: &Env, who: (&str, &str), space: &str) -> Result<(), Box<dyn Error>> {
+    let ctl = e.app.brain.open_control()?;
+    let p = users::list_users(&ctl)?
+        .into_iter()
+        .find(|u| u.ha_user.as_deref() == Some(who.0))
+        .ok_or("no such person")?;
+    e.app.brain.add_space_for(&sp(space), &p.id)?;
+    Ok(())
+}
+
+#[test]
+fn the_journal_reads_every_space_of_the_person_newest_first_and_nobody_elses() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    second_space(&e, SAM, "garden")?;
+    person_with(&e, ALEX, "private")?;
+    for (space, text, tag) in [
+        ("notes", "The boiler is serviced in March.", "home/boiler"),
+        ("garden", "Planted the tomatoes by the wall.", "plants"),
+        ("notes", "Call the plumber about the boiler.", "home/boiler"),
+    ] {
+        let r = post(
+            &e,
+            "fact/add",
+            SAM,
+            json!({ "space": space, "text": text, "tags": [tag] }),
+        );
+        assert_eq!(r.status, 200, "{}", r.body_json());
+    }
+    post(
+        &e,
+        "fact/add",
+        ALEX,
+        json!({ "space": "private", "text": "A secret of Alex.", "tags": ["secret"] }),
+    );
+    let all = get(&e, "journal", &[], SAM).body_json();
+    let facts = all["facts"].as_array().ok_or("no facts")?;
+    assert_eq!(facts.len(), 3, "{all}");
+    let spaces: Vec<&str> = facts.iter().filter_map(|f| f["space"].as_str()).collect();
+    assert!(spaces.contains(&"notes") && spaces.contains(&"garden"));
+    assert!(
+        !all.to_string().contains("secret"),
+        "never another person's"
+    );
+    let stamps: Vec<i64> = facts
+        .iter()
+        .filter_map(|f| f["created_at"].as_i64())
+        .collect();
+    assert!(stamps.windows(2).all(|w| w[0] >= w[1]), "newest first");
+    let tags: Vec<&str> = all["tags"]
+        .as_array()
+        .ok_or("no tags")?
+        .iter()
+        .filter_map(|t| t["tag"].as_str())
+        .collect();
+    assert!(tags.contains(&"plants") && tags.contains(&"home/boiler"));
+    // Filter by space, by tag (a parent path takes its children), by words.
+    let one = get(&e, "journal", &[("space", "garden")], SAM).body_json();
+    assert_eq!(one["facts"].as_array().map(Vec::len), Some(1));
+    let by_tag = get(&e, "journal", &[("tag", "home")], SAM).body_json();
+    assert_eq!(by_tag["facts"].as_array().map(Vec::len), Some(2));
+    let found = get(&e, "journal", &[("q", "tomatoes")], SAM).body_json();
+    assert_eq!(found["facts"].as_array().map(Vec::len), Some(1));
+    assert_eq!(found["facts"][0]["space"], "garden");
+    // Another person's space is unknown, not forbidden.
+    assert_eq!(get(&e, "journal", &[("space", "private")], SAM).status, 404);
+    // Pages continue where the last one stopped, without a repeat or a gap.
+    let first = get(&e, "journal", &[("limit", "2")], SAM).body_json();
+    assert_eq!(first["more"], true);
+    let before = first["next"]["before"].to_string();
+    let before_id = first["next"]["before_id"]
+        .as_str()
+        .ok_or("no cursor")?
+        .to_string();
+    let second = get(
+        &e,
+        "journal",
+        &[
+            ("limit", "2"),
+            ("before", &before),
+            ("before_id", &before_id),
+        ],
+        SAM,
+    )
+    .body_json();
+    assert_eq!(second["more"], false);
+    let mut ids: Vec<String> = first["facts"]
+        .as_array()
+        .into_iter()
+        .chain(second["facts"].as_array())
+        .flatten()
+        .filter_map(|f| f["id"].as_str().map(String::from))
+        .collect();
+    ids.sort();
+    ids.dedup();
+    assert_eq!(ids.len(), 3);
+    Ok(())
+}
+
+#[test]
+fn the_graph_has_spaces_tags_and_keywords_of_the_person_only() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    second_space(&e, SAM, "garden")?;
+    person_with(&e, ALEX, "private")?;
+    for (space, text, tag) in [
+        ("notes", "Boiler service in March.", "home"),
+        ("garden", "Tomatoes by the wall.", "home"),
+        ("garden", "Water the tomatoes.", "plants"),
+    ] {
+        post(
+            &e,
+            "fact/add",
+            SAM,
+            json!({ "space": space, "text": text, "tags": [tag] }),
+        );
+    }
+    post(
+        &e,
+        "fact/add",
+        ALEX,
+        json!({ "space": "private", "text": "Secret.", "tags": ["secret"] }),
+    );
+    let r = post(
+        &e,
+        "space/rules",
+        SAM,
+        json!({ "space": "garden", "keywords": ["tomatoes"] }),
+    );
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let g = get(&e, "links", &[], SAM).body_json();
+    let ids: Vec<&str> = g["nodes"]
+        .as_array()
+        .ok_or("no nodes")?
+        .iter()
+        .filter_map(|n| n["id"].as_str())
+        .collect();
+    for want in [
+        "space:notes",
+        "space:garden",
+        "tag:home",
+        "tag:plants",
+        "keyword:tomatoes",
+    ] {
+        assert!(ids.contains(&want), "{want} in {ids:?}");
+    }
+    assert!(
+        !ids.iter()
+            .any(|i| i.contains("private") || i.contains("secret"))
+    );
+    assert!(
+        !ids.contains(&"tag:rules"),
+        "the page's own notes are left out"
+    );
+    let kw = g["nodes"]
+        .as_array()
+        .and_then(|a| a.iter().find(|n| n["id"] == "keyword:tomatoes"))
+        .ok_or("no keyword")?;
+    assert_eq!(kw["count"], 2, "two notes cite it");
+    assert!(
+        g["edges"]
+            .as_array()
+            .is_some_and(|a| a.iter().any(|x| x["type"] == "shared_tag"))
+    );
+    // One space only.
+    let one = get(&e, "links", &[("space", "garden")], SAM).body_json();
+    assert!(!one.to_string().contains("space:notes"));
+    assert_eq!(get(&e, "links", &[("space", "private")], SAM).status, 404);
+    Ok(())
+}

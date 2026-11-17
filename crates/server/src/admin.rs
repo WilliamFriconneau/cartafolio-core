@@ -216,6 +216,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                     Err(r) => r,
                 }
             }
+            "/journal" => crate::explore::journal(app, &ctl, &me, req, now),
+            "/links" => crate::explore::graph(app, &ctl, &me, req),
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
@@ -291,7 +293,7 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
 
 /// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
 /// the person acts with their own rights (the spaces they own), as the connection `page`.
-fn living(
+pub(crate) fn living(
     app: &App,
     ctl: &Connection,
     me: &User,
