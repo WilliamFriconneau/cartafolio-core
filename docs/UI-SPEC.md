@@ -1,7 +1,7 @@
 # Interface specification
 
 **One app, the same everywhere**: iPhone, iPad, Mac, Windows, Linux and the node page in a browser show the same
-sections, in the same order, with the same words. A platform differs only where its device differs:
+four sections, in the same order, with the same words. A platform differs only where its device differs:
 
 | Platform | What is its own, and nothing else |
 |---|---|
@@ -16,30 +16,33 @@ Words never used: *bridge*, *proxy*, *vault* (say *space*). Vulgar or slang word
 1. **Say it now, find it later.** A thought, a measure, a task, said in three seconds, filed by itself.
 2. **What do I have to do, buy, remember?** The boards of each space answer, kept up to date from the notes.
 3. **What happened, day by day?** One journal for everything, with each note's space.
-4. **My health followed as a nurse would** (MemCP Health): targets, their signs counted, a summary to hand to a doctor.
+4. **My health followed as a nurse would**: the health space's targets, their signs counted, a summary to hand to a doctor; on the iPhone, Apple Health in step (the one thing sold).
 5. **Everything mine, on my machines**, reachable by the assistant I choose.
 
 ## Navigation
 
-Five sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
+Four sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
 
 ```
 ┌──────────────┬─────────────────────────────────────────────────────────────┐
-│ ● Note       │  the section selected                                       │
+│ ● Trace/drop │  the section selected                                       │
 │ ● Journal    │                                                             │
 │ ● Spaces     │                                                             │
-│ ● Health *   │                                                             │
 │ ● Settings   │                                                             │
 │──────────────│                                                             │
-│ ● in step    │  (* with MemCP Health only)                                 │
+│ ● in step    │                                                             │
 └──────────────┴─────────────────────────────────────────────────────────────┘
 ```
 
 At the foot of the sidebar (or at the top of the iPhone's Note screen), one line: the state of the machines (in step,
 syncing with its percent, offline, key refused with « Reconnect »). Proposals waiting (« 2 to confirm ») show as a
-badge on Note.
+badge on Trace or drop.
 
-### 1. Note
+### 1. Trace or drop
+
+More than a note: a trace (said, written, measured) or anything dropped (a file, a photo, a document). The
+image is unloading the mind: a thought drawn out of the head and put somewhere safe.
+
 
 The microphone, large, in the middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice
 note starts on a tap or on « Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**.
@@ -60,16 +63,17 @@ boards**: What's next, Ideas, Targets (with their signs), and its lists (shoppin
 tap, each board saying its last pass and how many notes came since. Then its notes, its tags, its keywords (the
 words that file a note there), and its **graph**: spaces, tags and keywords linked, a click filters the notes.
 
-### 4. Health (MemCP Health)
+### Health: a space, inside Spaces
 
-Set up by a nurse: the health space and its sub-space *Kalios* (the history of the original health journal, kept
-apart from dictated notes so one always knows where a measure comes from). Targets first (each a long-term problem
-with the signs and symptoms that show it, counted day by day), then the coach (training, recovery), the tools of each
-condition followed (blood pressure, sleep, asthma, migraine, epilepsy, transit, mood, cycle, a new medicine), and
-« Prepare an appointment » (a PDF laid out as nurses hand over, SBAR: free, always). One month paid sets the space up
-for good; an ended subscription only pauses Apple Health, and says so.
+Health is not a section of its own: it is the health space, in Spaces, with the boards every space has by default
+(What's next, Ideas, Targets with their signs, lists) and its dashboard. Its sub-space *Kalios* keeps the history of the
+original health journal, apart from dictated notes, so one always knows where a measure comes from. « Prepare an
+appointment » (a PDF laid out as nurses hand over, SBAR) is free, on every app.
 
-### 5. Settings
+**What is sold**: the iPhone app's synchronisation with Apple Health (MemCP Health: 3 € a month or 9,90 € once). Nothing
+else is paid. An ended subscription only pauses that synchronisation, and says so.
+
+### 4. Settings
 
 Machines (the map: assistants in the cloud and through which node, assistants on the machines, every node with its
 version, last activity and how it is reached; a machine reachable only locally « syncs on opening »), Assistants
@@ -94,13 +98,13 @@ Then, once, every permission the app will need, each with why. Then the use case
 4. *A second device*: install, « Continue with the memory of <device> », the same memory in a minute.
 5. *An assistant*: Settings › Assistants › Connect, paste the line in Claude, ask « what's next at home? ».
 
-**MemCP Health (the nurse's paths, from Kalios)**
-6. *A symptom noted*: « headache since this morning » → the sign counted under its target, the target's trend on Health.
+**Health (the nurse's paths, from Kalios)**
+6. *A symptom noted*: « headache since this morning » → the sign counted under its target, the target's trend in Spaces › Health.
 7. *A measure said*: « blood pressure 12/8 leaving the doctor's » → « Add to Apple Health? » (accept, always for this
    kind, always for Apple Health, refuse).
 8. *A condition followed*: a target for migraine → its tool (attacks, triggers, treatment taken), its signs over
    ten days, red flags checked with the help numbers first.
-9. *An appointment*: Health › Prepare an appointment → the SBAR PDF of the period, shared with the professional.
+9. *An appointment*: Spaces › Health › Prepare an appointment → the SBAR PDF of the period, shared with the professional.
 10. *The subscription ends*: Health stays, Apple Health pauses, said in one line with how to resume.
 
 **The tinkerer (the node page, Obsidian-like)**
@@ -123,7 +127,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 
 ## Acceptance
 
-1. The same five sections, in the same order, on every platform; a function missing on one is a defect.
+1. The same four sections, in the same order, on every platform; a function missing on one is a defect.
 2. No screen shows a technical name, JSON, a forbidden word or a vulgar word.
 3. The golden paths above pass on the iPhone, the Mac and the page.
 4. Every text exists in French, English and Spanish.

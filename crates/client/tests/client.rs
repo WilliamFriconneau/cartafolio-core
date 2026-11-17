@@ -482,7 +482,8 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
             json!({"space": "sam-me", "text": "Une note du portable."}),
         )
         .expect("write");
-    assert_eq!(r["fact"]["tags"], json!(["inbox"]));
+    // A peer writes like the person: nothing is forced into an inbox.
+    assert!(r["fact"]["id"].is_string(), "{r}");
     match memcp_client::pair(&server, &code, "again") {
         Err(Error::Tool(m)) => assert!(m.contains("unknown, used or expired"), "{m}"),
         other => panic!("{other:?}"),

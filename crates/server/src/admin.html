@@ -303,6 +303,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .ginfo{margin:8px 0;min-height:2.4em}
 .gnodes{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 @media (max-width:640px){.note{flex-wrap:wrap}.note .meta{flex-direction:row;flex-wrap:wrap;align-items:center;width:100%}}
+.off{display:none!important}
+.sections{margin:6px 0 14px}
 </style>
 </head>
 <body>
@@ -328,6 +330,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <h1>MemCP <button type="button" class="link" id="back-people" hidden>← My memory</button></h1>
       <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this installation, who is waiting to be let in">Administration</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every space you own, with a readable version. No key, connection or right in it.">export my data</button> <span class="switches" data-switches></span></div>
     </header>
+    <nav class="tabs sections" id="sections" aria-label="Sections"></nav>
     <p class="err" id="err" role="alert"></p>
     <div id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -363,7 +366,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     <div class="hero" id="hero"></div>
     <div class="tabs" id="home-nav"></div>
     <div id="join-banner" hidden></div>
-    <section id="machines-section">
+    <section id="machines-section" data-part="settings">
       <h2>Machines</h2>
       <p class="mute small">The machines that hold this memory, and whether they are in step. Refreshed every two seconds.</p>
       <div id="machines"></div>
@@ -375,7 +378,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <p class="err small" id="code-note" role="alert"></p>
       <p class="mute small">A new machine or phone asks to join: its request appears here with three words, and you allow it. Or show a code that it types or scans.</p>
     </section>
-    <div class="bento" id="actions" style="margin-bottom:16px">
+    <div class="bento" id="actions" style="margin-bottom:16px" data-part="settings">
       <div class="tile t2">
         <h3>Connect an assistant</h3>
         <p class="mute small" style="margin:0">Claude, ChatGPT, OpenCode… One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.</p>
@@ -411,7 +414,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </form>
     </section>
 
-    <section id="timeline-section">
+    <section id="timeline-section" data-part="settings">
       <h2>Timeline</h2>
       <p class="mute small">What each space received, over the last hours. Counts only, never content.</p>
       <div class="bar"><label class="inline">Scale <select id="tl-scale">
@@ -422,7 +425,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <div id="timeline"></div>
     </section>
 
-    <section>
+    <section data-part="settings">
       <h2>Connected assistants</h2>
       <p class="mute small">What is connected to your memory now, and what it can reach. Revoke one and it stops at once.</p>
       <div id="connections" class="bento conns"></div>
@@ -436,7 +439,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </details>
     </section>
 
-    <section id="revoked-section" hidden>
+    <section id="revoked-section" data-part="settings" hidden>
       <details>
         <summary><h2 style="display:inline">Revoked connections</h2></summary>
         <p class="mute small">Connections you cut. They stay here, with their history, until you remove them from the list.</p>
@@ -444,7 +447,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </details>
     </section>
 
-    <section id="internal-section" hidden>
+    <section id="internal-section" data-part="settings" hidden>
       <details>
         <summary><h2 style="display:inline">Internal tools</h2></summary>
         <p class="mute small">The program's own tools (the janitor, voice transcription, the weekly report, the device rangers). They are not assistants and are kept out of the list above. Revoke one and it stops at once.</p>
@@ -452,20 +455,20 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </details>
     </section>
 
-    <section id="app-guides-section" hidden>
+    <section id="app-guides-section" data-part="settings" hidden>
       <h2>Instructions apps proposed</h2>
       <p class="mute small">An app that may propose its own instructions wrote these. They are only text until you read them and approve: then the assistants that reach that space are told them, as coming from that app and approved by you, and only as the form of what that app keeps: how to read its records and how to write for it. If the app changes its text, it waits for you again. Nothing here is approved for you, whatever an assistant says.</p>
       <div id="app-guides"></div>
     </section>
 
-    <section id="attention-section" hidden>
+    <section id="attention-section" data-part="settings" hidden>
       <h2>Needs a look</h2>
       <p class="mute small">Not a decision to make: things worth a glance. Nothing here interrupts anything.</p>
       <div id="attention"></div>
     </section>
 
 
-    <details class="fold" id="safety">
+    <details class="fold" id="safety" data-part="settings">
       <summary>Safety: an heir, a recovery key</summary>
       <p class="mute small">If your Home Assistant account is deleted, your memory is not: it stays, and nothing is ever erased for you. Two ways to get it back, both yours to set up.</p>
       <h3 class="sub">Your heir</h3>
@@ -482,13 +485,13 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
     </details>
 
-    <details class="fold">
+    <details class="fold" data-part="settings">
       <summary>Activity</summary>
       <p class="mute small">The latest events about your connections and what you changed. Never a key, never memory content.</p>
       <div class="scroll"><table id="activity"></table></div>
     </details>
 
-    <details class="fold">
+    <details class="fold" data-part="settings">
       <summary>Files</summary>
       <p class="mute small">Photos and documents kept in a space (4 MB at most). Assistants find them by their note.</p>
       <div class="scroll"><table id="files"></table></div>
@@ -500,7 +503,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </form>
     </details>
 
-    <details class="fold" id="advanced">
+    <details class="fold" id="advanced" data-part="settings">
       <summary>Advanced</summary>
 
       <h3 class="sub">New space</h3>
@@ -781,6 +784,19 @@ const FR = {
   "3 days": "3 jours",
   "7 days": "7 jours",
   "30 days": "30 jours",
+  "Trace or drop": "Tracer ou déposer",
+  "Settings": "Réglages",
+  "Sections": "Sections",
+  "known through": "connue par",
+  "known through another machine": "connue par une autre machine",
+  "gone, not seen for 90 days": "partie, pas vue depuis 90 jours",
+  "older version": "version plus ancienne",
+  "reached by": "joignable par",
+  "exposure.loopback": "cette machine",
+  "exposure.lan": "le réseau local",
+  "exposure.tailnet": "le tailnet",
+  "exposure.public": "internet",
+  "syncs when opened with the peers it can reach": "se synchronise à l’ouverture avec les pairs joignables",
   "Connected assistants": "Assistants connectés",
   "What is connected to your memory now, and what it can reach. Revoke one and it stops at once.": "Ce qui est connecté à votre mémoire en ce moment, et ce qu’il peut atteindre. Révoquez-en un et il s’arrête aussitôt.",
   "Internal tools": "Outils internes",
@@ -1548,6 +1564,17 @@ function renderRuleLine(ov) {
 }
 function renderSpace() {
   const ov = SP.ov;
+  // Note (docs/UI-SPEC.md): À trier as the place a capture lands, without the inside of a space: a title, the box to
+  // write, record or attach, and what came in.
+  const note = location.hash === "#note";
+  $("#space-crumb").hidden = $("#space-sub").hidden = $("#space-tabs").hidden = note;
+  $("#space-rules").hidden = note;
+  if (note) {
+    $("#space-title").textContent = "Trace or drop";
+    SP.tab = "journal";
+    journalView($("#space-body"));
+    return;
+  }
   $("#space-title").textContent = spaceLabel(ov.space);
   crumbs($("#space-crumb"), ancestors(ov.space), null);
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
@@ -2117,13 +2144,29 @@ $("#layout-add").addEventListener("submit", async e => {
 
 // An administrator starts on the people; everyone else, and the administrator once they pick their
 // own line, on their memory.
+/// The four sections, the same on every app: a bar under the header (docs/UI-SPEC.md, Navigation).
+function renderSections(on) {
+  const items = [["#note", "Trace or drop", "note"], ["#journal", "Journal", "journal"], ["", "Spaces", "spaces"], ["#settings", "Settings", "settings"]];
+  $("#sections").replaceChildren(...items.map(([h, t, id]) => el("button", { type: "button", class: id === on ? "on" : "",
+    "aria-current": id === on ? "page" : null, onclick: () => { location.hash = h; } }, t)));
+}
+
 function route() {
   // Everyone lands in their own memory. The other people (an administrator only) are on a page of their own.
   const admin = !!(S && S.installation && S.installation.admin);
   const inSpace = location.hash.match(/^#space\/([a-z][a-z0-9-]*)$/);
   const inFolder = location.hash.match(/^#folder\/([a-z][a-z0-9-]*)$/);
   const global = location.hash === "#journal" || location.hash === "#graph";
-  const page = inSpace ? "space" : global ? "global" : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
+  // The four sections of every app (docs/UI-SPEC.md): Note, Journal, Spaces, Settings. Note opens À trier, where a
+  // capture lands; health is a space among the others; Settings is the machines, the assistants and the rest.
+  const triage = S && S.triage && S.triage.space ? { name: S.triage.space } : null;
+  const section = location.hash === "#note" ? "note" : global ? "journal"
+    : location.hash === "#settings" || location.hash === "#admin" ? "settings" : inSpace || inFolder || location.hash === "" ? "spaces" : "";
+  const page = inSpace || (section === "note" && triage) ? "space" : global ? "global"
+    : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
+  renderSections(section);
+  document.querySelectorAll('#view-memory [data-part="settings"]').forEach(n => { n.hidden = section !== "settings" || n.dataset.empty === "1"; });
+  document.querySelectorAll("#view-memory > #home > :not([data-part])").forEach(n => { if (n.id !== "machines-section") n.classList.toggle("off", section === "settings"); });
   $("#view-space").hidden = page !== "space";
   $("#view-global").hidden = page !== "global";
   // Only one graph and one list of notes at a time in the page (their ids are unique).
@@ -2132,10 +2175,12 @@ function route() {
   if (page === "global") renderGlobal();
   if (page === "memory" && S) { const f = inFolder ? inFolder[1] : ""; if (f !== HOME.folder) { HOME.folder = f; renderSpaceTiles(); } }
   if (inSpace) loadSpace(inSpace[1]);
+  else if (section === "note" && triage) loadSpace(triage.name);
   $("#view-people").hidden = page !== "admin";
   $("#view-memory").hidden = page !== "memory";
   $("#view-triage").hidden = page !== "triage";
-  $("#back-people").hidden = page === "memory";
+  // The sections bar leads everywhere; « ← My memory » is only for the people's page of an administrator.
+  $("#back-people").hidden = page !== "admin";
   $("#nav-admin").hidden = !(admin && page === "memory");
   $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
   document.title = page === "space" ? "MemCP · " + spacePath(inSpace[1]) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
@@ -2280,7 +2325,7 @@ $("#tr-send").addEventListener("click", async () => {
 const TONES = ["sage", "mist", "clay", "dusk"];
 function renderHero() {
   $("#home-nav").replaceChildren(el("button", { type: "button", class: "on", onclick: () => { location.hash = ""; } }, "Spaces"),
-    el("button", { type: "button", onclick: () => { location.hash = "#journal"; } }, "Journal"), el("button", { type: "button", onclick: () => { location.hash = "#graph"; } }, "Graph"));
+    el("button", { type: "button", onclick: () => { location.hash = "#graph"; } }, "Graph"));
   const me = S.me, name = me.display || me.name;
   let h = 0; for (const ch of String(me.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   document.documentElement.dataset.tone = TONES[h % TONES.length];
@@ -3115,7 +3160,8 @@ function renderSpaceTiles() {
       el("div", { class: "big" }, !s.stats ? "—" : num(nFacts)),
       el("div", { class: "reach mute" }, (n => n === 0 ? "No assistant reaches it" : n === 1 ? "1 connection reaches it" : n + " connections reach it")(
         assistantConns().filter(c => (c.rights === "all" || c.rights.split(",").some(r => r.split(":")[0].split("/")[0] === s.name))).length)),
-      el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "note" : "notes") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : "") + (s.stats.last_write ? " · last write " + ago(s.stats.last_write) : "")),
+      el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "note" : "notes") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : ""),
+        s.stats && s.stats.last_write ? el("span", {}, " · ", el("span", {}, "last write"), " " + ago(s.stats.last_write)) : null),
       el("div", { class: "acts" },
         el("button", { class: "primary", onclick: () => { location.hash = "#space/" + s.name; } }, "Open"),
         el("button", { class: "link", onclick: () => openWizard({ space: s.name }) }, "Connect"),
@@ -3186,11 +3232,12 @@ function peerActs(p) {
     if (c) box.append(
       el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename"),
       el("button", { class: "link", title: "Add or remove spaces for this machine; its key stays the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"));
-    if (p.state) box.append(
+    // DOM's append writes « null » for an empty slot: only the buttons that exist.
+    if (p.state) box.append(...[
       el("button", { type: "button", class: "link", onclick: () => askText("A note about " + p.name, p.note || "", v => api("nodes/update", { peer: p.peer, note: v }).then(() => { toast("Done"); nodeDone(); }).catch(fail)) }, "note"),
       p.state === "revoked" ? null : el("button", { type: "button", class: "link", onclick: () => previewThen("nodes/" + (p.state === "paused" ? "resume" : "pause"), { peer: p.peer }, nodeDone) }, p.state === "paused" ? "resume" : "pause"),
       p.state === "revoked" ? null : el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/revoke", { peer: p.peer }, nodeDone) }, "revoke"),
-      p.may_forget ? el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/forget", { peer: p.peer }, nodeDone) }, "forget") : null);
+      p.may_forget ? el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/forget", { peer: p.peer }, nodeDone) }, "forget") : null].filter(Boolean));
   }
   return box.children.length ? box : null;
 }
@@ -3199,11 +3246,15 @@ function machineRow(p) {
   const busy = p.direction === "sending" || p.direction === "receiving";
   const seen = !!(p.last_seen || p.last_activity);
   const pct = Math.max(0, Math.min(100, Number(p.percent == null ? 100 : p.percent)));
-  const arrow = !direct ? (p.gone ? "gone, not seen for 90 days" : "known through " + (p.learned_from || "another machine"))
+  const arrow = !direct ? (p.gone ? "gone, not seen for 90 days" : p.learned_from ? el("span", {}, el("span", {}, "known through"), " " + p.learned_from) : "known through another machine")
     : p.direction === "sending" ? "↑ sending" : p.direction === "receiving" ? "↓ receiving" : seen ? "= in step" : "waiting for the first copy";
   const notes = p.total ? Number(p.done).toLocaleString(loc()) + " / " + Number(p.total).toLocaleString(loc()) + " notes" : "";
-  const how = (p.exposures || []).map(e => e.kind).join(", ");
-  const facts = [p.version ? "version " + p.version : "", p.behind ? "older version" : "", how ? "reached by " + how : "", p.only_local ? "syncs when opened with the peers it can reach" : ""].filter(Boolean).join(" · ");
+  // Each part a text of its own, so the page's translation reads it (a joined sentence is no key).
+  const how = (p.exposures || []).map(e => e.kind);
+  const parts = [p.version ? el("span", {}, el("span", {}, "version"), " " + p.version) : null, p.behind ? el("span", {}, "older version") : null,
+    how.length ? el("span", {}, el("span", {}, "reached by"), " ", ...how.flatMap((k, i) => [i ? ", " : "", el("span", {}, "exposure." + k)])) : null,
+    p.only_local ? el("span", {}, "syncs when opened with the peers it can reach") : null].filter(Boolean);
+  const facts = el("span", {}, ...parts.flatMap((x, i) => i ? [" · ", x] : [x]));
   return el("div", { class: "mrow" + (p.gone ? " gone" : ""), "data-peer": p.peer || p.name },
     el("span", { class: "dot " + (p.gone ? "" : busy ? "busy" : seen ? "ok" : ""), title: p.gone ? "gone" : busy ? "catching up" : seen ? "in step" : "not seen yet" }),
     el("div", {}, el("div", { class: "mname" }, p.name, p.state && p.state !== "active" ? el("span", { class: "badge off", style: "margin-left:6px" }, p.state) : null), el("div", { class: "msub" }, p.note ? p.note + " · " : "", arrow), facts ? el("div", { class: "msub" }, facts) : ""),

@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.11
+
+- **The page in four sections**, the same as every app (docs/UI-SPEC.md, rewritten): *Trace or drop* (write, record or attach, into À trier, which every memory now has from the start), *Journal*, *Spaces* (health is a space among them), *Settings* (machines, assistants, tools, safety, activity, files, advanced).
+- **Machines:** a node renamed never comes back as another machine under its old name; the states of a machine are translated; no « null » button.
+- **One kind of device:** no capture apps on the page; a code pairs a peer of every space.
+
 ## 20261117.0.10
 
 - **Device invitation on a multi-person installation:** the invite of a peer reached at `/mcp/<person>/<connection>/join/invite` is passed to that person's memory, and `POST /join` with a ticket (and its polls) goes to the memory that made the ticket. Before, a ticket was looked for in the first administrator's memory only and was « unknown » for everyone else.

@@ -1068,7 +1068,8 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
         let all_users = users::list_users(ctl)?;
         let visible = |id: &str| id == me.id;
         let reach = users::access_of(ctl, &me.id)?;
-        let triage = memcp_core::triage::of(&app.brain, &me.id)?;
+        // Every memory has its « À trier » from the start: it is where Note writes (docs/UI-SPEC.md, Note).
+        let triage = Some(memcp_core::triage::ensure(&app.brain, &me.id, &me.name)?);
         let spaces: Vec<Value> = app
             .brain
             .spaces()?

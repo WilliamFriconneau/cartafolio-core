@@ -233,11 +233,39 @@ pub fn set_own_name(brain: &Brain, name: &str) -> Result<()> {
         ));
     }
     let ctl = brain.open_control()?;
+    // The name it went by before stays this node's: a peer that still knows it under that name never brings it back
+    // as another machine.
+    let before = meta_get(&ctl, NAME_KEY)?;
+    if let Some(old) = before.filter(|o| o != name) {
+        let mut former = former_names(&ctl)?;
+        if !former.contains(&old) {
+            former.push(old.clone());
+            ctl.execute(
+                "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+                params![FORMER_KEY, serde_json::to_string(&former).unwrap_or_default()],
+            )?;
+        }
+        ctl.execute("DELETE FROM peer_directory WHERE name = ?1", [&old])?;
+    }
     ctl.execute(
         "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
         params![NAME_KEY, name],
     )?;
     Ok(())
+}
+
+const FORMER_KEY: &str = "node_former_names";
+
+/// The names this node went by before (see [`set_own_name`]).
+fn former_names(ctl: &Connection) -> Result<Vec<String>> {
+    Ok(meta_get(ctl, FORMER_KEY)?
+        .and_then(|v| serde_json::from_str(&v).ok())
+        .unwrap_or_default())
+}
+
+/// This node, under its name or one it had.
+fn is_self(ctl: &Connection, name: &str) -> Result<bool> {
+    Ok(own_name_in(ctl)? == name || former_names(ctl)?.iter().any(|n| n == name))
 }
 
 fn read_entry(r: &rusqlite::Row<'_>) -> rusqlite::Result<Entry> {
@@ -325,7 +353,7 @@ pub fn merge(brain: &Brain, from: &str, entries: &[Value], now: i64) -> Result<u
         let Some(name) = v["name"].as_str().filter(|n| valid_name(n)) else {
             continue;
         };
-        if name == own {
+        if name == own || is_self(&ctl, name)? {
             continue;
         }
         let version: String = v["version"]
@@ -486,7 +514,11 @@ pub struct Local {
 /// Revoked nodes are left out. This node is not listed: it is the one asking.
 pub fn union(brain: &Brain, now: i64, locals: Vec<Local>) -> Result<Vec<Value>> {
     let own = own_name(brain)?;
-    let all = entries(brain)?;
+    let ctl = brain.open_control()?;
+    let all: Vec<Entry> = entries(brain)?
+        .into_iter()
+        .filter(|e| !is_self(&ctl, &e.name).unwrap_or(false))
+        .collect();
     let mut used = std::collections::BTreeSet::new();
     let mut rows = Vec::new();
     for l in locals {

@@ -484,3 +484,19 @@ fn the_peers_tool_lists_the_union_with_the_direct_peers_first() -> Res {
     assert_eq!(u[0]["direction"], "idle");
     Ok(())
 }
+
+#[test]
+fn a_node_renamed_never_comes_back_as_another_machine_under_its_old_name() -> Res {
+    let t = Temp::new("dir-rename");
+    let a = node(&t, "alpha")?;
+    let old = directory::own_name(&a)?;
+    directory::set_own_name(&a, "Home Assistant")?;
+    // A peer still knows this node under its old name and tells it.
+    let told = vec![
+        json!({ "name": old, "last_seen": NOW, "version": "20261117.0.8", "first_seen": NOW - 10 }),
+    ];
+    directory::merge(&a, "bravo", &told, NOW)?;
+    let rows = directory::union(&a, NOW, vec![])?;
+    assert!(rows.iter().all(|r| r["name"] != old.as_str()), "{rows:?}");
+    Ok(())
+}
