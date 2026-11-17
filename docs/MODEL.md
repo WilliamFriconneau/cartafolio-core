@@ -4,7 +4,7 @@ Status: design, decided in conversation, not implemented yet. Tests of 0.8.0 pas
 
 ## Decisions that shape everything
 
-- **A person's memory lives in one place.** No sync between devices, no swarm: every client reaches that one place through a proxy, over the local network or a tailnet.
+- **A person's memory lives on every node of that person, as a swarm.** No server and no admin node: every device runs a node, equal to the others, and the nodes keep each other in step (FEDERATION.md, « Spaces in the swarm »). What exists on one node of the person, spaces, sub-spaces, À trier and notes, exists on all of them.
 - **No sharing of a vault between people.** No groups, no shares, no key distribution. A house agent is simply a person of its own.
 - **No new MCP tool.** The tool list stays what it is: tags are a parameter of the existing write and search tools, the tag vocabulary comes back in `stats`, the guide travels in the handshake `instructions`. Unlocking, enrolling and approving are done on the page or the command line, never through a tool.
 - **The part that is free stays small**: Rust, one binary per role, no model inside.
@@ -95,7 +95,7 @@ Until then every change stays additive and carries a test that rewinds a databas
 
 ## Considered and set aside
 
-- **Sync between devices, swarm, zero-knowledge relay.** Dropped: one place per person, a merge written without an audit is a risk to a person's whole memory, and the Home Assistant backup covers durability. If offline use with a local model becomes real, the conditions are written down: every change numbered by (origin node, sequence), a fork representable (a fact may have several successors), uniqueness of a text scoped to a vault, tags as a set, a restored node taking a new node id, the guide accepted only from its owner's devices, an explicit erasure event, and convergence tests (any order, any duplicate, same state). Carry change files with an existing file-sync tool, never the SQLite files.
+- **A zero-knowledge relay.** Set aside: the nodes of a person meet directly (local network, tailnet), and each holds the whole memory or its window of it.
 - **A hash-chained log as the source of truth.** Its value was backup and sync; without sync the database, the Home Assistant backup and the readable export are enough.
 - **Markdown files as the source of truth, mem0, palace-rs, Basic Memory, engram as the engine.** Each lacks something we need or adds a cost we reject (a model on every write, a Docker stack, a copyleft licence, no HTTP server, editing and deleting by the assistant).
 - **Sharing, groups, per-fact rights, passwords.** (Rights on a tag path were set aside too, then built on 2026-11-01 because several apps deposit into one vault: see "Rights by path".)

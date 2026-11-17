@@ -1,6 +1,6 @@
 # Peers: every node is a copy, and together they are the backup
 
-Status: plan. Built after the spaces (see SPACES.md), the mounted folders and the app.
+Status: built. Every node of a person keeps the others in step: notes, spaces with their layout, archives and À trier (« Spaces in the swarm » below).
 
 ## The idea
 

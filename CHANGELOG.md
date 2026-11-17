@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.17
+
+- **The swarm:** every node of a person is equal. A space or sub-space made on any node reaches the others with its label and parent; a rename, a move or an archive follows; the person's À trier is one box across the nodes, so a dictation captured on a device reaches every node, and a note filed from it by two janitors is one note. Peers that joined earlier reach the spaces made since.
+
 ## 20261117.0.16
 
 - **A note sent out of À trier is tagged like one written in its space:** the tag of the space, then what the text says there (signs, levels and measures in a health space, the space's own keywords elsewhere). Notes dictated on a device, which wait in À trier first, now get their tags when the janitor or the person files them.
