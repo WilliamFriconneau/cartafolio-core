@@ -234,37 +234,33 @@ fn only_the_device_that_asked_can_poll_and_only_a_signed_in_person_can_answer() 
 #[test]
 fn requests_are_limited_per_address_and_in_all() -> Res {
     let e = env()?;
-    let mut last = 200;
-    for _ in 0..7 {
-        last = device(
-            &e,
-            "192.168.1.40",
-            "POST",
-            "/join",
-            "",
-            json!({ "device": "x" }),
-        )
-        .status;
+    let ask = |ip: &str| device(&e, ip, "POST", "/join", "", json!({ "device": "x" })).status;
+    // One address keeps at most three requests waiting: the fourth is refused, though the rate (five a minute) allows it.
+    let first: Vec<u16> = (0..4).map(|_| ask("192.168.1.40")).collect();
+    assert_eq!(
+        first,
+        [200, 200, 200, 429],
+        "one address cannot flood the person"
+    );
+    // An IPv6 client counts as its /64: changing the end of the address changes nothing.
+    for i in 1..=3 {
+        assert_eq!(ask(&format!("2001:db8:0:1::{i}")), 200);
     }
-    assert_eq!(last, 429, "one address cannot flood the person");
-    let mut refused = 0;
-    for i in 0..12 {
-        let ip = format!("192.168.2.{i}");
-        if device(&e, &ip, "POST", "/join", "", json!({ "device": "y" })).status == 429 {
-            refused += 1;
-        }
-    }
+    assert_eq!(ask("2001:db8:0:1::99"), 429);
+    // Another device still gets in: the requests of one address do not fill the list.
+    assert_eq!(ask("192.168.1.41"), 200);
+    // And the list is bounded in all.
+    let refused = (0..80)
+        .filter(|i| ask(&format!("10.1.{}.{}", i / 200, i % 200 + 1)) == 429)
+        .count();
     assert!(refused >= 1, "only so many requests wait at once");
     Ok(())
 }
 
 #[test]
-fn a_device_the_person_allowed_in_advance_joins_at_once_and_only_once() -> Res {
+fn a_device_the_person_allowed_in_advance_joins_with_the_ticket_only_and_only_once() -> Res {
     let e = env()?;
     let _ = person(&e, "GET", "/state", json!({}));
-    // Nobody allowed it: it waits.
-    let first = asked(&e, "192.168.1.31", "Sam's phone");
-    assert!(first["check"].is_string());
     let ok = person(
         &e,
         "POST",
@@ -272,17 +268,36 @@ fn a_device_the_person_allowed_in_advance_joins_at_once_and_only_once() -> Res {
         json!({ "device": "Sam's Phone", "minutes": 10 }),
     );
     assert_eq!(ok.status, 200, "{}", ok.body_json());
-    let ask = asked(&e, "192.168.1.32", "Sam's phone");
-    let (id, secret) = (
-        ask["id"].as_str().ok_or("id")?.to_string(),
-        ask["secret"].as_str().ok_or("secret")?.to_string(),
+    let allowed = ok.body_json();
+    let ticket = allowed["ticket"].as_str().ok_or("a ticket")?.to_string();
+    assert_eq!(allowed["single_use"], true);
+    // Saying the name is not enough: any device on the network may say it.
+    let named = asked(&e, "192.168.1.31", "Sam's Phone");
+    let w = device(
+        &e,
+        "192.168.1.31",
+        "GET",
+        &format!("/join/{}", named["id"].as_str().ok_or("id")?),
+        named["secret"].as_str().ok_or("secret")?,
+        json!({}),
     );
+    assert_eq!(w.body_json()["state"], "waiting");
+    // With the ticket the person was shown, it comes in at once.
+    let ask = device(
+        &e,
+        "192.168.1.32",
+        "POST",
+        "/join",
+        "",
+        json!({ "device": "Sam's Phone", "ticket": ticket }),
+    )
+    .body_json();
     let got = device(
         &e,
         "192.168.1.32",
         "GET",
-        &format!("/join/{id}"),
-        &secret,
+        &format!("/join/{}", ask["id"].as_str().ok_or("id")?),
+        ask["secret"].as_str().ok_or("secret")?,
         json!({}),
     );
     let j = got.body_json();
@@ -292,21 +307,16 @@ fn a_device_the_person_allowed_in_advance_joins_at_once_and_only_once() -> Res {
             .as_str()
             .is_some_and(|k| k.starts_with("hcp_"))
     );
-    // The permission was used up: the next request waits for a person.
-    let next = asked(&e, "192.168.1.33", "Sam's phone");
-    let (id2, secret2) = (
-        next["id"].as_str().ok_or("id")?.to_string(),
-        next["secret"].as_str().ok_or("secret")?.to_string(),
-    );
-    let w = device(
+    // The ticket was used up.
+    let again = device(
         &e,
         "192.168.1.33",
-        "GET",
-        &format!("/join/{id2}"),
-        &secret2,
-        json!({}),
+        "POST",
+        "/join",
+        "",
+        json!({ "device": "Sam's Phone", "ticket": ticket }),
     );
-    assert_eq!(w.body_json()["state"], "waiting");
+    assert_eq!(again.status, 403);
     Ok(())
 }
 

@@ -851,13 +851,14 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
             .any(|p| p["name"] == json!("beta") && p["revoked"] != json!(true)),
         "{status_body}"
     );
-    // A lets the device back in for a while, without comparing words: it comes in at once.
+    // A lets the device back in, without comparing words: the page shows a one-time ticket, the device gives it.
     let (status, v) = a.admin_post(
         "/join/allow-device",
         &json!({ "device": "beta", "minutes": 5 }),
     );
     assert_eq!(status, 200, "{v}");
     assert_eq!(v["result"], json!("allowed"), "{v}");
+    let ticket = v["ticket"].as_str().expect("a ticket").to_string();
     std::fs::remove_dir_all(b.data.join("peers")).unwrap();
     let status_file = root.path("rejoin.json");
     let mut cmd = Command::new(exe("memcp-sync"));
@@ -865,7 +866,8 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
         .arg(&b.data)
         .args(["--join", &a.base(), "--status-file"])
         .arg(&status_file)
-        .args(["--name", "beta"]);
+        .args(["--name", "beta"])
+        .env("MEMCP_JOIN_TICKET", &ticket);
     let mut rejoin = Proc::spawn(cmd);
     assert!(rejoin.wait(30).expect("the join did not finish").success());
     let again = peering_of(&b.data);
@@ -873,7 +875,7 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
     b.sync_ok(&again);
     assert_eq!(b.count(), 7);
     assert_eq!(b.fingerprint(), a.fingerprint());
-    // The permission was for one time only: a second device of that name waits for a person.
+    // The ticket was for one time only, and the name alone lets nobody in: nothing waits that a person did not see.
     let (_, pending) = a.admin_get("/join/pending");
     assert!(pending["requests"].as_array().unwrap().is_empty());
 }

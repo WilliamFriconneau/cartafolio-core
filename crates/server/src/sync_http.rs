@@ -13,8 +13,12 @@
 //!   the ones it sent itself.
 //! - `POST /mcp/<connection>/sync/events?space=S` `{events: [...]}`: events from the peer, applied here idempotently.
 //!
-//! Only the connection's own key is let in, and only on the spaces it reaches (read for pulling, write for pushing). The
-//! engine is `memcp_core::sync`; nothing here decides what a merge does.
+//! Only the connection's own key is let in, and only the key of a machine of the person (a connection made by a pairing
+//! code or a join request, `access::Kind::Peer`): an assistant's key, whatever its name, is refused everywhere here.
+//! The status, the directory and the offers of spaces need a full peer (`Caller::is_peer`: every space of the person,
+//! whole, may write); the log of a space (`spaces` read, `events`) is open to any machine of the person on the spaces
+//! it reaches (read for pulling, write for pushing), so a machine the person limited to some spaces keeps in step with
+//! those. The engine is `memcp_core::sync`; nothing here decides what a merge does.
 
 use memcp_core::{Space, access, directory, swarm, sync};
 use serde_json::{Value, json};
@@ -49,15 +53,21 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     if caller.agent != agent {
         return refused(403, "this key does not reach this address");
     }
+    // Only a machine of the person syncs; the rest of what is served here needs a full peer.
+    let full_peer = caller.is_peer();
+    let log_only = matches!(
+        (req.method.as_str(), op),
+        ("GET", "spaces" | "events") | ("POST", "events")
+    );
+    if caller.kind != access::Kind::Peer || !(full_peer || log_only) {
+        return refused(403, "only a machine of the person syncs");
+    }
     let _ = access::touch(&ctl, &caller, crate::app::client_seen(req).as_deref(), now);
     // Serving a request is activity: this node's own entry in the peer directory says so.
     let _ = directory::touch_self(brain, now);
     if !app.rate_ok(now, &format!("sync:{}", caller.id), caller.rate_per_min) {
         return refused(429, "rate limit exceeded").with("Retry-After", "60");
     }
-    // A peer of the person (reads and writes all their spaces): the one that may be told, and answer, the requests to join.
-    let full_peer =
-        caller.agent.starts_with("peer-") && !caller.is_scoped() && !caller.read_only_forced;
     // The log is the whole vault: a vault reached only through tag paths is not the peer's to copy or to write.
     let whole = |s: &Space| caller.read_paths(s).is_none();
     // A machine the person paused is not served until they resume it (its status stays readable).
@@ -77,9 +87,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         ("GET", "peers") => match (directory::node_json(brain, now), directory::to_wire(brain)) {
             (Ok(mut node), Ok(peers)) => {
                 // The devices asking to join this node: told to a peer of the person, who may answer them (join.rs).
-                if full_peer {
-                    node["pending"] = json!(crate::join::pending_here(app));
-                }
+                node["pending"] = json!(crate::join::pending_here(app));
                 Response::json(200, &json!({ "node": node, "peers": peers }))
             }
             (Err(e), _) | (_, Err(e)) => refused(500, &e.to_string()),
@@ -92,8 +100,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             let from = body["node"]["name"].as_str().unwrap_or(&caller.agent);
             let list = body["peers"].as_array().cloned().unwrap_or_default();
             // What the person answered, on the peer, to the requests this node told it about.
-            if full_peer
-                && let Some(answers) = body["answers"].as_array()
+            if let Some(answers) = body["answers"].as_array()
                 && let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id)
             {
                 crate::join::apply_answers(app, &ctl, &me, answers);
@@ -145,13 +152,13 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 200,
                 &json!({
                     "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out,
-                    "offers": takes_offers(&caller), "archived": archived,
+                    "offers": full_peer, "archived": archived,
                 }),
             )
         }
         // A space of the person that the peer has and this node lacks, or one the peer archived.
         ("POST", "spaces") => {
-            if !takes_offers(&caller) {
+            if !full_peer {
                 return refused(
                     403,
                     "only a peer of the person that reaches all their spaces offers a space",
@@ -283,15 +290,6 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         }
         _ => refused(404, "not found"),
     }
-}
-
-/// Whether the caller may offer spaces and archives: a machine of the person (`peer-…`) that reaches every space of
-/// theirs, whole, and may write.
-fn takes_offers(caller: &access::Caller) -> bool {
-    caller.agent.starts_with(sync::PEER_PREFIX)
-        && caller.all_spaces
-        && !caller.read_only_forced
-        && !caller.is_scoped()
 }
 
 /// What `GET /sync/status` answers: every peer of the memory (direct ones with their progress, and the nodes of the

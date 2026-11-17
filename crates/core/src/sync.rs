@@ -1535,7 +1535,7 @@ pub fn machine_name(peer: &str) -> String {
 pub fn status(brain: &Brain, now: i64) -> Result<Vec<PeerStatus>> {
     let ctl = brain.open_control()?;
     let mut peers: BTreeSet<String> = ctl
-        .prepare("SELECT agent FROM connections WHERE agent LIKE 'peer-%' AND revoked_at IS NULL")?
+        .prepare("SELECT agent FROM connections WHERE kind = 'peer' AND revoked_at IS NULL")?
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let rows: Vec<(String, String, String, i64, i64, i64)> = ctl
@@ -1749,7 +1749,7 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         .collect::<rusqlite::Result<_>>()?;
     // A peer that holds a connection here pulls from this node: its progress is its own, so it counts as unknown.
     let blind: i64 = ctl.query_row(
-        "SELECT count(*) FROM connections c WHERE c.agent LIKE 'peer-%' AND c.revoked_at IS NULL
+        "SELECT count(*) FROM connections c WHERE c.kind = 'peer' AND c.revoked_at IS NULL
            AND NOT EXISTS (SELECT 1 FROM sync_state s WHERE s.peer = c.agent AND s.space = ?1)",
         [space.as_str()],
         |r| r.get(0),

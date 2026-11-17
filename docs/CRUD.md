@@ -52,14 +52,14 @@ connections that lose access.
 
 | Op | core | CLI | HTTP | page | MCP |
 |---|---|---|---|---|---|
-| Create = join | `pairing`, join flow | `connect peer-...`, `memcp-sync --join` | `POST /join-memory`, `POST /join/...` | "Join a memory", the join banner | - |
+| Create = join | `pairing`, join flow | `connect peer-...` (on the node's own command line only), `memcp-sync --join` | `POST /join-memory`, `POST /join/...` | "Join a memory", the join banner | - |
 | Read (list, state) | `peers::list` | `node list` | `GET /nodes`, `GET /sync/status` | the machines list | `peers` |
 | Update: name, note | `peers::update` | `node rename PEER NAME`, `node note PEER TEXT` | `POST /nodes/update` | rename and note on the machine | - |
 | Pause, resume sync | `peers::set_paused` | `node pause PEER`, `node resume PEER` | `POST /nodes/pause`, `POST /nodes/resume` | pause / resume button | - |
 | Revoke | `peers::revoke` | `node revoke PEER` (or `revoke`) | `POST /nodes/revoke` | "Revoke" | - |
 | Forget (remove from lists) | `peers::forget` | `node forget PEER` | `POST /nodes/forget` | "Forget" on a revoked or silent node | - |
 
-A node is a peer connection named `peer-<machine>-xxxx`. Revoking stops its key at once; the entry stays, marked
+A node is a machine connection (kind `peer`, made by a pairing code, a join, or `memcp connect peer-…` on the node's own command line), named `peer-<machine>-xxxx`; the name alone makes nothing a machine. Revoking stops its key at once; the entry stays, marked
 revoked, with its history. Forgetting only hides a revoked node, or one silent for 30 days, from the lists (its sync
 progress rows go); it comes back by itself if it speaks again. A paused node is refused by this node's sync routes
 (and not contacted by this node's own sync pass) until resumed; nothing is lost, it resumes where it stopped.

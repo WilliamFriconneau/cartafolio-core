@@ -51,13 +51,11 @@ fn node(name: &str) -> Node {
 /// Serves `n` and makes a connection there for one machine of the person: its address and key.
 fn serve(n: &Node, machine: &str) -> (String, String) {
     let agent = format!("peer-{machine}-0001");
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &n.brain.open_control().unwrap(),
         OWNER,
         &agent,
         &Rights::parse("all").unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();
@@ -85,13 +83,11 @@ fn serve(n: &Node, machine: &str) -> (String, String) {
 /// Another connection on an already served node (`serve` started its server).
 fn connection(n: &Node, address_of_first: &str, machine: &str) -> (String, String) {
     let agent = format!("peer-{machine}-0001");
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &n.brain.open_control().unwrap(),
         OWNER,
         &agent,
         &Rights::parse("all").unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();

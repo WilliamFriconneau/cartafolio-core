@@ -63,7 +63,7 @@ pub fn run<R: BufRead, W: Write>(
         let Some(id) = id else { continue };
         let now = util::now();
         let ctl = app.brain.open_control().map_err(|e| e.to_string())?;
-        let Some(caller) = access::authenticate(&ctl, token, now).ok().flatten() else {
+        let Some(mut caller) = access::authenticate(&ctl, token, now).ok().flatten() else {
             access::auth_event(&ctl, None, None, "mcp_refused", "standard input");
             send(
                 &mut out,
@@ -71,6 +71,8 @@ pub fn run<R: BufRead, W: Write>(
             )?;
             return Err("the key is refused or revoked".into());
         };
+        // The standard input of a program started on this machine.
+        caller.local = true;
         let _ = access::touch(&ctl, &caller, None, now);
         if !app.rate_ok(now, &caller.id, caller.rate_per_min) {
             send(&mut out, &rpc_err(&id, -32000, "Rate limit exceeded", None))?;

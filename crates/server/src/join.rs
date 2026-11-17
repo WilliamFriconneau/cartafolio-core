@@ -31,7 +31,10 @@ pub fn ttl() -> i64 {
     })
 }
 /// Requests waiting at once, from anyone.
-const MAX_PENDING: usize = 8;
+const MAX_PENDING: usize = 64;
+/// Requests waiting at once from one address (an IPv6 client counts as its /64): one device on the network cannot fill
+/// the list and hide the request of the person's own device.
+const MAX_PENDING_PER_IP: usize = 3;
 /// Requests a minute from one address.
 const PER_MIN: i64 = 5;
 
@@ -53,6 +56,8 @@ pub enum State {
 
 pub struct Join {
     device: String,
+    /// Who asked (the address, cut to its /64 for IPv6), for the cap on requests waiting from one address.
+    from: String,
     /// The id of the node that asks, when it says it.
     node_id: Option<String>,
     check: String,
@@ -118,11 +123,15 @@ pub fn request(app: &App, req: &Request) -> Response {
     };
     let mut joins = app.joins.lock().unwrap_or_else(|e| e.into_inner());
     sweep(&mut joins, now);
-    let waiting = joins
+    let from = App::guard_key(&who);
+    let waiting: Vec<&Join> = joins
         .values()
         .filter(|j| matches!(j.state, State::Waiting) && now - j.created <= ttl())
-        .count();
-    if waiting >= MAX_PENDING {
+        .collect();
+    if ticket_owner.is_none()
+        && (waiting.len() >= MAX_PENDING
+            || waiting.iter().filter(|j| j.from == from).count() >= MAX_PENDING_PER_IP)
+    {
         return refused(
             429,
             "too many requests are waiting, try again in a few minutes",
@@ -131,20 +140,8 @@ pub fn request(app: &App, req: &Request) -> Response {
     let id = util::random_base32(12);
     let secret = util::random_base32(24);
     let check = phrase();
-    // A device the person allowed in advance joins at once, once: no words to compare.
-    let allowed = match ticket_owner {
-        Some((id, name)) => Some((id, name, now)),
-        None => {
-            let mut a = app
-                .allowed_devices
-                .lock()
-                .unwrap_or_else(|e| e.into_inner());
-            a.retain(|_, (_, _, until)| *until > now);
-            a.remove(&device.to_lowercase())
-        }
-    };
     let mut state = State::Waiting;
-    if let Some((user_id, user_name, _)) = allowed
+    if let Some((user_id, user_name)) = ticket_owner
         && let Ok(ctl) = app.brain.open_control()
         && let Ok((code, _)) = pairing::create_for_peer(&app.brain, &user_id, &user_name, now)
         && let Ok(paired) = pairing::redeem(&ctl, &code, &device, now)
@@ -161,6 +158,7 @@ pub fn request(app: &App, req: &Request) -> Response {
         id.clone(),
         Join {
             device,
+            from,
             node_id,
             check: check.clone(),
             secret: secret.clone(),
@@ -247,26 +245,23 @@ pub fn decide(
 ) -> Result<Value, Response> {
     let now = util::now();
     if path == "/join/allow-device" {
-        // The person lets a device come back (a reinstalled phone) without the three words, for a while, once.
+        // The person lets a device come back (a reinstalled phone) without the three words: a one-time ticket, shown to
+        // the person only, that the device gives with its request. A device name is no secret (any device on the
+        // network may say it), so it lets nothing in by itself.
         let device = clean_device(body.get("device").and_then(Value::as_str).unwrap_or(""));
         let minutes = body
             .get("minutes")
             .and_then(Value::as_i64)
-            .unwrap_or(30)
-            .clamp(1, 1440);
-        let mut a = app
-            .allowed_devices
-            .lock()
-            .unwrap_or_else(|e| e.into_inner());
-        a.retain(|_, (_, _, until)| *until > now);
-        if a.len() >= 16 {
-            return Err(refused(429, "too many devices are allowed at once"));
-        }
-        a.insert(
-            device.to_lowercase(),
-            (me.id.clone(), me.name.clone(), now + minutes * 60),
-        );
-        return Ok(json!({ "result": "allowed", "device": device, "minutes": minutes }));
+            .unwrap_or(TICKET_TTL / 60)
+            .clamp(1, TICKET_TTL / 60);
+        let ticket = make_ticket_for(app, &me.id, &me.name, now, minutes * 60)?;
+        let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+            .map(|l| l.to_link())
+            .ok();
+        return Ok(json!({
+            "result": "allowed", "device": device, "minutes": minutes,
+            "ticket": ticket, "link": link, "expires_in": minutes * 60, "single_use": true,
+        }));
     }
     let id = body
         .get("id")
@@ -364,7 +359,7 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
     if caller.agent != agent {
         return refused(403, "this key does not reach this address");
     }
-    if !caller.agent.starts_with("peer-") || caller.is_scoped() || caller.read_only_forced {
+    if !caller.is_peer() {
         return refused(403, "only a peer of the person may invite a device");
     }
     if !app.rate_ok(now, &format!("invite:{}", caller.id), 6) {
@@ -391,6 +386,17 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
 
 /// A one-time ticket for `person`: kept as a hash, valid [`TICKET_TTL`] seconds.
 pub fn make_ticket(app: &App, user_id: &str, person: &str, now: i64) -> Result<String, Response> {
+    make_ticket_for(app, user_id, person, now, TICKET_TTL)
+}
+
+/// A one-time ticket for `person`, valid `secs` seconds.
+fn make_ticket_for(
+    app: &App,
+    user_id: &str,
+    person: &str,
+    now: i64,
+    secs: i64,
+) -> Result<String, Response> {
     let ticket = util::random_base32(24);
     let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
     t.retain(|_, (_, _, until)| *until > now);
@@ -399,7 +405,7 @@ pub fn make_ticket(app: &App, user_id: &str, person: &str, now: i64) -> Result<S
     }
     t.insert(
         ticket_key(&ticket),
-        (user_id.to_string(), person.to_string(), now + TICKET_TTL),
+        (user_id.to_string(), person.to_string(), now + secs),
     );
     Ok(ticket)
 }
@@ -443,7 +449,7 @@ pub fn by_peer(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Res
     if caller.agent != agent {
         return refused(403, "this key does not reach this address");
     }
-    if !caller.agent.starts_with("peer-") || caller.is_scoped() || caller.read_only_forced {
+    if !caller.is_peer() {
         return refused(403, "only a peer of the person may answer a device");
     }
     let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id) else {

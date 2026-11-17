@@ -98,15 +98,19 @@ fn node(name: &str, connections: &[(&str, &str)]) -> Node {
         connections
             .iter()
             .map(|(agent, rights)| {
-                access::connect_for(
-                    &ctl,
-                    &sam,
-                    agent,
-                    &Rights::parse(rights).unwrap(),
-                    None,
-                    false,
-                    false,
-                )
+                (if agent.starts_with("peer-") {
+                    access::connect_peer(&ctl, &sam, agent, &Rights::parse(rights).unwrap(), false)
+                } else {
+                    access::connect_for(
+                        &ctl,
+                        &sam,
+                        agent,
+                        &Rights::parse(rights).unwrap(),
+                        None,
+                        false,
+                        false,
+                    )
+                })
                 .unwrap()
             })
             .collect()

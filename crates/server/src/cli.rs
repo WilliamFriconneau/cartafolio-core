@@ -155,15 +155,26 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
     let brain = open(data)?;
     let who = person(&brain, o.user.as_deref())?;
     let ctl = brain.open_control().map_err(fail)?;
-    let token = access::connect_for(
-        &ctl,
-        &who.id,
-        &o.agent,
-        &o.rights,
-        o.days,
-        o.read_only,
-        o.rotate,
-    )
+    // The owner of the node, on its own command line, may make the connection of a machine by hand: a name `peer-…`
+    // makes one (no expiry, never read-only). Nowhere else does a name make a machine.
+    let token = if o.agent.starts_with(memcp_core::sync::PEER_PREFIX) {
+        if o.days.is_some() || o.read_only {
+            return Err(bad(
+                "the connection of a machine has no --days and is not --read-only",
+            ));
+        }
+        access::connect_peer(&ctl, &who.id, &o.agent, &o.rights, o.rotate)
+    } else {
+        access::connect_for(
+            &ctl,
+            &who.id,
+            &o.agent,
+            &o.rights,
+            o.days,
+            o.read_only,
+            o.rotate,
+        )
+    }
     .map_err(fail)?;
     if o.internal {
         access::set_internal(&ctl, &o.agent, true).map_err(fail)?;
