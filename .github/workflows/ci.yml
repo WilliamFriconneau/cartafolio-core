@@ -21,6 +21,16 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
+  e2e:
+    # Real processes: the programs of the project talk to each other on loopback ports (scripts/e2e.sh).
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: scripts/e2e.sh
+
   supply-chain:
     runs-on: ubuntu-latest
     steps:
