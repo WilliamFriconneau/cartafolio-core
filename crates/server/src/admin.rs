@@ -453,11 +453,14 @@ fn action(
             let name = body.get("name").and_then(Value::as_str).unwrap_or("");
             crate::replica::start(app, ctl, me, name).map_err(fail)
         }
-        "/join-memory" => crate::replica::join_start(
-            app,
-            body.get("address").and_then(Value::as_str).unwrap_or(""),
-        )
-        .map_err(|m| err(400, &m)),
+        "/join-memory" => {
+            admin_only(me)?;
+            crate::replica::join_start(
+                app,
+                body.get("address").and_then(Value::as_str).unwrap_or(""),
+            )
+            .map_err(|m| err(400, &m))
+        }
         "/spaces" => {
             // A vault comes from a kind of the catalogue, named after the person.
             let space = app
