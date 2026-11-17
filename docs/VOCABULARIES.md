@@ -23,6 +23,11 @@ same words everywhere. That list is a **vocabulary**: too large for the `rules` 
   language of the space.
 - The janitor never rewrites a vocabulary. It may propose to copy a frequent term into the `rules` note.
 
+## Tags at write time
+
+The node also reads the vocabularies when a note is written (see [AUTOTAG.md](AUTOTAG.md)): a term found in the text becomes
+a tag, `signe/<term>` in a health space, the plain word elsewhere. The plural is the same word.
+
 ## Where the terms can come from
 
 The person brings the file; the app embeds none, so no licence travels with it. Candidates to check
