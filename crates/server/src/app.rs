@@ -321,7 +321,7 @@ impl App {
             return Response::json(401, &json!({ "error": "refused" }))
                 .with("WWW-Authenticate", &crate::oauth::challenge(self, address));
         };
-        let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
+        let _ = access::touch(&ctl, &caller, client_seen(req).as_deref(), now);
         // At an address that names a vault, the key is seen through that vault alone; one that
         // does not reach it is told so, the same whether the vault exists or not. At an address
         // that names a connection, only that connection's own key is let in.
@@ -491,6 +491,17 @@ impl App {
                 json!({ "content": [{ "type": "text", "text": e.to_string() }], "isError": true }),
             ),
         }
+    }
+}
+
+/// The client address kept with a connection's last use: `funnel <address>` for a request that came through Tailscale
+/// Funnel (the internet: Claude on the web), whose address seen here is the proxy's. The peer directory reads it to say
+/// whether an assistant is in the cloud or on the person's machines.
+pub(crate) fn client_seen(req: &Request) -> Option<String> {
+    if through_funnel(req) {
+        Some(format!("funnel {}", req.ip.as_deref().unwrap_or("?")))
+    } else {
+        req.ip.clone()
     }
 }
 

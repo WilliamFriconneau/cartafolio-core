@@ -2,7 +2,7 @@
 
 What `memcp-core` offers, by module. Every public item has a doc comment (`cargo doc -p memcp-core --open`); this page is the map. The crate has no network and no model: it opens files in a data directory (0700; files 0600), one SQLite file per space plus `control.sqlite`.
 
-**Invariants.** Facts are append-only: a fact is never deleted or edited; `supersede` marks the old one `replaced`, `retire` marks it `retired`, both keep the text and a history event. The only erasures are `files::erase` (a voice recording seven days after its transcript) and, on a replica that chose a window, `sync::prune_window` (local, never synchronised). The author of a write is the connection's name, never an argument. A function that takes a `Caller` or goes through `tools::call` checks rights; the lower-level functions take an open connection and trust the caller: only the server and the tools may reach them.
+**Invariants.** Facts are append-only: a fact is never deleted or edited; `supersede` marks the old one `replaced`, `retire` marks it `retired`, both keep the text and a history event. The only erasures are `files::erase` (a voice recording once its transcript exists) and, on a replica that chose a window, `sync::prune_window` (local, never synchronised). The author of a write is the connection's name, never an argument. A function that takes a `Caller` or goes through `tools::call` checks rights; the lower-level functions take an open connection and trust the caller: only the server and the tools may reach them.
 
 **Rights.** A connection holds `read` or `write` per space (`write` includes `read`), or `all`; it can be limited to tag paths inside a vault, and forced read-only. Rights never go beyond the person's own access. Column "Rights" below says what a caller needs; "Errors" lists the kinds of the [error vocabulary](#error-vocabulary).
 
@@ -44,7 +44,7 @@ Rights: Tools: `file_put`, `file_retire`, `file_erase` need write; `file_get`, `
 | `list` | Active files of a space, newest first, optionally matching words of the name or note | none (pure) |
 | `retire` | Retires a file: out of lists and searches, the bytes stay on disk | `Error::Invalid` (empty reason, unknown file) |
 | `erased` | The recording is gone for good (see `erase`); its record stays | `Error::Sqlite`/`Io` on storage failure |
-| `erase` | Erases a voice memo for good, seven days after the text that replaces it was written | `Error::Invalid` (not a recording, transcript missing, under seven days) |
+| `erase` | Erases a voice memo for good, once the text that replaces it is written | `Error::Invalid` (not a recording, transcript missing or not yet written) |
 | `erase_at` | `erase` at a given instant | as `erase` |
 
 ## `access`: Connections, rights and tokens

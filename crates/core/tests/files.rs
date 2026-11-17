@@ -204,8 +204,8 @@ fn the_tools_stay_within_the_caller_spaces() -> Res {
 // --- erasing a recording once it is transcribed ------------------------------------------------
 //
 // The one exception to « nothing is erased »: a voice memo waits in the inbox as audio, a
-// program transcribes it and deposits the text, and seven days later the recording itself is
-// erased, with a trace. Nothing else is ever erased.
+// program transcribes it and deposits the text, and then the recording itself is erased, with a
+// trace. Nothing else is ever erased.
 
 const DAY: i64 = 86_400;
 
@@ -264,7 +264,7 @@ fn transcribed_at(
 }
 
 #[test]
-fn a_transcribed_recording_is_erased_after_seven_days_with_a_trace() -> Res {
+fn a_transcribed_recording_is_erased_once_its_text_exists_with_a_trace() -> Res {
     let t = Temp::new("files");
     let b = brain(&t)?;
     let personal = sp("personal");
@@ -273,7 +273,7 @@ fn a_transcribed_recording_is_erased_after_seven_days_with_a_trace() -> Res {
     transcribed_at(&b, &personal, &transcript, then)?;
     assert!(exists(&b, &personal, &memo.sha256));
 
-    // One second short of seven days: refused, and the bytes stay.
+    // Before its text was written: refused, and the bytes stay.
     let early = files::erase_at(
         &b,
         &personal,
@@ -281,12 +281,9 @@ fn a_transcribed_recording_is_erased_after_seven_days_with_a_trace() -> Res {
         &memo.id,
         &personal,
         &transcript,
-        then + 7 * DAY - 1,
+        then - 1,
     );
-    assert!(
-        matches!(&early, Err(e) if e.to_string().contains("7 days")),
-        "{early:?}"
-    );
+    assert!(early.is_err(), "{early:?}");
     assert!(exists(&b, &personal, &memo.sha256));
 
     let done = files::erase_at(
@@ -296,7 +293,7 @@ fn a_transcribed_recording_is_erased_after_seven_days_with_a_trace() -> Res {
         &memo.id,
         &personal,
         &transcript,
-        then + 7 * DAY,
+        then,
     )?;
     assert_eq!(done.status, "retired");
     assert!(!exists(&b, &personal, &memo.sha256), "the bytes are gone");
@@ -496,13 +493,6 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
         ),
         "another vault: unknown file"
     );
-    // Too early, said in plain words; the recording stays.
-    let early = tools::call(&b, &worker, "file_erase", &args);
-    assert!(
-        matches!(&early, Err(ToolError::Invalid(m)) if m.contains("7 days")),
-        "{early:?}"
-    );
-    assert!(exists(&b, &personal, &memo.sha256));
     transcribed_at(
         &b,
         &personal,

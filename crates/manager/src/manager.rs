@@ -36,6 +36,10 @@ use serde_json::{Value, json};
 pub struct Options {
     /// The public address shown in connection instructions.
     pub public_url: Option<String>,
+    /// The name every memory here goes by in the peer directory (`--node-name`; the apps show it).
+    pub node_name: Option<String>,
+    /// The address the manager listens on (`--listen`): with `public_url`, how the nodes here can be reached.
+    pub listen: Option<String>,
     pub allowed_origins: Vec<String>,
     /// Where the OAuth consent page is reached.
     pub login_url: Option<String>,
@@ -233,6 +237,25 @@ impl Manager {
         }
         let mut app = App::new(brain);
         Self::configure(&mut app, &self.opts);
+        // The person's memory in the peer directory: the installation's name, and how it can be reached (the local
+        // network on the listener, the tailnet or the internet on the public address). Without it the apps saw a
+        // made-up name and no way in.
+        if let Some(n) = self.opts.node_name.as_deref() {
+            let _ = memcp_core::directory::set_own_name(&app.brain, n);
+        }
+        let tailnet = self
+            .opts
+            .login_url
+            .as_deref()
+            .filter(|_| !self.opts.tailnet_users.is_empty());
+        let _ = memcp_core::directory::set_exposures(
+            &app.brain,
+            &memcp_core::directory::exposures_from(
+                self.opts.listen.as_deref().unwrap_or("127.0.0.1:8791"),
+                &app.public_url,
+                tailnet,
+            ),
+        );
         for (login, person) in &self.opts.tailnet_users {
             if person == &u.name {
                 app.tailnet_users.insert(login.clone(), u.name.clone());

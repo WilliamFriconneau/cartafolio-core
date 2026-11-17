@@ -685,3 +685,24 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     assert_eq!(pair("ZZZZ-ZZZZ").status, 429);
     Ok(())
 }
+
+#[test]
+fn each_memory_of_the_installation_goes_by_its_name_and_says_how_it_is_reached() -> Res {
+    let d = Dir::new("directory-name");
+    let mut opts = options();
+    opts.node_name = Some("Home Assistant".into());
+    opts.listen = Some("0.0.0.0:8791".into());
+    let m = Manager::open(d.path(), opts).map_err(|e| e.1)?;
+    m.add_person("lou", "Lou", None, false).map_err(|e| e.1)?;
+    let app = m.person_app("lou").ok_or("no app for lou")?;
+    let node = memcp_core::directory::node_json(&app.brain, 0)?;
+    assert_eq!(node["name"], "Home Assistant");
+    let kinds: Vec<&str> = node["exposures"]
+        .as_array()
+        .ok_or("no exposures")?
+        .iter()
+        .filter_map(|e| e["kind"].as_str())
+        .collect();
+    assert!(kinds.contains(&"lan"), "{kinds:?}");
+    Ok(())
+}

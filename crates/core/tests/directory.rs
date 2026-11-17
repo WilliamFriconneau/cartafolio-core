@@ -392,6 +392,19 @@ fn an_assistant_connection_is_cloud_when_it_comes_from_the_internet_and_local_ot
         [],
     )?;
     assert_eq!(directory::connections(&a, OWNER)?[1]["kind"], "cloud");
+    // Through Tailscale Funnel the address seen is the proxy's, a private one: the marker says the internet.
+    ctl.execute(
+        "UPDATE connections SET last_ip = 'funnel 172.30.32.1' WHERE agent = 'claude-web'",
+        [],
+    )?;
+    assert_eq!(directory::connections(&a, OWNER)?[1]["kind"], "cloud");
+    // The node's own tools (janitor, voice, sorter) are not assistants.
+    access::set_internal(&ctl, "unused", true)?;
+    let names: Vec<String> = directory::connections(&a, OWNER)?
+        .iter()
+        .map(|c| c["name"].as_str().unwrap().to_string())
+        .collect();
+    assert_eq!(names, ["claude-code", "claude-web"]);
     Ok(())
 }
 

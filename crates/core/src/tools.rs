@@ -417,7 +417,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "file_erase",
-            description: "Erases for good the recording of a voice memo that was kept as audio in the inbox (filed under inbox/audio), seven days after its transcription was written. The only thing this memory ever erases: nothing else, and not before the text exists. Give the id of the file and the id of the fact that holds its transcription (an active text fact in a vault you can read, wherever it was sorted); the record, the reason and the transcription stay.".into(),
+            description: "Erases for good the recording of a voice memo that was kept as audio in the inbox (filed under inbox/audio), once its transcription is written. The only thing this memory ever erases: nothing else, and not before the text exists. Give the id of the file and the id of the fact that holds its transcription (an active text fact in a vault you can read, wherever it was sorted); the record, the reason and the transcription stay.".into(),
             schema: json!({ "type": "object", "properties": { "id": { "type": "string", "description": "The recording (file id)." }, "transcript": { "type": "string", "description": "The id of the fact that holds its transcription." } }, "required": ["id", "transcript"] }),
         });
     }

@@ -588,7 +588,8 @@ pub fn connections(brain: &Brain, user: &str) -> Result<Vec<Value>> {
     let via = own_name_in(&ctl)?;
     let mut st = ctl.prepare(
         "SELECT agent, last_used_at, last_ip FROM connections
-         WHERE console = 0 AND revoked_at IS NULL AND coalesce(user_id, 'owner') = ?1 AND agent NOT LIKE 'peer-%'
+         WHERE console = 0 AND revoked_at IS NULL AND internal = 0
+           AND coalesce(user_id, 'owner') = ?1 AND agent NOT LIKE 'peer-%'
          ORDER BY agent",
     )?;
     let rows = st.query_map([user], |r| {
@@ -601,20 +602,23 @@ pub fn connections(brain: &Brain, user: &str) -> Result<Vec<Value>> {
     let mut out = Vec::new();
     for row in rows {
         let (name, used, ip) = row?;
-        let cloud = ip
-            .as_deref()
-            .and_then(|i| {
-                i.trim_start_matches('[')
-                    .split(']')
-                    .next()
-                    .map(str::to_string)
-            })
-            .and_then(|i| {
-                i.parse::<std::net::IpAddr>()
-                    .ok()
-                    .or_else(|| i.rsplit_once(':').and_then(|(h, _)| h.parse().ok()))
-            })
-            .is_some_and(|ip| !is_private(&ip));
+        // Through Tailscale Funnel (`funnel <proxy address>`, app::client_seen): the internet, whatever the address.
+        let funnel = ip.as_deref().is_some_and(|i| i.starts_with("funnel"));
+        let cloud = funnel
+            || ip
+                .as_deref()
+                .and_then(|i| {
+                    i.trim_start_matches('[')
+                        .split(']')
+                        .next()
+                        .map(str::to_string)
+                })
+                .and_then(|i| {
+                    i.parse::<std::net::IpAddr>()
+                        .ok()
+                        .or_else(|| i.rsplit_once(':').and_then(|(h, _)| h.parse().ok()))
+                })
+                .is_some_and(|ip| !is_private(&ip));
         out.push(json!({
             "name": name,
             "kind": if cloud { "cloud" } else { "local" },

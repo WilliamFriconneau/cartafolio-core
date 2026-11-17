@@ -110,6 +110,8 @@ fn options(a: &Args) -> Result<Options, Failure> {
         public_url: flag("--public-url")
             .map(String::from)
             .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok()),
+        node_name: flag("--node-name").map(String::from),
+        listen: flag("--listen").map(String::from),
         allowed_origins: flag("--allow-origin")
             .map(|o| vec![o.to_string()])
             .unwrap_or_default(),

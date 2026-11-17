@@ -1,6 +1,6 @@
 //! The voice part of the intake, on the machine that has the speech model: a recording that reached an inbox with no
 //! text is read by Whisper here, its text becomes a note of the same inbox (filed later like any note), and the recording
-//! is erased from the memory seven days after its text was filed — the one erasure the memory has.
+//! is erased from the memory as soon as its text is filed — the one erasure the memory has.
 //!
 //! - A recording already named by a note (transcribed on the capturing side) is left alone: a note received means the work
 //!   is done.
@@ -22,8 +22,8 @@ use crate::whisper::{Heard, VoiceSettings, Whisper};
 const NOTE_MAX: usize = 3800;
 /// Tries before a recording that cannot be read is left alone.
 const MAX_FAILS: u64 = 3;
-/// A recording is erased when its filed text is this old: seven days, and an hour (the memory refuses earlier).
-const ERASE_AFTER: i64 = 7 * 86_400 + 3600;
+/// A recording is erased as soon as its text is filed (the memory allows it from then on).
+const ERASE_AFTER: i64 = 0;
 /// Passes refused by the memory before an erasure is given up (the text was retired by someone, say).
 const MAX_ERASE_FAILS: u64 = 5;
 

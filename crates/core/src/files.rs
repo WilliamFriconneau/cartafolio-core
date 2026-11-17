@@ -4,7 +4,7 @@
 //! gets a fact describing it, so `recall` finds it by its name or note. The type
 //! comes from the content, never from the declared name. Nothing is deleted: a
 //! file is retired and stays on disk. The one exception is [`erase`]: a voice memo kept as
-//! audio in the inbox, once its transcription has been written for seven days.
+//! audio in the inbox, once its transcription has been written.
 
 use std::fs::{self, DirBuilder, OpenOptions};
 use std::io::Write;
@@ -494,8 +494,9 @@ pub fn mark_transcription_failed(
     Ok(f)
 }
 
-/// How long a recording is kept after its transcription was written (seven days).
-pub const ERASE_AFTER: i64 = 7 * 24 * 3600;
+/// How long a recording is kept after its transcription was written: not at all. Once its text exists, the audio
+/// goes (the person's rule: a transcribed voice note is thrown away); the record, the reason and the text stay.
+pub const ERASE_AFTER: i64 = 0;
 
 const ERASED: &str = "erased: ";
 
@@ -514,7 +515,7 @@ pub fn erased(brain: &Brain, space: &Space, id: &str) -> Result<bool> {
         .is_some_and(|reason| reason.starts_with(ERASED)))
 }
 
-/// Erases a voice memo for good, seven days after the text that replaces it was written.
+/// Erases a voice memo for good, once the text that replaces it is written.
 pub fn erase(
     brain: &Brain,
     space: &Space,
@@ -624,7 +625,7 @@ pub fn erase_at(
     }
     if now < at.saturating_add(ERASE_AFTER) {
         return Err(Error::Invalid(
-            "a recording is erased 7 days after its transcription was written".into(),
+            "a recording is erased once its transcription is written, not before".into(),
         ));
     }
     let reason = format!("{ERASED}transcribed in {transcript}, recording erased by {author}");

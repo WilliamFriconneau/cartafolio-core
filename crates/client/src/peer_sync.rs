@@ -16,15 +16,21 @@ const PAGE_BYTES: usize = 4 << 20;
 /// What a pass did, per space.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Pass {
+    /// Spaces exchanged in this pass.
     pub spaces: usize,
+    /// Events received from the peer and applied here.
     pub pulled: usize,
+    /// Events of this node the peer took.
     pub pushed: usize,
+    /// Events that touched a fact changed on both sides (kept, flagged for the person).
     pub disputed: usize,
     /// Notes this replica removed to keep to its window (see `memcp_core::sync::prune_window`).
     pub pruned: usize,
+    /// What went wrong, in words, one line each; the pass goes on past them.
     pub problems: Vec<String>,
 }
 
+/// The peer this node keeps in step with, reached at the address of this node's own connection there.
 pub struct Peer {
     /// The address of this node's connection on the peer: `https://…/mcp/<person>/<connection>`.
     address: String,
@@ -35,6 +41,7 @@ pub struct Peer {
 }
 
 impl Peer {
+    /// `address`: this node's connection on the peer; `key`: its key; `name`: how this node keeps the peer.
     pub fn new(address: &str, key: &str, name: &str) -> Peer {
         let agent: ureq::Agent = ureq::Agent::config_builder()
             .http_status_as_error(false)
@@ -250,7 +257,9 @@ fn read(res: &mut ureq::http::Response<ureq::Body>) -> Result<Value, String> {
 /// A request to join another memory, as the asking machine holds it.
 #[derive(Debug, Clone)]
 pub struct JoinAsk {
+    /// The request's id on the other node (`GET /join/<id>`).
     pub id: String,
+    /// The secret that proves this machine asked (`X-Join-Secret`).
     pub secret: String,
     /// The three words the person compares on both machines.
     pub check: String,

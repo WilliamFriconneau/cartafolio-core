@@ -1163,11 +1163,11 @@ Example call and answer:
 
 ### `file_erase`
 
-Erases for good the recording of a voice memo that was kept as audio in the inbox (filed under inbox/audio), seven days after its transcription was written. The only thing this memory ever erases: nothing else, and not before the text exists. Give the id of the file and the id of the fact that holds its transcription (an active text fact in a vault you can read, wherever it was sorted); the record, the reason and the transcription stay.
+Erases for good the recording of a voice memo that was kept as audio in the inbox (filed under inbox/audio), once its transcription is written. The only thing this memory ever erases: nothing else, and not before the text exists. Give the id of the file and the id of the fact that holds its transcription (an active text fact in a vault you can read, wherever it was sorted); the record, the reason and the transcription stay.
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it).
 - **Answer:** `{ result: "erased", file }`.
-- **Errors:** `invalid` (unknown file, not a recording, transcript missing or younger than seven days).
+- **Errors:** `invalid` (unknown file, not a recording, transcript missing).
 - **Effects:** Erases the recording bytes for good: the only erasure in the memory. Record, reason and transcript stay.
 
 | Field | Type | Required | Limits |

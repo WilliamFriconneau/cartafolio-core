@@ -26,7 +26,7 @@ This is why rights are not "per tag" or "per fact". Filtering inside one file wo
 
 ## Facts, not chat logs
 
-A memory entry is a short, dated, sourced fact that stands on its own. A fact is never edited. Correcting it writes a new one that replaces the old, and the old stays readable in the history. Retiring leaves a tombstone with a reason. Near-duplicates are not written until the assistant has decided. Nothing is deleted behind your back. The one exception is the recording of a voice memo kept in the inbox: once a program has written its transcription, `file_erase` erases the audio seven days later, and only that, leaving the record and the reason (see `docs/MODEL.md`).
+A memory entry is a short, dated, sourced fact that stands on its own. A fact is never edited. Correcting it writes a new one that replaces the old, and the old stays readable in the history. Retiring leaves a tombstone with a reason. Near-duplicates are not written until the assistant has decided. Nothing is deleted behind your back. The one exception is the recording of a voice memo kept in the inbox: once a program has written its transcription, `file_erase` erases the audio, and only that, leaving the record and the reason (see `docs/MODEL.md`).
 
 ## Instructions and data are not the same thing
 

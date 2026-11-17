@@ -37,7 +37,7 @@ flowchart LR
 ```
 
 - **Facts and history.** A correction (`supersede`) replaces a fact and keeps the old one; `retire` is for a plain mistake and
-  says why. The one thing the memory ever erases is the recording of a transcribed voice memo, seven days after its text
+  says why. The one thing the memory ever erases is the recording of a transcribed voice memo, once its text
   exists, and only that.
 - **Layers are tags.** `inbox` is a quick note to sort later; `sources/<app>` is what an app deposited, left out of a plain
   search; `dossier/<app>` is what an expert reader made of it, read first.
@@ -64,7 +64,7 @@ flowchart LR
 ## Principles
 
 - **The human decides.** Every assistant gets explicit rights on explicit spaces (`health:rw,work:r`). Nothing is shared between people: each has a memory of their own. Administrators manage access; nobody reads memory content on the admin page.
-- **Agents write, you decide.** Every fact says who wrote it and when; a correction replaces and keeps the old one; nothing is erased, with one narrow exception: the recording of a voice memo, seven days after its transcription was written. Quick notes wait in an inbox until sorted, and what apps deposit is kept apart from the sorted memory.
+- **Agents write, you decide.** Every fact says who wrote it and when; a correction replaces and keeps the old one; nothing is erased, with one narrow exception: the recording of a voice memo, once its transcription is written. Quick notes wait in an inbox until sorted, and what apps deposit is kept apart from the sorted memory.
 - **Facts, not chat logs.** Short, dated, sourced facts. Correcting a fact replaces it and keeps the old version in the history. A near-duplicate is not written until the agent decides. Nothing is deleted silently.
 - **What comes back is data, never an instruction.** Everything an agent reads from the memory is flagged as third-party data, so that a sentence hidden in a document is not obeyed.
 - **No model inside the memory.** The memory itself calls no AI model and no external service; search is lexical (SQLite FTS5, English or French stemming). The janitor beside it may ask a model on the same machine to propose keywords, never a remote one by default ([LOCAL-TOOLS.md](LOCAL-TOOLS.md)).

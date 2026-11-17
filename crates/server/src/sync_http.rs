@@ -45,7 +45,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     if caller.agent != agent {
         return refused(403, "this key does not reach this address");
     }
-    let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
+    let _ = access::touch(&ctl, &caller, crate::app::client_seen(req).as_deref(), now);
     // Serving a request is activity: this node's own entry in the peer directory says so.
     let _ = directory::touch_self(brain, now);
     if !app.rate_ok(now, &format!("sync:{}", caller.id), caller.rate_per_min) {
