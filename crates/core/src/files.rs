@@ -218,6 +218,15 @@ pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) 
     Ok(())
 }
 
+/// Removes the bytes of a stored file from this space's folder (a window replica pruning, see `sync`).
+pub(crate) fn remove_blob(brain: &Brain, space: &Space, sha: &str) -> Result<()> {
+    match fs::remove_file(blob_dir(brain, space).join(sha)) {
+        Ok(()) => Ok(()),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(e.into()),
+    }
+}
+
 /// The bytes of a stored file, checked against their digest; `None` when they are not on disk.
 pub(crate) fn read_blob(brain: &Brain, space: &Space, sha: &str) -> Result<Option<Vec<u8>>> {
     match fs::read(blob_dir(brain, space).join(sha)) {

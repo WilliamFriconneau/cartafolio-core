@@ -553,6 +553,8 @@ enum Step {
     Disputed,
     /// Logged, without effect, and told to the sender.
     Refused(String),
+    /// About something this replica's window left out or pruned: ignored, and not logged (see [`prune_window`]).
+    Dropped,
 }
 
 /// A problem with one event.
@@ -678,10 +680,12 @@ fn apply_created(conn: &Connection, space: &Space, p: &Value, via: &str) -> Outc
         if !plain_id(r) {
             return Err(Fault::Bad("replaces is not a valid identifier".into()));
         }
-        if !exists(conn, "facts", r)? {
+        // A predecessor this replica pruned or left out is not waited for: the link to it is not kept.
+        if !exists(conn, "facts", r)? && !gone(conn, "fact", r)? {
             return Err(Fault::Missing(format!("fact {r} has not arrived")));
         }
     }
+    let replaces = replaces.filter(|r| exists(conn, "facts", r).unwrap_or(false));
     let tags: Vec<String> = p
         .get("tags")
         .and_then(Value::as_array)
@@ -766,6 +770,10 @@ fn apply_created(conn: &Connection, space: &Space, p: &Value, via: &str) -> Outc
         json!({ "replaces": replaces, "synced_from": via }),
     )
     .map_err(Fault::from)?;
+    conn.execute(
+        "DELETE FROM window_gone WHERE kind = 'fact' AND id = ?1",
+        [id],
+    )?;
     Ok(Step::Applied)
 }
 
@@ -773,10 +781,33 @@ fn apply_superseded(conn: &Connection, p: &Value, at: i64, via: &str) -> Outcome
     let (old, by) = (id_of(p, "old")?, id_of(p, "by")?);
     let actor = opt(p, "actor").unwrap_or("peer");
     let Some((status, current)) = fact_status(conn, old)? else {
+        if gone(conn, "fact", old)? {
+            return Ok(Step::Dropped);
+        }
         return Err(Fault::Missing(format!("fact {old} has not arrived")));
     };
     if !exists(conn, "facts", by)? {
-        return Err(Fault::Missing(format!("fact {by} has not arrived")));
+        if !gone(conn, "fact", by)? {
+            return Err(Fault::Missing(format!("fact {by} has not arrived")));
+        }
+        // Replaced by a note this replica does not hold: an open fact is closed as retired, with that reason.
+        if status == "active" || status == "proposed" {
+            let reason = "replaced by a note outside this replica's window";
+            conn.execute(
+                "UPDATE facts SET status = 'retired', status_at = ?2, status_by = ?3, status_reason = ?4 WHERE id = ?1",
+                params![old, at, actor, reason],
+            )?;
+            facts::event(
+                conn,
+                old,
+                actor,
+                "retire",
+                json!({ "reason": reason, "synced_from": via }),
+            )
+            .map_err(Fault::from)?;
+            return Ok(Step::Applied);
+        }
+        return Ok(Step::Dropped);
     }
     let history = |conn: &Connection| {
         facts::event(
@@ -833,6 +864,9 @@ fn apply_retired(conn: &Connection, p: &Value, at: i64, via: &str) -> Outcome {
     let actor = opt(p, "actor").unwrap_or("peer");
     let reason = opt(p, "reason").unwrap_or_default();
     let Some((status, current)) = fact_status(conn, id)? else {
+        if gone(conn, "fact", id)? {
+            return Ok(Step::Dropped);
+        }
         return Err(Fault::Missing(format!("fact {id} has not arrived")));
     };
     let history = |conn: &Connection| {
@@ -902,6 +936,10 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             return Err(Fault::Bad("fact_id is not a valid identifier".into()));
         }
         if !exists(conn, "facts", f)? {
+            if gone(conn, "fact", f)? {
+                mark_gone(conn, "file", id)?;
+                return Ok(Step::Dropped);
+            }
             return Err(Fault::Missing(format!("fact {f} has not arrived")));
         }
     }
@@ -973,6 +1011,7 @@ fn apply_file_retired(conn: &Connection, p: &Value) -> Outcome {
         .query_row("SELECT status FROM files WHERE id = ?1", [id], |r| r.get(0))
         .optional()?;
     match status.as_deref() {
+        None if gone(conn, "file", id)? => Ok(Step::Dropped),
         None => Err(Fault::Missing(format!("file {id} has not arrived"))),
         Some("retired") => Ok(Step::Skipped),
         Some(_) => {
@@ -1074,7 +1113,93 @@ fn apply_layout(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -> 
     Ok(Step::Applied)
 }
 
-fn apply_one(brain: &Brain, space: &Space, conn: &Connection, ev: &Event, via: &str) -> Outcome {
+// --- the window --------------------------------------------------------------------------------
+
+fn gone(conn: &Connection, kind: &str, id: &str) -> rusqlite::Result<bool> {
+    Ok(conn
+        .query_row(
+            "SELECT 1 FROM window_gone WHERE kind = ?1 AND id = ?2",
+            params![kind, id],
+            |_| Ok(()),
+        )
+        .optional()?
+        .is_some())
+}
+
+fn mark_gone(conn: &Connection, kind: &str, id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO window_gone (kind, id, at) VALUES (?1, ?2, ?3)",
+        params![kind, id, util::now()],
+    )?;
+    Ok(())
+}
+
+/// A tag that keeps a note on every replica: `pin`, or anything under `pin/`.
+fn is_pin(tag: &str) -> bool {
+    tag == "pin" || tag.starts_with("pin/")
+}
+
+/// The tags of the boards and guides a space is read through: kept while the note is open, because they are
+/// the current state, not history.
+fn is_structural(tag: &str) -> bool {
+    matches!(tag, "dashboard" | "rules" | "index" | "guide")
+        || tag.starts_with("living/")
+        || tag.starts_with("living-meta/")
+}
+
+/// Whether a note outside the window stays: pinned, or an open board or guide note.
+fn stays<S: AsRef<str>>(tags: &[S], open: bool) -> bool {
+    tags.iter().any(|t| is_pin(t.as_ref()))
+        || (open && tags.iter().any(|t| is_structural(t.as_ref())))
+}
+
+/// What a replica that holds a window leaves out of what it receives: a note created before `cutoff` that is
+/// not pinned (and not an open board note), a file of such a note or an old file with no note. `None` lets the
+/// event through. What is left out is remembered, so what comes later about it is ignored.
+fn window_gate(
+    conn: &Connection,
+    ev: &Event,
+    cutoff: i64,
+) -> std::result::Result<Option<Step>, Fault> {
+    let p = &ev.payload;
+    match ev.kind.as_str() {
+        "fact_created" => {
+            let id = id_of(p, "id")?;
+            let Some(created_at) = p.get("created_at").and_then(Value::as_i64) else {
+                return Ok(None);
+            };
+            let tags: Vec<&str> = p
+                .get("tags")
+                .and_then(Value::as_array)
+                .map(|a| a.iter().filter_map(Value::as_str).collect())
+                .unwrap_or_default();
+            let open = opt(p, "status") != Some("retired");
+            if created_at < cutoff && !exists(conn, "facts", id)? && !stays(&tags, open) {
+                mark_gone(conn, "fact", id)?;
+                return Ok(Some(Step::Dropped));
+            }
+        }
+        "file_put" => {
+            let id = id_of(p, "id")?;
+            let created_at = p.get("created_at").and_then(Value::as_i64).unwrap_or(ev.at);
+            if opt(p, "fact_id").is_none() && created_at < cutoff && !exists(conn, "files", id)? {
+                mark_gone(conn, "file", id)?;
+                return Ok(Some(Step::Dropped));
+            }
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
+fn apply_one(
+    brain: &Brain,
+    space: &Space,
+    conn: &Connection,
+    ev: &Event,
+    via: &str,
+    cutoff: Option<i64>,
+) -> Outcome {
     if ev.eid.len() > 200 || expected_eid(ev)? != ev.eid {
         return Err(Fault::Bad(
             "the identifier does not match the change".into(),
@@ -1088,6 +1213,11 @@ fn apply_one(brain: &Brain, space: &Space, conn: &Connection, ev: &Event, via: &
             ));
         }
         Some(_) => {}
+    }
+    if let Some(cutoff) = cutoff
+        && let Some(step) = window_gate(conn, ev, cutoff)?
+    {
+        return Ok(step);
     }
     let p = &ev.payload;
     match ev.kind.as_str() {
@@ -1104,6 +1234,18 @@ fn apply_one(brain: &Brain, space: &Space, conn: &Connection, ev: &Event, via: &
 /// malformed one is refused and the rest goes on; one that needs an event that has not arrived stops the
 /// batch (`stopped`), and the sender sends it again later.
 pub fn apply(brain: &Brain, space: &Space, events: &[Event], via: &str) -> Result<Applied> {
+    apply_window(brain, space, events, via, None)
+}
+
+/// [`apply`] for a replica that holds a window: with `cutoff` (Unix seconds, see [`window_cutoff`]) a note
+/// created before it is left out unless it is pinned, and so are its files and what is said about it later.
+pub fn apply_window(
+    brain: &Brain,
+    space: &Space,
+    events: &[Event],
+    via: &str,
+    cutoff: Option<i64>,
+) -> Result<Applied> {
     let conn = brain.open_space(space)?;
     let mut out = Applied::default();
     let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
@@ -1120,23 +1262,25 @@ pub fn apply(brain: &Brain, space: &Space, events: &[Event], via: &str) -> Resul
             continue;
         }
         tx.execute_batch("SAVEPOINT ev")?;
-        match apply_one(brain, space, &tx, ev, via) {
+        match apply_one(brain, space, &tx, ev, via, cutoff) {
             Ok(step) => {
                 observe(&tx, &ev.hlc)?;
-                record_raw(
-                    &tx,
-                    &ev.eid,
-                    &ev.hlc,
-                    &ev.origin,
-                    Some(via),
-                    &ev.kind,
-                    ev.at,
-                    &ev.payload,
-                )?;
+                if !matches!(step, Step::Dropped) {
+                    record_raw(
+                        &tx,
+                        &ev.eid,
+                        &ev.hlc,
+                        &ev.origin,
+                        Some(via),
+                        &ev.kind,
+                        ev.at,
+                        &ev.payload,
+                    )?;
+                }
                 tx.execute_batch("RELEASE ev")?;
                 match step {
                     Step::Applied => out.applied += 1,
-                    Step::Skipped => out.skipped += 1,
+                    Step::Skipped | Step::Dropped => out.skipped += 1,
                     Step::Disputed => {
                         out.applied += 1;
                         out.disputed += 1;
@@ -1330,4 +1474,342 @@ pub fn ensure_space(brain: &Brain, space: &Space, kind: &str) -> Result<()> {
     // A kind this node's catalogue does not know stays `custom`.
     let _ = brain.set_space_kind(space, kind);
     Ok(())
+}
+
+// --- a replica that holds a window ---------------------------------------------------------------
+//
+// A phone holds the last N days of a memory, not all of it. The setting is the replica's own (the control
+// database), off by default.
+//
+// - Catch-up leaves out what is older than the window, except what is pinned (see `is_pin`) and the open notes
+//   of boards and guides (`is_structural`).
+// - [`prune_window`] removes what is older than the window, only once every peer this replica syncs with has
+//   it. It is LOCAL: it writes no event and nothing tells a peer. What a peer says later about a note that is
+//   gone here (replaced, retired, a file added) is ignored: this replica does not keep the newer state of a
+//   note it does not hold, and the peers still hold the whole history. A note replaced by one this replica
+//   does not hold, while it still holds the old one (it is pinned), is closed as retired with that reason.
+// - Pruning deletes the note, its tags, its history, its search entry, its files (and their bytes) and the log
+//   rows about them. A node that joins later is therefore not fed those notes by this replica, only by the
+//   ones that hold everything.
+
+const WINDOW_KEY: &str = "window_days";
+const WINDOW_LAST_KEY: &str = "window_last_prune";
+const DAY: i64 = 86_400;
+
+/// The window of this replica in days, or `None` (the default): it holds everything.
+pub fn window_days(brain: &Brain) -> Result<Option<u32>> {
+    let ctl = brain.open_control()?;
+    Ok(meta_get(&ctl, WINDOW_KEY)?.and_then(|v| v.parse().ok()))
+}
+
+/// Sets the window (`Some(days)`, 1 to 36500) or turns it off (`None`). Turning it off does not bring back
+/// what was pruned; a node that holds everything does.
+pub fn set_window_days(brain: &Brain, days: Option<u32>) -> Result<()> {
+    let ctl = brain.open_control()?;
+    match days {
+        Some(d) if (1..=36_500).contains(&d) => meta_set(&ctl, WINDOW_KEY, &d.to_string()),
+        Some(_) => Err(Error::Invalid(
+            "a window is 1 to 36500 days; none means everything".into(),
+        )),
+        None => {
+            ctl.execute("DELETE FROM meta WHERE k = ?1", [WINDOW_KEY])?;
+            Ok(())
+        }
+    }
+}
+
+/// The instant (Unix seconds) before which a note is outside the window, or `None` without a window.
+pub fn window_cutoff(brain: &Brain, now: i64) -> Result<Option<i64>> {
+    Ok(window_days(brain)?.map(|d| now.saturating_sub(i64::from(d) * DAY)))
+}
+
+/// What one pruning removed or kept.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Pruned {
+    pub space: String,
+    /// Notes removed, whatever their status.
+    pub facts: usize,
+    pub tags: usize,
+    pub files: usize,
+    /// Notes outside the window that stay because a peer has not acknowledged them yet.
+    pub kept_unacknowledged: usize,
+    /// Notes outside the window that stay because they are pinned (or open board notes, or waiting for approval).
+    pub kept_pinned: usize,
+}
+
+impl Pruned {
+    pub fn to_json(&self) -> Value {
+        json!({
+            "space": self.space, "facts": self.facts, "tags": self.tags, "files": self.files,
+            "kept_unacknowledged": self.kept_unacknowledged, "kept_pinned": self.kept_pinned,
+        })
+    }
+}
+
+type LogRows = Vec<(i64, Option<String>)>;
+
+/// Whether every peer of the space holds the log rows named: for each row, the peer sent it here, or this node
+/// has pushed past it. No peer, or no row, is never enough.
+fn acknowledged(rows: &LogRows, peers: &[(String, i64)]) -> bool {
+    !peers.is_empty()
+        && !rows.is_empty()
+        && rows.iter().all(|(seq, via)| {
+            peers
+                .iter()
+                .all(|(peer, pushed)| via.as_deref() == Some(peer.as_str()) || pushed >= seq)
+        })
+}
+
+fn log_rows(conn: &Connection, eid: &str, prefix: bool) -> Result<LogRows> {
+    let sql = if prefix {
+        "SELECT seq, via FROM sync_log WHERE substr(eid, 1, length(?1)) = ?1"
+    } else {
+        "SELECT seq, via FROM sync_log WHERE eid = ?1"
+    };
+    Ok(conn
+        .prepare(sql)?
+        .query_map([eid], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+fn strings(conn: &Connection, sql: &str, arg: impl rusqlite::ToSql) -> Result<Vec<String>> {
+    Ok(conn
+        .prepare(sql)?
+        .query_map([arg], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?)
+}
+
+/// Removes from this replica, for good, the notes of `space` created more than `days` days before `now`, with
+/// their tags, history, files and log rows, but only those that every peer this replica syncs with has
+/// acknowledged, that are not pinned (`pin`, `pin/…`) and that no kept note points to. Open board notes
+/// (`dashboard`, `rules`, `index`, `guide`, `living/…`) and notes waiting for approval stay. It writes no
+/// event: the pruning stays local.
+pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result<Pruned> {
+    let cutoff = now.saturating_sub(i64::from(days) * DAY);
+    let conn = brain.open_space(space)?;
+    let mut out = Pruned {
+        space: space.as_str().to_string(),
+        ..Pruned::default()
+    };
+    // The peers this replica syncs with, and how far it has pushed to each.
+    let ctl = brain.open_control()?;
+    let mut peers: Vec<(String, i64)> = ctl
+        .prepare("SELECT peer, pushed FROM sync_state WHERE space = ?1")?
+        .query_map([space.as_str()], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    // A peer that holds a connection here pulls from this node: its progress is its own, so it counts as unknown.
+    let blind: i64 = ctl.query_row(
+        "SELECT count(*) FROM connections c WHERE c.agent LIKE 'peer-%' AND c.revoked_at IS NULL
+           AND NOT EXISTS (SELECT 1 FROM sync_state s WHERE s.peer = c.agent AND s.space = ?1)",
+        [space.as_str()],
+        |r| r.get(0),
+    )?;
+    if blind > 0 {
+        peers.clear();
+    }
+
+    let old: Vec<(String, String)> = conn
+        .prepare("SELECT id, status FROM facts WHERE created_at < ?1 ORDER BY created_at, rowid")?
+        .query_map([cutoff], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let file_rows = |fid: &str| -> Result<LogRows> {
+        let mut rows = log_rows(&conn, &format!("f:{fid}"), false)?;
+        rows.extend(log_rows(&conn, &format!("fr:{fid}"), false)?);
+        Ok(rows)
+    };
+    let mut doomed: BTreeSet<String> = BTreeSet::new();
+    for (id, status) in &old {
+        let tags = strings(&conn, "SELECT tag FROM fact_tags WHERE fact_id = ?1", id)?;
+        if status == "proposed" || stays(&tags, status == "active") {
+            out.kept_pinned += 1;
+            continue;
+        }
+        let created = log_rows(&conn, &format!("c:{id}"), false)?;
+        let mut rows = created.clone();
+        rows.extend(log_rows(&conn, &format!("r:{id}"), false)?);
+        rows.extend(log_rows(&conn, &format!("s:{id}:"), true)?);
+        for fid in strings(&conn, "SELECT id FROM files WHERE fact_id = ?1", id)? {
+            rows.extend(file_rows(&fid)?);
+        }
+        if !created.is_empty() && acknowledged(&rows, &peers) {
+            doomed.insert(id.clone());
+        } else {
+            out.kept_unacknowledged += 1;
+        }
+    }
+    // A note that a kept note was replaced by stays, and so does what that one was replaced by.
+    let pointers: Vec<(String, String)> = conn
+        .prepare("SELECT id, replaced_by FROM facts WHERE replaced_by IS NOT NULL")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    loop {
+        let keep: Vec<&String> = pointers
+            .iter()
+            .filter(|(id, to)| !doomed.contains(id) && doomed.contains(to))
+            .map(|(_, to)| to)
+            .collect();
+        if keep.is_empty() {
+            break;
+        }
+        for k in keep {
+            if doomed.remove(k) {
+                out.kept_pinned += 1;
+            }
+        }
+    }
+    // Files with no note, older than the window and acknowledged, and the files of the notes that go.
+    let mut doomed_files: Vec<String> = Vec::new();
+    for fid in strings(
+        &conn,
+        "SELECT id FROM files WHERE fact_id IS NULL AND created_at < ?1",
+        cutoff,
+    )? {
+        if acknowledged(&file_rows(&fid)?, &peers) {
+            doomed_files.push(fid);
+        }
+    }
+    for id in &doomed {
+        doomed_files.extend(strings(
+            &conn,
+            "SELECT id FROM files WHERE fact_id = ?1",
+            id,
+        )?);
+    }
+    if doomed.is_empty() && doomed_files.is_empty() {
+        return Ok(out);
+    }
+
+    let mut blobs: Vec<String> = Vec::new();
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    meta_set(&tx, "window_pruning", "1")?;
+    for fid in &doomed_files {
+        for eid in [format!("f:{fid}"), format!("fr:{fid}")] {
+            tx.execute("DELETE FROM sync_log WHERE eid = ?1", [&eid])?;
+        }
+        if let Some(sha) = tx
+            .query_row("SELECT sha256 FROM files WHERE id = ?1", [fid], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()?
+        {
+            blobs.push(sha);
+        }
+        tx.execute("DELETE FROM files WHERE id = ?1", [fid])?;
+        mark_gone(&tx, "file", fid)?;
+        out.files += 1;
+    }
+    for id in &doomed {
+        tx.execute(
+            "DELETE FROM sync_log WHERE eid IN (?1, ?2)",
+            [format!("c:{id}"), format!("r:{id}")],
+        )?;
+        tx.execute(
+            "DELETE FROM sync_log WHERE substr(eid, 1, length(?1)) = ?1",
+            [format!("s:{id}:")],
+        )?;
+        tx.execute("UPDATE facts SET replaces = NULL WHERE replaces = ?1", [id])?;
+        tx.execute("DELETE FROM sync_disputes WHERE fact_id = ?1", [id])?;
+        tx.execute("DELETE FROM fact_events WHERE fact_id = ?1", [id])?;
+        tx.execute("DELETE FROM embeddings WHERE fact_id = ?1", [id])?;
+        tx.execute("DELETE FROM fact_origin WHERE fact_id = ?1", [id])?;
+        tx.execute("DELETE FROM library_raised WHERE fact_id = ?1", [id])?;
+        out.tags += tx.execute("DELETE FROM fact_tags WHERE fact_id = ?1", [id])?;
+        let rowid: i64 =
+            tx.query_row("SELECT rowid FROM facts WHERE id = ?1", [id], |r| r.get(0))?;
+        tx.execute("DELETE FROM facts_fts WHERE rowid = ?1", [rowid])?;
+        tx.execute("DELETE FROM facts WHERE id = ?1", [id])?;
+        mark_gone(&tx, "fact", id)?;
+        out.facts += 1;
+    }
+    tx.execute("DELETE FROM meta WHERE k = 'window_pruning'", [])?;
+    tx.commit()?;
+    // The bytes go unless another record of this space still holds them.
+    for sha in blobs {
+        let held: bool = conn.query_row(
+            "SELECT count(*) > 0 FROM files WHERE sha256 = ?1",
+            [&sha],
+            |r| r.get(0),
+        )?;
+        if !held {
+            crate::files::remove_blob(brain, space, &sha)?;
+        }
+    }
+    Ok(out)
+}
+
+/// What the last pruning of this replica did.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LastPrune {
+    pub at: i64,
+    pub facts: usize,
+    pub files: usize,
+    pub kept_unacknowledged: usize,
+}
+
+/// The window of this replica and what was pruned last, for the page and the apps.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WindowStatus {
+    pub days: Option<u32>,
+    pub last_prune: Option<LastPrune>,
+}
+
+impl WindowStatus {
+    /// `window: N days`, or `window: all` when there is none.
+    pub fn label(&self) -> String {
+        match self.days {
+            Some(d) => format!("window: {d} days"),
+            None => "window: all".to_string(),
+        }
+    }
+
+    pub fn to_json(&self) -> Value {
+        json!({
+            "days": self.days,
+            "label": self.label(),
+            "last_prune": self.last_prune.as_ref().map(|l| json!({
+                "at": l.at, "facts": l.facts, "files": l.files,
+                "kept_unacknowledged": l.kept_unacknowledged,
+            })),
+        })
+    }
+}
+
+pub fn window_status(brain: &Brain) -> Result<WindowStatus> {
+    let ctl = brain.open_control()?;
+    let last = meta_get(&ctl, WINDOW_LAST_KEY)?
+        .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+        .and_then(|v| {
+            let n = |k: &str| v.get(k).and_then(Value::as_u64).map(|n| n as usize);
+            Some(LastPrune {
+                at: v.get("at").and_then(Value::as_i64)?,
+                facts: n("facts")?,
+                files: n("files")?,
+                kept_unacknowledged: n("kept_unacknowledged")?,
+            })
+        });
+    Ok(WindowStatus {
+        days: window_days(brain)?,
+        last_prune: last,
+    })
+}
+
+/// Prunes every space of this replica to its window, if it has one, and remembers what was done. Without a
+/// window it does nothing and returns `None`.
+pub fn prune_all(brain: &Brain, now: i64) -> Result<Option<Vec<Pruned>>> {
+    let Some(days) = window_days(brain)? else {
+        return Ok(None);
+    };
+    let mut all = Vec::new();
+    for space in brain.spaces()? {
+        all.push(prune_window(brain, &space, days, now)?);
+    }
+    let last = json!({
+        "at": now,
+        "facts": all.iter().map(|p| p.facts).sum::<usize>(),
+        "files": all.iter().map(|p| p.files).sum::<usize>(),
+        "kept_unacknowledged": all.iter().map(|p| p.kept_unacknowledged).sum::<usize>(),
+    });
+    let ctl = brain.open_control()?;
+    meta_set(&ctl, WINDOW_LAST_KEY, &last.to_string())?;
+    Ok(Some(all))
 }

@@ -1,4 +1,4 @@
-//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS]`: keeps this node's memory in
+//! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--window-days N|off]`: keeps this node's memory in
 //! step with a peer. ADDRESS is the address of this node's connection on the peer (`https://…/mcp/<person>/<connection>`),
 //! its key read from VAR (default MEMCP_PEER_TOKEN). One pass, or one every SECONDS. Exit: 0 done, 1 the key is refused,
 //! 2 wrong use, 3 done with problems (said on standard error).
@@ -10,8 +10,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use memcp_client::peer_sync::Peer;
 use memcp_core::Brain;
 
-const USAGE: &str =
-    "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS]";
+const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--window-days N|off]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -52,6 +51,23 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // `--window-days N`: this replica holds the last N days only (kept in its settings); `off` holds everything.
+    if let Some(w) = value("--window-days") {
+        let days = match w.as_str() {
+            "off" | "0" => None,
+            n => match n.parse::<u32>() {
+                Ok(d) => Some(d),
+                Err(_) => {
+                    eprintln!("{USAGE}");
+                    return ExitCode::from(2);
+                }
+            },
+        };
+        if let Err(e) = memcp_core::sync::set_window_days(&brain, days) {
+            eprintln!("memcp-sync: {e}");
+            return ExitCode::from(2);
+        }
+    }
     let peer = Peer::new(&peer, &key, &name);
     loop {
         let now = SystemTime::now()
@@ -60,8 +76,8 @@ fn main() -> ExitCode {
         let code = match peer.sync_once(&brain, now) {
             Ok(pass) => {
                 println!(
-                    "{} spaces, {} received, {} sent, {} in dispute",
-                    pass.spaces, pass.pulled, pass.pushed, pass.disputed
+                    "{} spaces, {} received, {} sent, {} in dispute, {} pruned",
+                    pass.spaces, pass.pulled, pass.pushed, pass.disputed, pass.pruned
                 );
                 for p in &pass.problems {
                     eprintln!("memcp-sync: {p}");

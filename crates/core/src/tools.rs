@@ -128,7 +128,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "peers",
-            description: "The machines (peers) that hold this memory with you: the connections named `peer-…` of the person, with when each was created and last used, and whether it is still allowed. Live synchronisation state comes from `GET /sync/status` when the node has it.".into(),
+            description: "The machines (peers) that hold this memory with you: the connections named `peer-…` of the person, with when each was created and last used, and whether it is still allowed, and this node's window (`window: N days` and what was pruned last). Live synchronisation state comes from `GET /sync/status` when the node has it.".into(),
             schema: json!({ "type": "object", "properties": {} }),
         });
         out.push(ToolDef {
@@ -1106,7 +1106,8 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     })
                 })
                 .collect();
-            Ok(json!({ "peers": list }))
+            let window = crate::sync::window_status(brain)?.to_json();
+            Ok(json!({ "peers": list, "window": window }))
         }
         "living_get" | "living_set" => {
             // A living page is a board of cards, each a one-line note tagged `living/<page>/<column>`, so it is read

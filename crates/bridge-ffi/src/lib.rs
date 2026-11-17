@@ -571,3 +571,77 @@ pub fn markdown_meeting(
         .to_string_lossy()
         .into_owned())
 }
+
+/// Why a replica setting could not be read or written.
+#[derive(Debug, uniffi::Error)]
+pub enum ReplicaError {
+    /// The folder is not a memory, or it cannot be opened, or the value is refused (a window is 1 to 36500 days).
+    Failed { message: String },
+}
+
+impl std::fmt::Display for ReplicaError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let ReplicaError::Failed { message } = self;
+        write!(f, "{message}")
+    }
+}
+
+impl std::error::Error for ReplicaError {}
+
+fn failed(e: impl std::fmt::Display) -> ReplicaError {
+    ReplicaError::Failed {
+        message: e.to_string(),
+    }
+}
+
+fn replica(data: &str) -> Result<memcp_core::Brain, ReplicaError> {
+    memcp_core::Brain::open(Path::new(data)).map_err(failed)
+}
+
+/// The window of a replica: how many days it holds, and what it pruned last.
+#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
+pub struct ReplicaWindow {
+    /// `None`: it holds everything (the default).
+    pub days: Option<u32>,
+    /// `window: N days`, or `window: all`, as the page shows it.
+    pub label: String,
+    /// Unix time of the last pruning, 0 if none.
+    pub pruned_at: i64,
+    /// Notes removed by the last pruning, and notes kept because a peer has not acknowledged them yet.
+    pub pruned_facts: u32,
+    pub pruned_files: u32,
+    pub kept_unacknowledged: u32,
+}
+
+/// The window of the replica kept in `data_dir` (the node's own folder). Cheap: call it when a screen shows.
+#[uniffi::export]
+pub fn replica_window(data_dir: String) -> Result<ReplicaWindow, ReplicaError> {
+    let s = memcp_core::sync::window_status(&replica(&data_dir)?).map_err(failed)?;
+    let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
+    let last = s.last_prune.clone();
+    Ok(ReplicaWindow {
+        label: s.label(),
+        days: s.days,
+        pruned_at: last.as_ref().map_or(0, |l| l.at),
+        pruned_facts: last.as_ref().map_or(0, |l| n(l.facts)),
+        pruned_files: last.as_ref().map_or(0, |l| n(l.files)),
+        kept_unacknowledged: last.as_ref().map_or(0, |l| n(l.kept_unacknowledged)),
+    })
+}
+
+/// Sets the window of the replica in `data_dir`: `Some(days)` (1 to 36500) holds only the last `days` days (what is
+/// pinned stays: tag `pin` or under `pin/`), `None` holds everything. Takes effect at the next synchronisation; what
+/// was pruned does not come back by itself.
+#[uniffi::export]
+pub fn set_replica_window(data_dir: String, days: Option<u32>) -> Result<(), ReplicaError> {
+    memcp_core::sync::set_window_days(&replica(&data_dir)?, days).map_err(failed)
+}
+
+/// Prunes the replica in `data_dir` to its window now (it also happens after each synchronisation): only notes
+/// every peer has acknowledged, never pinned ones, nothing is sent to a peer. Returns how many notes went.
+#[uniffi::export]
+pub fn prune_replica_window(data_dir: String, now: i64) -> Result<u32, ReplicaError> {
+    let done = memcp_core::sync::prune_all(&replica(&data_dir)?, now).map_err(failed)?;
+    let n: usize = done.map_or(0, |d| d.iter().map(|p| p.facts).sum());
+    Ok(u32::try_from(n).unwrap_or(u32::MAX))
+}

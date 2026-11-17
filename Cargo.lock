@@ -744,6 +744,7 @@ version = "20261117.0.3"
 dependencies = [
  "memcp-bridge",
  "memcp-client",
+ "memcp-core",
  "uniffi",
 ]
 

@@ -52,7 +52,11 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         ("GET", "status") => match sync::status(brain, now) {
             Ok(list) => Response::json(
                 200,
-                &json!({ "peers": list.iter().map(status_json).collect::<Vec<_>>() }),
+                &json!({
+                    "peers": list.iter().map(status_json).collect::<Vec<_>>(),
+                    // This replica's window and what it pruned last.
+                    "window": sync::window_status(brain).map_or(Value::Null, |w| w.to_json()),
+                }),
             ),
             Err(e) => refused(500, &e.to_string()),
         },
