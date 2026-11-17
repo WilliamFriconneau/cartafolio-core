@@ -35,7 +35,9 @@
 //! let retired = facts::retire(&conn, "me", &newer.id, "sold the boiler")?;
 //! assert_eq!(retired.status, "retired");
 //! assert_eq!(facts::history(&conn, &newer.id)?.len(), 2);
-//! # std::fs::remove_dir_all(&dir)?;
+//! # drop(conn);
+//! # drop(brain);
+//! # let _ = std::fs::remove_dir_all(&dir);
 //! # Ok::<(), memcp_core::Error>(())
 //! ```
 
@@ -52,12 +54,16 @@ pub mod guide;
 pub mod import;
 pub mod layout;
 pub mod library;
+pub mod lifecycle;
 pub mod merge;
 #[cfg(test)]
 mod migration_tests;
 mod moves;
 pub mod origin;
 pub mod pairing;
+pub mod peers;
+pub mod people;
+pub mod rules;
 mod schema;
 mod space;
 pub mod sync;

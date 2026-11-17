@@ -383,7 +383,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
       <div class="tile t3" id="triage-tile" hidden>
         <h3>À trier <span class="badge" id="triage-count"></span></h3>
-        <p class="mute small" style="margin:0">What your devices sent and the janitor has not sent on yet.</p>
+        <p class="mute small" style="margin:0">What waits for your decision: what your devices sent and the janitor could not place.</p>
         <div class="acts"><button type="button" class="primary" onclick="location.hash='#triage'">Sort them</button></div>
       </div>
     </div>
@@ -405,6 +405,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <form id="layout-add" class="row" style="margin-top:10px">
         <input name="label" placeholder="a new space, in any words" size="26" required>
         <select name="parent" id="layout-parent"></select>
+        <select name="kind" id="layout-kind" title="The kind of space"></select>
+        <input name="keywords" placeholder="keywords, comma separated" size="22">
         <button class="primary">Add a space</button>
       </form>
     </section>
@@ -424,6 +426,30 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <h2>Connected assistants</h2>
       <p class="mute small">What is connected to your memory now, and what it can reach. Revoke one and it stops at once.</p>
       <div id="connections" class="bento conns"></div>
+    </section>
+
+    <section id="archived-section" hidden>
+      <details>
+        <summary><h2 style="display:inline">Archived spaces</h2></summary>
+        <p class="mute small">Spaces you deleted. Nothing was erased: restore one and it comes back with its notes, files and place in the tree.</p>
+        <div id="archived"></div>
+      </details>
+    </section>
+
+    <section id="revoked-section" hidden>
+      <details>
+        <summary><h2 style="display:inline">Revoked connections</h2></summary>
+        <p class="mute small">Connections you cut. They stay here, with their history, until you remove them from the list.</p>
+        <div id="revoked"></div>
+      </details>
+    </section>
+
+    <section id="internal-section" hidden>
+      <details>
+        <summary><h2 style="display:inline">Internal tools</h2></summary>
+        <p class="mute small">The program's own tools (the janitor, voice transcription, the weekly report, the device rangers). They are not assistants and are kept out of the list above. Revoke one and it stops at once.</p>
+        <div id="internal" class="bento conns"></div>
+      </details>
     </section>
 
     <section id="captures-section" hidden>
@@ -455,6 +481,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <p class="mute small">Shown once: keep it somewhere safe, a password manager or a paper. A new Home Assistant account that enters it on the waiting page takes your memory over. A new key cancels the old one.</p>
       <p class="small" id="key-state"></p>
       <button type="button" class="primary" id="make-key">Make a recovery key</button>
+      <button type="button" class="link danger" id="clear-key">Remove my recovery key</button>
       <div id="heir-duty" hidden>
         <h3 class="sub">People who named you their heir</h3>
         <div id="heir-of"></div>
@@ -537,6 +564,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
       <div id="tr-list" class="trlist"></div>
       <p class="mute small" id="tr-empty" hidden>Nothing waits here.</p>
+      <div id="tr-failed"></div>
     </section>
     </div>
   </div>
@@ -574,6 +602,14 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 </dialog>
 
 
+<dialog id="del-dlg"></dialog>
+<dialog id="ask-dlg">
+  <form id="ask-form" method="dialog">
+    <h2 id="ask-q"></h2>
+    <input id="ask-input" size="40">
+    <div class="row"><button class="primary">Save</button><button type="button" class="link" id="ask-cancel">Cancel</button></div>
+  </form>
+</dialog>
 <dialog id="confirm-dlg">
   <h2 id="confirm-q"></h2>
   <p class="mute small">Hold the red button down until it fills. Letting go early does nothing.</p>
@@ -754,6 +790,51 @@ const FR = {
   "Connected assistants": "Assistants connectés",
   "What is connected to your memory now, and what it can reach. Revoke one and it stops at once.": "Ce qui est connecté à votre mémoire en ce moment, et ce qu’il peut atteindre. Révoquez-en un et il s’arrête aussitôt.",
   "Capture apps": "Applications de capture",
+  "Internal tools": "Outils internes",
+  "Revoked connections": "Connexions révoquées",
+  "Connections you cut. They stay here, with their history, until you remove them from the list.": "Les connexions que vous avez coupées. Elles restent ici, avec leur historique, jusqu’à ce que vous les retiriez de la liste.",
+  "remove from the list": "retirer de la liste",
+  "Remove it from the list; what the audit says about it stays": "La retirer de la liste ; ce que le journal en dit reste",
+  "new key": "nouvelle clé",
+  "A new key at the same address, with the same rights; the old key stops at once": "Une nouvelle clé à la même adresse, avec les mêmes droits ; l’ancienne s’arrête aussitôt",
+  "Archived spaces": "Espaces archivés",
+  "Spaces you deleted. Nothing was erased: restore one and it comes back with its notes, files and place in the tree.": "Les espaces que vous avez supprimés. Rien n’a été effacé : restaurez-en un et il revient avec ses notes, ses fichiers et sa place dans l’arbre.",
+  "restore": "restaurer",
+  "edit name": "changer le nom",
+  "Disables them and keeps a full export of their memory: nothing is lost": "La désactive et garde un export complet de sa mémoire : rien n’est perdu",
+  "Your name as shown": "Votre nom affiché",
+  "no kind": "sans type",
+  "The kind of space": "Le type d’espace",
+  "keywords, comma separated": "mots-clés, séparés par des virgules",
+  "Kind": "Type",
+  "Delete this space…": "Supprimer cet espace…",
+  "Delete this space": "Supprimer cet espace",
+  "A space is never erased: its notes, files and tags go into another space, or it is archived with a full export and can be restored.": "Un espace n’est jamais effacé : ses notes, ses fichiers et ses étiquettes passent dans un autre espace, ou il est archivé avec un export complet et peut être restauré.",
+  "Archive it (a full copy is kept, it can be restored)": "L’archiver (une copie complète est gardée, il peut être restauré)",
+  "Move everything into another space": "Tout déplacer dans un autre espace",
+  "Sub-spaces move up to the parent": "Les sous-espaces remontent chez le parent",
+  "Sub-spaces go to the top": "Les sous-espaces passent tout en haut",
+  "Show what happens": "Voir ce qui va se passer",
+  "Vocabularies": "Vocabulaires",
+  "Library folders": "Dossiers de bibliothèque",
+  "add terms": "ajouter des termes",
+  "unmount": "démonter",
+  "note": "note",
+  "pause": "mettre en pause",
+  "resume": "reprendre",
+  "revoke": "révoquer",
+  "forget": "oublier",
+  "Show removed notes": "Voir les notes retirées",
+  "Hide removed notes": "Masquer les notes retirées",
+  "Bring back": "Remettre",
+  "Brought back": "Remise",
+  "Remove my recovery key": "Retirer ma clé de récupération",
+  "Go on?": "Continuer ?",
+  "treat as an assistant": "traiter comme un assistant",
+  "mark as internal tool": "marquer comme outil interne",
+  "The program's own tools (the janitor, voice transcription, the weekly report, the device rangers). They are not assistants and are kept out of the list above. Revoke one and it stops at once.": "Les outils propres au programme (le rangeur, la transcription vocale, le bilan de la semaine, les rangeurs d'appareils). Ce ne sont pas des assistants : ils restent hors de la liste ci-dessus. Révoquez-en un et il s'arrête aussitôt.",
+  "It is an assistant of yours after all: it goes back to the list of connected assistants": "C'est finalement un de vos assistants : il revient dans la liste des assistants connectés",
+  "One of the program's own tools, not an assistant: it moves to Internal tools": "Un outil propre au programme, pas un assistant : il passe dans les outils internes",
   "The capture apps already paired: one tile per device. Revoke one and it stops at once.": "Les applications de capture déjà associées : une tuile par appareil. Révoquez-en une et elle s’arrête aussitôt.",
   "Instructions apps proposed": "Consignes proposées par les applications",
   "An app that may propose its own instructions wrote these. They are only text until you read them and approve: then the assistants that reach that space are told them, as coming from that app and approved by you, and only as the form of what that app keeps: how to read its records and how to write for it. If the app changes its text, it waits for you again. Nothing here is approved for you, whatever an assistant says.": "Une application autorisée à proposer ses propres consignes a écrit ceci. Ce n’est que du texte tant que vous ne l’avez pas lu et approuvé : les assistants qui atteignent cet espace en sont alors informés, comme venant de cette application et approuvées par vous, et seulement comme la forme de ce que l’application garde : comment lire ses enregistrements et comment écrire pour elle. Si l’application change son texte, il attend de nouveau votre accord. Rien ici n’est approuvé à votre place, quoi que dise un assistant.",
@@ -1155,6 +1236,31 @@ const FR = {
   "This code was not accepted here: it must come from this node's own page.": "Ce code n’a pas été accepté ici : il doit venir de la page de ce nœud."
 };
 const FRX = [
+  [/^Name shown for (.+)$/, a => "Nom affiché pour " + a],
+  [/^Name and note for (.+)$/, a => "Nom de " + a],
+  [/^A note about (.+)$/, a => "Une note sur " + a],
+  [/^Add terms to (.+) \(comma separated\)$/, a => "Ajouter des termes à " + a + " (séparés par des virgules)"],
+  [/^New key for (.+)$/, a => "Nouvelle clé pour " + a],
+  [/^(.+) stops at once; it stays in the list, marked revoked$/, a => a + " s’arrête aussitôt ; elle reste dans la liste, marquée révoquée"],
+  [/^(.+) gets a new key at the same address, with the same rights; the old key stops at once$/, a => a + " reçoit une nouvelle clé à la même adresse, avec les mêmes droits ; l’ancienne s’arrête aussitôt"],
+  [/^(.+) is removed from the list; what the audit says about it stays$/, a => a + " est retirée de la liste ; ce que le journal en dit reste"],
+  [/^(.+) is disabled: their keys stop and the sign-in closes; nothing is deleted$/, a => a + " est désactivé : ses clés s’arrêtent et la connexion se ferme ; rien n’est supprimé"],
+  [/^(.+) is enabled again$/, a => a + " est réactivé"],
+  [/^(.+) is disabled: (\d+) connection\(s\) stop and the sign-in closes\. Their (\d+) space\(s\) are exported and kept; enabling them again brings everything back\.$/, (a, c, n) => a + " est désactivé : " + c + " connexion(s) s’arrêtent et la connexion se ferme. Ses " + n + " espace(s) sont exportés et gardés ; le réactiver rend tout."],
+  [/^(.+) stops exchanging until you resume it; nothing is lost$/, a => a + " n’échange plus jusqu’à ce que vous le repreniez ; rien n’est perdu"],
+  [/^(.+) resumes where it stopped$/, a => a + " reprend où il s’était arrêté"],
+  [/^(.+)'s key stops at once; the entry stays, marked revoked, with its history$/, a => "La clé de " + a + " s’arrête aussitôt ; l’entrée reste, marquée révoquée, avec son historique"],
+  [/^(.+) leaves the lists \(revoked or silent machines only\); it shows again if it speaks again$/, a => a + " quitte les listes (machines révoquées ou silencieuses seulement) ; elle réapparaît si elle parle de nouveau"],
+  [/^the vocabulary (.+) and its terms leave (.+); the original file is untouched$/, (a, b) => "le vocabulaire " + a + " et ses termes quittent " + b + " ; le fichier d’origine n’est pas touché"],
+  [/^(\d+) term\(s\) join (.+)$/, (n, a) => n + " terme(s) rejoignent " + a],
+  [/^(\d+) term\(s\) leave (.+)$/, (n, a) => n + " terme(s) quittent " + a],
+  [/^(.+) is unmounted from (.+): its index is forgotten, the folder itself is never touched$/, (a, b) => a + " est démonté de " + b + " : son index est oublié, le dossier lui-même n’est jamais touché"],
+  [/^your recovery key is removed: no new account can take your memory over with it any more$/, () => "votre clé de récupération est retirée : aucun nouveau compte ne pourra reprendre votre mémoire avec"],
+  [/^(.+) comes back with its notes, files, label and place in the tree$/, a => a + " revient avec ses notes, ses fichiers, son nom et sa place dans l’arbre"],
+  [/^(\d+) notes and (\d+) files of (.+) go into (.+) \((\d+) are already there\)(.*)\. Nothing is erased: the space can be restored\.$/, (n, f, a, t, d, rest) => n + " notes et " + f + " fichiers de " + a + " passent dans " + t + " (" + d + " y sont déjà)" + rest.split(/(?=; )/).map(tr).join("") + ". Rien n’est effacé : l’espace peut être restauré."],
+  [/^(\d+) notes and (\d+) files of (.+) are archived(.*)\. Nothing is erased: the space can be restored\.$/, (n, f, a, rest) => n + " notes et " + f + " fichiers de " + a + " sont archivés" + rest.split(/(?=; )/).map(tr).join("") + ". Rien n’est effacé : l’espace peut être restauré."],
+  [/^; (\d+) sub-space\(s\) move up$/, n => " ; " + n + " sous-espace(s) remontent"],
+  [/^; (\d+) connection\(s\) lose access$/, n => " ; " + n + " connexion(s) perdent l’accès"],
   [/^Paired: (.+)$/, a => "Associé : " + a],
   [/^MemCP · (.+)$/, a => "MemCP · " + tr(a)],
   [/^· space (.+) · (.+)$/, (a, w) => "· espace " + a + " · " + tr(w)],
@@ -1376,7 +1482,9 @@ setInterval(() => { if (!document.hidden && $("#app") && !$("#app").hidden) load
 
 async function load() {
   S = await api("state");
-  S.connections = (S.connections || []).filter(c => !/^janitor(-|$)/.test(c.agent));
+  const isInternal = c => c.internal || /^janitor(-|$)/.test(c.agent);
+  S.internal = (S.connections || []).filter(isInternal);
+  S.connections = (S.connections || []).filter(c => !isInternal(c));
   $("#login").hidden = true; $("#app").hidden = false;
   const me = S.me;
   $("#who").textContent = (me.display || me.name) + " · " + (isAdmin() ? "administrator" : "member");
@@ -1388,6 +1496,7 @@ async function load() {
   renderSafety();
   route();
   loadTimeline();
+  loadArchived();
   applyOnboarding();
 }
 
@@ -1501,7 +1610,7 @@ function noteRows(facts, o) {
       rows.push(el("div", { class: "note", onclick: () => o.open(f) },
         el("div", { class: "meta" }, hm, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
         el("div", { class: "tx" },
-          ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file) : null]),
+          ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file, f.voice) : null]),
           tags.length ? el("div", { class: "tg" }, ...tags.map(t => el("button", { type: "button", class: "chip", onclick: e => { e.stopPropagation(); o.onTag(t); } }, t))) : null)));
     }
   }
@@ -1601,12 +1710,13 @@ async function notesView(body) {
     SP.tag ? el("button", { type: "button", class: "link", onclick: () => { SP.tag = ""; notesView(body); } }, "path: " + SP.tag + " ✕") : null,
     el("button", { type: "button", class: "primary", onclick: () => newNote(body) }, "New note"),
     el("button", { type: "button", onclick: () => attachInput.click() }, "Attach files"),
+    el("button", { type: "button", class: "link", onclick: () => { SP.removed = !SP.removed; notesView(body); } }, SP.removed ? "Hide removed notes" : "Show removed notes"),
     recBtn);
   const list = el("div", {}, el("p", { class: "mute" }, "…"));
   const editor = el("div", {});
   body.replaceChildren(bar, editor, list);
   try {
-    const r = await api("facts?space=" + q(SP.name) + (SP.tag ? "&tag=" + q(SP.tag) : "") + (SP.q ? "&q=" + q(SP.q) : ""));
+    const r = await api("facts?space=" + q(SP.name) + (SP.removed ? "&status=retired" : "") + (SP.tag ? "&tag=" + q(SP.tag) : "") + (SP.q ? "&q=" + q(SP.q) : ""));
     list.replaceChildren(r.facts.length ? thread(r.facts, f => openNote(body, f.id)) : el("p", { class: "mute" }, "No note here."));
   } catch (x) { fail(x); }
   if (SP.open) { const id = SP.open; SP.open = null; openNote(body, id); }
@@ -1665,7 +1775,7 @@ function thread(facts, open) {
     box.append(el("div", { class: "bubble " + (machine ? "other" : "mine"), onclick: () => open(f) },
       el("div", { class: "who" }, (machine ? (app || f.author) : f.author) + " · " + (f.created || "").slice(11, 16)),
       ...(machine ? traceBody(f.extract) : [el("div", { class: "tx" }, f.extract)]),
-      f.file ? attachmentLine(f.file) : null,
+      f.file ? attachmentLine(f.file, f.voice) : null,
       (f.tags || []).length ? el("div", { class: "tags" }, ...f.tags.map(t => el("span", { class: "chip" }, t))) : null));
   }
   setTimeout(() => box.lastElementChild && box.lastElementChild.scrollIntoView({ block: "nearest" }), 0);
@@ -1719,7 +1829,18 @@ async function fileBlobUrl(f) {
   if (!r.ok) throw new Error("Cannot open " + f.name);
   return URL.createObjectURL(await r.blob());
 }
-function attachmentLine(f) {
+// The state of a voice note: waiting for its text, transcribed, or failed (with a button to try again).
+function voiceBadge(v) {
+  if (!v) return null;
+  if (v.state === "transcribed") return el("span", { class: "mute small voice-state" }, " · transcribed");
+  if (v.state === "waiting") return el("span", { class: "mute small voice-state" }, " · waiting for its text");
+  return el("span", { class: "small voice-state" }, " · transcription failed ",
+    el("button", { type: "button", class: "link", onclick: async e => {
+      e.stopPropagation();
+      try { await api("fact/retire", { space: SP.name, id: v.marker, reason: "retry the transcription" }); toast("It will be read again"); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); }
+    } }, "Retry"));
+}
+function attachmentLine(f, voice) {
   const holder = el("span", { class: "mute small" });
   const open = el("button", { type: "button", class: "link", onclick: async e => {
     e.stopPropagation();
@@ -1729,7 +1850,7 @@ function attachmentLine(f) {
       else window.open(url, "_blank", "noopener");
     } catch (x) { fail(x); }
   } }, (f.mime || "").startsWith("audio/") ? "▶ Play" : "Open");
-  return el("div", { class: "small", style: "margin-top:4px" }, "📎 " + f.name + " · " + sizeOf(f.size) + " ", open, holder);
+  return el("div", { class: "small", style: "margin-top:4px" }, "📎 " + f.name + " · " + sizeOf(f.size) + " ", open, holder, voiceBadge(voice));
 }
 let REC = null, RECTIMER = null;
 async function toggleRecord(btn, body) {
@@ -1795,7 +1916,7 @@ async function openNote(body, id) {
   $$(".editor", body).forEach(e => e.remove());
   body.insertBefore(el("div", { class: "editor" },
     el("div", { class: "mute small" }, r.fact.author + " · " + (r.fact.created || "") + " · " + r.fact.status),
-    r.fact.file ? attachmentLine(r.fact.file) : null,
+    r.fact.file ? attachmentLine(r.fact.file, r.fact.voice) : null,
     f.text, f.tags, active ? reason : null,
     el("div", { class: "row" },
       active ? el("button", { type: "button", class: "primary", onclick: async () => {
@@ -1803,6 +1924,8 @@ async function openNote(body, id) {
       active ? el("button", { type: "button", class: "link danger", onclick: async () => {
         if (!reason.value.trim()) { reason.focus(); return fail(new Error("Say why you remove it: a note is never erased, but the reason stays.")); }
         try { await api("fact/retire", { space: SP.name, id, reason: reason.value }); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Remove") : null,
+      r.fact.status === "retired" ? el("button", { type: "button", class: "primary", onclick: async () => {
+        try { await api("fact/restore", { space: SP.name, id }); toast("Brought back"); SP.removed = false; await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Bring back") : null,
       el("button", { type: "button", class: "link", onclick: () => notesView(body) }, "Close")),
     hist.length ? el("details", {}, el("summary", {}, "History (" + hist.length + ")"),
       ...hist.map(h => el("div", { class: "note" }, el("div", { class: "tx" }, h.extract), el("div", { class: "meta" }, (h.created || "").slice(0, 10) + " · " + h.status)))) : null), body.children[1]);
@@ -1813,6 +1936,7 @@ const FT = { l: [], open: new Set(), sel: null, info: null };
 async function renderLayout() {
   try { FT.l = (await api("layout")).spaces.filter(x => x.kind !== "a-trier").map(x => ({ ...x, label: niceLabel(x, x.kind) })); } catch (x) { return; }
   drawTree();
+  $("#layout-kind").replaceChildren(el("option", { value: "" }, "no kind"), ...(S.catalogue || []).map(k => el("option", { value: k.key }, k.label)));
   $("#layout-parent").replaceChildren(el("option", { value: "" }, "— top level —"), ...FT.l.map(x => el("option", { value: x.space }, x.label)));
   if (FT.sel) loadSide();
   renderSpaceTiles();
@@ -1910,7 +2034,66 @@ async function loadSide() {
     el("p", { class: "mute small", style: "margin:0" }, "Notes with these tags or keywords are filed in this space."),
     el("div", {}, ...rtags.map(t => el("span", { class: "fchip kw" }, "tag " + t, el("button", { type: "button", title: "remove", onclick: () => saveRules({ tags: rtags.filter(x => x !== t) }) }, "✕"))),
       ...kw.map(k => el("span", { class: "fchip kw" }, "#" + k, el("button", { type: "button", title: "remove", onclick: () => saveRules({ keywords: kw.filter(x => x !== k) }) }, "✕")))),
-    kwInput);
+    kwInput,
+    el("h3", { style: "margin-top:8px" }, "Kind"),
+    el("select", { id: "kind-select", onchange: e => spaceUpdate({ kind: e.target.value }) },
+      el("option", { value: "custom", selected: ov.kind === "custom" ? "" : null }, "no kind"),
+      ...(S.catalogue || []).map(k => el("option", { value: k.key, selected: ov.kind === k.key ? "" : null }, k.label))),
+    el("div", { id: "side-vocab" }), el("div", { id: "side-lib" }),
+    el("div", { class: "row", style: "margin-top:10px" },
+      el("button", { type: "button", class: "link danger", id: "delete-space", onclick: () => deleteSpaceFlow(FT.sel) }, "Delete this space…")));
+  sideLists(FT.sel);
+}
+async function spaceUpdate(patch) {
+  try { await api("spaces/update", { space: FT.sel, ...patch }); toast("Done"); await renderLayout(); loadSide(); } catch (x) { fail(x); }
+}
+// Vocabularies and mounted library folders of the selected space, each removable (after a preview).
+async function sideLists(space) {
+  let v = { vocabularies: [] }, l = { libraries: [] };
+  try { v = await api("space/vocabularies?space=" + q(space)); l = await api("space/libraries?space=" + q(space)); } catch (_) { return; }
+  const hv = $("#side-vocab"), hl = $("#side-lib");
+  if (!hv || !hl || FT.sel !== space) return;
+  hv.replaceChildren(...(v.vocabularies.length ? [el("h3", { style: "margin-top:8px" }, "Vocabularies"),
+    ...v.vocabularies.map(x => el("div", { class: "row", "data-vocabulary": x.name },
+      el("span", {}, x.name + " · " + x.terms + " terms"),
+      el("button", { type: "button", class: "link", onclick: () => askText("Add terms to " + x.name + " (comma separated)", "", t => t && api("space/vocabulary", { space, name: x.name, op: "add", terms: t.split(",") }).then(() => { toast("Done"); sideLists(space); }).catch(fail)) }, "add terms"),
+      el("button", { type: "button", class: "link danger", onclick: () => previewThen("space/vocabulary", { space, name: x.name, op: "delete" }, () => sideLists(space)) }, "remove")))] : []));
+  hl.replaceChildren(...(l.libraries.length ? [el("h3", { style: "margin-top:8px" }, "Library folders"),
+    ...l.libraries.map(x => el("div", { class: "row", "data-library": x.id },
+      el("span", {}, x.root + " · " + x.files + " files"),
+      el("button", { type: "button", class: "link danger", onclick: () => previewThen("space/library", { space, op: "remove", id: x.id }, () => sideLists(space)) }, "unmount")))] : []));
+}
+// Deleting a space is a choice, never silent: move everything into another space, or archive it. The page shows what
+// will happen (a dry run) and asks to be held to confirm.
+function deleteSpaceFlow(space) {
+  const others = FT.l.filter(x => x.space !== space);
+  const kidsOf = kids(space);
+  const d = $("#del-dlg");
+  const how = el("select", { id: "del-how" }, el("option", { value: "archive" }, "Archive it (a full copy is kept, it can be restored)"),
+    ...(others.length ? [el("option", { value: "into" }, "Move everything into another space")] : []));
+  const into = el("select", { id: "del-into", hidden: true }, ...others.map(x => el("option", { value: x.space }, x.label)));
+  how.addEventListener("change", () => { into.hidden = how.value !== "into"; });
+  const children = el("select", { id: "del-children" }, el("option", { value: "grandparent" }, "Sub-spaces move up to the parent"), el("option", { value: "top" }, "Sub-spaces go to the top"));
+  const body = () => ({ space, ...(how.value === "into" ? { into: into.value } : { archive: true }), children: children.value });
+  const info = el("p", { class: "mute small", id: "del-info" }, "");
+  const go = el("button", { type: "button", class: "danger", id: "del-go", onclick: async () => {
+    let r; try { r = await api("spaces/delete", { ...body(), dry_run: true }); } catch (x) { return fail(x); }
+    d.close();
+    confirmThen(r.would, async () => { try { await api("spaces/delete", body()); FT.sel = null; toast("Done"); await load(); } catch (x) { fail(x); } });
+  } }, "Show what happens");
+  d.replaceChildren(el("h2", {}, "Delete this space"), el("p", { class: "mute small" }, "A space is never erased: its notes, files and tags go into another space, or it is archived with a full export and can be restored."),
+    how, into, kidsOf.length ? children : el("span", {}), info,
+    el("div", { class: "row" }, go, el("button", { type: "button", class: "link", onclick: () => d.close() }, "Cancel")));
+  d.showModal();
+}
+// Archived spaces: restore one.
+async function loadArchived() {
+  let r; try { r = await api("spaces/archived"); } catch (_) { return; }
+  const list = r.archived || [];
+  $("#archived-section").hidden = list.length === 0;
+  $("#archived").replaceChildren(...list.map(a => el("div", { class: "row", "data-archive": a.name },
+    el("span", {}, a.label + " · " + a.facts + " notes · archived " + fmt(a.archived_at).slice(0, 10) + (a.into ? " · moved into " + a.into : "")),
+    el("button", { type: "button", class: "link", onclick: () => previewThen("spaces/restore", { archive: a.name }, async () => { await load(); }) }, "restore"))));
 }
 // Sending the notes of a tag from one space to another: shown first, done on a click.
 async function moveTags(from, to, tag) {
@@ -1933,7 +2116,11 @@ async function moveTags(from, to, tag) {
 $("#layout-add").addEventListener("submit", async e => {
   e.preventDefault();
   const f = e.target;
-  try { await api("layout/add", { label: f.label.value, parent: f.parent.value || null }); f.reset(); await load(); } catch (x) { fail(x); }
+  try {
+    await api("spaces/create", { label: f.label.value, parent: f.parent.value || null, kind: f.kind.value || undefined,
+      keywords: f.keywords.value.split(",").map(k => k.trim()).filter(Boolean) });
+    f.reset(); await load();
+  } catch (x) { fail(x); }
 });
 
 // An administrator starts on the people; everyone else, and the administrator once they pick their
@@ -1998,6 +2185,7 @@ $("#heir-form").addEventListener("submit", async e => {
   e.preventDefault();
   await act("heir/set", { heir: $("#heir-select").value });
 });
+$("#clear-key").addEventListener("click", () => previewThen("recovery/clear", {}, load));
 $("#make-key").addEventListener("click", async () => {
   const r = await act("recovery/make", {});
   if (r) secret("Your recovery key", [["Keep it: it is shown once", r.key]]);
@@ -2031,8 +2219,13 @@ const trItems = () => {
 };
 function renderTriage() {
   const all = trItems();
-  $("#triage-tile").hidden = all.length === 0;
   $("#triage-count").textContent = String(all.length);
+  const fails = (S.triage && S.triage.failed_transcription) || [];
+  $("#triage-tile").hidden = all.length === 0 && fails.length === 0;
+  $("#tr-failed").replaceChildren(...(fails.length ? [el("p", { class: "mute small" }, fails.length + " recording(s) could not be transcribed after three tries; they do not wait for a decision (tag failed/transcription)."),
+    ...fails.map(f => el("div", { class: "trrow" }, el("span", { class: "tx" }, f.name, " ", el("span", { class: "badge" }, "failed/transcription")),
+      el("span", { class: "when" }, ago(f.created_at)),
+      el("button", { type: "button", onclick: async () => { if (await act("triage/retry-transcription", { id: f.id })) location.reload(); } }, "Retry")))] : []));
   const ids = new Set(all.map(i => i.id));
   for (const id of [...TR.picked]) if (!ids.has(id)) TR.picked.delete(id);
   const q = $("#tr-filter").value.trim().toLowerCase(), k = $("#tr-kind").value;
@@ -2047,7 +2240,8 @@ function renderTriage() {
     const row = el("div", { class: "trrow" + (box.checked ? " on" : "") },
       box,
       el("span", { class: "tx" }, it.what.length > 220 ? it.what.slice(0, 220) + "…" : it.what,
-        " ", el("span", { class: "badge" }, it.kind === "file" ? "file" : "note")),
+        " ", el("span", { class: "badge" }, it.kind === "file" ? "file" : "note"),
+        it.reason ? el("span", { class: "mute small", style: "display:block" }, "Why it waits: " + it.reason) : ""),
       el("span", { class: "when" }, ago(it.created_at)));
     const toggle = (on, range) => {
       if (range && TR.last !== null) {
@@ -2153,9 +2347,12 @@ function render() {
       names.length ? el("div", { class: "minis" }, ...names.map(n => el("span", { class: "mini" }, n))) : null,
       el("div", { class: "acts" },
         mine ? el("button", { class: "primary", onclick: () => { location.hash = ""; } }, "Open my memory") : null,
+        mine ? el("button", { class: "link", onclick: () => askText("Your name as shown", u.display || "", v => act("users/update", { id: u.id, display: v })) }, "edit name") : null,
         // Never offered on one's own line: a stray click must not lock the administrator out.
         mine ? null : el("button", { class: "link", onclick: () => confirmThen("Make " + (u.display || u.name) + (u.admin ? " a member?" : " an administrator?"), () => act("users/update", { id: u.id, admin: !u.admin })) }, u.admin ? "make member" : "make admin"),
-        mine ? null : el("button", { class: "link " + (u.disabled ? "" : "danger"), onclick: () => confirmThen((u.disabled ? "Enable " : "Disable ") + (u.display || u.name) + "?", () => act("users/update", { id: u.id, disabled: !u.disabled })) }, u.disabled ? "enable" : "disable"),
+        mine ? null : el("button", { class: "link " + (u.disabled ? "" : "danger"), onclick: () => previewThen("users/update", { id: u.id, disabled: !u.disabled }) }, u.disabled ? "enable" : "disable"),
+        mine ? null : el("button", { class: "link", onclick: () => askText("Name shown for " + u.name, u.display || "", v => act("users/update", { id: u.id, display: v })) }, "edit name"),
+        mine || u.disabled ? null : el("button", { class: "link danger", title: "Disables them and keeps a full export of their memory: nothing is lost", onclick: () => previewThen("users/delete", { id: u.id }) }, "remove"),
         !mine && u.home_assistant ? el("button", { class: "link", title: "Cut the link to their Home Assistant account (their memory stays); the next login of that name takes it up again", onclick: () => confirmThen("Unlink " + (u.display || u.name) + " from their Home Assistant account?", () => act("users/unlink", { id: u.id })) }, "unlink") : null,
         el("button", { class: "link", onclick: () => consoleToken(u) }, "console key")));
   }));
@@ -2206,6 +2403,7 @@ function render() {
       c.person_guide === false ? el("span", { class: "chip" }, "not told your instructions") : null];
   };
   const live = S.connections.filter(c => !c.revoked);
+  const tools = (S.internal || []).filter(c => !c.revoked);
   const isCapture = c => c.agent.startsWith("bridge-");
   const connTile = c => el("div", { class: "tile" + (regranting && regranting.agent === c.agent ? " wide" : "") },
     el("div", { class: "tilehead" },
@@ -2224,9 +2422,24 @@ function render() {
     el("div", { class: "acts" },
       isCapture(c) ? null : el("button", { class: "link", title: "Add or remove spaces for this assistant; its key and address stay the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
       isCapture(c) ? null : el("button", { class: "link", title: "Your own instructions (my instructions) speak of your whole life: an assistant for work need not be told them", onclick: () => act("connections/person-guide", { agent: c.agent, told: c.person_guide === false }) }, c.person_guide === false ? "tell my instructions" : "keep my instructions from it"),
-      el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")));
+      isCapture(c) ? null : el("button", { class: "link", title: "A new key at the same address, with the same rights; the old key stops at once", onclick: () => previewThen("connections/rotate", { agent: c.agent }, async r => { await load(); secret("New key for " + c.agent, [["Address with its key", r.mcp_url_with_key]]); }) }, "new key"),
+      isCapture(c) ? null : el("button", { class: "link", title: "One of the program's own tools, not an assistant: it moves to Internal tools", onclick: () => act("connections/internal", { agent: c.agent, internal: true }) }, "mark as internal tool"),
+      el("button", { class: "link danger", onclick: () => previewThen("connections/revoke", { agent: c.agent }) }, "Revoke")));
   const assistants = live.filter(c => !isCapture(c) && !isPeer(c)), captures = live.filter(isCapture);
   $("#connections").replaceChildren(...(assistants.length ? assistants.map(connTile) : [el("p", { class: "mute", style: "grid-column:1/-1" }, "Nothing is connected.")]));
+  const gone = [...S.connections, ...(S.internal || [])].filter(c => c.revoked);
+  $("#revoked-section").hidden = gone.length === 0;
+  $("#revoked").replaceChildren(...gone.map(c => el("div", { class: "row", "data-agent": c.agent },
+    el("span", {}, c.agent), el("span", { class: "mute small" }, " revoked"),
+    el("button", { class: "link danger", title: "Remove it from the list; what the audit says about it stays", onclick: () => previewThen("connections/delete", { agent: c.agent }) }, "remove from the list"))));
+  $("#internal-section").hidden = tools.length === 0;
+  $("#internal").replaceChildren(...tools.map(c => el("div", { class: "tile" },
+    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", {}, c.agent),
+      el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),
+    el("div", {}, reach(c)),
+    el("div", { class: "acts" },
+      el("button", { class: "link", title: "It is an assistant of yours after all: it goes back to the list of connected assistants", onclick: () => act("connections/internal", { agent: c.agent, internal: false }) }, "treat as an assistant"),
+      el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")))));
   $("#captures-section").hidden = captures.length === 0;
   $("#captures").replaceChildren(...captures.map(connTile));
 }
@@ -2296,6 +2509,31 @@ function confirmThen(question, fn) {
   $("#confirm-dlg").showModal();
 }
 const HOLD_MS = 1200;
+// A destructive action shows what it will do first (the same route with dry_run), then asks to be held to confirm.
+async function previewThen(path, body, after) {
+  let r;
+  try { r = await api(path, { ...body, dry_run: true }); } catch (x) { return fail(x); }
+  confirmThen(r.would || "Go on?", async () => {
+    try { const out = await api(path, body); toast("Done"); if (after) await after(out); else await load(); } catch (x) { fail(x); }
+  });
+}
+// A small question with one text field, in the page (never a browser dialog).
+function askText(title, value, fn) {
+  const d = $("#ask-dlg"), input = $("#ask-input");
+  $("#ask-q").textContent = tr(title);
+  input.value = value || "";
+  askText.fn = fn;
+  d.showModal();
+  setTimeout(() => input.focus(), 0);
+}
+$("#ask-form").addEventListener("submit", e => {
+  e.preventDefault();
+  const fn = askText.fn; askText.fn = null;
+  $("#ask-dlg").close();
+  if (fn) fn($("#ask-input").value.trim());
+});
+$("#ask-cancel").addEventListener("click", () => { askText.fn = null; $("#ask-dlg").close(); });
+
 function holdStart() {
   const b = $("#confirm-hold");
   if (b.classList.contains("holding")) return;
@@ -2604,7 +2842,7 @@ function startWaiting() {
   const tick = async () => {
     try {
       const st = await api("state");
-      S.connections = st.connections.filter(c => !/^janitor(-|$)/.test(c.agent));
+      S.connections = st.connections.filter(c => !c.internal && !/^janitor(-|$)/.test(c.agent));
       const live = S.connections.filter(c => !c.revoked);
       let hit = null;
       if (p.token && W.created) hit = live.find(c => c.agent === W.created.agent && c.last_used_at);
@@ -2930,12 +3168,17 @@ function renderSpaceTiles() {
 }
 
 // ---- Machines: this one first, then the peers, live from the node (GET /sync/status) ----
-const SYNC = { peers: [], ok: false };
-async function pollSync() {
+const SYNC = { peers: [], ok: false, nodes: {}, tick: 0 };
+async function pollSync(force) {
   if (!S) return;
   try { SYNC.peers = (await api("sync/status")).peers || []; SYNC.ok = true; } catch (_) { SYNC.ok = false; }
+  // What the person said about each machine (name, note, paused, revoked): read now and then, and after an action.
+  if (force || SYNC.tick++ % 5 === 0) {
+    try { SYNC.nodes = Object.fromEntries(((await api("nodes?all=1")).nodes || []).map(n => [n.peer, n])); } catch (_) {}
+  }
   renderMachines();
 }
+const nodeDone = () => pollSync(true);
 setInterval(() => { if (!document.hidden && S && !$("#view-memory").hidden) pollSync(); }, 2000);
 const since = sec => {
   if (!sec) return "never";
@@ -2945,17 +3188,22 @@ const since = sec => {
 // Rename, change access and revoke for the connection of a peer: the same controls as an assistant's, on the machine's card.
 function peerActs(p) {
   const c = (S.connections || []).find(x => x.agent === p.peer && !x.revoked);
-  if (!c) return null;
   const box = el("div", { class: "macts" });
-  if (renaming === c.agent) box.append(el("input", { id: "rename-input", value: c.agent, size: "22", pattern: "[a-z0-9][a-z0-9\\-]{0,39}" }),
+  if (c && renaming === c.agent) box.append(el("input", { id: "rename-input", value: c.agent, size: "22", pattern: "[a-z0-9][a-z0-9\\-]{0,39}" }),
     el("button", { class: "link", onclick: () => act("connections/rename", { agent: c.agent, name: $("#rename-input").value.trim() }).then(() => { renaming = null; render(); }) }, "save"),
     el("button", { class: "link", onclick: () => { renaming = null; render(); } }, "cancel"));
-  else if (regranting && regranting.agent === c.agent) box.append(rightsEditor(c));
-  else box.append(
-    el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename"),
-    el("button", { class: "link", title: "Add or remove spaces for this machine; its key stays the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
-    el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke"));
-  return box;
+  else if (c && regranting && regranting.agent === c.agent) box.append(rightsEditor(c));
+  else {
+    if (c) box.append(
+      el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename"),
+      el("button", { class: "link", title: "Add or remove spaces for this machine; its key stays the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"));
+    if (p.state) box.append(
+      el("button", { type: "button", class: "link", onclick: () => askText("A note about " + p.name, p.note || "", v => api("nodes/update", { peer: p.peer, note: v }).then(() => { toast("Done"); nodeDone(); }).catch(fail)) }, "note"),
+      p.state === "revoked" ? null : el("button", { type: "button", class: "link", onclick: () => previewThen("nodes/" + (p.state === "paused" ? "resume" : "pause"), { peer: p.peer }, nodeDone) }, p.state === "paused" ? "resume" : "pause"),
+      p.state === "revoked" ? null : el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/revoke", { peer: p.peer }, nodeDone) }, "revoke"),
+      p.may_forget ? el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/forget", { peer: p.peer }, nodeDone) }, "forget") : null);
+  }
+  return box.children.length ? box : null;
 }
 function machineRow(p) {
   const direct = p.direct !== false;
@@ -2969,10 +3217,10 @@ function machineRow(p) {
   const facts = [p.version ? "version " + p.version : "", p.behind ? "older version" : "", how ? "reached by " + how : "", p.only_local ? "syncs when opened with the peers it can reach" : ""].filter(Boolean).join(" · ");
   return el("div", { class: "mrow" + (p.gone ? " gone" : ""), "data-peer": p.peer || p.name },
     el("span", { class: "dot " + (p.gone ? "" : busy ? "busy" : seen ? "ok" : ""), title: p.gone ? "gone" : busy ? "catching up" : seen ? "in step" : "not seen yet" }),
-    el("div", {}, el("div", { class: "mname" }, p.name), el("div", { class: "msub" }, arrow), facts ? el("div", { class: "msub" }, facts) : ""),
+    el("div", {}, el("div", { class: "mname" }, p.name, p.state && p.state !== "active" ? el("span", { class: "badge off", style: "margin-left:6px" }, p.state) : null), el("div", { class: "msub" }, p.note ? p.note + " · " : "", arrow), facts ? el("div", { class: "msub" }, facts) : ""),
     el("div", { class: "mprog" }, direct ? el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")) : "",
       direct ? el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" })) : ""),
-    el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""), direct ? peerActs(p) : "");
+    el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""), (direct || p.state) ? peerActs(p) : "");
 }
 function renderMachines() {
   if (!S || !$("#machines")) return;
@@ -2985,8 +3233,11 @@ function renderMachines() {
     el("div", {}, el("div", { class: "mname" }, node.name), el("div", { class: "msub" }, "This machine" + (node.version ? " · version " + node.version : ""))),
     el("div", { class: "mprog" }, el("div", { class: "msub" }, S.public_url)),
     el("span", { class: "mwhen" }, ""));
-  const others = SYNC.peers.map(p => {
-    return machineRow(p);
+  const known = new Set(SYNC.peers.map(p => p.peer));
+  const rows = [...SYNC.peers, ...Object.values(SYNC.nodes).filter(n => !known.has(n.peer)).map(n => ({ peer: n.peer, name: n.name, direction: "idle", spaces: [], last_activity: null, direct: true }))];
+  const others = rows.filter(p => !(SYNC.nodes[p.peer] && SYNC.nodes[p.peer].hidden)).map(p => {
+    const nd = SYNC.nodes[p.peer];
+    return machineRow(nd ? { ...p, name: nd.name, label: nd.label, note: nd.note, state: nd.state, may_forget: nd.may_forget } : p);
   });
   $("#machines").replaceChildren(me, ...(others.length ? others : [el("p", { class: "mute small", "data-none": "" }, "No other machine yet. Join a memory, or add a machine below.")]));
   const last = SYNC.peers.map(p => p.last_activity || 0).reduce((a, b) => Math.max(a, b), 0);

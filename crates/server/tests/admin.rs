@@ -1407,6 +1407,50 @@ fn the_page_reads_the_live_peers_and_the_nodes_found() -> Res {
 }
 
 #[test]
+fn an_internal_connection_is_kept_apart_and_only_its_owner_marks_it() -> Res {
+    let e = env()?;
+    join(&e, ALEX)?;
+    join(&e, BEN)?;
+    post(&e, ALEX, "spaces", json!({ "kind": "me" }))?;
+    post(
+        &e,
+        ALEX,
+        "connections",
+        json!({ "agent": "alex-tool", "rights": "alex-me:rw" }),
+    )?;
+    let listed = |s: &Value, internal: bool| -> bool {
+        s["connections"].as_array().is_some_and(|a| {
+            a.iter()
+                .any(|c| c["agent"] == "alex-tool" && c["internal"] == internal)
+        })
+    };
+    assert!(listed(&state(&e, ALEX), false));
+    let other = ha(
+        &e,
+        "POST",
+        "/admin/api/connections/internal",
+        BEN,
+        json!({ "agent": "alex-tool", "internal": true }),
+    );
+    assert_eq!(other.status, 403, "not someone else's connection");
+    post(
+        &e,
+        ALEX,
+        "connections/internal",
+        json!({ "agent": "alex-tool", "internal": true }),
+    )?;
+    assert!(listed(&state(&e, ALEX), true), "flagged internal");
+    post(
+        &e,
+        ALEX,
+        "connections/internal",
+        json!({ "agent": "alex-tool", "internal": false }),
+    )?;
+    assert!(listed(&state(&e, ALEX), false));
+    Ok(())
+}
+
+#[test]
 fn a_member_cannot_make_the_node_join_another_memory() -> Res {
     let e = env()?;
     join(&e, ALEX)?;

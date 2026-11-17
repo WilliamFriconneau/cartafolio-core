@@ -1,0 +1,35 @@
+# One consistent backup of every database (safe while the server runs). Started by memcp-backup.timer.
+# Where it goes and how many are kept: backup_dir and backup_keep in /etc/memcp/memcp.toml
+# (by default /var/backups/memcp, 14 kept: the same as `memcp backup --keep 14`).
+[Unit]
+Description=MemCP backup
+Documentation=https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/LINUX.md
+ConditionPathExists=/var/lib/memcp/control.sqlite
+
+[Service]
+Type=oneshot
+User=memcp
+Group=memcp
+Environment=MEMCP_CONFIG=/etc/memcp/memcp.toml
+ExecStart=/usr/bin/memcp backup
+UMask=0077
+Nice=10
+IOSchedulingClass=idle
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+PrivateNetwork=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/memcp /var/backups/memcp

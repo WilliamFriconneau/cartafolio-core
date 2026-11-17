@@ -1,0 +1,43 @@
+# The janitor: files the notes of the inboxes with the model named in memcp.toml (janitor = true, and a model).
+# It stays running and passes once the writing has calmed down and once a night. Off by default.
+[Unit]
+Description=MemCP janitor
+Documentation=https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/JANITOR.md
+After=memcp.service
+Wants=memcp.service
+
+[Service]
+Type=simple
+User=memcp
+Group=memcp
+Environment=MEMCP_CONFIG=/etc/memcp/memcp.toml
+StateDirectory=memcp-janitor
+StateDirectoryMode=0700
+UMask=0077
+# Makes its key and its settings from memcp.toml; exit 78 (no janitor, no model) is a refusal that is not retried.
+ExecStartPre=/usr/bin/memcp prepare janitor --out /var/lib/memcp-janitor
+EnvironmentFile=-/var/lib/memcp-janitor/janitor.env
+ExecStart=/usr/bin/memcp-janitor --config /var/lib/memcp-janitor/janitor.conf $JANITOR_ARGS
+Restart=on-failure
+RestartSec=30
+RestartPreventExitStatus=78
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+RestrictRealtime=true
+RestrictSUIDSGID=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallArchitectures=native
+ReadWritePaths=/var/lib/memcp
+
+[Install]
+WantedBy=multi-user.target

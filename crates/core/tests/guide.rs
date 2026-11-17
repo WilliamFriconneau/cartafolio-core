@@ -318,7 +318,7 @@ fn a_database_from_before_guides_gets_the_table_and_keeps_its_people() -> Res {
     let data = w._t.path().join("data");
     {
         let c = Connection::open(data.join("control.sqlite"))?;
-        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE bridge_pairings; DROP TABLE sync_state; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
+        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE bridge_pairings; DROP TABLE sync_state; DROP TABLE peer_meta; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
     }
     let ctl = Brain::open(&data)?.open_control()?;
     assert!(users::user(&ctl, &w.sam)?.is_some(), "people are untouched");
@@ -424,5 +424,50 @@ fn an_assistant_that_writes_a_vault_whole_keeps_its_guide_and_nothing_more() -> 
     );
     let told = guide::instructions(&w.brain, &whole)?;
     assert!(told.contains("Answer in French."));
+    Ok(())
+}
+
+#[test]
+fn a_recording_waiting_more_than_half_an_hour_is_warned_about_and_counted() -> Res {
+    let w = world()?;
+    let c = caller(&w, &w.sam, "s-all", "all")?;
+    let mut wav = b"RIFF\0\0\0\0WAVEfmt ".to_vec();
+    wav.extend_from_slice(&[0; 32]);
+    let tags = vec!["inbox/audio".to_string()];
+    let space = sp("sam-work");
+    memcp_core::files::put_tagged(&w.brain, &space, "bridge", "memo.wav", "kept", &wav, &tags)?;
+    let seen = |w: &World| -> Result<serde_json::Value, Box<dyn Error>> {
+        let s = tools::call(&w.brain, &c, "spaces", &json!({}))?;
+        Ok(s["spaces"]
+            .as_array()
+            .ok_or("spaces")?
+            .iter()
+            .find(|x| x["name"] == "sam-work")
+            .ok_or("no space")?
+            .clone())
+    };
+    assert_eq!(seen(&w)?["recordings_waiting"], 1);
+    assert!(
+        !guide::instructions(&w.brain, &c)?.contains("WARNING"),
+        "a fresh one is fine"
+    );
+    let conn = w.brain.open_space(&space)?;
+    conn.execute("UPDATE files SET created_at = created_at - 3600", [])?;
+    let t = guide::instructions(&w.brain, &c)?;
+    assert!(
+        t.contains("WARNING: 1 voice recording of the vault \"sam-work\""),
+        "{t}"
+    );
+    assert!(seen(&w)?["oldest_recording_at"].is_i64());
+    // Its text arrives: no more warning, nothing waits.
+    put(
+        &w,
+        &c,
+        "sam-work",
+        "Dictée, audio memo.wav (x) : hello",
+        &["inbox", "dictee"],
+    )?;
+    assert!(!guide::instructions(&w.brain, &c)?.contains("WARNING"));
+    assert_eq!(seen(&w)?["recordings_waiting"], 0);
     Ok(())
 }

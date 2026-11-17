@@ -147,6 +147,7 @@ pub struct ConnectOpts {
     pub days: Option<i64>,
     pub read_only: bool,
     pub rotate: bool,
+    pub internal: bool,
     pub url: String,
 }
 
@@ -164,6 +165,9 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
         o.rotate,
     )
     .map_err(fail)?;
+    if o.internal {
+        access::set_internal(&ctl, &o.agent, true).map_err(fail)?;
+    }
     let info = access::list(&ctl)
         .map_err(fail)?
         .into_iter()
@@ -664,5 +668,24 @@ pub fn vocabulary_remove(data: &Path, space: &str, name: &str) -> Result<(), Fai
         Ok(())
     } else {
         Err(bad(&format!("no vocabulary {name} on {space}")))
+    }
+}
+
+/// `internal AGENT on|off`: marks a connection as one of the program's own tools.
+pub fn internal(data: &Path, agent: &str, on: &str) -> Result<(), Failure> {
+    let on = match on {
+        "on" => true,
+        "off" => false,
+        _ => return Err(bad("internal AGENT on|off")),
+    };
+    let ctl = open(data)?.open_control().map_err(fail)?;
+    if access::set_internal(&ctl, agent, on).map_err(fail)? {
+        println!(
+            "{agent:?}: internal tool {}.",
+            if on { "on" } else { "off" }
+        );
+        Ok(())
+    } else {
+        Err(fail(format!("unknown connection: {agent}")))
     }
 }

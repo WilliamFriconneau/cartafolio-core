@@ -18,11 +18,41 @@ use crate::models::{self, Models};
 use crate::router::{Place, Rules, clean_keyword};
 use crate::{Janitor, Report, learn, now, tags_of, time};
 
-/// A note of « À trier » that no rule could place.
+/// A note or a file of « À trier » that waits for the person, and why.
 #[derive(Clone, Debug)]
 pub struct Unplaced {
+    /// The id of the note or of the file.
+    pub id: String,
+    /// What the router read: the text of the note, or the name and description of the file.
     pub text: String,
+    /// Why it waits (`no keyword matched`, `two spaces tie: a, b`…).
+    pub reason: String,
+    pub file: bool,
 }
+
+impl Unplaced {
+    pub fn new(id: &str, text: &str, reason: &str) -> Unplaced {
+        Unplaced {
+            id: id.into(),
+            text: text.into(),
+            reason: reason.into(),
+            file: false,
+        }
+    }
+
+    pub fn file(id: &str, name: &str, note: &str, reason: &str) -> Unplaced {
+        Unplaced {
+            id: id.into(),
+            text: format!("{name} {note}").trim().to_string(),
+            reason: reason.into(),
+            file: true,
+        }
+    }
+}
+
+/// Reasons kept in the note of reasons, and how long each may be: the note is one fact of 4000 characters at most.
+const MAX_REASONS: usize = 40;
+const REASON_CHARS: usize = 60;
 
 /// Notes read per main tag of a space, and tags read, for the frequency rule.
 const SAMPLE_READ: usize = 100;
@@ -36,13 +66,14 @@ const MAX_FREQUENT: usize = 10;
 const DOMINANCE: usize = 3;
 
 /// Tags of the notes that are not the person's own content.
-const NOT_CONTENT: [&str; 6] = [
+const NOT_CONTENT: [&str; 7] = [
     "rules",
     "dashboard",
     "index",
     "guide",
     "janitor/keywords",
     "janitor/waiting",
+    "janitor/reasons",
 ];
 
 /// The words that, in at least `min` notes of one space, are far more common there than elsewhere, and are not yet a
@@ -392,66 +423,98 @@ impl Janitor {
         (added, problems)
     }
 
-    /// One note in each « À trier » that still holds notes no rule could place, to tell the person; none when nothing waits.
+    /// Keeps one note of the janitor in `space`, tagged `tag`, with `text`; with `None` the note retires (nothing waits).
+    /// The note is replaced only when its text changed.
+    fn keep_note(
+        &mut self,
+        key: &str,
+        space: &str,
+        tag: &str,
+        text: Option<String>,
+        report: &mut Report,
+    ) {
+        let old = self.state.note_id(key, space);
+        let stamp = format!("{key}:{space}");
+        let Some(text) = text else {
+            if let Some(id) = old {
+                // Nothing waits any more: the note retires (it stays in the history).
+                let r = self.client.call(
+                    "retire",
+                    json!({ "id": id, "reason": "nothing waits in the inbox any more" }),
+                );
+                if r.is_ok() {
+                    self.state.set_note_id(key, space, None);
+                    self.state.set_stamp(&stamp, 0);
+                }
+            }
+            return;
+        };
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        text.hash(&mut hasher);
+        let digest = hasher.finish() >> 1;
+        if old.is_some() && self.state.stamp(&stamp) == digest {
+            return;
+        }
+        let written = match &old {
+            Some(id) => self.client.call(
+                "supersede",
+                json!({ "id": id, "text": text, "tags": [tag], "kind": "context", "reason": "the janitor's note on what waits" }),
+            ),
+            None => Err(ClientError::Tool("no note yet".into())),
+        }
+        .or_else(|_| {
+            self.client.call(
+                "remember",
+                json!({ "space": space, "kind": "context", "text": text, "tags": [tag] }),
+            )
+        });
+        match written {
+            Ok(r) => {
+                if let Some(id) = r["fact"]["id"].as_str() {
+                    self.state.set_note_id(key, space, Some(id));
+                    self.state.set_stamp(&stamp, digest);
+                }
+            }
+            Err(e) => report.problems.push(format!(
+                "the note of what waits in {space} cannot be written: {e}"
+            )),
+        }
+    }
+
+    /// In each « À trier »: one note to tell the person what waits (notes and files), and one note of reasons (tag
+    /// `janitor/reasons`) that the `triage_waiting` tool and the page read; none when nothing waits.
     pub(crate) fn leave_waiting_notes(
         &mut self,
         waiting: &BTreeMap<String, Vec<Unplaced>>,
         report: &mut Report,
     ) {
         let (y, m, d, _, _) = time::civil(now(), self.config.utc_offset_minutes);
-        for (space, notes) in waiting {
-            let old = self.state.note_id("waiting", space);
-            if notes.is_empty() {
-                if let Some(id) = old {
-                    // Nothing waits any more: the note retires (it stays in the history).
-                    let r = self.client.call(
-                        "retire",
-                        json!({ "id": id, "reason": "nothing waits in the inbox any more" }),
-                    );
-                    if r.is_ok() {
-                        self.state.set_note_id("waiting", space, None);
-                        self.state.set_stamp(&format!("waiting:{space}"), 0);
-                    }
-                }
+        for (space, items) in waiting {
+            if items.is_empty() {
+                self.keep_note("waiting", space, "janitor/waiting", None, report);
+                self.keep_note("reasons", space, crate::REASONS_TAG, None, report);
                 continue;
             }
-            let first: Vec<String> = notes.iter().take(3).map(|n| extract(&n.text, 80)).collect();
+            let notes = items.iter().filter(|n| !n.file).count();
+            let files = items.len() - notes;
+            let first: Vec<String> = items.iter().take(3).map(|n| extract(&n.text, 80)).collect();
+            let and_files = if files > 0 {
+                format!(" et {files} fichier(s)")
+            } else {
+                String::new()
+            };
             let text = format!(
-                "{y:04}-{m:02}-{d:02}, {} note(s) attendent dans À trier : aucun mot-clé ne les place. Ajoute des mots-clés au coffre concerné, ou envoie-les depuis ta page. Premières : {}.",
-                notes.len(),
+                "{y:04}-{m:02}-{d:02}, {notes} note(s) attendent dans À trier{and_files} : aucun mot-clé ne les place (la raison de chacun est donnée par triage_waiting). Ajoute des mots-clés au coffre concerné, ou envoie-les depuis ta page. Premiers : {}.",
                 first.join(" | ")
             );
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            text.hash(&mut hasher);
-            let digest = hasher.finish() >> 1;
-            let key = format!("waiting:{space}");
-            if old.is_some() && self.state.stamp(&key) == digest {
-                continue;
-            }
-            let written = match &old {
-                Some(id) => self.client.call(
-                    "supersede",
-                    json!({ "id": id, "text": text, "tags": ["janitor/waiting"], "kind": "context", "reason": "the janitor's note on what waits" }),
-                ),
-                None => Err(ClientError::Tool("no note yet".into())),
-            }
-            .or_else(|_| {
-                self.client.call(
-                    "remember",
-                    json!({ "space": space, "kind": "context", "text": text, "tags": ["janitor/waiting"] }),
-                )
-            });
-            match written {
-                Ok(r) => {
-                    if let Some(id) = r["fact"]["id"].as_str() {
-                        self.state.set_note_id("waiting", space, Some(id));
-                        self.state.set_stamp(&key, digest);
-                    }
-                }
-                Err(e) => report.problems.push(format!(
-                    "the note of what waits in {space} cannot be written: {e}"
-                )),
-            }
+            self.keep_note("waiting", space, "janitor/waiting", Some(text), report);
+            let reasons: BTreeMap<&str, String> = items
+                .iter()
+                .take(MAX_REASONS)
+                .map(|u| (u.id.as_str(), extract(&u.reason, REASON_CHARS)))
+                .collect();
+            let doc = json!({ "version": 1, "reasons": reasons }).to_string();
+            self.keep_note("reasons", space, crate::REASONS_TAG, Some(doc), report);
         }
     }
 }

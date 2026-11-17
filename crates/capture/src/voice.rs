@@ -156,6 +156,43 @@ fn fail(report: &mut VoiceReport, what: &str, e: &ClientError) {
     report.problems.push(format!("{what}: {e}"));
 }
 
+/// The spaces to read: the list as given, or, when it holds `all`, every space the key can write to (a space made
+/// since is read too, nothing is named twice).
+pub fn resolve_spaces(client: &mut Client, wanted: &[String]) -> Result<Vec<String>, ClientError> {
+    if !wanted.iter().any(|w| w.eq_ignore_ascii_case("all")) {
+        return Ok(wanted.to_vec());
+    }
+    let listed = client.call("spaces", json!({}))?;
+    let mut out: Vec<String> = listed["spaces"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|s| s["writable"] == true)
+        .filter_map(|s| s["name"].as_str().map(String::from))
+        .collect();
+    for w in wanted {
+        if !w.eq_ignore_ascii_case("all") && !out.contains(w) {
+            out.push(w.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// Recordings that wait for a text, per space: `(space, how many, age in seconds of the oldest)`.
+pub fn waiting(client: &mut Client) -> Result<Vec<(String, u64, i64)>, ClientError> {
+    let listed = client.call("spaces", json!({}))?;
+    Ok(listed["spaces"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| {
+            let n = s["recordings_waiting"].as_u64().filter(|n| *n > 0)?;
+            let age = now() - s["oldest_recording_at"].as_i64().unwrap_or_else(now);
+            Some((s["name"].as_str()?.to_string(), n, age.max(0)))
+        })
+        .collect())
+}
+
 /// One pass over the inboxes of `vaults`: recordings transcribed, old ones erased.
 pub fn transcribe(
     client: &mut Client,
@@ -178,6 +215,13 @@ pub fn transcribe(
     }
     let mut state = State::open(state_dir)?;
     let whisper = Whisper::new(settings);
+    let vaults = &match resolve_spaces(client, vaults) {
+        Ok(v) => v,
+        Err(e) => {
+            fail(&mut report, "the spaces cannot be listed", &e);
+            return Ok(report);
+        }
+    };
     for vault in vaults {
         // The recordings waiting are the descriptions under inbox/audio, newest first.
         let listed = match client.call(
@@ -229,11 +273,27 @@ pub fn transcribe(
                 continue;
             }
             let seen = state.get(id);
-            if seen.is_some_and(|e| e["done_at"].is_i64())
-                || seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0) >= MAX_FAILS
-            {
+            if seen.is_some_and(|e| e["done_at"].is_i64()) {
                 continue;
             }
+            if seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0) >= MAX_FAILS {
+                let marked = seen.is_some_and(|e| e["marked"] == true);
+                let tagged = tags_of(desc).contains(&FAILED_TAG);
+                if marked && !tagged {
+                    // The person took the tag off: another round of tries.
+                    let e = state.entry(id);
+                    e["fails"] = json!(0);
+                    e["marked"] = json!(false);
+                    state.save()?;
+                } else {
+                    if !marked {
+                        mark_failed(client, &mut state, id, &mut report);
+                        state.save()?;
+                    }
+                    continue;
+                }
+            }
+            let seen = state.get(id);
             let started = seen
                 .and_then(|e| e["parts"].as_array())
                 .is_some_and(|p| !p.is_empty());
@@ -417,9 +477,23 @@ fn one(
                 ""
             };
             report.problems.push(format!("{name}: {why}{last}"));
+            if n >= MAX_FAILS {
+                mark_failed(client, state, id, report);
+            }
         }
     }
     state.save()
+}
+
+/// The tag a recording given up on carries on its description (see `transcription_failed`).
+const FAILED_TAG: &str = "failed/transcription";
+
+/// Tags the recording `id` as failed, so that it is visible and counted apart from what waits for the person.
+fn mark_failed(client: &mut Client, state: &mut State, id: &str, report: &mut VoiceReport) {
+    match client.call("transcription_failed", json!({ "id": id })) {
+        Ok(_) => state.entry(id)["marked"] = json!(true),
+        Err(e) => fail(report, "the failed recording cannot be tagged", &e),
+    }
 }
 
 /// The recordings whose text is old enough, wherever it was filed: erased. The text is found by the recording's id, which

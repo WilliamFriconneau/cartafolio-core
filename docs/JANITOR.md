@@ -10,8 +10,16 @@ like any other client, with a connection of its own, and does three jobs:
    inboxes, and compares it with the keywords and tags of every space (see Keywords). A note that clearly belongs to a space
    is written there **as it is**, still in the inbox, and retired from À trier once the write is certain. A note the router
    cannot place stays in À trier: the person decides on their page, where every note and file waiting there has a « Send »
-   to the vault they choose. When anything is left, the janitor leaves one note there (tag `janitor/waiting`, replaced as the
-   count changes, retired when nothing waits). Files are never sent by the janitor.
+   to the vault they choose. **Files are routed too** (documents, images; never a recording, which is the bridge's): the
+   router reads the words of the file's name, its text when it is readable (a text or markdown file; a PDF or Word file
+   has no text extractor here, so it goes by name, description and tags), its description (the note it came with) and its
+   tags, with the same keywords, space names and vocabularies as for a note. A file the router places is sent as it is
+   (`triage_send`) to the inbox of the chosen space; when the person names several spaces it goes to the first, and is not
+   copied. **What cannot be placed stays, with its reason** (`no keyword matched`, `two spaces tie: a, b`, `it could not be
+   sent three times`): the janitor keeps the reasons in one note of À trier, tagged `janitor/reasons` and replaced as they
+   change, which the read tool `triage_waiting` and the page show next to each note and file, with its age. When anything is
+   left, the janitor also leaves one note there (tag `janitor/waiting`, replaced as the count changes, retired when nothing
+   waits).
 1. **Every note of an inbox is filed, inside the vault whose inbox holds it.** Each vault has its own inbox. A note found in
    the inbox of the work vault stays in the work vault: the model only picks tags and a title. The note's text is written
    **as it is**, after the title, tagged `janitor`, and replaces the raw note (`supersede`). The model's answer is checked:
@@ -23,7 +31,13 @@ like any other client, with a connection of its own, and does three jobs:
    each ends with where it came from and is written in the vault of that inbox, tagged `absorb`. Then the piece leaves.
 
 **Recordings are not its business.** The bridge, where the speech model is, transcribes them, puts their text in the inbox,
-and erases them a week after the text was filed (`memcp-capture transcribe`).
+and erases them a week after the text was filed (`memcp-capture transcribe`). A recording whose transcription failed three
+times gets the tag `failed/transcription` on its description (the tool `transcription_failed`): it stays visible, with a
+« Retry » on the page (the tag comes off, the bridge tries again), and it is counted apart.
+
+**What « À trier » counts.** The number on the page and the `facts` of `spaces` for À trier mean what waits for a decision:
+the notes and files the janitor could not place, not the janitor's own notes, not a recording whose text is already
+filed, not a recording given up on (`failed_transcription`, reported on its own).
 
 ## Keywords
 

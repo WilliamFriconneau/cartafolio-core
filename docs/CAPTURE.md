@@ -143,10 +143,20 @@ read that conversation can read it. A key limited to one vault is the boundary o
 ## Voice: recordings read where the speech model is
 
 The voice part of the intake runs where the speech model is (the server, say): `memcp-capture transcribe --config FILE`, on a
-timer, with `transcribe = <person>-a-trier` (where the devices put their recordings; other inboxes may be added) and `whisper_model = ...` (optionally `whisper_cmd`, `ffmpeg_cmd`,
-`whisper_lang`, `whisper_threads`, `lexicon`). A recording that reached one of those inboxes with no note naming it is read by
-Whisper; its text becomes a note of the same inbox (« Dictée du … audio <name> (<id>) : … », cut into parts if long, resumed if a
-pass stops halfway). Silence leaves the inbox; a recording that cannot be read is tried three times. A week after its text
+timer, with `transcribe = all` and `whisper_model = ...` (optionally `whisper_cmd`, `ffmpeg_cmd`,
+`whisper_lang`, `whisper_threads`, `lexicon`). `all` is the default when the line is missing: the job reads every space its key
+can write to, a space made later included (it asks the memory's `spaces` tool at each pass). A list (`transcribe = <person>-a-trier, work`)
+still limits it. A voice note recorded on the page lands in the inbox of the space it was recorded in, and is read like the others.
+A recording that reached an inbox with no note naming it is read by
+Whisper, once whatever the space; its text becomes a note of the **same** inbox, tagged `inbox` and `dictee` (« Dictée du … audio <name> (<id>) : … », cut into parts if long, resumed if a
+pass stops halfway). Silence leaves the inbox; a recording that cannot be read is tried three times, then the job leaves a note
+tagged `inbox/audio/failed` that carries the recording's id. The page shows each voice note as waiting, transcribed or failed;
+its Retry button retires that note, and the next pass reads the recording again.
+
+`memcp-capture status` (with a key that sees `spaces`) lists the recordings waiting for a text per space and the age of the
+oldest (`LATE` after 30 minutes). The instructions the memory gives an assistant that connects add a WARNING line for a vault
+where a recording has waited more than 30 minutes: the job is not working. The `spaces` tool carries `recordings_waiting` and
+`oldest_recording_at` for the same purpose. A week after its text
 was filed (wherever the janitor filed it), the recording is erased from the memory. Its key needs the whole vaults it reads
 (erasing is not offered to a key limited to paths).
 

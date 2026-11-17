@@ -75,7 +75,16 @@ pub(super) fn spaces(
             continue;
         };
         let conn = brain.open_space(&s)?;
-        let facts = facts::counts(&conn)?["active"].as_u64().unwrap_or(0);
+        let mut facts = facts::counts(&conn)?["active"].as_u64().unwrap_or(0);
+        // « À trier » counts what waits for a decision, not every note it holds (the janitor's own notes, the recordings
+        // already transcribed or given up on are not waiting for anybody); the ones given up on are counted apart.
+        let mut failed = None;
+        if kind == crate::catalogue::TRIAGE && caller.read_paths(&s).is_none() {
+            let w = crate::triage::waiting(brain, &s, 500)?;
+            facts = w["count"].as_u64().unwrap_or(0);
+            failed = Some(w["failed_transcription"].as_array().map_or(0, Vec::len));
+        }
+        let recordings = crate::files::recordings_waiting(&conn).unwrap_or_default();
         out.push(json!({
             "name": s.as_str(),
             "label": label.unwrap_or_else(|| s.as_str().into()),
@@ -84,7 +93,12 @@ pub(super) fn spaces(
             "kind": kind,
             "writable": caller.can_write(&s),
             "facts": facts,
+            "recordings_waiting": recordings.len(),
+            "oldest_recording_at": recordings.first().map(|r| r.2),
         }));
+        if let (Some(n), Some(row)) = (failed, out.last_mut()) {
+            row["failed_transcription"] = json!(n);
+        }
     }
     // A parent this connection cannot read is not shown: that space stands at the top.
     let names: Vec<String> = out

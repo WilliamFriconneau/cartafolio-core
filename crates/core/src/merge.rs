@@ -1060,6 +1060,28 @@ pub fn apply(brain: &Brain, plan: &Plan, opts: &Options) -> Result<Report> {
     }
 }
 
+/// Applies a plan without the backup of [`apply`], for a caller that keeps its own record (the archive of a deleted
+/// space). All or nothing, like [`apply`].
+pub(crate) fn apply_in_place(brain: &Brain, plan: &Plan) -> Result<Report> {
+    let manifest = export::verify_export(&plan.export)?;
+    let ctl = brain.open_control()?;
+    let user = users::resolve(&ctl, &plan.user)?;
+    let resolved = resolve(brain, &ctl, &user, &manifest, plan)?;
+    let opts = Options {
+        backup_to: PathBuf::new(),
+        at: util::now(),
+        stop_after: None,
+    };
+    let mut undo = Undo::default();
+    match run(brain, &ctl, &user, plan, &resolved, &opts, &mut undo) {
+        Ok(report) => Ok(report),
+        Err(e) => {
+            undo.run(brain);
+            Err(e)
+        }
+    }
+}
+
 fn proposals(
     export_dir: &Path,
     resolved: &[Resolved<'_>],

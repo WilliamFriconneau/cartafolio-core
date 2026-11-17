@@ -118,3 +118,74 @@ fn recordings_with_no_text_are_read_here_and_the_rest_left_alone() {
     );
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[test]
+fn every_space_the_key_writes_to_is_read_once_and_a_failure_can_be_retried() {
+    let mem = memory("voice-all", &["sam-me/inbox:rw", "all"]);
+    // A space made after the key: read all the same.
+    {
+        let ctl = mem.app.brain.open_control().expect("control");
+        let sam: String = ctl
+            .query_row("SELECT id FROM users WHERE name = 'sam'", [], |r| r.get(0))
+            .expect("sam");
+        mem.app
+            .brain
+            .add_vault(&sam, "sam", "work")
+            .expect("new space");
+    }
+    mem.up();
+    let dir = unique("voice-all");
+    std::fs::create_dir_all(&dir).expect("dir");
+    let settings = VoiceSettings {
+        whisper_cmd: script(&dir, "whisper-cli", WHISPER).display().to_string(),
+        ffmpeg_cmd: script(&dir, "ffmpeg", FFMPEG).display().to_string(),
+        whisper_model: PathBuf::from("/nonexistent"),
+        ..VoiceSettings::default()
+    };
+    let mut voice = memcp_client::Client::new(&mem.url(1), &mem.tokens[1]);
+    voice.retry.tries = 1;
+    for (space, name, said) in [
+        ("sam-me", "2026-11-02-13h34-un.wav", "memo alpha"),
+        ("sam-work", "2026-11-02-14h00-deux.wav", "memo beta"),
+        ("sam-work", "2026-11-02-15h00-casse.wav", "BROKEN"),
+    ] {
+        voice
+            .file_put(space, name, "dictée", &["inbox/audio"], &audio(said))
+            .expect("recording");
+    }
+    let waiting = memcp_capture::waiting(&mut voice).expect("waiting");
+    assert!(
+        waiting.iter().any(|(s, n, _)| s == "sam-work" && *n == 2),
+        "{waiting:?}"
+    );
+    let state = dir.join("state");
+    let all = vec!["all".to_string()];
+    let r = transcribe(&mut voice, &all, &settings, &state, 60).expect("pass");
+    assert_eq!(r.transcribed, 2, "{r:?}");
+    let in_space = |space: &str, tags: &[&str], q: &str| -> Vec<String> {
+        let mut c = memcp_client::Client::new(&mem.url(1), &mem.tokens[1]);
+        let a = c
+            .call(
+                "recall",
+                json!({ "space": space, "query": q, "tags": tags, "limit": 50 }),
+            )
+            .expect("recall");
+        a["results"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|x| x["text"].as_str().map(String::from))
+            .collect()
+    };
+    assert_eq!(in_space("sam-work", &["inbox"], "memo").len(), 1);
+    assert_eq!(in_space("sam-me", &["inbox"], "memo").len(), 1);
+    assert!(in_space("sam-work", &["inbox"], "deux")[0].contains("deux.wav"));
+    // Again: nothing is read twice. The broken one is given up after three tries and says so.
+    for _ in 0..3 {
+        let again = transcribe(&mut voice, &all, &settings, &state, 60).expect("pass");
+        assert_eq!(again.transcribed, 0, "{again:?}");
+    }
+    let quiet = transcribe(&mut voice, &all, &settings, &state, 60).expect("pass");
+    assert!(quiet.problems.is_empty(), "left alone: {quiet:?}");
+    let _ = std::fs::remove_dir_all(dir);
+}

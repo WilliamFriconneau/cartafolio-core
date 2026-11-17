@@ -28,6 +28,8 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V17,
     CONTROL_V18,
     CONTROL_V19,
+    CONTROL_V20,
+    CONTROL_V21,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -584,4 +586,23 @@ DROP TRIGGER fact_events_no_delete;
 CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
   WHEN NOT EXISTS (SELECT 1 FROM meta WHERE k = 'window_pruning')
   BEGIN SELECT RAISE(ABORT,'append-only'); END;
+";
+
+/// A connection of the program's own tools (the janitor, voice transcription, the weekly report, the device
+/// rangers) is marked `internal`: the page keeps it out of the list of connected assistants and shows it in its own
+/// section, with its own controls.
+const CONTROL_V20: &str = r"
+ALTER TABLE connections ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
+";
+
+/// What the person says of each machine (peer): a name they gave it, a note, whether its sync is paused, and when it
+/// was forgotten (hidden from the lists). The peer's own key and progress live in `connections` and `sync_state`.
+const CONTROL_V21: &str = r"
+CREATE TABLE peer_meta (
+  peer TEXT PRIMARY KEY,
+  label TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  paused_at INTEGER,
+  forgotten_at INTEGER
+) STRICT, WITHOUT ROWID;
 ";

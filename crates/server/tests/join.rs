@@ -309,3 +309,96 @@ fn a_device_the_person_allowed_in_advance_joins_at_once_and_only_once() -> Res {
     assert_eq!(w.body_json()["state"], "waiting");
     Ok(())
 }
+
+#[test]
+fn a_peer_invites_another_device_with_a_one_time_ticket() -> Res {
+    let e = env()?;
+    let _ = person(&e, "GET", "/state", json!({}));
+    // A first device joins as a peer, through the person.
+    let ask = asked(&e, "192.168.1.40", "Sam's Mac");
+    let id = ask["id"].as_str().ok_or("id")?.to_string();
+    let secret = ask["secret"].as_str().ok_or("secret")?.to_string();
+    person(&e, "POST", "/join/approve", json!({ "id": id }));
+    let got = device(
+        &e,
+        "192.168.1.40",
+        "GET",
+        &format!("/join/{id}"),
+        &secret,
+        json!({}),
+    )
+    .body_json();
+    let key = got["join"]["key"].as_str().ok_or("key")?.to_string();
+    let agent = got["join"]["agent"].as_str().ok_or("agent")?.to_string();
+    // The peer asks for a ticket with its own key.
+    let invite = |key: &str, agent: &str| {
+        e.app.handle(&Request {
+            method: "POST".into(),
+            path: format!("/mcp/{agent}/join/invite"),
+            query: Default::default(),
+            headers: [("authorization".to_string(), format!("Bearer {key}"))]
+                .into_iter()
+                .collect(),
+            body: b"{}".to_vec(),
+            ip: Some("192.168.1.40".into()),
+            via_ingress: false,
+            tailnet_login: None,
+        })
+    };
+    let r = invite(&key, &agent);
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let ticket = r.body_json()["ticket"]
+        .as_str()
+        .ok_or("ticket")?
+        .to_string();
+    assert!(
+        r.body_json()["expires_in"]
+            .as_i64()
+            .is_some_and(|n| n <= 600)
+    );
+    // A wrong key does not get one.
+    assert_eq!(invite("hcp_wrong", &agent).status, 401);
+    // The new device joins at once with the ticket, and gets a key of its own.
+    let ask = device(
+        &e,
+        "192.168.1.41",
+        "POST",
+        "/join",
+        "",
+        json!({ "device": "Sam's iPad", "ticket": ticket }),
+    );
+    assert_eq!(ask.status, 200, "{}", ask.body_json());
+    let (id2, secret2) = (
+        ask.body_json()["id"].as_str().ok_or("id")?.to_string(),
+        ask.body_json()["secret"]
+            .as_str()
+            .ok_or("secret")?
+            .to_string(),
+    );
+    let j = device(
+        &e,
+        "192.168.1.41",
+        "GET",
+        &format!("/join/{id2}"),
+        &secret2,
+        json!({}),
+    )
+    .body_json();
+    assert_eq!(j["state"], "approved", "{j}");
+    assert_ne!(
+        j["join"]["key"].as_str(),
+        Some(key.as_str()),
+        "a key of its own"
+    );
+    // The ticket is single use.
+    let again = device(
+        &e,
+        "192.168.1.42",
+        "POST",
+        "/join",
+        "",
+        json!({ "device": "x", "ticket": ticket }),
+    );
+    assert_eq!(again.status, 403);
+    Ok(())
+}

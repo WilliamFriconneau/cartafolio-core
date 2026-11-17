@@ -9,7 +9,7 @@ use memcp_janitor::{Config, Janitor};
 
 const USAGE: &str = "usage: memcp-janitor [--config FILE] [run]
 
-One pass: every note of À trier is sent to the inbox of a vault (or left there when it is unsure), every note of an inbox is
+One pass: every note and file of À trier is sent to the inbox of a vault (or left there when it is unsure), every note of an inbox is
 filed in the vault of that inbox, its
 text unchanged; a piece of a note the bridge absorbed is turned into short, dated facts. If no model answers, the notes stay.
 With --watch FILE (the memory's mark of the last write into an inbox), it stays: a pass once the writing has calmed down
@@ -81,7 +81,10 @@ fn main() -> ExitCode {
         let r = janitor.run_once();
         println!(
             "sent on from À trier {}, left there for you {}; filed {}, left in the inbox {}",
-            r.sent, r.unsure, r.filed, r.left
+            r.sent + r.files_sent,
+            r.unsure,
+            r.filed,
+            r.left
         );
         for p in &r.problems {
             eprintln!("memcp-janitor: {p}");
@@ -118,10 +121,21 @@ fn main() -> ExitCode {
         } else {
             janitor.run_once()
         };
-        if r.filed > 0 || r.left > 0 || r.sent > 0 || r.unsure > 0 || !r.problems.is_empty() {
+        if r.filed > 0
+            || r.left > 0
+            || r.sent > 0
+            || r.files_sent > 0
+            || r.unsure > 0
+            || !r.problems.is_empty()
+        {
             println!(
                 "{why}: sent on from À trier {}, left there for you {}; filed {} ({} without the model), left in the inbox {}, keywords added {}",
-                r.sent, r.unsure, r.filed, r.without_model, r.left, r.keywords_added
+                r.sent + r.files_sent,
+                r.unsure,
+                r.filed,
+                r.without_model,
+                r.left,
+                r.keywords_added
             );
         }
         for p in &r.problems {

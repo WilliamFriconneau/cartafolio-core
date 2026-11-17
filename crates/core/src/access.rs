@@ -334,6 +334,8 @@ pub struct ConnectionInfo {
     pub read_only_forced: bool,
     /// Whether the person's own guide is left out of what it is told when it connects.
     pub no_person_guide: bool,
+    /// One of the program's own tools (janitor, transcription, report, rangers), not an assistant.
+    pub internal: bool,
 }
 
 /// SHA-256 of a token: the only form in which a token is stored and compared.
@@ -942,6 +944,85 @@ pub fn set_read_only(ctl: &Connection, agent: &str, on: bool) -> Result<bool> {
     Ok(n == 1)
 }
 
+/// One connection by name.
+pub fn get(ctl: &Connection, agent: &str) -> Result<Option<ConnectionInfo>> {
+    Ok(list(ctl)?.into_iter().find(|c| c.agent == agent))
+}
+
+/// A new key for an active connection of this person: same address, rights and expiry; the old key stops at once.
+/// `None` when the connection is revoked, unknown or someone else's.
+pub fn rotate(ctl: &Connection, agent: &str, user_id: &str) -> Result<Option<String>> {
+    let token = format!(
+        "hcp_{}_{}",
+        hex(&util::random_bytes::<4>()),
+        hex(&util::random_bytes::<24>())
+    );
+    let n = ctl.execute(
+        "UPDATE connections SET hash = ?3
+         WHERE agent = ?1 AND coalesce(user_id, 'owner') = ?2 AND revoked_at IS NULL AND console = 0",
+        params![agent, user_id, hash_token(&token)],
+    )?;
+    if n != 1 {
+        return Ok(None);
+    }
+    // A refresh token minted under the old key cannot bring it back.
+    ctl.execute(
+        "UPDATE oauth_refresh SET revoked_at = ?2 WHERE agent = ?1 AND revoked_at IS NULL",
+        params![agent, util::now()],
+    )?;
+    ctl.execute(
+        "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'rotate_key', ?3)",
+        params![util::now(), agent, user_id],
+    )?;
+    Ok(Some(token))
+}
+
+/// Removes a revoked connection from the list. An active one must be revoked first. What the audit says about it stays.
+pub fn delete(ctl: &Connection, agent: &str, user_id: &str) -> Result<bool> {
+    let row: Option<(String, Option<i64>)> = ctl
+        .query_row(
+            "SELECT id, revoked_at FROM connections
+             WHERE agent = ?1 AND coalesce(user_id, 'owner') = ?2 AND console = 0",
+            params![agent, user_id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?;
+    let Some((id, revoked)) = row else {
+        return Ok(false);
+    };
+    if revoked.is_none() {
+        return Err(Error::Invalid(format!(
+            "{agent} is still active: revoke it first"
+        )));
+    }
+    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute("DELETE FROM grant_paths WHERE connection_id = ?1", [&id])?;
+    tx.execute("DELETE FROM grants WHERE connection_id = ?1", [&id])?;
+    tx.execute("DELETE FROM oauth_refresh WHERE agent = ?1", [agent])?;
+    tx.execute("DELETE FROM connections WHERE id = ?1", [&id])?;
+    tx.execute(
+        "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'connection_delete', ?3)",
+        params![util::now(), agent, user_id],
+    )?;
+    tx.commit()?;
+    Ok(true)
+}
+
+/// Marks a connection as one of the program's own tools (or back to an assistant).
+pub fn set_internal(ctl: &Connection, agent: &str, on: bool) -> Result<bool> {
+    let n = ctl.execute(
+        "UPDATE connections SET internal = ?2 WHERE agent = ?1 AND console = 0",
+        params![agent, i64::from(on)],
+    )?;
+    if n == 1 {
+        ctl.execute(
+            "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'internal', ?3)",
+            params![util::now(), agent, if on { "on" } else { "off" }],
+        )?;
+    }
+    Ok(n == 1)
+}
+
 /// `key`: `rate` (requests/minute) or `max-text` (characters). There is no daily budget of writes.
 pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result<bool> {
     if value < 1 {
@@ -966,7 +1047,7 @@ pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result
 pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
     let mut st = ctl.prepare(
         "SELECT id, agent, coalesce(user_id, 'owner'), created_at, expires_at, revoked_at, last_used_at,
-         read_only_forced, all_spaces, no_person_guide FROM connections WHERE console = 0 ORDER BY created_at, agent",
+         read_only_forced, all_spaces, no_person_guide, internal FROM connections WHERE console = 0 ORDER BY created_at, agent",
     )?;
     let rows = st.query_map([], |r| {
         Ok((
@@ -981,6 +1062,7 @@ pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
                 last_used_at: r.get(6)?,
                 read_only_forced: r.get::<_, i64>(7)? != 0,
                 no_person_guide: r.get::<_, i64>(9)? != 0,
+                internal: r.get::<_, i64>(10)? != 0,
             },
             r.get::<_, i64>(8)? != 0,
         ))

@@ -1,6 +1,6 @@
 //! The `memcp` binary: the owner's command line and the server (MCP, admin page, OAuth).
 
-use memcp_server::{app, cli, net};
+use memcp_server::{app, cli, config, net, setup};
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -16,6 +16,13 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   init [--spaces health,home,personal | --defaults] [--language en|fr]
                                          --defaults: personal, health, home, finances, hobbies and work
                                          creates the data directory, the control database and the spaces
+  setup [--system] [--yes] [--person NAME] [--node-name NAME] [--language en|fr] [--listen ADDR]
+        [--public-url URL] [--spaces LIST] [--assistant NAME] [--config FILE] [--force]
+                                         first run: the data directory (private), the first memory, the default
+                                         spaces, memcp.toml; prints the page address and one address with the key for an
+                                         assistant. Asks questions on a terminal; --yes (or no terminal) asks nothing.
+  config check|show|example              reads memcp.toml, shows it with every option, or prints the documented file
+  prepare janitor|transcribe --out DIR   what the service units run first: the key and the settings of a companion
   catalogue                              lists the kinds of vault this installation offers
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
@@ -27,6 +34,19 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          title, dates, text of .md and .txt, [[links]]) and never copies or changes it
   library scan [--space NAME] | library list
                                          reads the mounted folders again (only what changed) | lists them
+  space new LABEL [--kind K] [--parent S] [--keywords a,b] [--tags t] | space show NAME | space tree
+  space set NAME [--label L] [--parent S | --top] [--position N] [--kind K]
+  space delete NAME (--into SPACE | --archive) [--children grandparent|top|under:SPACE] [--dry-run]
+                                         a space is never destroyed: its notes, files and tags go into another space,
+                                         or it is archived (full export, database moved aside); sub-spaces move up
+  space archived | space restore ARCHIVE [--dry-run]
+  rules show|add-keyword|remove-keyword|add-tag|remove-tag SPACE [WORD]
+  node list [--all] | node rename|note|pause|resume|revoke|forget PEER [TEXT] [--dry-run]
+  connection show|rename|rotate|delete AGENT [NAME] [--dry-run]
+  person list | person show|set|heir|recovery-key|disable|enable|delete NAME [--display D] [--role admin|member] [--dry-run]
+  note add|show|list|edit|retire|restore SPACE [TEXT|ID] [--tag T] [--reason R]
+  library remove FOLDER --space NAME [--dry-run] | vocabulary term-add|term-remove NAME TERM... --space NAME
+                                         every command above takes --user PERSON (default: the first administrator)
   console-token PERSON                   a token that opens the admin page (/admin) where it is served, never MCP
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--console-admin]                the admin page on this listener, with a console token: on by
@@ -36,7 +56,7 @@ const USAGE: &str = "usage: memcp --data DIR <command>
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL] [--oauth-redirect URL]
                                          OAuth for Claude on the web: consent page behind Tailscale serve
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
-        [--days N] [--read-only] [--rotate] [--public-url URL]
+        [--days N] [--read-only] [--rotate] [--internal] [--public-url URL]
                                          creates an MCP connection and shows its token once
   open VAULT [--user PERSON] [--read-only] [--days N] [--public-url URL]
                                          opens one vault to an assistant: a connection limited to it,
@@ -60,6 +80,7 @@ const USAGE: &str = "usage: memcp --data DIR <command>
   regrant AGENT (--all | --grant ...)
                                          changes the rights, same token
   revoke AGENT                           cuts a connection
+  internal AGENT on|off                  marks a connection as one of the program's own tools (kept out of the assistants)
   readonly AGENT on|off                  forces read-only
   person-guide AGENT on|off              off: the person's own guide is not told to this connection (a work assistant)
   limit AGENT rate|max-text N     sets a limit
@@ -67,9 +88,26 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          indexes a Markdown folder (first run: --dry-run)
   backup --to DIR [--keep 14]            consistent copy of every database (safe while serving), outside the data dir
 
+Settings come from memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp/memcp.toml, /etc/memcp/memcp.toml); a flag wins.
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
-const VALUE_FLAGS: [&str; 35] = [
+const VALUE_FLAGS: &[&str] = &[
+    "--config",
+    "--out",
+    "--person",
+    "--assistant",
+    "--label",
+    "--parent",
+    "--position",
+    "--kind",
+    "--into",
+    "--children",
+    "--keywords",
+    "--tags",
+    "--reason",
+    "--tag",
+    "--role",
+    "--note",
     "--name",
     "--source",
     "--plan",
@@ -157,7 +195,7 @@ fn list(v: Option<&str>) -> Vec<String> {
 }
 
 fn run(args: &[String]) -> Result<(), Failure> {
-    let a = parse(args)?;
+    let mut a = parse(args)?;
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
         println!("{USAGE}");
         return Ok(());
@@ -170,6 +208,46 @@ fn run(args: &[String]) -> Result<(), Failure> {
             .ok_or_else(|| (2, format!("missing the export directory\n\n{USAGE}")))?;
         return cli::verify_export(Path::new(dir));
     }
+    // The settings file fills in what the command line does not say.
+    // `setup` may name a file that does not exist yet: it makes it.
+    let named = a.flags.get("--config").map(String::as_str);
+    let cfg_path = match named {
+        Some(f) if a.pos[0] == "setup" && !Path::new(f).is_file() => None,
+        _ => config::locate(named).map_err(|e| (2, e))?,
+    };
+    let settings = match &cfg_path {
+        Some(p) => config::Settings::load(p).map_err(|e| (2, e))?,
+        None => config::Settings::default(),
+    };
+    if a.pos[0] == "config" {
+        return setup::config_command(a.pos.get(1).map_or("check", String::as_str), cfg_path);
+    }
+    if a.pos[0] == "setup" {
+        let f = |n: &str| a.flags.get(n).cloned();
+        let sw = |n: &str| a.switches.iter().any(|s| s == n);
+        return setup::setup(
+            setup::SetupArgs {
+                data: f("--data").map(PathBuf::from),
+                config: f("--config").map(PathBuf::from),
+                node_name: f("--node-name"),
+                language: f("--language"),
+                listen: f("--listen"),
+                public_url: f("--public-url"),
+                person: f("--person"),
+                spaces: if sw("--defaults") {
+                    None
+                } else {
+                    f("--spaces")
+                },
+                assistant: f("--assistant"),
+                yes: sw("--yes") || sw("-y"),
+                system: sw("--system"),
+                force: sw("--force"),
+            },
+            cfg_path,
+        );
+    }
+    config::fill_flags(&settings, &mut a.flags, &mut a.switches);
     let data: PathBuf = a
         .flags
         .get("--data")
@@ -190,6 +268,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok())
         .unwrap_or_else(|| "http://127.0.0.1:8791".into());
     let rights = || cli::rights(sw("--all"), flag("--grant"));
+
+    let cmd = memcp_server::cli_crud::Cmd {
+        pos: &a.pos,
+        flag: &flag,
+        sw: &sw,
+    };
+    if let Some(done) = memcp_server::cli_crud::run(&data, &cmd) {
+        return done;
+    }
 
     match (a.pos[0].as_str(), a.pos.get(1).map(String::as_str)) {
         ("init", _) => {
@@ -232,6 +319,9 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ("vocabulary", Some("remove")) => {
             cli::vocabulary_remove(&data, need("--space")?, arg(2, "the name")?)
         }
+        ("prepare", Some(kind)) => {
+            setup::prepare(kind, &data, &settings, Path::new(need("--out")?))
+        }
         ("catalogue", _) => cli::catalogue_list(&data),
         ("serve", _) => serve(&data, &a, flag("--listen").unwrap_or("127.0.0.1:8791")),
         ("connect", _) => cli::connect(
@@ -243,6 +333,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
                 days: flag("--days").and_then(|d| d.parse().ok()),
                 read_only: sw("--read-only"),
                 rotate: sw("--rotate"),
+                internal: sw("--internal"),
                 url: public,
             },
         ),
@@ -272,9 +363,18 @@ fn run(args: &[String]) -> Result<(), Failure> {
             flag("--policy"),
         ),
         ("connections", _) => cli::connections(&data),
-        ("doctor", _) => memcp_server::doctor::run(&data, flag("--public-url"), flag("--listen")),
+        ("doctor", _) => memcp_server::doctor::run_with(
+            &data,
+            flag("--public-url"),
+            flag("--listen"),
+            Some(&memcp_server::doctor::Extra {
+                settings_file: cfg_path.as_deref(),
+                settings: &settings,
+            }),
+        ),
         ("regrant", _) => cli::regrant(&data, arg(1, "the agent name")?, &rights()?),
         ("revoke", _) => cli::revoke(&data, arg(1, "the agent name")?),
+        ("internal", _) => cli::internal(&data, arg(1, "the agent name")?, arg(2, "on or off")?),
         ("readonly", _) => cli::readonly(&data, arg(1, "the agent name")?, arg(2, "on or off")?),
         ("person-guide", _) => {
             cli::person_guide(&data, arg(1, "the agent name")?, arg(2, "on or off")?)
@@ -298,10 +398,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
         ),
         ("backup", _) => cli::backup(
             &data,
-            Path::new(need("--to")?),
-            flag("--keep").map_or(Ok(14), |k| {
-                k.parse().map_err(|_| cli::bad("--keep needs a number"))
-            })?,
+            Path::new(
+                &flag("--to")
+                    .map(String::from)
+                    .unwrap_or_else(|| settings.text_or_default("backup_dir")),
+            ),
+            flag("--keep").map_or(
+                Ok(settings.int("backup_keep").map_or(14, |n| n as usize)),
+                |k| k.parse().map_err(|_| cli::bad("--keep needs a number")),
+            )?,
         ),
         (other, _) => Err((2, format!("unknown command {other:?}\n\n{USAGE}"))),
     }
@@ -325,9 +430,7 @@ fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
     let brain = Brain::open(data).map_err(cli::fail)?;
     text::set_language(brain.language().map_err(cli::fail)?);
     let mut app = app::App::new(brain);
-    if let Some(o) = flag("--allow-origin") {
-        app.allowed_origins.push(o.to_string());
-    }
+    app.allowed_origins.extend(list(flag("--allow-origin")));
     // The admin page on this listener (console token): by default only on the loopback.
     app.console_admin = a.switches.iter().any(|s| s == "--console-admin") || loopback;
     app.ingress_admins = list(flag("--admins"));

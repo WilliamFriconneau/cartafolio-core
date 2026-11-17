@@ -719,3 +719,151 @@ fn a_note_to_file_in_two_spaces_is_copied_to_each_and_nothing_is_erased() {
     assert_eq!(texts(&mut o, "sam-health", &[], "mutuelle").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
+
+/// Puts files into the person's « À trier » (what a device would have sent): `(name, note, bytes)`.
+fn put_files(brain: &memcp_core::Brain, sam: &str, files: &[(&str, &str, &[u8])], tags: &[&str]) {
+    let space = memcp_core::triage::of(brain, sam)
+        .expect("À trier")
+        .expect("made");
+    let tags: Vec<String> = tags.iter().map(|t| (*t).to_string()).collect();
+    for (name, note, bytes) in files {
+        memcp_core::files::put_tagged(brain, &space, "edge", name, note, bytes, &tags)
+            .expect("a file into À trier");
+    }
+}
+
+fn waiting(o: &mut Client) -> Value {
+    o.call("triage_waiting", json!({})).expect("triage_waiting")["triage"][0].clone()
+}
+
+fn png() -> Vec<u8> {
+    let mut b = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+    b.extend_from_slice(&[0; 16]);
+    b
+}
+
+#[test]
+fn files_are_routed_by_name_text_and_description_and_the_rest_waits_with_a_reason() {
+    let image = png();
+    let r = rig_with("files", &|brain, sam| {
+        put_files(
+            brain,
+            sam,
+            &[
+                ("zephyr-budget.txt", "", b"quarterly numbers"),
+                (
+                    "report.md",
+                    "",
+                    "# Readings\nGlycémie 5,4 this morning".as_bytes(),
+                ),
+                ("scan.pdf", "Zephyr contract", b"%PDF-1.4 x"),
+                ("photo.png", "", &image),
+                ("boiler.txt", "", b"the boiler leaks"),
+            ],
+            &["inbox"],
+        );
+    });
+    let mut o = owner(&r);
+    rules_note(&mut o, "sam-work", &["zephyr", "boiler"]);
+    rules_note(&mut o, "sam-health", &["glycémie", "boiler"]);
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!(report.files_sent, 3, "{report:?} {}", waiting(&mut o));
+    let names = |o: &mut Client, space: &str| -> Vec<String> {
+        let l = o
+            .call("file_list", json!({"space": space}))
+            .expect("file_list");
+        l["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .filter_map(|f| f["name"].as_str().map(String::from))
+            .collect()
+    };
+    let work = names(&mut o, "sam-work");
+    assert!(
+        work.contains(&"zephyr-budget.txt".to_string()),
+        "by name: {work:?}"
+    );
+    assert!(
+        work.contains(&"scan.pdf".to_string()),
+        "by description: {work:?}"
+    );
+    assert_eq!(
+        names(&mut o, "sam-health"),
+        vec!["report.md"],
+        "by its text"
+    );
+    // What cannot be placed stays, and says why.
+    let w = waiting(&mut o);
+    assert_eq!(w["count"], 2, "{w}");
+    let why = |name: &str| -> String {
+        w["files"]
+            .as_array()
+            .expect("files")
+            .iter()
+            .find(|f| f["name"] == name)
+            .and_then(|f| f["reason"].as_str())
+            .unwrap_or("")
+            .to_string()
+    };
+    assert_eq!(why("photo.png"), "no keyword matched");
+    assert!(
+        why("boiler.txt").starts_with("two spaces tie"),
+        "{}",
+        why("boiler.txt")
+    );
+    assert!(w["files"][0]["age_seconds"].is_number());
+    // The count of « À trier » in `spaces` is what waits for a decision.
+    let spaces = o.call("spaces", json!({})).expect("spaces");
+    let row = spaces["spaces"]
+        .as_array()
+        .expect("spaces")
+        .iter()
+        .find(|s| s["name"] == "sam-a-trier")
+        .expect("À trier");
+    assert_eq!(row["facts"], 2, "{row}");
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
+fn a_recording_given_up_on_is_tagged_and_counted_apart_from_what_waits_for_the_person() {
+    let mut m4a = vec![
+        0, 0, 0, 0x18, b'f', b't', b'y', b'p', b'M', b'4', b'A', b' ',
+    ];
+    m4a.extend_from_slice(&[0; 32]);
+    let r = rig_with("failed", &|brain, sam| {
+        put_files(brain, sam, &[("memo.m4a", "kept", &m4a)], &["inbox/audio"]);
+    });
+    let mut o = owner(&r);
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!(
+        report.files_sent, 0,
+        "a recording is not the janitor's: {report:?}"
+    );
+    let w = waiting(&mut o);
+    assert_eq!(w["count"], 1, "until the bridge gives up, it waits: {w}");
+    let id = w["files"][0]["id"].as_str().expect("id").to_string();
+    o.call("transcription_failed", json!({"id": id}))
+        .expect("marked");
+    let w = waiting(&mut o);
+    assert_eq!(w["count"], 0, "{w}");
+    assert_eq!(w["failed_transcription"][0]["name"], "memo.m4a");
+    let spaces = o.call("spaces", json!({})).expect("spaces");
+    let row = spaces["spaces"]
+        .as_array()
+        .expect("spaces")
+        .iter()
+        .find(|s| s["name"] == "sam-a-trier")
+        .expect("À trier");
+    assert_eq!(
+        (row["facts"].as_u64(), row["failed_transcription"].as_u64()),
+        (Some(0), Some(1))
+    );
+    // Retry: the tag comes off, it waits again.
+    o.call("transcription_failed", json!({"id": id, "failed": false}))
+        .expect("cleared");
+    assert_eq!(waiting(&mut o)["count"], 1);
+    let _ = std::fs::remove_dir_all(&r.dir);
+}

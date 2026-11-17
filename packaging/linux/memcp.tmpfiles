@@ -1,0 +1,3 @@
+# Where backups go (systemd-tmpfiles); the data folder is made by the service itself (StateDirectory).
+d /var/backups/memcp 0700 memcp memcp -
+d /etc/memcp 0755 root root -

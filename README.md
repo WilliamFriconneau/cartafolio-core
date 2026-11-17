@@ -63,7 +63,9 @@ The first Home Assistant login becomes the administrator and gets a memory of it
 curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh
 ```
 
-It asks where the memory should live, checks what it downloads against the published `SHA256SUMS`, can run the server as a service of your own user (nothing exposed: it listens on the loopback), and prints the key that opens the page. Read it first if you like; `--help` lists the options.
+It asks where the memory should live, checks what it downloads against the published `SHA256SUMS`, runs `memcp setup` (a private data folder, your first spaces, `memcp.toml`), can run the server as a service of your own user (nothing exposed: it listens on the loopback), and prints the address of the page and one address with the key for an assistant. Read it first if you like; `--help` lists the options.
+
+As a system service, with a Debian or Arch package and hardened systemd units, a nightly backup and the firewall and TLS recipes: [docs/LINUX.md](docs/LINUX.md).
 
 ### macOS and Windows
 
@@ -83,7 +85,7 @@ The server listens on the loopback only. Keys are shown once and only their dige
 
 ## Read more
 
-[docs/REFERENCE.md](docs/REFERENCE.md) (the full manual) · [docs/MODEL.md](docs/MODEL.md) · [docs/SPACES.md](docs/SPACES.md) · [docs/FEDERATION.md](docs/FEDERATION.md) · [docs/TAILSCALE.md](docs/TAILSCALE.md) · [docs/ENCRYPTION.md](docs/ENCRYPTION.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
+[docs/REFERENCE.md](docs/REFERENCE.md) (the full manual) · [docs/LINUX.md](docs/LINUX.md) · [docs/MODEL.md](docs/MODEL.md) · [docs/SPACES.md](docs/SPACES.md) · [docs/FEDERATION.md](docs/FEDERATION.md) · [docs/TAILSCALE.md](docs/TAILSCALE.md) · [docs/ENCRYPTION.md](docs/ENCRYPTION.md) · [CHANGELOG.md](CHANGELOG.md) · [CONTRIBUTING.md](CONTRIBUTING.md)
 
 ## License
 

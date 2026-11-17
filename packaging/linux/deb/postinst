@@ -1,0 +1,17 @@
+#!/bin/sh
+set -e
+if [ "$1" = configure ]; then
+  # The service user and the folders, as the sysusers and tmpfiles files say.
+  if command -v systemd-sysusers >/dev/null 2>&1; then
+    systemd-sysusers /usr/lib/sysusers.d/memcp.conf || true
+  elif ! getent passwd memcp >/dev/null; then
+    adduser --system --group --home /var/lib/memcp --no-create-home memcp
+  fi
+  if command -v systemd-tmpfiles >/dev/null 2>&1; then
+    systemd-tmpfiles --create /usr/lib/tmpfiles.d/memcp.conf || true
+  fi
+  if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
+  echo "MemCP is installed. First run:  sudo memcp setup --system  then  sudo systemctl enable --now memcp"
+fi
+#DEBHELPER#
+exit 0

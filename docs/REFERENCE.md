@@ -166,7 +166,7 @@ Put the identity listener behind `tailscale serve` (never Funnel): the page know
 
 ## Is it healthy?
 
-`memcp --data DIR doctor [--public-url URL] [--listen ADDR]` reads the installation and says, in plain words, what is fine and what deserves a look: file permissions, database versions and integrity, people, connections that reach everything or are no longer used, quick notes waiting in the inbox, the public address, whether the server answers. It writes nothing and starts no migration, so it is safe on a live installation and before an update.
+`memcp --data DIR doctor [--public-url URL] [--listen ADDR]` reads the installation and says, in plain words, what is fine and what deserves a look: file permissions, database versions and integrity, people, connections that reach everything or are no longer used, quick notes waiting in the inbox, the public address, whether the server answers. It also reads `memcp.toml` and the age of the newest backup. It writes nothing and starts no migration, so it is safe on a live installation and before an update. Every check is listed in [LINUX.md](LINUX.md#what-memcp-doctor-checks). The settings file and the commands `setup`, `config` and `prepare` are in [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md).
 
 
 ## A health app deposits its data

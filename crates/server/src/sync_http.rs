@@ -53,6 +53,10 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     }
     // The log is the whole vault: a vault reached only through tag paths is not the peer's to copy or to write.
     let whole = |s: &Space| caller.read_paths(s).is_none();
+    // A machine the person paused is not served until they resume it (its status stays readable).
+    if op != "status" && memcp_core::peers::is_paused(&ctl, &caller.agent) {
+        return refused(423, "the sync with this machine is paused");
+    }
     let space = || -> Result<Space, Response> {
         let name = req.query.get("space").map(String::as_str).unwrap_or("");
         Space::new(name).map_err(|_| refused(400, "space: a space name"))

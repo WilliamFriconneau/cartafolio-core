@@ -33,6 +33,14 @@ jobs:
           cp target/${{ matrix.target }}/release/memcp-janitor dist/memcp-janitor-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-capture dist/memcp-capture-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-sync dist/memcp-sync-${{ github.ref_name }}-${{ matrix.target }}
+          # The archive install.sh installs from: programs, units, memcp.toml (see packaging/linux).
+          V=${GITHUB_REF_NAME#v}
+          n=memcp-$V-${{ matrix.target }}
+          mkdir -p pkg/$n/bin pkg/$n/units
+          for b in memcp memcp-janitor memcp-capture; do cp target/${{ matrix.target }}/release/$b pkg/$n/bin/; done
+          cp packaging/linux/*.service packaging/linux/*.timer packaging/linux/memcp.sysusers packaging/linux/memcp.tmpfiles pkg/$n/units/
+          cp packaging/linux/memcp.toml docs/LINUX.md LICENSE install.sh pkg/$n/
+          tar -C pkg -czf dist/$n.tar.gz $n
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}

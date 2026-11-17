@@ -165,6 +165,23 @@ Rights: The owner of the spaces.
 | `set_layout` | Renames, moves or reorders one of a person's spaces | `Error::Invalid` for a malformed value |
 | `add_custom_space` | Creates a space of a person's own, of kind `custom`, with a label and perhaps under a parent | none (pure) |
 
+## `lifecycle`, `rules`, `peers`, `people`: create, update and delete what a person owns
+
+The matrix of every object and operation, with the command line, the HTTP route, the page button and the MCP tool, is `docs/CRUD.md`.
+
+Rights: The owner of the objects (an administrator for `people`).
+
+| Function | Purpose | Errors |
+|---|---|---|
+| `Brain::create_space_with` | Creates a space of a kind, with a label, a parent and keywords | `Error::Invalid` for an unknown kind or a malformed value |
+| `Brain::space_info` | Reads one of a person's spaces: label, kind, parent, counts, rules | `Error::Invalid` for a space that is not theirs |
+| `Brain::update_space` | Changes label, parent, position, kind, keywords and tags | `Error::Invalid` for a malformed value |
+| `Brain::delete_space` | Deletes a space with a choice (into another, or archive), with a dry run; never destroys | `Error::Invalid` for a space that is not theirs, « À trier », a bad choice |
+| `Brain::archived_spaces`, `Brain::restore_space` | Lists the archive; brings an archived space back | `Error::Invalid` for an unknown archive or a name in use |
+| `rules::read`, `rules::write`, `rules::edit` | The keywords and tags of a space, one new version of the `rules` note per change | `Error::Invalid` for a malformed tag |
+| `peers::list`, `peers::get`, `peers::update`, `peers::set_paused`, `peers::revoke`, `peers::forget` | A person's machines: read, rename and note, pause and resume, revoke, forget | `Error::Invalid` for a machine that is not theirs or still in use |
+| `people::retire_person` | Removes a person = disables them and exports their memory | `Error::Invalid` for a non-administrator, oneself, the last administrator |
+
 ## `merge`: Merging another memory's export into this one
 
 Rights: An administrator, from the command line; a backup is made first.

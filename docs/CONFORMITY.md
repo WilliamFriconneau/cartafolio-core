@@ -177,6 +177,21 @@ The documents above say little of the add-on directly; what they require of it i
 | Manager | `GET /health` answers | done | `crates/manager/src/manager.rs` |
 | The add-on starts | `run.sh` builds the settings from the options and starts the node and the manager | partial | `ha-addon/memcp/run.sh`; shell, no automated test |
 
+## The Linux server app
+
+What [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md) promise, and where it is checked.
+
+| Doc and section | Requirement | Status | Test or code |
+|---|---|---|---|
+| LINUX, First run | `memcp setup` makes a private data directory, the first memory, the default spaces and the settings file, and prints the page address and one address with the key; non-interactive with `--yes`; run again it changes nothing | done | `server/tests/linux.rs::setup_makes_a_private_memory_a_page_key_and_one_address_for_an_assistant` |
+| LINUX, Settings | One `memcp.toml` with every option, a flag wins, a wrong file is refused | done | `server/tests/linux.rs::a_flag_wins_over_the_file_and_a_bad_file_is_refused`, `server/tests/parity.rs` |
+| PARITY | Every add-on option has a `memcp.toml` counterpart and a row in the table | done | `server/tests/parity.rs::every_addon_option_has_a_memcp_toml_counterpart_and_a_row_in_the_parity_table` |
+| LINUX, The page | Sign-in by console key or tailnet identity outside Home Assistant | done | `server/tests/linux.rs`, `server/tests/admin.rs`, `server/tests/oauth.rs::the_admin_page_on_the_tailnet_knows_the_owner` |
+| LINUX, What doctor checks | Every check the documentation lists exists | done | `server/tests/parity.rs::every_doctor_check_the_documentation_lists_exists` |
+| LINUX, Install | Hardened unit, backup and companion timers, a Debian package, an Arch package, a release archive that `install.sh` installs from | done | `packaging/linux/`, CI jobs `linux-app` and `arch-package` (build, install, smoke test), `scripts/linux-smoke.sh` |
+| LINUX, Backup and restore | `memcp backup` honours `backup_dir` and `backup_keep` | done | `server/tests/linux.rs` |
+| LINUX, Restore, Uninstall, Firewall, TLS | The restore and uninstall steps and the proxy snippets are exact | partial | written by hand; the restore is the one `core/tests/backup.rs` exercises, the snippets are not run in CI |
+
 ## Gaps left, by importance
 
 Small gaps (under about 50 lines) were closed with `crates/server/tests/conformity.rs`: discovery content, the join lifetime, the token digest, the forbidden words. The footer of the page was left out: it needs the page's data and a browser test, more than a few lines. What remains:
