@@ -400,7 +400,8 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
                 |_| Ok(()),
             )
             .is_ok();
-        if n.starts_with("console-") || (owner.is_some() && !made_by_signing_in) {
+        let kept = n.starts_with("console-") || n.starts_with(memcp_core::sync::PEER_PREFIX);
+        if kept || (owner.is_some() && !made_by_signing_in) {
             return page(
                 app,
                 403,
@@ -614,22 +615,49 @@ struct CodeRow {
 /// choice just made is the connection's rights: a client that is approved again with
 /// another choice gets that one, on the same connection. Nothing is ever granted that
 /// was not ticked, and never beyond what the person reaches.
+///
+/// Only a connection an OAuth consent made for this person is ever reused. A name held by any other connection (a
+/// machine's, an app's, a key made by hand, another person's), whether it was there at the consent or made since, is left
+/// alone and the client gets another name: renewing that connection would cut its own device off and hand its rights to
+/// the client.
 fn issue(
     ctl: &Connection,
     user: &User,
     client_id: &str,
     choice: &Choice,
 ) -> Result<(String, String), String> {
-    let agent = if choice.agent.is_empty() {
+    let wanted = if choice.agent.is_empty() {
         agent_name(user, client_id)
     } else {
         choice.agent.clone()
     };
     let rights = Rights::parse(&choice.rights).map_err(|e| e.to_string())?;
-    let owner = access::owner_of(ctl, &agent).map_err(|e| e.to_string())?;
-    if owner.as_deref() == Some(user.id.as_str())
-        && access::regrant(ctl, &agent, &rights).map_err(|e| e.to_string())?
-    {
+    // `None`: the name is free; `Some(true)`: this person's connection made by OAuth; `Some(false)`: anything else.
+    let mine = |name: &str| -> Result<Option<bool>, String> {
+        ctl.query_row(
+            "SELECT coalesce(user_id, 'owner') = ?2 AND kind = 'oauth' FROM connections WHERE agent = ?1",
+            params![name, user.id],
+            |r| r.get::<_, bool>(0),
+        )
+        .optional()
+        .map_err(|e| e.to_string())
+    };
+    // A name held by a connection OAuth did not make, or by someone else: the same name with `-2`, `-3`… , the first
+    // that is free or this person's own OAuth connection, so that the next consent finds the same one again.
+    let mut agent = wanted.clone();
+    let mut reuse = mine(&agent)?;
+    let mut n = 1;
+    while reuse == Some(false) {
+        n += 1;
+        if n > 99 {
+            return Err(format!("no free name left after {wanted}"));
+        }
+        let tail = format!("-{n}");
+        let base: String = wanted.chars().take(40 - tail.len()).collect();
+        agent = format!("{}{tail}", base.trim_end_matches('-'));
+        reuse = mine(&agent)?;
+    }
+    if reuse == Some(true) && access::regrant(ctl, &agent, &rights).map_err(|e| e.to_string())? {
         access::set_read_only(ctl, &agent, choice.read_only).map_err(|e| e.to_string())?;
         if let Some(token) =
             access::renew(ctl, &agent, &user.id, ACCESS_DAYS).map_err(|e| e.to_string())?
@@ -637,14 +665,14 @@ fn issue(
             return Ok((agent, token));
         }
     }
-    let token = access::connect_for(
+    let token = access::connect_oauth(
         ctl,
         &user.id,
         &agent,
         &rights,
         Some(ACCESS_DAYS),
         choice.read_only,
-        owner.is_some(),
+        reuse == Some(true),
     )
     .map_err(|e| e.to_string())?;
     Ok((agent, token))

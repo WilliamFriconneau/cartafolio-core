@@ -472,8 +472,9 @@ pub(crate) fn insert(
     Ok(fact)
 }
 
-/// [`insert`] without the entry in the peers' log: the caller logs it once the fact is complete.
-fn insert_unlogged(
+/// [`insert`] without the entry in the peers' log: the caller logs it (`sync::record_fact_created`) once the fact is
+/// complete, so the event carries what the fact finally holds.
+pub(crate) fn insert_unlogged(
     conn: &Connection,
     space: &Space,
     author: &str,

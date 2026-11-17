@@ -56,6 +56,18 @@ fn connect(e: &Env, agent: &str, rights: &str) -> Result<String, Box<dyn Error>>
     )?)
 }
 
+/// A connection for a machine of the person, as a pairing or a join makes it.
+fn machine(e: &Env, agent: &str, rights: &str) -> Result<String, Box<dyn Error>> {
+    let ctl = e.app.brain.open_control()?;
+    Ok(access::connect_peer(
+        &ctl,
+        memcp_core::users::OWNER,
+        agent,
+        &Rights::parse(rights)?,
+        false,
+    )?)
+}
+
 fn rq(method: &str, path: &str, token: &str, query: &[(&str, &str)], body: &str) -> Request {
     let mut headers = std::collections::HashMap::new();
     if !token.is_empty() {
@@ -111,27 +123,27 @@ fn sync(
 #[test]
 fn a_connection_limited_to_paths_cannot_use_the_sync_routes() -> Res {
     let e = env()?;
-    let whole = connect(&e, "whole", "work:rw")?;
-    let narrow = connect(&e, "narrow", "work/sources/app:rw")?;
-    // The whole connection syncs: it reads the log and writes through it.
+    let whole = machine(&e, "peer-whole", "work:rw")?;
+    let narrow = machine(&e, "peer-narrow", "work/sources/app:rw")?;
+    // The machine that reaches the space whole syncs it: it reads the log and writes through it.
     let body = json!({ "events": [event("f1", &["secret/index"])] }).to_string();
-    let r = sync(&e, "POST", "whole", "events", &whole, "work", &body);
+    let r = sync(&e, "POST", "peer-whole", "events", &whole, "work", &body);
     assert_eq!(r.status, 200, "{}", String::from_utf8_lossy(&r.body));
     assert_eq!(
-        sync(&e, "GET", "whole", "events", &whole, "work", "").status,
+        sync(&e, "GET", "peer-whole", "events", &whole, "work", "").status,
         200
     );
     // A connection limited to a path reaches neither: the log is the whole vault.
     assert_eq!(
-        sync(&e, "GET", "narrow", "events", &narrow, "work", "").status,
+        sync(&e, "GET", "peer-narrow", "events", &narrow, "work", "").status,
         403
     );
     let body = json!({ "events": [event("f2", &["index"])] }).to_string();
     assert_eq!(
-        sync(&e, "POST", "narrow", "events", &narrow, "work", &body).status,
+        sync(&e, "POST", "peer-narrow", "events", &narrow, "work", &body).status,
         403
     );
-    let listed = sync(&e, "GET", "narrow", "spaces", &narrow, "", "").body_json();
+    let listed = sync(&e, "GET", "peer-narrow", "spaces", &narrow, "", "").body_json();
     assert_eq!(listed["spaces"], json!([]), "{listed}");
     Ok(())
 }
@@ -254,5 +266,111 @@ fn guessing_oauth_codes_is_counted_and_held_off() -> Res {
         last = e.app.handle(&r).status;
     }
     assert_eq!(last, 429);
+    Ok(())
+}
+
+/// Every route of the exchange between nodes, with a body each accepts.
+const SYNC_ROUTES: [(&str, &str, &str); 7] = [
+    ("GET", "status", ""),
+    ("GET", "peers", ""),
+    ("POST", "peers", r#"{"node": {"name": "x"}, "peers": []}"#),
+    ("GET", "spaces", ""),
+    ("POST", "spaces", r#"{"space": "health", "archived_at": 1}"#),
+    ("GET", "events", ""),
+    ("POST", "events", r#"{"events": []}"#),
+];
+
+#[test]
+fn a_connection_named_like_a_machine_gets_none_of_the_powers_of_one() -> Res {
+    let e = env()?;
+    let ctl = e.app.brain.open_control()?;
+    // The name of a machine cannot be asked for, nor taken by a rename.
+    assert!(
+        access::connect_for(
+            &ctl,
+            "owner",
+            "peer-mine",
+            &Rights::owner(),
+            None,
+            false,
+            false
+        )
+        .is_err()
+    );
+    connect(&e, "other", "work:r")?;
+    assert!(access::rename(&ctl, "other", "peer-other").is_err());
+    // A connection an older node let take such a name (by hand, by OAuth, by a rename): the name is all it has.
+    let key = connect(&e, "helper", "all")?;
+    ctl.execute(
+        "UPDATE connections SET agent = 'peer-helper' WHERE agent = 'helper'",
+        [],
+    )?;
+    let at = |method: &str, path: &str, body: &str| {
+        e.app
+            .handle(&rq(
+                method,
+                &format!("/mcp/peer-helper/{path}"),
+                &key,
+                &[],
+                body,
+            ))
+            .status
+    };
+    assert_eq!(at("POST", "join/invite", "{}"), 403, "it mints no ticket");
+    assert_eq!(at("GET", "join/pending", ""), 403);
+    assert_eq!(at("POST", "join/approve", r#"{"id": "x"}"#), 403);
+    for (method, op, body) in SYNC_ROUTES {
+        let r = sync(&e, method, "peer-helper", op, &key, "work", body);
+        assert_eq!(r.status, 403, "{method} sync/{op}");
+    }
+    // A machine the person let in (a pairing code) has them.
+    let now = memcp_core::util::now();
+    let (code, _) = memcp_core::pairing::create_for_peer(&e.app.brain, "owner", "owner", now)?;
+    let paired = memcp_core::pairing::redeem(&ctl, &code, "laptop", now)?;
+    let invite = e.app.handle(&rq(
+        "POST",
+        &format!("/mcp/{}/join/invite", paired.agent),
+        &paired.token,
+        &[],
+        "{}",
+    ));
+    assert_eq!(invite.status, 200, "{}", invite.body_json());
+    Ok(())
+}
+
+#[test]
+fn an_assistant_key_reaches_no_route_of_the_exchange_between_nodes() -> Res {
+    let e = env()?;
+    // An assistant that reaches every space, at its own address: the exchange is not for it.
+    let key = connect(&e, "assistant", "all")?;
+    for (method, op, body) in SYNC_ROUTES {
+        let r = sync(&e, method, "assistant", op, &key, "work", body);
+        assert_eq!(r.status, 403, "{method} sync/{op}: {}", r.body_json());
+    }
+    // A machine limited to some spaces keeps the log of those in step, and is told nothing else.
+    let narrow = machine(&e, "peer-narrow", "work:r")?;
+    assert_eq!(
+        sync(&e, "GET", "peer-narrow", "events", &narrow, "work", "").status,
+        200
+    );
+    assert_eq!(
+        sync(&e, "GET", "peer-narrow", "spaces", &narrow, "", "").status,
+        200
+    );
+    for (method, op, body) in [
+        SYNC_ROUTES[0],
+        SYNC_ROUTES[1],
+        SYNC_ROUTES[2],
+        SYNC_ROUTES[4],
+    ] {
+        let r = sync(&e, method, "peer-narrow", op, &narrow, "work", body);
+        assert_eq!(r.status, 403, "{method} sync/{op}");
+    }
+    // A full machine of the person is served everywhere.
+    let full = machine(&e, "peer-full", "all")?;
+    for (method, op, body) in SYNC_ROUTES {
+        let r = sync(&e, method, "peer-full", op, &full, "work", body);
+        assert_eq!(r.status, 200, "{method} sync/{op}: {}", r.body_json());
+    }
     Ok(())
 }

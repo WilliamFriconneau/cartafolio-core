@@ -920,3 +920,109 @@ fn an_address_naming_a_connection_of_someone_else_or_a_vault_is_not_a_new_connec
     }
     Ok(())
 }
+
+#[test]
+fn an_address_with_the_name_of_a_machine_makes_no_connector() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query_for(&client, "https://memory.example.net/mcp/peer-laptop");
+    let (status, html) = page_of(&e, &q);
+    assert_eq!(status, 403);
+    assert!(!html.contains("name=nonce"), "{html}");
+    Ok(())
+}
+
+/// The redirect's code after an approval of `q` with these ticks.
+fn approved(e: &Env, q: &str, extra: &str) -> Result<String, Box<dyn Error>> {
+    let (_, html) = page_of(e, q);
+    let n = nonce_from(&html)?;
+    let r = decide_with(e, q, &n, "allow", &[], extra);
+    assert_eq!(r.status, 302);
+    Ok(location(&r)
+        .split("code=")
+        .nth(1)
+        .and_then(|c| c.split('&').next())
+        .ok_or("code")?
+        .to_string())
+}
+
+fn exchange(e: &Env, client: &str, code: &str) -> Result<String, Box<dyn Error>> {
+    let cb = "https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback";
+    let t = token(e, &format!("grant_type=authorization_code&code={code}&redirect_uri={cb}&client_id={client}&code_verifier={VERIFIER}")).body_json();
+    Ok(t["access_token"].as_str().ok_or("access")?.to_string())
+}
+
+#[test]
+fn a_consent_never_takes_over_a_connection_it_did_not_make() -> Res {
+    let e = env()?;
+    let ctl = e.app.brain.open_control()?;
+    let alive = |key: &str| {
+        access::authenticate(&ctl, key, util_now())
+            .ok()
+            .flatten()
+            .map(|c| c.agent)
+    };
+    // The name an address asked for is taken, between the consent and the exchange of its code, by a key made another
+    // way (an app's, a device's).
+    let client = register(&e)?;
+    let code = approved(
+        &e,
+        &authorize_query_for(&client, "https://memory.example.net/mcp/laptop"),
+        "&v_health=1",
+    )?;
+    let app_key = access::connect(
+        &ctl,
+        "laptop",
+        &access::Rights::parse("personal:rw")?,
+        None,
+        false,
+        false,
+    )?;
+    let got = exchange(&e, &client, &code)?;
+    assert_eq!(
+        alive(&app_key).as_deref(),
+        Some("laptop"),
+        "the app keeps its key"
+    );
+    let named = alive(&got).ok_or("the client's key works")?;
+    assert_eq!(named, "laptop-2");
+    assert_eq!(
+        access::get(&ctl, "laptop")?.ok_or("laptop")?.rights,
+        "personal:rw"
+    );
+    // The name a client gets by default is held by a key the person made by hand.
+    let client = register(&e)?;
+    let default = format!("oauth-owner-{}", &client[client.len() - 8..]);
+    let by_hand = access::connect(
+        &ctl,
+        &default,
+        &access::Rights::parse("personal:r")?,
+        None,
+        false,
+        false,
+    )?;
+    let got = exchange(
+        &e,
+        &client,
+        &approved(&e, &authorize_query(&client), "&all=1")?,
+    )?;
+    assert_eq!(
+        alive(&by_hand),
+        Some(default.clone()),
+        "the key by hand still works"
+    );
+    assert_eq!(alive(&got), Some(format!("{default}-2")));
+    assert_eq!(
+        access::get(&ctl, &default)?.ok_or("kept")?.rights,
+        "personal:r"
+    );
+    // The next consent of the same client finds that connection and renews it, as before.
+    let again = exchange(
+        &e,
+        &client,
+        &approved(&e, &authorize_query(&client), "&all=1")?,
+    )?;
+    assert_eq!(alive(&again), Some(format!("{default}-2")));
+    assert_eq!(alive(&got), None, "renewed: the former key stops");
+    Ok(())
+}

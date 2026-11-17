@@ -736,7 +736,19 @@ fn the_library_index_follows_the_one_setting_and_library_add_is_its_alias() -> R
 
 // ---- rights and travel -----------------------------------------------------------------------------------------
 
+/// A connection used by a program on the node's own machine (the standard input, or the loopback address).
 fn caller(b: &Brain, name: &str, spec: &str) -> Result<access::Caller, Box<dyn std::error::Error>> {
+    let mut c = remote_caller(b, name, spec)?;
+    c.local = true;
+    Ok(c)
+}
+
+/// The same connection used from another machine (a cloud assistant, a laptop on the network).
+fn remote_caller(
+    b: &Brain,
+    name: &str,
+    spec: &str,
+) -> Result<access::Caller, Box<dyn std::error::Error>> {
     let ctl = b.open_control()?;
     let tok = access::connect_for(&ctl, OWNER, name, &Rights::parse(spec)?, None, false, false)?;
     Ok(access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?)
@@ -902,5 +914,64 @@ fn the_setting_is_in_no_sync_event_and_in_no_replicated_table() -> Res {
     // The layout of the space (what does travel) carries no folder.
     let layout = b.layout(OWNER)?;
     assert!(!format!("{layout:?}").contains(needle));
+    Ok(())
+}
+
+#[test]
+fn only_the_page_and_programs_of_this_machine_point_a_space_at_a_folder() -> Res {
+    let t = Temp::new("folders-remote");
+    let b = brain(&t)?;
+    let dir = t.path().join("from-afar");
+    let args = json!({ "space": "home", "path": dir.display().to_string(), "mode": "read" });
+    let names = |c: &access::Caller| -> Vec<&'static str> {
+        tools::definitions(c).iter().map(|d| d.name).collect()
+    };
+    // A key used from another machine, even one that writes the space whole: no folder_set, listed or called.
+    let afar = remote_caller(&b, "afar", "home:rw")?;
+    assert!(!names(&afar).contains(&"folder_set"));
+    assert!(names(&afar).contains(&"folder_get"));
+    assert!(tools::call(&b, &afar, "folder_set", &args).is_err());
+    // A connection made by an OAuth consent never may, even through the loopback address.
+    let ctl = b.open_control()?;
+    let tok = access::connect_oauth(
+        &ctl,
+        OWNER,
+        "signed-in",
+        &Rights::parse("home:rw")?,
+        Some(30),
+        false,
+        false,
+    )?;
+    let mut oauth = access::authenticate(&ctl, &tok, util::now())?.ok_or("refused")?;
+    oauth.local = true;
+    assert!(!names(&oauth).contains(&"folder_set"));
+    assert!(tools::call(&b, &oauth, "folder_set", &args).is_err());
+    assert!(!dir.exists(), "nothing was made on the disk");
+    assert!(folders::get(&b, &sp("home"))?.is_none());
+    Ok(())
+}
+
+#[test]
+fn a_space_never_sits_in_or_over_a_folder_of_keys_or_of_the_system() -> Res {
+    let t = Temp::new("folders-secret");
+    let b = brain(&t)?;
+    let s = sp("home");
+    let home = std::env::var_os("HOME").map(PathBuf::from).ok_or("HOME")?;
+    for path in [
+        home.join(".ssh"),
+        home.join(".ssh/inside"),
+        home.join(".config/memcp"),
+        home.clone(),
+        PathBuf::from("/etc"),
+    ] {
+        let err = folders::set(&b, &s, Some(&path), Mode::Read, 1)
+            .err()
+            .ok_or_else(|| format!("{} was taken", path.display()))?;
+        assert!(err.to_string().contains("keys"), "{err}");
+    }
+    assert!(folders::get(&b, &s)?.is_none());
+    // A folder of the person's documents is fine.
+    let docs = t.path().join("documents");
+    folders::set(&b, &s, Some(&docs), Mode::Read, 1)?;
     Ok(())
 }

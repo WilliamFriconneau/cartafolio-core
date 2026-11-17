@@ -614,7 +614,7 @@ fn direct(t: &Target, a: &Args, words: &str) -> Result<(), Failure> {
         }
         "invite allow" => {
             let device = arg(2, "the device name")?;
-            let minutes: i64 = flag("--minutes").and_then(|m| m.parse().ok()).unwrap_or(30);
+            let minutes: i64 = flag("--minutes").and_then(|m| m.parse().ok()).unwrap_or(10);
             let v = call_json(
                 t,
                 "POST",
@@ -625,9 +625,13 @@ fn direct(t: &Target, a: &Args, words: &str) -> Result<(), Failure> {
                 show(&v);
             } else {
                 crate::sayln!(
-                    "{device} may join within {} minutes, once, without the three words.",
-                    v["minutes"]
+                    "{device} may join within {} minutes, once, without the three words, with this ticket (shown once):\n  {}",
+                    v["minutes"],
+                    v["ticket"].as_str().unwrap_or("?")
                 );
+                if let Some(link) = v["link"].as_str() {
+                    crate::sayln!("or this link:\n  {link}");
+                }
             }
             Ok(())
         }

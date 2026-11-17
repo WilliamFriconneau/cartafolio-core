@@ -342,19 +342,22 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 "required": ["path", "summary"]
             }),
         });
-        out.push(ToolDef {
-            name: "folder_set",
-            description: "Points a space at a local folder of THIS NODE, or (`path` null) back at the node's own storage folder. The node then keeps the space's notes there as Markdown (`<slug>-<shortid>.md`, with a front matter `id`, `space`, `tags`, `created`, `version`) and its files as themselves in `files/`, in both directions: an edit in the folder becomes a new version of the note, a new `.md` becomes a note, a new file becomes a file of the space (author `folder-sync`); a file deleted from the folder retires its note with a reason, never the reverse. `mode`: `readwrite` (default) or `read` (the folder is only read, for search; nothing is written either way). The setting is per node and never travels in the swarm. A folder held by a cloud service is allowed and flagged (`cloud`, `warning`): keep it on the device. The folder must be outside the node's data directory and not overlap another space's folder; it is made if missing. Returns what `folder_get` returns. The first pass runs within seconds.".into(),
-            schema: json!({
-                "type": "object",
-                "properties": {
-                    "space": space_prop(&writable, "Required if you can write to several spaces."),
-                    "path": { "type": ["string", "null"], "description": "The full path of the folder on this node; null puts the space back on the default storage folder." },
-                    "mode": { "type": "string", "enum": ["readwrite", "read"], "description": "Default readwrite." }
-                },
-                "required": ["path"]
-            }),
-        });
+        // A folder is a path of this machine's disk: only the page and the programs on this machine point a space at one.
+        if caller.may_set_folders() {
+            out.push(ToolDef {
+                name: "folder_set",
+                description: "Points a space at a local folder of THIS NODE, or (`path` null) back at the node's own storage folder. The node then keeps the space's notes there as Markdown (`<slug>-<shortid>.md`, with a front matter `id`, `space`, `tags`, `created`, `version`) and its files as themselves in `files/`, in both directions: an edit in the folder becomes a new version of the note, a new `.md` becomes a note, a new file becomes a file of the space (author `folder-sync`); a file deleted from the folder retires its note with a reason, never the reverse. `mode`: `readwrite` (default) or `read` (the folder is only read, for search; nothing is written either way). The setting is per node and never travels in the swarm. A folder held by a cloud service is allowed and flagged (`cloud`, `warning`): keep it on the device. The folder must be outside the node's data directory and not overlap another space's folder; it is made if missing. Returns what `folder_get` returns. The first pass runs within seconds.".into(),
+                schema: json!({
+                    "type": "object",
+                    "properties": {
+                        "space": space_prop(&writable, "Required if you can write to several spaces."),
+                        "path": { "type": ["string", "null"], "description": "The full path of the folder on this node; null puts the space back on the default storage folder." },
+                        "mode": { "type": "string", "enum": ["readwrite", "read"], "description": "Default readwrite." }
+                    },
+                    "required": ["path"]
+                }),
+            });
+        }
         out.push(ToolDef {
             name: "supersede",
             description: "Replaces an active fact with a corrected version. The old one stays readable in the history.".into(),
@@ -578,6 +581,9 @@ fn vault_guide_spaces(caller: &Caller) -> Vec<Space> {
 }
 
 fn visible(caller: &Caller, name: &str) -> bool {
+    if name == "folder_set" && !caller.may_set_folders() {
+        return false;
+    }
     if name == "guide_set" {
         return !vault_guide_spaces(caller).is_empty();
     }

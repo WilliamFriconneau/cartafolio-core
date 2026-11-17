@@ -35,7 +35,10 @@ the name is refused. That is the only case it knows: every space is new.
 - A note is the same note when its fingerprint (text, tags, date) matches: it is not copied twice.
   Merging twice is harmless.
 - Tags and the rules note (`rules`) of two spaces are merged as sets; the dashboard note of the target
-  wins unless *replace* is chosen.
+  wins unless *replace* is chosen. A note of the target that gains tags is replaced by a copy of itself with
+  every tag, as a note filed elsewhere is.
+- Everything a merge writes is in the space's log: the other nodes of the person get the merged space as it
+  is on this one.
 - Files keep their fingerprints; a file already present is not copied again.
 - Instructions (guides) are not merged: the target's stay, the other's are offered as a proposal.
 - Connections never travel; they are made again where the memory now lives.

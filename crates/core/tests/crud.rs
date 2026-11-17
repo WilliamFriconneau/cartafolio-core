@@ -70,12 +70,11 @@ fn a_node_is_renamed_paused_revoked_and_forgotten_without_losing_its_history() -
     let ctl = b.open_control()?;
     let owner = users::user(&ctl, OWNER)?.ok_or("owner")?;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
-    access::connect(
+    access::connect_peer(
         &ctl,
+        memcp_core::users::OWNER,
         "peer-laptop-ab12",
         &Rights::parse("work:rw")?,
-        None,
-        false,
         false,
     )?;
     let now = util::now();

@@ -39,8 +39,8 @@ pub const CONFLICT_TAG: &str = "conflict";
 /// The subfolder that holds the space's files.
 pub const FILES_DIR: &str = "files";
 
-/// A file bigger than this is left alone (read whole into memory).
-const MAX_FILE: i64 = 100 * 1024 * 1024;
+/// A file bigger than this is left alone: the biggest a space keeps (see `files::MAX_BYTES`).
+const MAX_FILE: i64 = files::MAX_BYTES as i64;
 /// Deepest subfolder the engine goes into.
 const MAX_DEPTH: usize = 12;
 /// Most files one folder may hold for the engine.
@@ -400,6 +400,85 @@ pub fn info(brain: &Brain, space: &Space) -> Result<Value> {
     })
 }
 
+/// Folders of the system and of the person's keys, under the home folder (`HOME`, `USERPROFILE`) or from the root. A
+/// space never sits in one, nor in a folder that holds one: in `read` mode the node would read the person's secrets into
+/// a space that any of their assistants reads, and in `readwrite` mode it would write there.
+const SECRET_HOME: [&str; 16] = [
+    ".ssh",
+    ".gnupg",
+    ".aws",
+    ".azure",
+    ".kube",
+    ".docker",
+    ".config",
+    ".password-store",
+    ".local/share/keyrings",
+    ".netrc",
+    ".pgpass",
+    "Library/Keychains",
+    "Library/Cookies",
+    "Library/Application Support/com.apple.TCC",
+    "AppData/Roaming/Microsoft/Credentials",
+    "AppData/Local/Microsoft/Credentials",
+];
+const SECRET_ROOT: [&str; 12] = [
+    "/etc",
+    "/private/etc",
+    "/private/var/db",
+    "/System",
+    "/Library/Keychains",
+    "/usr",
+    "/bin",
+    "/sbin",
+    "/boot",
+    "/root",
+    "/proc",
+    "/sys",
+];
+
+/// `path` with its deepest existing ancestor resolved (links followed) and the rest, not made yet, appended as it is.
+fn resolved_ahead(path: &Path) -> PathBuf {
+    let mut rest = Vec::new();
+    let mut at = path;
+    loop {
+        if let Ok(c) = fs::canonicalize(at) {
+            return rest.iter().rev().fold(c, |p: PathBuf, part| p.join(part));
+        }
+        match (at.parent(), at.file_name()) {
+            (Some(parent), Some(name)) => {
+                rest.push(name.to_os_string());
+                at = parent;
+            }
+            _ => return path.to_path_buf(),
+        }
+    }
+}
+
+/// Refuses a folder that is, is inside, or holds a place of [`SECRET_HOME`] or [`SECRET_ROOT`] (compared after
+/// resolving links, as `canon` is).
+fn refuse_secret_place(canon: &Path) -> Result<()> {
+    let homes = ["HOME", "USERPROFILE"]
+        .iter()
+        .filter_map(std::env::var_os)
+        .map(PathBuf::from)
+        .filter(|h| h.is_absolute());
+    let mut places: Vec<PathBuf> = SECRET_ROOT.iter().map(PathBuf::from).collect();
+    for home in homes {
+        places.extend(SECRET_HOME.iter().map(|p| home.join(p)));
+    }
+    for place in places {
+        let place = fs::canonicalize(&place).unwrap_or(place);
+        if canon.starts_with(&place) || place.starts_with(canon) {
+            return Err(Error::Invalid(format!(
+                "{} is, or holds, a folder of the system or of keys ({}): a space never sits there",
+                canon.display(),
+                place.display()
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Points a space at a folder of this node, or (`path` `None`) back at the default storage folder: the node then stops
 /// mirroring and leaves the folder as it is. The folder is made if it does not exist. It must not hold, or be held by,
 /// the node's own data directory or the folder of another space of this node. The library index of the space follows
@@ -455,6 +534,15 @@ pub fn set(
             path.display()
         )));
     }
+    if path
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        return Err(Error::Invalid("give the folder's path without `..`".into()));
+    }
+    // Checked before anything is made on the disk, from the deepest part of the path that exists, and again below once
+    // the folder exists and every link in it is resolved.
+    refuse_secret_place(&resolved_ahead(path))?;
     fs::create_dir_all(path).map_err(|e| Error::Invalid(format!("{}: {e}", path.display())))?;
     let canon =
         fs::canonicalize(path).map_err(|e| Error::Invalid(format!("{}: {e}", path.display())))?;
@@ -463,6 +551,7 @@ pub fn set(
             "the root of the disk is not a folder for a space".into(),
         ));
     }
+    refuse_secret_place(&canon)?;
     let data = fs::canonicalize(brain.dir())?;
     // Where the node writes, never its own data directory; a folder only read (a library) may be anywhere.
     if mode == Mode::ReadWrite && (canon.starts_with(&data) || data.starts_with(&canon)) {
@@ -1165,7 +1254,7 @@ impl Pass<'_> {
                     Kind::File,
                     String::new(),
                     &seen,
-                    "too big (over 100 MB)".into(),
+                    format!("too big (over {} MB)", MAX_FILE / 1024 / 1024),
                 )?;
                 continue;
             }

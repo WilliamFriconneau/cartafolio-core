@@ -54,11 +54,9 @@ pub struct App {
     pub(crate) consents: Mutex<HashMap<String, (String, i64)>>,
     /// Requests to join, waiting for the person's answer (in memory only).
     pub(crate) joins: Mutex<HashMap<String, crate::join::Join>>,
-    /// Devices the person allowed in advance (a reinstalled phone): device name, lower case, to (person id, person
-    /// name, end of the permission). A request from such a device is allowed at once, once.
-    /// One-time invitation tickets made by a peer: hash of the ticket to (person id, person name, end of validity).
+    /// One-time invitation tickets made by a peer or by the person: hash of the ticket to (person id, person name, end
+    /// of validity).
     pub(crate) tickets: Mutex<HashMap<String, (String, String, i64)>>,
-    pub(crate) allowed_devices: Mutex<HashMap<String, (String, String, i64)>>,
     /// The `memcp-sync` programs this node started (joining a memory, keeping in step with a peer).
     pub(crate) children: Mutex<Vec<std::process::Child>>,
     /// The peers whose sync was started (by name).
@@ -115,7 +113,6 @@ impl App {
             node_name: "MemCP".into(),
             consents: Mutex::new(HashMap::new()),
             joins: Mutex::new(HashMap::new()),
-            allowed_devices: Mutex::new(HashMap::new()),
             tickets: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
             synced: Mutex::new(std::collections::HashSet::new()),
@@ -247,7 +244,7 @@ impl App {
 
     /// Who a failure is counted against: an IPv6 client holds a whole /64, so the address is cut to it (otherwise one
     /// machine tries a different address for every guess).
-    fn guard_key(who: &str) -> String {
+    pub(crate) fn guard_key(who: &str) -> String {
         match who.parse::<std::net::Ipv6Addr>() {
             Ok(a) => {
                 let s = a.segments();
@@ -337,7 +334,7 @@ impl App {
         let Ok(ctl) = self.brain.open_control() else {
             return Response::json(500, &json!({ "error": "storage failed" }));
         };
-        let Some(caller) =
+        let Some(mut caller) =
             bearer(req).and_then(|t| access::authenticate(&ctl, &t, now).ok().flatten())
         else {
             self.fail(now, &who);
@@ -345,6 +342,7 @@ impl App {
             return Response::json(401, &json!({ "error": "refused" }))
                 .with("WWW-Authenticate", &crate::oauth::challenge(self, address));
         };
+        caller.local = from_this_machine(req);
         let _ = access::touch(&ctl, &caller, client_seen(req).as_deref(), now);
         // At an address that names a vault, the key is seen through that vault alone; one that
         // does not reach it is told so, the same whether the vault exists or not. At an address
@@ -527,6 +525,23 @@ pub(crate) fn client_seen(req: &Request) -> Option<String> {
     } else {
         req.ip.clone()
     }
+}
+
+/// A request made on this machine, straight to the server: from the loopback address, and carrying none of the marks a
+/// proxy leaves (`X-Forwarded-For`, `Forwarded`, the Tailscale headers, the ingress). A proxy on this machine that adds
+/// none of them makes its requests look local: such a proxy must add `X-Forwarded-For`.
+pub(crate) fn from_this_machine(req: &Request) -> bool {
+    !req.via_ingress
+        && req.tailnet_login.is_none()
+        && !through_funnel(req)
+        && !req.headers.contains_key("x-forwarded-for")
+        && !req.headers.contains_key("forwarded")
+        && !req.headers.contains_key("tailscale-user-login")
+        && req
+            .ip
+            .as_deref()
+            .and_then(|i| i.parse::<std::net::IpAddr>().ok())
+            .is_some_and(|a| a.is_loopback())
 }
 
 /// A request that reached the server through Tailscale Funnel (the public internet).

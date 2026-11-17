@@ -94,7 +94,7 @@ pub fn list(brain: &Brain, who: &User, now: i64, all: bool) -> Result<Vec<Node>>
         .collect();
     let mut out: BTreeMap<String, Node> = BTreeMap::new();
     for c in access::list(&ctl)? {
-        if !c.agent.starts_with(PEER_PREFIX) || c.user_id != who.id {
+        if c.kind != access::Kind::Peer || c.user_id != who.id {
             continue;
         }
         out.insert(

@@ -144,10 +144,10 @@ Example call and answer:
 
 ### `peers`
 
-The machines (peers) that hold this memory with you: the connections named `peer-…` of the person, with when each was created and last used, and whether it is still allowed, and this node's window (`window: N days` and what was pruned last). Live synchronisation state comes from `GET /sync/status` when the node has it.
+The machines (peers) that hold this memory with you: the connections of the person's machines (made by a pairing code or a join, never by a name), with when each was created and last used, and whether it is still allowed, and this node's window (`window: N days` and what was pruned last). Live synchronisation state comes from `GET /sync/status` when the node has it.
 
 - **Seen with:** read access on at least one space.
-- **Answer:** `{ peers: [{name, created_at, last_used_at, allowed}], window }`: the connections named `peer-...` of the person and the node's window.
+- **Answer:** `{ peers: [{name, created_at, last_used_at, allowed}], window }`: the machine connections of the person and the node's window.
 - **Errors:** `internal` on storage failure.
 - **Effects:** None.
 
@@ -926,9 +926,9 @@ Example call and answer:
 
 Points a space at a local folder of THIS NODE, or (`path` null) back at the node's own storage folder. The node then keeps the space's notes there as Markdown (`<slug>-<shortid>.md`, with a front matter `id`, `space`, `tags`, `created`, `version`) and its files as themselves in `files/`, in both directions: an edit in the folder becomes a new version of the note, a new `.md` becomes a note, a new file becomes a file of the space (author `folder-sync`); a file deleted from the folder retires its note with a reason, never the reverse. `mode`: `readwrite` (default) or `read` (the folder is only read, for search; nothing is written either way). The setting is per node and never travels in the swarm. A folder held by a cloud service is allowed and flagged (`cloud`, `warning`): keep it on the device. The folder must be outside the node's data directory and not overlap another space's folder; it is made if missing. Returns what `folder_get` returns. The first pass runs within seconds.
 
-- **Seen with:** write on a space as a whole (not offered to a key limited to paths, nor to a read-only key).
+- **Seen with:** write on a space as a whole (not offered to a key limited to paths, nor to a read-only key), and only from this machine: the standard input of `memcp mcp`, or HTTP from the loopback address with no proxy in between (no `X-Forwarded-For`, `Forwarded` or Tailscale header). Never offered to a key used from another machine, nor to a connection an OAuth consent made, wherever it calls from: a folder is a path of this machine's disk. The page and the command line set folders through their own routes.
 - **Answer:** the object of `folder_get`.
-- **Errors:** `invalid` for a relative path, a file, a folder inside the data directory or overlapping another space's, an unknown mode; `denied`.
+- **Errors:** `invalid` for a relative path, a path with `..`, a file, a folder inside the data directory or overlapping another space's, a folder that is, is inside or holds a folder of the system or of keys (`~/.ssh`, `~/.gnupg`, `~/.config`, `~/Library/Keychains`, `/etc`… and the home folder itself), an unknown mode; `denied`. Those checks run before anything is made on the disk.
 - **Effects:** stores the setting in the control database of this node (no sync event); the library index of the space follows the folder. Nothing is read or written in the folder until the next pass. The audit of the space records the call.
 
 | Field | Type | Required | Limits |

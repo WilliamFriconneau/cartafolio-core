@@ -1,8 +1,10 @@
 //! `memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]`: keeps this node's memory in
 //! step with a peer. ADDRESS is the address of this node's connection on the peer (`https://…/mcp/<person>/<connection>`),
 //! its key read from VAR (default MEMCP_PEER_TOKEN). `--person` names the person of this node whose spaces go both ways
-//! (default: the first administrator). One pass, or one every SECONDS. Exit: 0 done, 1 the key is refused,
-//! 2 wrong use, 3 done with problems (said on standard error).
+//! (default: the person whose memory this node holds, the one who owns its spaces; the peer connection says who that is
+//! on the peer). One pass, or one every SECONDS. Each thing a pass could not do (an offer refused, a space not made) is
+//! one line on standard error, and is kept for the page (`last_pass` of the peer in `GET /sync/status`).
+//! Exit: 0 done, 1 the key is refused, 2 wrong use, 3 done with problems.
 
 use std::path::PathBuf;
 use std::process::ExitCode;

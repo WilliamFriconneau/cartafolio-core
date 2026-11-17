@@ -350,7 +350,7 @@ pub const COMMANDS: &[Entry] = &[
     e("invite deny", "turns a device away", Remote::Direct, false),
     e(
         "invite allow",
-        "lets a named device come back without the words",
+        "lets a device come back without the words, with a one-time ticket",
         Remote::Direct,
         false,
     ),

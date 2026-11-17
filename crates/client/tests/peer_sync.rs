@@ -58,13 +58,11 @@ fn server() -> (Brain, String, String, std::path::PathBuf) {
             .expect("user")
             .id;
         brain.add_vault(&sam, "sam", "me").expect("vault");
-        access::connect_for(
+        access::connect_peer(
             &ctl,
             &sam,
             "peer-mac-ab12",
             &Rights::parse("sam-me:rw").expect("rights"),
-            None,
-            false,
             false,
         )
         .expect("connect")

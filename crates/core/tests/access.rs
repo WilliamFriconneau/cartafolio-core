@@ -596,12 +596,12 @@ fn the_same_fact_elsewhere_is_said_only_for_a_space_the_caller_reads() -> Res {
 #[test]
 fn a_connection_and_a_vault_never_share_a_name() -> Res {
     let h = home()?;
-    // Both end an address (`/mcp/<name>`): a connection named like a vault is refused, a vault named
+    // Both end an address (`/mcp/<name>`): a connection named like a space is refused, a space named
     // like a connection too, and a rename cannot do it either.
     token(&h, "taken-name", "home:rw")?;
     assert!(h.brain.add_space(&sp("taken-name")).is_err());
-    h.brain.add_space(&sp("a-vault"))?;
-    assert!(token(&h, "a-vault", "home:rw").is_err());
-    assert!(access::rename(&h.ctl, "taken-name", "a-vault").is_err());
+    h.brain.add_space(&sp("a-space"))?;
+    assert!(token(&h, "a-space", "home:rw").is_err());
+    assert!(access::rename(&h.ctl, "taken-name", "a-space").is_err());
     Ok(())
 }
