@@ -1458,6 +1458,30 @@ pub fn status(brain: &Brain, now: i64) -> Result<Vec<PeerStatus>> {
 }
 
 impl PeerStatus {
+    /// This peer as a direct peer of the directory's union.
+    pub fn to_local(&self) -> crate::directory::Local {
+        crate::directory::Local {
+            connection: self.peer.clone(),
+            name: self.name.clone(),
+            direction: self.direction.clone(),
+            spaces: self.spaces.clone(),
+            last_activity: self.last_activity,
+            ..Default::default()
+        }
+    }
+}
+
+/// Every peer of the memory: the direct ones (connections held here, peers synced with) with direction and
+/// progress, and every node the peer directory knows, each row once (see `directory::union`).
+pub fn peers_view(brain: &Brain, now: i64) -> Result<Vec<Value>> {
+    let locals = status(brain, now)?
+        .iter()
+        .map(PeerStatus::to_local)
+        .collect();
+    crate::directory::union(brain, now, locals)
+}
+
+impl PeerStatus {
     pub fn to_json(&self) -> Value {
         json!({
             "peer": self.peer,

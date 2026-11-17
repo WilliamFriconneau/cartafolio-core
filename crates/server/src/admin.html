@@ -213,6 +213,7 @@ details.fold[open]>summary{margin-bottom:8px}
 /* Machines: one line per machine, live */
 .mrow{display:grid;grid-template-columns:auto minmax(8em,1.2fr) minmax(10em,2fr) auto;gap:6px 14px;align-items:center;padding:10px 12px;border-radius:16px;background:var(--sc)}
 .mrow+.mrow{margin-top:6px}
+.mrow.gone{opacity:.55}
 .mrow .dot{width:12px;height:12px;border-radius:50%;background:var(--outline)}
 .mrow .dot.ok{background:var(--ok)}.mrow .dot.busy{background:#c8993a}.mrow .dot.bad{background:var(--error)}
 .mrow .mname{font-weight:500;overflow-wrap:anywhere}
@@ -2694,17 +2695,21 @@ const since = sec => {
   return d < 60 ? d + " s ago" : d < 3600 ? Math.floor(d / 60) + " min ago" : d < 86400 ? Math.floor(d / 3600) + " h ago" : Math.floor(d / 86400) + " days ago";
 };
 function machineRow(p) {
+  const direct = p.direct !== false;
   const busy = p.direction === "sending" || p.direction === "receiving";
-  const seen = !!p.last_activity;
+  const seen = !!(p.last_seen || p.last_activity);
   const pct = Math.max(0, Math.min(100, Number(p.percent == null ? 100 : p.percent)));
-  const arrow = p.direction === "sending" ? "↑ sending" : p.direction === "receiving" ? "↓ receiving" : seen ? "= in step" : "waiting for the first copy";
+  const arrow = !direct ? (p.gone ? "gone, not seen for 90 days" : "known through " + (p.learned_from || "another machine"))
+    : p.direction === "sending" ? "↑ sending" : p.direction === "receiving" ? "↓ receiving" : seen ? "= in step" : "waiting for the first copy";
   const notes = p.total ? Number(p.done).toLocaleString(loc()) + " / " + Number(p.total).toLocaleString(loc()) + " notes" : "";
-  return el("div", { class: "mrow", "data-peer": p.peer },
-    el("span", { class: "dot " + (busy ? "busy" : seen ? "ok" : ""), title: busy ? "catching up" : seen ? "in step" : "not seen yet" }),
-    el("div", {}, el("div", { class: "mname" }, p.name), el("div", { class: "msub" }, arrow)),
-    el("div", { class: "mprog" }, el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")),
-      el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" }))),
-    el("span", { class: "mwhen" }, seen ? since(p.last_activity) : ""));
+  const how = (p.exposures || []).map(e => e.kind).join(", ");
+  const facts = [p.version ? "version " + p.version : "", p.behind ? "older version" : "", how ? "reached by " + how : "", p.only_local ? "syncs when opened with the peers it can reach" : ""].filter(Boolean).join(" · ");
+  return el("div", { class: "mrow" + (p.gone ? " gone" : ""), "data-peer": p.peer || p.name },
+    el("span", { class: "dot " + (p.gone ? "" : busy ? "busy" : seen ? "ok" : ""), title: p.gone ? "gone" : busy ? "catching up" : seen ? "in step" : "not seen yet" }),
+    el("div", {}, el("div", { class: "mname" }, p.name), el("div", { class: "msub" }, arrow), facts ? el("div", { class: "msub" }, facts) : ""),
+    el("div", { class: "mprog" }, direct ? el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")) : "",
+      direct ? el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" })) : ""),
+    el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""));
 }
 function renderMachines() {
   if (!S || !$("#machines")) return;
@@ -2715,8 +2720,7 @@ function renderMachines() {
     el("div", { class: "mprog" }, el("div", { class: "msub" }, S.public_url)),
     el("span", { class: "mwhen" }, ""));
   const others = SYNC.peers.map(p => {
-    const done = (p.spaces || []).reduce((n, x) => n + x.done, 0), total = (p.spaces || []).reduce((n, x) => n + x.total, 0);
-    return machineRow({ ...p, done, total, percent: total ? Math.round(100 * done / total) : 100 });
+    return machineRow(p);
   });
   $("#machines").replaceChildren(me, ...(others.length ? others : [el("p", { class: "mute small", "data-none": "" }, "No other machine yet. Join a memory, or add a machine below.")]));
   const last = SYNC.peers.map(p => p.last_activity || 0).reduce((a, b) => Math.max(a, b), 0);

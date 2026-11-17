@@ -43,7 +43,11 @@ not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that join
 - Machine view: name, address, version, peers seen, connections it holds, live sync (see below), a button to
   forget the machine.
 - Sync block, one line per peer: `name  ↑ sending | ↓ receiving | = in step   42 %   1 380 / 3 290 notes   2 s ago`,
-  with a progress bar; refreshed every 2 s; `GET /sync/status` is its only source.
+  with a progress bar; refreshed every 2 s; `GET /sync/status` is its only source. The block lists every peer of the
+  memory, not only the ones that joined this node: a peer known through another node has no bar, and shows
+  `known through <node>`, its version, `older version` when it is behind, how it can be reached (`loopback`, `lan`,
+  `tailnet`, `public`) and, when it can only be reached locally, `syncs when opened with the peers it can reach`.
+  A peer not seen for 90 days is dimmed (`gone`). A revoked peer is not listed.
 - Join banner: when a machine asks to join, a banner shows its name and the three words; one button to allow, one
   to refuse. The same request appears as a notification on the desktop apps.
 - Space view: Journal (by day), Dashboard (sections from the `dashboard` note), Notes (tags and keywords of the
@@ -81,7 +85,7 @@ not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that join
 
 | Screen | Source |
 |---|---|
-| Machines, live sync | `GET /sync/status` (peer, direction, spaces, done, total, percent, last_activity) |
+| Machines, live sync | `GET /sync/status` (`node`, `peers`: name, version, last_seen, learned_from, behind, gone, exposures, only_local, and for direct peers direction, spaces, done, total, percent, last_activity; `connections`: name, kind cloud or local, via, last_used_at) |
 | Space tree | MCP `spaces` (name, label, parent, position, kind, writable, facts) |
 | Tags | MCP `stats` (tags with counts) |
 | Graph | MCP `links` (planned) |

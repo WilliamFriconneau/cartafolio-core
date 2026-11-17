@@ -859,6 +859,10 @@ pub fn revoke(ctl: &Connection, agent: &str) -> Result<bool> {
             "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'revoke', '')",
             params![util::now(), agent],
         )?;
+        // A peer's revocation spreads through the peer directory.
+        if agent.starts_with(crate::sync::PEER_PREFIX) {
+            crate::directory::revoked_connection(ctl, agent, util::now())?;
+        }
     }
     Ok(n == 1)
 }

@@ -5,6 +5,7 @@
 pub mod access;
 mod brain;
 pub mod catalogue;
+pub mod directory;
 mod error;
 pub mod export;
 pub mod facts;

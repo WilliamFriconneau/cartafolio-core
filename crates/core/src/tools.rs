@@ -132,7 +132,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "peers",
-            description: "The machines (peers) that hold this memory with you: the connections named `peer-…` of the person, with when each was created and last used, and whether it is still allowed, and this node's window (`window: N days` and what was pruned last). Live synchronisation state comes from `GET /sync/status` when the node has it.".into(),
+            description: "Every peer of this memory, as the peer directory shared between nodes knows it, not only the ones that joined this node: `peers` (name, version, last_seen, learned_from, `behind` when its version is older than this node's, `gone` after 90 days unseen, `exposures` [{kind: loopback|lan|tailnet|public, address?}], `only_local` with `note: syncs_on_open` when it can only be reached locally, and for a direct peer its connection, direction, progress and whether it is still allowed), `connections` (the assistants: name, kind `cloud` or `local`, `via` the node serving it, last_used_at), `node` (this node) and this node's window (`window: N days` and what was pruned last). Revoked peers are not listed.".into(),
             schema: json!({ "type": "object", "properties": {} }),
         });
         out.push(ToolDef {
