@@ -25,19 +25,25 @@ use crate::util;
 /// The tag of the fact that is a vault's index.
 pub const INDEX_TAG: &str = "index";
 
+/// One text of a guide. A scope keeps every text it ever had; at most one is in force.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Guide {
+    /// `person:<user id>` or `space:<name>` (see [`person_scope`], [`space_scope`]).
     pub scope: String,
+    /// The instructions, as written by the person.
     pub body: String,
     /// The person who wrote it (a person id).
     pub author: String,
+    /// When it was written (seconds since the epoch).
     pub created_at: i64,
 }
 
+/// The scope of a person's own guide: `person:<id>`.
 pub fn person_scope(user_id: &str) -> String {
     format!("person:{user_id}")
 }
 
+/// The scope of a vault's guide: `space:<name>`.
 pub fn space_scope(space: &Space) -> String {
     format!("space:{}", space.as_str())
 }
@@ -334,12 +340,16 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
 /// Where an app's guide stands: not read yet, approved as it is now, or changed since it was approved.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Standing {
+    /// The app proposed this text and nobody has read it yet.
     Waiting,
+    /// The person approved exactly the text now in place.
     Approved,
+    /// The app changed its text after it was approved; it is not served until approved again.
     Changed,
 }
 
 impl Standing {
+    /// `"waiting"`, `"approved"` or `"changed"`, as shown on the page.
     pub fn word(self) -> &'static str {
         match self {
             Standing::Waiting => "waiting",
@@ -352,14 +362,21 @@ impl Standing {
 /// The guide an app proposed for one vault.
 #[derive(Clone, Debug)]
 pub struct AppGuide {
+    /// The vault the guide is for.
     pub space: Space,
+    /// The app that proposed it.
     pub app: String,
+    /// The proposed text. It is data until a person approves it.
     pub text: String,
     /// Digest of the text, to approve exactly what was read.
     pub hash: String,
+    /// When the app last changed it.
     pub updated_at: i64,
+    /// Where it stands.
     pub standing: Standing,
+    /// When the person approved the current digest, if they did.
     pub approved_at: Option<i64>,
+    /// Who approved it (a person id).
     pub approved_by: Option<String>,
 }
 

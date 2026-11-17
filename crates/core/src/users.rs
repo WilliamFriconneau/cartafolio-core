@@ -18,14 +18,22 @@ use crate::util;
 /// The bootstrap administrator, created by the control migration.
 pub const OWNER: &str = "owner";
 
+/// A person who owns vaults and connections.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct User {
+    /// Opaque identifier (`u_...`), stable; the bootstrap administrator is [`OWNER`].
     pub id: String,
+    /// Short login name: 1 to 40 lowercase letters, digits or dashes, starting with a letter.
     pub name: String,
+    /// Display name (80 characters at most, no control characters).
     pub display: String,
+    /// Whether the person is an administrator (manages people, not their content).
     pub admin: bool,
+    /// The Home Assistant user this person signs in as, if linked.
     pub ha_user: Option<String>,
+    /// Creation date (seconds since the epoch).
     pub created_at: i64,
+    /// A disabled person's connections stop working at once; nothing is deleted.
     pub disabled: bool,
 }
 
@@ -70,6 +78,13 @@ pub(crate) fn audit(ctl: &Connection, actor: &str, event: &str, detail: &str) {
     crate::access::auth_event(ctl, Some(actor), None, event, detail);
 }
 
+/// Creates a person. `actor` is recorded in the control audit log.
+///
+/// # Errors
+/// [`Error::Invalid`] for a bad `name` or a name already taken.
+///
+/// # Effects
+/// A row in `users` and one `user_create` row in the control audit log. The person owns no vault yet.
 pub fn create_user(
     ctl: &Connection,
     actor: &str,
@@ -92,6 +107,7 @@ pub fn create_user(
     user(ctl, &id)?.ok_or_else(|| Error::Schema("user not found after creation".into()))
 }
 
+/// A person by id (also a disabled one); `Ok(None)` if unknown. Read-only.
 pub fn user(ctl: &Connection, id: &str) -> Result<Option<User>> {
     Ok(ctl
         .query_row(
@@ -102,6 +118,7 @@ pub fn user(ctl: &Connection, id: &str) -> Result<Option<User>> {
         .optional()?)
 }
 
+/// A person by login name (also a disabled one); `Ok(None)` if unknown. Read-only.
 pub fn user_by_name(ctl: &Connection, name: &str) -> Result<Option<User>> {
     Ok(ctl
         .query_row(
@@ -125,6 +142,7 @@ pub fn resolve(ctl: &Connection, id_or_name: &str) -> Result<User> {
     }
 }
 
+/// Every person, oldest first, disabled ones included. Read-only.
 pub fn list_users(ctl: &Connection) -> Result<Vec<User>> {
     let mut st = ctl.prepare(&format!(
         "SELECT {USER_COLS} FROM users ORDER BY created_at, name"
@@ -185,6 +203,7 @@ pub fn set_admin(ctl: &Connection, actor: &str, id: &str, admin: bool) -> Result
     Ok(n == 1)
 }
 
+/// Changes the display name of the person `id`. Returns `false` if the id is unknown.
 pub fn set_display(ctl: &Connection, id: &str, display: &str) -> Result<bool> {
     Ok(ctl.execute(
         "UPDATE users SET display = ?2 WHERE id = ?1",
@@ -455,14 +474,21 @@ pub fn ha_login(
 /// A login waiting for, or refused by, an administrator.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PersonRequest {
+    /// The Home Assistant user id that asked.
     pub ha_user: String,
+    /// Login name proposed for the new person.
     pub name: String,
+    /// Display name proposed.
     pub display: String,
+    /// First time the login was seen.
     pub first_seen: i64,
+    /// Last time it was seen.
     pub last_seen: i64,
+    /// `pending` (waiting for an administrator) or `refused`.
     pub status: String,
 }
 
+/// The logins waiting for, or refused by, an administrator: refused ones first, then pending ones, each by first sighting. Read-only.
 pub fn list_requests(ctl: &Connection) -> Result<Vec<PersonRequest>> {
     let mut st = ctl.prepare(
         "SELECT ha_user, name, display, first_seen, last_seen, status FROM person_requests ORDER BY status DESC, first_seen",
@@ -554,6 +580,7 @@ fn text_slug(s: &str) -> String {
     out.trim_end_matches('-').to_string()
 }
 
+/// Whether `user_id` owns `space`. Read-only.
 pub fn is_space_owner(ctl: &Connection, space: &Space, user_id: &str) -> Result<bool> {
     Ok(ctl
         .query_row(
@@ -607,6 +634,7 @@ pub fn set_heir(ctl: &Connection, id: &str, heir: Option<&str>) -> Result<()> {
     Ok(())
 }
 
+/// The person `id` named as their heir, if any. Read-only.
 pub fn heir_of(ctl: &Connection, id: &str) -> Result<Option<String>> {
     Ok(ctl
         .query_row("SELECT heir FROM users WHERE id = ?1", [id], |r| {
@@ -677,6 +705,7 @@ pub fn make_recovery_key(ctl: &Connection, id: &str) -> Result<String> {
     Ok(key)
 }
 
+/// Whether a recovery key was made for the person (the key itself is never stored, only its digest). Read-only.
 pub fn has_recovery_key(ctl: &Connection, id: &str) -> Result<bool> {
     Ok(ctl
         .query_row(

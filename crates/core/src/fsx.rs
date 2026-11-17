@@ -10,6 +10,7 @@ use std::path::Path;
 
 /// A folder made private to its owner.
 pub trait PrivateDir {
+    /// Sets the creation mode of the folder to `0700` (Unix; a no-op elsewhere).
     fn private_dir(&mut self) -> &mut Self;
 }
 
@@ -28,6 +29,7 @@ impl PrivateDir for fs::DirBuilder {
 
 /// A file made private to its owner.
 pub trait PrivateFile {
+    /// Sets the creation mode of the file to `0600` (Unix; a no-op elsewhere).
     fn private_file(&mut self) -> &mut Self;
 }
 

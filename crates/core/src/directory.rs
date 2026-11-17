@@ -33,9 +33,13 @@ pub fn own_version() -> &'static str {
 /// One row of the directory.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
+    /// The node's name.
     pub name: String,
+    /// When this node was last seen alive (unix seconds, never in the future).
     pub last_seen: i64,
+    /// The program version the node reported.
     pub version: String,
+    /// When this node first learned of the entry.
     pub first_seen: i64,
     /// The node that told this one about the entry (`None`: it is this node's own).
     pub learned_from: Option<String>,
@@ -43,7 +47,9 @@ pub struct Entry {
     pub stamp: String,
     /// The name of the direct connection (here or on the peer) this node is, when it is one.
     pub link: Option<String>,
+    /// Whether the person revoked this node (the flag spreads and sticks).
     pub revoked: bool,
+    /// When it was revoked.
     pub revoked_at: Option<i64>,
     /// How the node can be reached: `[{kind, address?}]`, `kind` one of [`KINDS`]. Empty when not known.
     pub exposures: Vec<Value>,
@@ -462,11 +468,17 @@ pub struct Local {
     pub connection: String,
     /// The machine's name as the person gave it.
     pub name: String,
+    /// `sending`, `receiving` or `idle`.
     pub direction: String,
+    /// Progress of the latest transfer, per space.
     pub spaces: Vec<crate::sync::SpaceProgress>,
+    /// When the latest transfer happened (unix seconds).
     pub last_activity: Option<i64>,
+    /// Whether the connection is still allowed (not revoked or expired).
     pub allowed: Option<bool>,
+    /// When the connection was made.
     pub created_at: Option<String>,
+    /// When the connection was last used.
     pub last_used_at: Option<String>,
 }
 

@@ -88,13 +88,21 @@ const INSTRUCTION_FILES: [&str; 4] = ["claude.md", "agents.md", "gemini.md", "sk
 pub struct ImportRules {
     /// (folded folder prefix, space), longest prefix first.
     pub routes: Vec<(String, Space)>,
+    /// The space of every note no route matches.
     pub default_space: Space,
+    /// Folders (folded names) never read.
     pub excluded_dirs: Vec<String>,
+    /// Name fragments (folded) of notes never read at all (card numbers, door codes).
     pub protected: Vec<String>,
+    /// Name fragments of notes that are instructions to an agent, not memory: counted, never imported.
     pub instructions: Vec<String>,
 }
 
 impl ImportRules {
+    /// Reads the rules text (`map Folder = space`, `default = space`, `exclude`, `protect`, `instructions`; `#` starts a comment).
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] for an unknown key, a bad space name, or a missing `default`.
     pub fn parse(src: &str) -> Result<ImportRules> {
         let mut routes = vec![];
         let mut default_space = None;
@@ -162,10 +170,12 @@ impl ImportRules {
     }
 }
 
+/// How to run an import.
 #[derive(Clone, Debug, Default)]
 pub struct ImportOptions {
     /// Only process this folder (relative path).
     pub only: Option<String>,
+    /// Count and report only; nothing is written (and a later real run is then allowed).
     pub dry_run: bool,
     /// Allows a first real run without a recent `--dry-run`.
     pub yes: bool,
@@ -173,25 +183,40 @@ pub struct ImportOptions {
     pub extra_protected: Vec<String>,
 }
 
+/// What an import did (or, in a dry run, would do), in notes and passages.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Report {
+    /// Nothing was written.
     pub dry_run: bool,
+    /// Notes read.
     pub read: usize,
+    /// Notes whose passages did not change.
     pub unchanged: usize,
+    /// Passages created.
     pub created: usize,
+    /// Passages replaced by a new text (the old ones stay in history).
     pub replaced: usize,
+    /// Passages retired because they left the note.
     pub retired: usize,
+    /// Passages whose pointer moved with a renamed note.
     pub repointed: usize,
+    /// Passages skipped because the same text is already active.
     pub duplicates: usize,
+    /// Notes never read (protected).
     pub protected: usize,
+    /// Notes in excluded folders.
     pub excluded: usize,
+    /// Notes that are instructions to an agent.
     pub instructions: usize,
+    /// Notes too big to read.
     pub too_big: usize,
+    /// Notes that were imported before and are gone from the folder.
     pub missing_notes: usize,
     /// Passages left out because they look like a secret (token, password, key).
     pub secrets_masked: usize,
     /// Where (note#heading), never what: so the owner can go and look.
     pub masked_refs: Vec<String>,
+    /// Passages created, per space.
     pub created_by_space: BTreeMap<String, usize>,
 }
 
@@ -238,8 +263,11 @@ impl fmt::Display for Report {
 /// A passage ready to be stored.
 #[derive(Clone, Debug, PartialEq)]
 pub struct Block {
+    /// Heading path of the passage inside the note.
     pub reference: String,
+    /// The passage text.
     pub text: String,
+    /// Where it sits in the note.
     pub range: String,
 }
 
@@ -665,6 +693,16 @@ fn dry_run_key(vault: &Path, only: &Option<String>) -> String {
     format!("import_dryrun:{}", &sha_hex(id.as_bytes())[..12])
 }
 
+/// Reads a folder of notes into passages (facts of kind `passage`, source `note`), routed to spaces by `rules`.
+/// Idempotent: a passage whose text is unchanged is left alone, a changed one is `supersede`d, one that left the
+/// note is `retire`d, a renamed note moves its pointers. Passages that look like a secret are left out and only
+/// their place is reported. A first real run needs a recent dry run on the same scope unless `opts.yes`.
+///
+/// # Errors
+/// [`Error::Invalid`] if `vault` is not a folder, a space in the rules does not exist, or a real first run has no recent dry run.
+///
+/// # Effects
+/// Facts and history events in the target spaces (nothing in the folder: it is only read).
 pub fn import(
     brain: &Brain,
     vault: &Path,

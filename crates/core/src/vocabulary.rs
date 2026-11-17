@@ -14,9 +14,13 @@ pub const MAX_TERM_LEN: usize = 60;
 /// One vocabulary of a space.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Vocabulary {
+    /// Name of the vocabulary (the file name it was imported from).
     pub name: String,
+    /// Where it came from (a path or address, as the person gave it).
     pub source: String,
+    /// Number of terms it holds.
     pub terms: usize,
+    /// When it was imported (seconds since the epoch).
     pub imported_at: i64,
 }
 
