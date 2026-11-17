@@ -548,15 +548,35 @@ impl Brain {
         at: i64,
     ) -> Result<()> {
         let ctl = self.open_control()?;
-        let grants: Vec<Value> = ctl
+        let mut grants: Vec<Value> = ctl
             .prepare(
-                "SELECT c.agent, g.can_write FROM grants g JOIN connections c ON c.id = g.connection_id
+                "SELECT c.agent, g.can_write, c.id FROM grants g JOIN connections c ON c.id = g.connection_id
                  WHERE g.space = ?1 ORDER BY c.agent",
             )?
             .query_map([space.as_str()], |r| {
-                Ok(json!({ "agent": r.get::<_, String>(0)?, "write": r.get::<_, i64>(1)? != 0 }))
+                Ok(json!({ "agent": r.get::<_, String>(0)?, "write": r.get::<_, i64>(1)? != 0,
+                           "id": r.get::<_, String>(2)? }))
             })?
             .collect::<rusqlite::Result<_>>()?;
+        // A connection limited to paths of the space keeps those limits: without them it would come back reaching the
+        // whole space.
+        for g in &mut grants {
+            let id = g["id"].as_str().unwrap_or_default().to_string();
+            let paths: Vec<Value> = ctl
+                .prepare(
+                    "SELECT path, can_write FROM grant_paths WHERE connection_id = ?1 AND space = ?2 ORDER BY path",
+                )?
+                .query_map(params![id, space.as_str()], |r| {
+                    Ok(json!({ "path": r.get::<_, String>(0)?, "write": r.get::<_, i64>(1)? != 0 }))
+                })?
+                .collect::<rusqlite::Result<_>>()?;
+            if let Some(o) = g.as_object_mut() {
+                o.remove("id");
+                if !paths.is_empty() {
+                    o.insert("paths".into(), Value::Array(paths));
+                }
+            }
+        }
         let created: i64 = ctl
             .query_row(
                 "SELECT created_at FROM spaces WHERE name = ?1",
@@ -711,6 +731,20 @@ impl Brain {
                     user_id
                 ],
             )?;
+            for p in g["paths"].as_array().into_iter().flatten() {
+                tx.execute(
+                    "INSERT OR IGNORE INTO grant_paths (connection_id, space, path, can_write)
+                     SELECT id, ?2, ?3, ?4 FROM connections WHERE agent = ?1 AND revoked_at IS NULL
+                     AND coalesce(user_id, 'owner') = ?5",
+                    params![
+                        g["agent"].as_str().unwrap_or_default(),
+                        space.as_str(),
+                        p["path"].as_str().unwrap_or_default(),
+                        i64::from(p["write"].as_bool().unwrap_or(false)),
+                        user_id
+                    ],
+                )?;
+            }
         }
         fs::rename(
             live.join(space.file_name()),

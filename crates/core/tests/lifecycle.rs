@@ -289,6 +289,45 @@ fn an_archive_is_a_full_export_and_the_space_comes_back_with_restore() -> Res {
 }
 
 #[test]
+fn a_connection_limited_to_paths_comes_back_limited_after_a_restore() -> Res {
+    let t = Temp::new("life");
+    let b = brain(&t)?;
+    let ctl = b.open_control()?;
+    let token = access::connect(
+        &ctl,
+        "sources",
+        &Rights::parse("health/sources/scale:rw")?,
+        None,
+        false,
+        false,
+    )?;
+    let before = access::authenticate(&ctl, &token, memcp_core::util::now())?.ok_or("caller")?;
+    assert!(
+        before.read_paths(&sp("health")).is_some(),
+        "limited to paths"
+    );
+    drop(ctl);
+    b.delete_space(
+        OWNER,
+        &sp("health"),
+        &Disposition::Archive,
+        &Children::Grandparent,
+        false,
+        2_000,
+    )?;
+    let list = b.archived_spaces(OWNER)?;
+    b.restore_space(OWNER, &list[0].name, false)?;
+    let ctl = b.open_control()?;
+    let after = access::authenticate(&ctl, &token, memcp_core::util::now())?.ok_or("caller")?;
+    assert_eq!(
+        after.read_paths(&sp("health")),
+        before.read_paths(&sp("health")),
+        "the same paths, not the whole space"
+    );
+    Ok(())
+}
+
+#[test]
 fn children_go_to_the_grandparent_by_default_and_one_cannot_delete_what_is_not_theirs() -> Res {
     let t = Temp::new("life");
     let b = brain(&t)?;
