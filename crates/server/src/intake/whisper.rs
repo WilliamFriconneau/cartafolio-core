@@ -7,6 +7,21 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// The function a [`Decoder`] holds.
+pub type DecodeFn = dyn Fn(&Path) -> Result<Vec<f32>, String> + Send + Sync;
+
+/// Turns a recording into 16 kHz, mono, 32-bit float samples. A host that has its own audio system (an app: AVFoundation
+/// on a Mac, where `ffmpeg` cannot be run) provides one, and the speech model then runs inside the program
+/// (`local-whisper`, on the GPU with `metal`). With none, `ffmpeg` and `whisper-cli` are run, or the speech service is asked.
+#[derive(Clone)]
+pub struct Decoder(pub std::sync::Arc<DecodeFn>);
+
+impl std::fmt::Debug for Decoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Decoder")
+    }
+}
+
 /// How recordings are read on this machine.
 #[derive(Clone, Debug)]
 pub struct VoiceSettings {
@@ -22,6 +37,8 @@ pub struct VoiceSettings {
     pub api_model: String,
     /// A table of terms and their wrong spellings (a Markdown table), to help and to correct Whisper.
     pub lexicon: Option<PathBuf>,
+    /// The host's way to decode a recording: when set, the speech model (`whisper_model`) runs inside the program.
+    pub decoder: Option<Decoder>,
 }
 
 impl Default for VoiceSettings {
@@ -36,6 +53,7 @@ impl Default for VoiceSettings {
             api_key: None,
             api_model: "whisper-1".into(),
             lexicon: None,
+            decoder: None,
         }
     }
 }
@@ -254,6 +272,8 @@ pub struct Whisper {
     api_key: Option<String>,
     api_model: String,
     lexicon: Lexicon,
+    lexicon_file: Option<PathBuf>,
+    decoder: Option<Decoder>,
 }
 
 impl Whisper {
@@ -268,6 +288,8 @@ impl Whisper {
             api_key: c.api_key.clone(),
             api_model: c.api_model.clone(),
             lexicon: Lexicon::load(c.lexicon.as_deref()),
+            lexicon_file: c.lexicon.clone(),
+            decoder: c.decoder.clone(),
         }
     }
 
@@ -275,6 +297,9 @@ impl Whisper {
     pub fn transcribe(&self, audio: &Path, work: &Path) -> Result<Heard, String> {
         if let Some(url) = &self.api_url {
             return self.via_api(url, audio);
+        }
+        if let Some(decoder) = &self.decoder {
+            return self.in_process(decoder, audio);
         }
         let wav = work.join("audio.wav");
         let (made, why) = run(
@@ -328,6 +353,32 @@ impl Whisper {
             text: self.lexicon.correct(&text),
             seconds,
         })
+    }
+
+    /// What `audio` says, by the speech model inside the program, from the samples the host decoded.
+    #[cfg(feature = "local-whisper")]
+    fn in_process(&self, decoder: &Decoder, audio: &Path) -> Result<Heard, String> {
+        let samples = (decoder.0)(audio)?;
+        let seconds = u32::try_from(samples.len() / 16_000).unwrap_or(u32::MAX);
+        let heard = super::local::transcribe_samples(
+            &self.model,
+            &samples,
+            &self.lang,
+            self.threads,
+            self.lexicon_file.as_deref(),
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(match heard {
+            Some(text) => Heard::Text { text, seconds },
+            None => Heard::Nothing,
+        })
+    }
+
+    /// Without `local-whisper` the program has no speech model of its own.
+    #[cfg(not(feature = "local-whisper"))]
+    fn in_process(&self, decoder: &Decoder, audio: &Path) -> Result<Heard, String> {
+        let _ = (decoder, audio, &self.lexicon_file);
+        Err("this build has no built-in speech model (local-whisper)".into())
     }
 
     /// What `audio` says, by a speech service of the OpenAI kind: one multipart request, a JSON answer with `text`.

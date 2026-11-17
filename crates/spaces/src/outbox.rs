@@ -1,6 +1,6 @@
 //! What leaves for a kept note: one delivery per (note, space, connector),
 //! with a key so that sending again never makes a duplicate. The app keeps
-//! them (SQLite on the phone) and sends them; the Mac bridge can keep them
+//! them (SQLite on the phone) and sends them; the Mac app can keep them
 //! its own way.
 
 use crate::space::Tree;

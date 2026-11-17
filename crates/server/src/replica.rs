@@ -3,7 +3,8 @@
 //! - **Start a memory**: the six default spaces of `memcp init --defaults` for the person, and their name.
 //! - **Join a memory**: this node asks another one to let it in (the person there compares three words and says yes),
 //!   then keeps in step with it. The asking and the syncing are the work of the `memcp-sync` program, started from here:
-//!   the node itself has no TLS stack and never calls out (see deny.toml). The program tells the page where the request
+//!   the node itself has a TLS stack for one thing only, the speech service the person may name for their voice notes (see
+//!   deny.toml): the sync with other nodes stays a program of its own. The program tells the page where the request
 //!   stands in a status file (the three words, never a key); the peer it keeps (address and key) lives in `peers/`,
 //!   private to the owner, and is started again with the node.
 
@@ -63,24 +64,15 @@ fn sync_program() -> PathBuf {
     program("MEMCP_SYNC_BIN", "memcp-sync")
 }
 
-/// `GET /discover`: the nodes found on this network and on the tailnet (the work of `memcp-capture discover`, which owns
-/// the mDNS browsing and the probes), this node left out. Nothing found is an empty list, never an error.
+/// `GET /discover`: the nodes found on this network and on the tailnet (`intake::discover` owns the mDNS browsing and
+/// the probes), this node left out. Nothing found is an empty list, never an error.
 pub fn discover(app: &App) -> Value {
-    let out = Command::new(program("MEMCP_BRIDGE_BIN", "memcp-capture"))
-        .args(["discover", "--seconds", "3"])
-        .stdin(Stdio::null())
-        .stderr(Stdio::null())
-        .output();
-    let text = out
-        .map(|o| String::from_utf8_lossy(&o.stdout).into_owned())
-        .unwrap_or_default();
-    let nodes: Vec<Value> = text
-        .lines()
-        .filter_map(|l| {
-            let f: Vec<&str> = l.split('\t').collect();
-            (f.len() == 4 && f[0] != app.node_name && f[1] != app.public_url)
-                .then(|| json!({ "name": f[0], "address": f[1], "version": f[2], "via": f[3] }))
-        })
+    let nodes: Vec<Value> = crate::intake::discover::discover(std::time::Duration::from_secs(3))
+        .into_iter()
+        .filter(|f| f.name != app.node_name && f.address != app.public_url)
+        .map(
+            |f| json!({ "name": f.name, "address": f.address, "version": f.version, "via": f.via }),
+        )
         .collect();
     json!({ "nodes": nodes })
 }

@@ -10,6 +10,7 @@ pub mod discovery;
 pub mod doctor;
 pub mod explore;
 pub mod http;
+pub mod intake;
 pub mod join;
 pub mod net;
 pub mod oauth;

@@ -254,7 +254,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             )
             .expect("rules");
     }
-    // Pieces of a note the bridge absorbed: facts are drawn out, in their own vault, and the pieces leave.
+    // Pieces of a note the node absorbed: facts are drawn out, in their own vault, and the pieces leave.
     for t in [
         "D'après la note Projets/Alpha.md, modifiée le 2026-11-03 : Alpha — Suite : la directrice des opérations valide le budget le 2026-11-10.",
         "D'après la note Projets/Vide.md, modifiée le 2026-11-03 : RIEN à retenir.",
@@ -843,7 +843,7 @@ fn a_recording_given_up_on_is_tagged_and_counted_apart_from_what_waits_for_the_p
         "a recording is not the janitor's: {report:?}"
     );
     let w = waiting(&mut o);
-    assert_eq!(w["count"], 1, "until the bridge gives up, it waits: {w}");
+    assert_eq!(w["count"], 1, "until the node gives up, it waits: {w}");
     let id = w["files"][0]["id"].as_str().expect("id").to_string();
     o.call("transcription_failed", json!({"id": id}))
         .expect("marked");

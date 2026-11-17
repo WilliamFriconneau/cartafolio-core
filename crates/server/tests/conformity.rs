@@ -104,7 +104,7 @@ fn a_token_is_kept_only_as_a_digest() -> Res {
     Ok(())
 }
 
-/// UI-SPEC.md, acceptance 4: no screen contains *bridge*, *proxy* or *vault*. The text of the page (what is not a
+/// UI-SPEC.md, acceptance 4: no screen contains *bridge*, *capture program*, *capture app*, *proxy* or *vault*. The text of the page (what is not a
 /// script, a style or a tag) and every sentence of its translations are checked.
 #[test]
 fn no_screen_holds_a_forbidden_word() -> Res {
@@ -135,7 +135,14 @@ fn no_screen_holds_a_forbidden_word() -> Res {
         text.push_str(line);
     }
     let low = text.to_lowercase();
-    for w in ["bridge", "proxy", "proxies", "vault"] {
+    for w in [
+        "bridge",
+        "capture program",
+        "capture app",
+        "proxy",
+        "proxies",
+        "vault",
+    ] {
         assert!(!low.contains(w), "the page says {w:?}");
     }
     Ok(())

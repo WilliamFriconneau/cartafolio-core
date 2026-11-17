@@ -18,7 +18,7 @@ page in jsdom: the page talks to the real API, only the browser is simulated. In
 sections and their labels; Spaces shows the tiles and a space opens on its Boards tab; Trace or drop writes a note that
 appears in its list; the Journal lists the notes of every space, each with its space; Settings shows the machines and
 « Connect an assistant », hides the tiles and shows no empty section. On every view: no « null », « undefined », and none
-of the words the interface never uses (bridge, capture app, vault), and nothing logged as an error. jsdom only:
+of the words the interface never uses (bridge, capture program, capture app, vault), and nothing logged as an error. jsdom only:
 
 ```sh
 cd crates/server/tests/page && npm install jsdom --no-save && node e2e.test.js
@@ -60,7 +60,7 @@ It needs a Chromium on the machine (`CHROMIUM` says where) and the program built
 guided path of four steps with its progress (start: name, an assistant with the single address that carries the key;
 join: nodes found on the network or an address, then three words), a node with spaces shows its machines first (live
 peers), folders, labels, the keywords and targets of a space, French and English, light and dark, and that nothing
-scrolls sideways at 400 px. It stands in for `memcp-capture discover` and `memcp-sync --join` with small scripts, so it
+scrolls sideways at 400 px. It stands in for the network (`MEMCP_DISCOVER_FOUND`) and `memcp-sync --join` (a small script), so it
 needs no network. `SCREENSHOTS=dir` keeps pictures at 1280 and 400 px.
 
 ```sh

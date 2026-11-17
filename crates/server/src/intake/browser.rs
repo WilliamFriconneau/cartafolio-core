@@ -15,7 +15,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde_json::{Value, json};
 
-use crate::Error;
+use super::Error;
 
 /// The extension's id, fixed by the public key in its manifest (`apps/chrome-extension/manifest.json`).
 pub const EXTENSION_ID: &str = "ikhhhehjfmhdobidogcbommdklfmnnfg";
@@ -316,7 +316,7 @@ impl BrowserLink {
         let state = Arc::new(Mutex::new(State::default()));
         let (serving, shared) = (Arc::clone(&server), Arc::clone(&state));
         let thread = std::thread::Builder::new()
-            .name("memcp-capture-browser".into())
+            .name("memcp-browser-link".into())
             .spawn(move || serve(&serving, &shared))
             .map_err(|e| Error::Io(e.to_string()))?;
         Ok(BrowserLink {
@@ -386,6 +386,7 @@ fn serve(server: &tiny_http::Server, state: &Mutex<State>) {
                 {
                     s.last_seen = now_ms();
                 }
+                // The name the browser extension of the apps looks for in this answer: kept as it is.
                 reply(request, 200, &json!({ "app": "memcp-capture" }));
             }
             tiny_http::Method::Post if origin.as_deref() == Some(ours.as_str()) => {

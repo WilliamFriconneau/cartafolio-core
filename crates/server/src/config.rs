@@ -59,6 +59,7 @@ pub const SECTIONS: &[(&str, &[Opt])] = &[
     ("Who may sign in", &SIGN_IN),
     ("The janitor", &JANITOR),
     ("Voice notes", &VOICE),
+    ("Folders", &FOLDERS),
     ("Backups", &BACKUPS),
 ];
 
@@ -304,14 +305,14 @@ static JANITOR: [Opt; 11] = [
     ),
 ];
 
-static VOICE: [Opt; 7] = [
+static VOICE: [Opt; 13] = [
     o(
         "transcribe",
         Kind::Bool,
         "false",
         Some("transcribe"),
         None,
-        "Read voice notes (`memcp-transcribe.timer`): a recording waiting in an inbox becomes text through the speech service below. The recording leaves this machine for it.",
+        "Read voice notes: the node turns a recording waiting in an inbox into text, by the speech model on this machine (`transcribe_model`) or by the speech service below. With a service, the recording leaves this machine for it.",
     ),
     o(
         "transcribe_person",
@@ -319,7 +320,7 @@ static VOICE: [Opt; 7] = [
         "",
         Some("transcribe_person"),
         None,
-        "The person whose recordings are read. Empty: `janitor_person`.",
+        "The person whose recordings are read. Empty: `intake_person`, then `janitor_person`.",
     ),
     o(
         "transcribe_spaces",
@@ -327,7 +328,7 @@ static VOICE: [Opt; 7] = [
         "",
         Some("transcribe_spaces"),
         None,
-        "The spaces whose recordings are read, comma separated. Empty: the person's to-sort space.",
+        "The spaces whose recordings are read, comma separated, or `all`. Empty: every space the person writes to, one made later included.",
     ),
     o(
         "transcribe_api_url",
@@ -360,6 +361,129 @@ static VOICE: [Opt; 7] = [
         Some("transcribe_language"),
         None,
         "The language of the recordings (`en`, `fr`...). Empty: the model finds it.",
+    ),
+    o(
+        "transcribe_every",
+        Kind::Int { min: 5, max: 3600 },
+        "60",
+        None,
+        None,
+        "Seconds between two passes over the recordings waiting in the inboxes.",
+    ),
+    o(
+        "transcribe_model",
+        Kind::Path,
+        "",
+        None,
+        None,
+        "A whisper.cpp speech model (a `ggml-*.bin` file) on this machine: the recordings are read here and leave nowhere. Needs `whisper-cli` and `ffmpeg`.",
+    ),
+    o(
+        "transcribe_cmd",
+        Kind::Text,
+        "whisper-cli",
+        None,
+        None,
+        "The whisper.cpp program that reads a recording with `transcribe_model`.",
+    ),
+    o(
+        "transcribe_ffmpeg",
+        Kind::Text,
+        "ffmpeg",
+        None,
+        None,
+        "The `ffmpeg` program that makes a recording readable by the speech model.",
+    ),
+    o(
+        "transcribe_threads",
+        Kind::Int { min: 1, max: 64 },
+        "8",
+        None,
+        None,
+        "Threads the speech model uses.",
+    ),
+    o(
+        "transcribe_lexicon",
+        Kind::Path,
+        "",
+        None,
+        None,
+        "A Markdown table of terms and their wrong spellings, to help the speech model and to correct what it wrote.",
+    ),
+];
+
+static FOLDERS: [Opt; 9] = [
+    o(
+        "intake_person",
+        Kind::Text,
+        "",
+        Some("intake_person"),
+        None,
+        "The person whose memory the voice notes, the watched folders and the absorbed folders work for. Empty: `transcribe_person`, then `janitor_person`, then the first administrator.",
+    ),
+    o(
+        "watch",
+        Kind::List,
+        "",
+        Some("watch"),
+        None,
+        "Folders watched, each as `FOLDER -> SPACE`: a file added to the folder becomes a note (Markdown, text), a recording (audio) or a file of that space's inbox. Without `-> SPACE`, it goes to the person's to-sort box. The files stay where they are. A folder is taken in whole on the first look: use one made for it.",
+    ),
+    o(
+        "watch_every",
+        Kind::Int { min: 1, max: 3600 },
+        "10",
+        None,
+        None,
+        "Seconds between two looks at the watched folders.",
+    ),
+    o(
+        "absorb",
+        Kind::List,
+        "",
+        None,
+        None,
+        "Folders of notes kept up to date on this machine, each as `FOLDER -> SPACE`: what is new in them goes to that space's inbox, cut at the headings, and the janitor draws facts from it. The first pass only takes stock.",
+    ),
+    o(
+        "absorb_exclude",
+        Kind::List,
+        "",
+        None,
+        None,
+        "Folders of an absorbed folder that are never read (relative names).",
+    ),
+    o(
+        "absorb_protect",
+        Kind::List,
+        "",
+        None,
+        None,
+        "Words that keep a file of an absorbed folder closed when its name holds one.",
+    ),
+    o(
+        "absorb_roles",
+        Kind::Path,
+        "",
+        None,
+        None,
+        "A Markdown table `Name | Post`: a name is never sent from an absorbed folder, its post is.",
+    ),
+    o(
+        "absorb_every",
+        Kind::Int { min: 1, max: 1440 },
+        "15",
+        None,
+        None,
+        "Minutes between two passes over the absorbed folders.",
+    ),
+    o(
+        "deliver",
+        Kind::List,
+        "",
+        None,
+        None,
+        "Proposals put down as files, each as `SPACE TAG -> FOLDER`: a fact of the space tagged `TAG` (`proposals/pro`) is written once as a file in the folder.",
     ),
 ];
 
@@ -825,11 +949,20 @@ pub fn describe(settings: &Settings) -> Vec<String> {
             "janitor is on but no model is named (janitor_api_url or janitor_ollama_url): it will not start".into(),
         );
     }
-    if settings.flag("transcribe") && settings.text("transcribe_api_url").is_none() {
+    if settings.flag("transcribe")
+        && settings.text("transcribe_api_url").is_none()
+        && settings.text("transcribe_model").is_none()
+    {
         out.push(
-            "transcribe is on but no speech service is named (transcribe_api_url): it will not start"
+            "transcribe is on but there is no speech service (transcribe_api_url) and no speech model (transcribe_model): it will not start"
                 .into(),
         );
+    }
+    for line in settings.list("watch") {
+        let dir = line.split("->").next().unwrap_or("").trim();
+        if !crate::intake::home_path(dir).is_dir() {
+            out.push(format!("watch: the folder {dir:?} is not there yet"));
+        }
     }
     if settings
         .text("public_url")

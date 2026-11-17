@@ -58,7 +58,7 @@ async function until(cond, ms = 5000) {
 // The words the interface never says (docs/UI-SPEC.md), and no technical leftovers.
 function clean(name, text) {
   check(name + ": no « null » or « undefined »", !/\b(null|undefined|NaN)\b/.test(text), (text.match(/.{0,40}\b(null|undefined|NaN)\b.{0,40}/) || [""])[0]);
-  check(name + ": no forbidden word (bridge, capture app, vault)", !/\bbridge|capture app|\bvaults?\b/i.test(text), (text.match(/.{0,40}(bridge|capture app|vaults?).{0,40}/i) || [""])[0]);
+  check(name + ": no forbidden word (bridge, capture program, capture app, vault)", !/\bbridge|capture (app|program)|\bvaults?\b/i.test(text), (text.match(/.{0,40}(bridge|capture (app|program)|vaults?).{0,40}/i) || [""])[0]);
 }
 
 (async () => {

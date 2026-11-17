@@ -8,7 +8,7 @@
 **Use it**
 - [CORE-API.md](CORE-API.md): the map of the core by module, and the error vocabulary.
 - [TOOLS.md](TOOLS.md): the MCP tools an assistant gets, one section each. [REFERENCE.md](REFERENCE.md): commands and settings.
-- [DESKTOP.md](DESKTOP.md), [CAPTURE.md](CAPTURE.md): the apps on a computer and the capture program.
+- [DESKTOP.md](DESKTOP.md), [INTAKE.md](INTAKE.md): the apps on a computer, and what the node does with what comes into it (voice notes, watched folders, absorbed folders); [CHANGELOG-API.md](CHANGELOG-API.md): what changed on the wire, for the apps.
 - [LINUX.md](LINUX.md): install, first run, upgrade, backup, firewall and TLS on a Linux server; [PARITY.md](PARITY.md): the add-on options and their `memcp.toml` counterparts.
 - [TAILSCALE.md](TAILSCALE.md), [DISCOVERY.md](DISCOVERY.md): reaching a node.
 - [PLATFORMS.md](PLATFORMS.md): one app on every platform, what each adds (iPad, Watch, CarPlay, Windows, Linux GTK4).

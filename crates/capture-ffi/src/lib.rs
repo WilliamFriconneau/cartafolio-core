@@ -1,118 +1,30 @@
 #![warn(missing_docs)]
-//! The bridge, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
-//! bridge's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
-//! is read from the Keychain by Swift and handed over for the length of the run, never stored here.
+//! The node's helpers, as the apps' Swift sees them. Nothing but a shell: the logic is the node's (`memcp-server`, its
+//! `intake` module, and `memcp-client` for joining by code), renamed for Swift.
 //!
-//! `Intake.flush()` blocks while it sends: call it from a background task, after each `submit…` and every
-//! minute while the app runs.
+//! What this crate offers:
+//!
+//! - **Joining by code**: [`pair`], [`address_allowed`] (and the [`Pairing`] and [`PairError`] they use).
+//! - **The browser extension's link** (the Meet or Teams roster): [`BrowserLink`], [`BrowserCall`],
+//!   [`browser_extension_id`].
+//! - **The speech model of a Mac** and the rules around it: [`transcribe`] (macOS), [`should_transcribe`], the
+//!   `summary_*` prompts.
+//! - **The node's own intake**, new: [`node::NodeIntake`], voice notes read by the node itself and folders it watches.
+//!
+//! The names above are frozen for the apps that already link them (the pairing's `vaults` field stays, deprecated, next to
+//! `spaces`); the old outbox, the local relay and the Markdown writers are gone, since an app embeds the node and writes
+//! into it directly.
 
+#[cfg(target_os = "macos")]
 use std::path::Path;
 use std::sync::Arc;
 
-use memcp_capture::{Config, Intake as Core};
+pub mod node;
 
 uniffi::setup_scaffolding!();
 
-/// What the app knows about the connection and the place it keeps what waits. No `Debug`: it holds the key.
-#[derive(Clone, uniffi::Record)]
-pub struct IntakeConfig {
-    /// The address of the connection: `https://<server>/mcp/<name>`.
-    pub url: String,
-    /// The connection's key, read from the Keychain.
-    pub key: String,
-    /// A folder of the app's own (Application Support); only what waits lives there.
-    pub outbox: String,
-    /// Minutes east of UTC where the user is (`TimeZone.current.secondsFromGMT() / 60`), for the dates.
-    pub utc_offset_minutes: i32,
-}
-
-/// What a captured item is.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum ItemKind {
-    /// A typed or dictated text.
-    Text,
-    /// A file (a photo, a PDF).
-    Document,
-    /// A recording.
-    Audio,
-    /// A call of a tool of the memory kept by the bridge's gateway.
-    Call,
-}
-
-/// Where an item stands in the outbox.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, uniffi::Enum)]
-pub enum ItemState {
-    /// Waiting for the next `flush`.
-    Queued,
-    /// Being sent now.
-    Sending,
-    /// Taken by the memory; it leaves the outbox.
-    Sent,
-    /// The memory refused it in its own words (see `detail`); not sent again unless `retry`.
-    Failed,
-}
-
-/// One item of the outbox, as the app lists it.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct IntakeItem {
-    /// Identifier of the item in the outbox.
-    pub id: String,
-    /// What it is.
-    pub kind: ItemKind,
-    /// Short title shown in the list.
-    pub title: String,
-    /// Unix time.
-    pub created_at: i64,
-    /// Size on disk, in bytes.
-    pub bytes: u64,
-    /// Where it stands.
-    pub state: ItemState,
-    /// Why it failed, or how many tries it has had.
-    pub detail: String,
-    /// When the memory took it (Unix time), 0 while it waits.
-    pub sent_at: i64,
-    /// What this Mac heard in a recording; empty when the memory's side transcribes it.
-    pub heard: String,
-    /// The recording that went, kept on this Mac to be listened to again; empty when there is none.
-    pub audio: String,
-    /// Its summary, made on this Mac; empty when there is none.
-    pub summary: String,
-}
-
-/// What this Mac made of a recording, and what of it goes to one memory.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct HeardInput {
-    /// The text this Mac made of the recording.
-    pub text: String,
-    /// Its summary, made on this Mac.
-    pub summary: String,
-    /// Send the recording itself.
-    pub send_audio: bool,
-    /// Send the text.
-    pub send_text: bool,
-    /// Send the summary.
-    pub send_summary: bool,
-}
-
-/// How a `flush()` went.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct IntakeFlush {
-    /// Items the memory took in this flush.
-    pub sent: u32,
-    /// Still queued: they will be tried again.
-    pub waiting: u32,
-    /// Refused by the memory in this flush (listed with the reason until `retry` or `forget`).
-    pub failed: u32,
-    /// The memory could not be reached (or asked to wait): everything stays queued.
-    pub unreachable: bool,
-    /// The key is refused or revoked: **stop sending and ask the person for a new key.**
-    pub refused: bool,
-    /// Another flush was running (this app or the command line on the same outbox): nothing was tried now.
-    pub busy: bool,
-}
-
-/// What pairing gave: the connection's address and key (put the key in the Keychain at once). `vaults` names the one
-/// box the key writes to, the person's « À trier » (`<person>-a-trier`): it is no vault, and there is nothing to choose.
+/// What pairing gave: the connection's address and key (put the key in the Keychain at once). `spaces` names the one
+/// box the key writes to, the person's « À trier » (`<person>-a-trier`): there is nothing to choose.
 #[derive(Clone, uniffi::Record)]
 pub struct Pairing {
     /// Name of the new connection (`peer-...`).
@@ -121,8 +33,10 @@ pub struct Pairing {
     pub url: String,
     /// The key, shown once: put it in the Keychain at once.
     pub key: String,
-    /// The one box the key writes to (the person's inbox); never a vault to choose.
+    /// The same list as `spaces`, under its old name. Deprecated: read `spaces`.
     pub vaults: Vec<String>,
+    /// The one box the key writes to (the person's inbox); never a space to choose.
+    pub spaces: Vec<String>,
     /// The key would travel in clear (HTTP outside this machine and the own network): warn the person, never refuse.
     pub in_clear: bool,
 }
@@ -161,19 +75,20 @@ impl std::fmt::Display for PairError {
 
 impl std::error::Error for PairError {}
 
-/// Pairs this device with a memory: `server` is the address the person's page shows ("Connect a bridge"), `code` the
-/// one-time code it gave, `device` this computer's name (it names the connection). **Blocks** (a network call, 30 s at
-/// most): call it from a background task. Once only per code.
+/// Pairs this device with a memory: `server` is the address the person's page shows, `code` the one-time code it gave,
+/// `device` this computer's name (it names the connection). **Blocks** (a network call, 30 s at most): call it from a
+/// background task. Once only per code.
 #[uniffi::export]
 pub fn pair(server: String, code: String, device: String) -> Result<Pairing, PairError> {
     use memcp_client::Error as E;
-    match memcp_capture::pair_allowing(&server, &code, &device, true) {
+    match memcp_client::pair_allowing(&server, &code, &device, true) {
         Ok(p) => Ok(Pairing {
-            in_clear: memcp_capture::in_clear(&p.url),
+            in_clear: !memcp_client::allowed_url(&p.url),
             agent: p.agent,
             url: p.url,
             key: p.key,
-            vaults: p.spaces,
+            vaults: p.spaces.clone(),
+            spaces: p.spaces,
         }),
         Err(E::Tool(m)) => Err(PairError::Refused { message: m }),
         Err(E::RateLimited(_)) => Err(PairError::Wait {
@@ -185,16 +100,23 @@ pub fn pair(server: String, code: String, device: String) -> Result<Pairing, Pai
     }
 }
 
+/// Whether this address keeps the key safe: HTTPS anywhere, plain HTTP only to this machine or the own network. For a
+/// warning on the setup screen: nothing is refused for it.
+#[uniffi::export]
+pub fn address_allowed(url: String) -> bool {
+    memcp_client::allowed_url(&url)
+}
+
 /// An error the app can show as it is; `message` is in plain words.
 #[derive(Debug, uniffi::Error)]
 pub enum IntakeError {
-    /// The outbox could not be written.
+    /// Something on this computer could not be written.
     /// Plain words for the person.
     Storage {
         /// Plain words for the person.
         message: String,
     },
-    /// What was given is not a capture, or the address is not allowed.
+    /// What was given cannot be worked on, or the address is not allowed.
     /// Plain words for the person.
     Invalid {
         /// Plain words for the person.
@@ -219,179 +141,12 @@ impl std::fmt::Display for IntakeError {
 
 impl std::error::Error for IntakeError {}
 
-impl From<memcp_capture::Error> for IntakeError {
-    fn from(e: memcp_capture::Error) -> Self {
+impl From<memcp_server::intake::Error> for IntakeError {
+    fn from(e: memcp_server::intake::Error) -> Self {
         let message = e.to_string();
         match e {
-            memcp_capture::Error::Io(_) => IntakeError::Storage { message },
-            memcp_capture::Error::Invalid(_) => IntakeError::Invalid { message },
-            memcp_capture::Error::TooBig(_) => IntakeError::TooBig { message },
-            memcp_capture::Error::Folder(_) => IntakeError::Storage { message },
-        }
-    }
-}
-
-impl From<memcp_capture::Item> for IntakeItem {
-    fn from(i: memcp_capture::Item) -> Self {
-        IntakeItem {
-            id: i.id,
-            kind: match i.kind {
-                memcp_capture::Kind::Text => ItemKind::Text,
-                memcp_capture::Kind::Document => ItemKind::Document,
-                memcp_capture::Kind::Audio => ItemKind::Audio,
-                memcp_capture::Kind::Call => ItemKind::Call,
-            },
-            title: i.title,
-            created_at: i.created_at,
-            bytes: i.bytes,
-            state: match i.state {
-                memcp_capture::State::Queued => ItemState::Queued,
-                memcp_capture::State::Sending => ItemState::Sending,
-                memcp_capture::State::Sent => ItemState::Sent,
-                memcp_capture::State::Failed => ItemState::Failed,
-            },
-            detail: i.detail,
-            sent_at: i.sent_at,
-            heard: i.heard,
-            audio: i.audio,
-            summary: i.summary,
-        }
-    }
-}
-
-/// The outbox and what sends from it. One per app, kept for as long as it runs.
-#[derive(uniffi::Object)]
-pub struct Intake {
-    core: Core,
-}
-
-#[uniffi::export]
-impl Intake {
-    /// Opens the outbox (making its folder, private to the user, if it is not there).
-    #[uniffi::constructor]
-    pub fn new(config: IntakeConfig) -> Result<Arc<Intake>, IntakeError> {
-        let core = Core::open(Config {
-            url: config.url,
-            key: config.key,
-            outbox: config.outbox.into(),
-            utc_offset_minutes: config.utc_offset_minutes,
-        })?;
-        Ok(Arc::new(Intake { core }))
-    }
-
-    /// A note, dated in the user's day. Kept before this returns. Returns its id.
-    pub fn submit_text(&self, text: String) -> Result<String, IntakeError> {
-        Ok(self.core.submit_text(&text)?)
-    }
-
-    /// A file or a recording (by its extension). **Copied** into the outbox: the original may be moved or
-    /// deleted at once. Returns its id.
-    pub fn submit_file(&self, path: String, note: String) -> Result<String, IntakeError> {
-        Ok(self.core.submit_file(Path::new(&path), &note)?)
-    }
-
-    /// One recording, or one part of a long one: `part` of `parts` is 1 of 1 for a recording in one piece.
-    /// `started_at` is Unix time, `seconds` its length. At most 24 MB a file: cut a long one into parts.
-    /// `heard`: what this Mac made of it (`transcribe`, a summary) and what of it goes to this memory.
-    #[allow(clippy::too_many_arguments)]
-    pub fn submit_audio(
-        &self,
-        path: String,
-        started_at: i64,
-        seconds: u32,
-        title: String,
-        part: u8,
-        parts: u8,
-        heard: HeardInput,
-    ) -> Result<String, IntakeError> {
-        let heard = memcp_capture::Heard {
-            text: heard.text,
-            summary: heard.summary,
-            send_audio: heard.send_audio,
-            send_text: heard.send_text,
-            send_summary: heard.send_summary,
-        };
-        Ok(self.core.submit_audio_heard(
-            Path::new(&path),
-            started_at,
-            seconds,
-            &title,
-            part,
-            parts,
-            &heard,
-        )?)
-    }
-
-    /// What waits (and what the memory refused for good), the oldest first, then the last 50 sent, the
-    /// newest first.
-    pub fn items(&self) -> Vec<IntakeItem> {
-        self.core.items().into_iter().map(Into::into).collect()
-    }
-
-    /// How many captures wait to be sent.
-    pub fn waiting(&self) -> u32 {
-        self.core.waiting()
-    }
-
-    /// Sends what waits, in order. **Blocks** while it does: call it from a background task.
-    pub fn flush(&self) -> IntakeFlush {
-        let r = self.core.flush();
-        IntakeFlush {
-            sent: r.sent,
-            waiting: r.waiting,
-            failed: r.failed,
-            unreachable: r.unreachable,
-            refused: r.refused,
-            busy: r.busy,
-        }
-    }
-
-    /// The key would travel in clear (an HTTP address outside this machine and the own network): show a warning.
-    pub fn in_clear(&self) -> bool {
-        self.core.in_clear()
-    }
-
-    /// Forgets a capture: one that waits is dropped, one that went is taken off the list. Waits for a flush that is
-    /// sending it.
-    pub fn forget(&self, id: String) {
-        let _ = self.core.forget(&id);
-    }
-
-    /// Puts a refused capture back in the queue (`id`), or all of them (`nil`). How many went back.
-    pub fn retry(&self, id: Option<String>) -> Result<u32, IntakeError> {
-        Ok(self.core.retry(id.as_deref())?)
-    }
-}
-
-/// The memory's tools served on this Mac only (`POST http://127.0.0.1:<port>/mcp`), for an assistant that must never hold
-/// the memory's address nor its key (a work assistant, say): the app keeps both, the assistant gets a local address.
-/// It shares the connection's outbox with the app. Stops with `stop()` or when the app lets it go.
-#[derive(uniffi::Object)]
-pub struct LocalMcp {
-    server: std::sync::Mutex<memcp_capture::HttpServer>,
-}
-
-#[uniffi::export]
-impl LocalMcp {
-    /// Listens on `127.0.0.1:<port>` before it returns: a port already taken is an error at once.
-    #[uniffi::constructor]
-    pub fn new(config: IntakeConfig, port: u16) -> Result<Arc<LocalMcp>, IntakeError> {
-        let gateway = memcp_capture::Gateway::new(Config {
-            url: config.url,
-            key: config.key,
-            outbox: config.outbox.into(),
-            utc_offset_minutes: config.utc_offset_minutes,
-        })?;
-        let server = memcp_capture::HttpServer::start(gateway, &format!("127.0.0.1:{port}"))?;
-        Ok(Arc::new(LocalMcp {
-            server: std::sync::Mutex::new(server),
-        }))
-    }
-
-    /// Stops the local server (idempotent); the port is free afterwards.
-    pub fn stop(&self) {
-        if let Ok(mut s) = self.server.lock() {
-            s.stop();
+            memcp_server::intake::Error::Io(_) => IntakeError::Storage { message },
+            memcp_server::intake::Error::Invalid(_) => IntakeError::Invalid { message },
         }
     }
 }
@@ -400,7 +155,7 @@ impl LocalMcp {
 /// extension only, on `127.0.0.1:8790`. Stops with `stop()` or when the app lets it go.
 #[derive(uniffi::Object)]
 pub struct BrowserLink {
-    link: std::sync::Mutex<memcp_capture::BrowserLink>,
+    link: std::sync::Mutex<memcp_server::intake::browser::BrowserLink>,
 }
 
 /// The call the extension reports now.
@@ -419,7 +174,9 @@ impl BrowserLink {
     /// Listens before it returns: a port already taken is an error at once.
     #[uniffi::constructor]
     pub fn new() -> Result<Arc<BrowserLink>, IntakeError> {
-        let link = memcp_capture::BrowserLink::start(memcp_capture::browser::EXTENSION_PORT)?;
+        let link = memcp_server::intake::browser::BrowserLink::start(
+            memcp_server::intake::browser::EXTENSION_PORT,
+        )?;
         Ok(Arc::new(BrowserLink {
             link: std::sync::Mutex::new(link),
         }))
@@ -460,66 +217,12 @@ impl BrowserLink {
 /// The extension's id, fixed by its key: the one the app hears.
 #[uniffi::export]
 pub fn browser_extension_id() -> String {
-    memcp_capture::browser::EXTENSION_ID.to_string()
-}
-
-/// The outbox folder of one connection under `base` (the app's own data folder, Application Support): pass it as
-/// `IntakeConfig.outbox`. Named after a fingerprint of the address, never the address: one connection never lists or
-/// sends another's captures.
-#[uniffi::export]
-pub fn connection_outbox(base: String, url: String) -> String {
-    memcp_capture::connection_outbox(Path::new(&base), &url)
-        .to_string_lossy()
-        .into_owned()
-}
-
-/// Moves the captures left in the outbox the app used before (`old`, the folder that was `IntakeConfig.outbox`) into the
-/// connection's own (`new`, from `connection_outbox`), all of them, whatever vault they were made for: they go to
-/// « À trier ». Call it once at start, before `Intake(config:)`; calling it again moves nothing. How many moved.
-#[uniffi::export]
-pub fn adopt_old_captures(old: String, new: String) -> Result<u32, IntakeError> {
-    Ok(memcp_capture::adopt_old_captures(
-        Path::new(&old),
-        Path::new(&new),
-    )?)
-}
-
-/// Whether this address keeps the key safe: HTTPS anywhere, plain HTTP only to this machine or the own network. For a
-/// warning on the setup screen: nothing is refused for it.
-#[uniffi::export]
-pub fn address_allowed(url: String) -> bool {
-    memcp_client::allowed_url(&url)
-}
-
-// MARK: - Markdown, for a folder of notes (Obsidian)
-
-/// One line of the live text of a meeting or a dictation.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct LiveLineInput {
-    /// Whether the line was said by the user (otherwise by someone else).
-    pub me: bool,
-    /// What was said.
-    pub text: String,
-}
-
-/// One part of a recording, as it is handed to the core.
-#[derive(Debug, Clone, uniffi::Record)]
-pub struct MarkdownPart {
-    /// Path of the audio file of this part.
-    pub path: String,
-    /// Its length in seconds.
-    pub seconds: u32,
-}
-
-fn markdown(folder: String, utc_offset_minutes: i32) -> memcp_capture::markdown::Markdown {
-    memcp_capture::markdown::Markdown {
-        folder: folder.into(),
-        utc_offset_minutes,
-    }
+    memcp_server::intake::browser::EXTENSION_ID.to_string()
 }
 
 /// What a recording says, read on this Mac by Whisper (on its GPU). `pcm`: 16 kHz, mono, 32-bit float samples,
 /// little-endian, no header. Empty for nothing audible. **Blocks** for a while: call it from a background task.
+/// (The node reads the recordings kept in a memory by itself: see [`node::NodeIntake`].)
 #[cfg(target_os = "macos")]
 #[uniffi::export]
 pub fn transcribe(
@@ -529,7 +232,7 @@ pub fn transcribe(
 ) -> Result<String, IntakeError> {
     let threads =
         std::thread::available_parallelism().map_or(4, |n| u32::try_from(n.get()).unwrap_or(4));
-    Ok(memcp_capture::local::transcribe(
+    Ok(memcp_server::intake::local::transcribe(
         Path::new(&model),
         Path::new(&pcm),
         "fr",
@@ -542,168 +245,29 @@ pub fn transcribe(
 /// Whether this Mac reads a recording itself: on mains, or on a battery not low and not in Low Power Mode.
 #[uniffi::export]
 pub fn should_transcribe(on_mains: bool, battery_percent: u8, low_power: bool) -> bool {
-    memcp_capture::plan::should_transcribe(on_mains, battery_percent, low_power)
+    memcp_server::intake::plan::should_transcribe(on_mains, battery_percent, low_power)
 }
 
 /// What the summarising model of the system is told, once per session.
 #[uniffi::export]
 pub fn summary_instructions() -> String {
-    memcp_capture::plan::SUMMARY_INSTRUCTIONS.to_string()
+    memcp_server::intake::plan::SUMMARY_INSTRUCTIONS.to_string()
 }
 
 /// The requests to make, one per piece of the transcript, in order.
 #[uniffi::export]
 pub fn summary_prompts(text: String) -> Vec<String> {
-    let pieces = memcp_capture::plan::summary_pieces(&text);
+    let pieces = memcp_server::intake::plan::summary_pieces(&text);
     let n = pieces.len();
     pieces
         .iter()
         .enumerate()
-        .map(|(i, p)| memcp_capture::plan::summary_prompt(p, i, n))
+        .map(|(i, p)| memcp_server::intake::plan::summary_prompt(p, i, n))
         .collect()
 }
 
-/// The request that joins the summaries of the pieces; `None` for a single one (it is the summary).
+/// The request that joins the summaries of the pieces into one; `None` when there is only one.
 #[uniffi::export]
 pub fn summary_join_prompt(summaries: Vec<String>) -> Option<String> {
-    memcp_capture::plan::summary_join_prompt(&summaries)
-}
-
-/// A note as one dated `.md` in `folder` (a folder the person chose, often an Obsidian vault). Returns the file.
-#[uniffi::export]
-pub fn markdown_note(
-    folder: String,
-    utc_offset_minutes: i32,
-    text: String,
-    at: i64,
-) -> Result<String, IntakeError> {
-    Ok(markdown(folder, utc_offset_minutes)
-        .note(&text, at)?
-        .to_string_lossy()
-        .into_owned())
-}
-
-/// A document or a recording copied into `folder`, with a `.md` beside it that embeds it.
-#[uniffi::export]
-pub fn markdown_file(
-    folder: String,
-    utc_offset_minutes: i32,
-    path: String,
-    note: String,
-    at: i64,
-) -> Result<String, IntakeError> {
-    Ok(markdown(folder, utc_offset_minutes)
-        .file(Path::new(&path), &note, at)?
-        .to_string_lossy()
-        .into_owned())
-}
-
-/// A meeting or a dictation: its parts copied and embedded, and its live text, said to be approximate.
-#[uniffi::export]
-#[allow(clippy::too_many_arguments)]
-pub fn markdown_meeting(
-    folder: String,
-    utc_offset_minutes: i32,
-    title: String,
-    started_at: i64,
-    parts: Vec<MarkdownPart>,
-    live: Vec<LiveLineInput>,
-    heard: String,
-    summary: String,
-) -> Result<String, IntakeError> {
-    let parts: Vec<(std::path::PathBuf, u32)> = parts
-        .into_iter()
-        .map(|p| (p.path.into(), p.seconds))
-        .collect();
-    let live: Vec<memcp_capture::markdown::LiveLine> = live
-        .into_iter()
-        .map(|l| memcp_capture::markdown::LiveLine {
-            me: l.me,
-            text: l.text,
-        })
-        .collect();
-    Ok(markdown(folder, utc_offset_minutes)
-        .meeting_heard(&title, started_at, &parts, &live, &heard, &summary)?
-        .to_string_lossy()
-        .into_owned())
-}
-
-/// Why a replica setting could not be read or written.
-#[derive(Debug, uniffi::Error)]
-pub enum ReplicaError {
-    /// The folder is not a memory, or it cannot be opened, or the value is refused (a window is 1 to 36500 days).
-    /// Plain words for the person.
-    Failed {
-        /// Plain words for the person.
-        message: String,
-    },
-}
-
-impl std::fmt::Display for ReplicaError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let ReplicaError::Failed { message } = self;
-        write!(f, "{message}")
-    }
-}
-
-impl std::error::Error for ReplicaError {}
-
-fn failed(e: impl std::fmt::Display) -> ReplicaError {
-    ReplicaError::Failed {
-        message: e.to_string(),
-    }
-}
-
-fn replica(data: &str) -> Result<memcp_core::Brain, ReplicaError> {
-    memcp_core::Brain::open(Path::new(data)).map_err(failed)
-}
-
-/// The window of a replica: how many days it holds, and what it pruned last.
-#[derive(Debug, Clone, PartialEq, Eq, uniffi::Record)]
-pub struct ReplicaWindow {
-    /// `None`: it holds everything (the default).
-    pub days: Option<u32>,
-    /// `window: N days`, or `window: all`, as the page shows it.
-    pub label: String,
-    /// Unix time of the last pruning, 0 if none.
-    pub pruned_at: i64,
-    /// Notes removed by the last pruning, and notes kept because a peer has not acknowledged them yet.
-    pub pruned_facts: u32,
-    /// Files removed by the last pruning.
-    pub pruned_files: u32,
-    /// Notes kept because a peer has not acknowledged them yet.
-    pub kept_unacknowledged: u32,
-}
-
-/// The window of the replica kept in `data_dir` (the node's own folder). Cheap: call it when a screen shows.
-#[uniffi::export]
-pub fn replica_window(data_dir: String) -> Result<ReplicaWindow, ReplicaError> {
-    let s = memcp_core::sync::window_status(&replica(&data_dir)?).map_err(failed)?;
-    let n = |v: usize| u32::try_from(v).unwrap_or(u32::MAX);
-    let last = s.last_prune.clone();
-    Ok(ReplicaWindow {
-        label: s.label(),
-        days: s.days,
-        pruned_at: last.as_ref().map_or(0, |l| l.at),
-        pruned_facts: last.as_ref().map_or(0, |l| n(l.facts)),
-        pruned_files: last.as_ref().map_or(0, |l| n(l.files)),
-        kept_unacknowledged: last.as_ref().map_or(0, |l| n(l.kept_unacknowledged)),
-    })
-}
-
-/// Sets the window of the replica in `data_dir`: `Some(days)` (1 to 36500) holds only the last `days` days (what is
-/// pinned stays: tag `pin` or under `pin/`), `None` holds everything. Takes effect at the next synchronisation; what
-/// was pruned does not come back by itself.
-#[uniffi::export]
-pub fn set_replica_window(data_dir: String, days: Option<u32>) -> Result<(), ReplicaError> {
-    memcp_core::sync::set_window_days(&replica(&data_dir)?, days).map_err(failed)
-}
-
-/// Prunes the replica in `data_dir` to its window now (it also happens after each synchronisation): only notes
-/// every peer has acknowledged, never pinned ones, nothing is sent to a peer. Returns how many notes went.
-#[uniffi::export]
-pub fn prune_replica_window(data_dir: String, now: i64) -> Result<u32, ReplicaError> {
-    let done = memcp_core::sync::prune_all(&replica(&data_dir)?, now).map_err(failed)?;
-    let n: usize = done.map_or(0, |d| d.iter().map(|p| p.facts).sum());
-    Ok(u32::try_from(n).unwrap_or(u32::MAX))
+    memcp_server::intake::plan::summary_join_prompt(&summaries)
 }

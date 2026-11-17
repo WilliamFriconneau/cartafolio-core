@@ -6,8 +6,8 @@ use std::path::Path;
 
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
-use crate::Error;
-use crate::whisper::{Lexicon, clean, parasite};
+use super::Error;
+use super::whisper::{Lexicon, clean, parasite};
 
 /// Below this peak (-50 dB) there is no sound at all: the microphone was off.
 const SILENCE: f32 = 0.003_16;
@@ -25,6 +25,18 @@ pub fn transcribe(
         .chunks_exact(4)
         .map(|b| f32::from_le_bytes([b[0], b[1], b[2], b[3]]))
         .collect();
+    transcribe_samples(model, &samples, lang, threads, lexicon)
+}
+
+/// What `samples` say (16 kHz, mono, 32-bit float), or `None` for nothing audible. The node's voice pass calls it with
+/// what the host's own audio system decoded from a recording (see [`super::whisper::Decoder`]).
+pub fn transcribe_samples(
+    model: &Path,
+    samples: &[f32],
+    lang: &str,
+    threads: u32,
+    lexicon: Option<&Path>,
+) -> Result<Option<String>, Error> {
     if samples.iter().fold(0f32, |m, s| m.max(s.abs())) < SILENCE {
         return Ok(None);
     }
@@ -52,7 +64,7 @@ pub fn transcribe(
         params.set_initial_prompt(&vocab);
     }
     state
-        .full(params, &samples)
+        .full(params, samples)
         .map_err(|e| Error::Invalid(format!("whisper failed: {e}")))?;
     let mut lines = Vec::new();
     for segment in state.as_iter() {

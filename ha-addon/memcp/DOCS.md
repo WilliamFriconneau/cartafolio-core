@@ -62,15 +62,19 @@ To bring in the memory of an installation that ran as another app (a former HemC
 
 On the page of a space, **Record** keeps a voice note, **Attach files** keeps photos, PDF, text and recordings; each is a note of the space, with its file. The microphone needs the page to be served over https (Home Assistant's own address is, in the app or through Nabu Casa or your own certificate).
 
-A voice note waits as a recording under `inbox/audio` until something reads it. To read them here, turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: choose one you trust. The text is put in the inbox of the same space, tagged `dictee`, and the recording is erased a week later. The page shows next to each voice note whether it waits, was read, or failed (with a Retry button). Without a service here, a computer that runs the desktop bridge with a local speech model reads the same recordings, and nothing leaves your network.
+A voice note waits as a recording under `inbox/audio` until something reads it. The node reads it itself (there is no other program): turn on `transcribe` and name a speech service of the OpenAI kind (`transcribe_api_url`, for example `https://api.openai.com/v1/audio/transcriptions`, or a service on your network such as a faster-whisper server; `transcribe_api_model`, `transcribe_api_key`). **The recording leaves this machine for that service**: turn it on only for a service you trust. The text becomes a note of the same space, and the recording is erased a short while after its text is filed.
 
 | Option | Meaning |
 |---|---|
 | `transcribe` | on or off |
-| `transcribe_person` | whose recordings (defaults to `janitor_person`) |
+| `transcribe_person` | whose recordings (defaults to `intake_person`, then `janitor_person`) |
 | `transcribe_spaces` | the spaces whose recordings are read, separated by commas (empty: every space of the person, those made later included, `all` says the same) |
 | `transcribe_api_url`, `transcribe_api_model`, `transcribe_api_key` | the speech service |
 | `transcribe_language` | `fr`, `en`… or empty to let the service detect it |
+
+## Watched folders
+
+`watch` is a list of folders, each written `FOLDER -> SPACE` (for example `/share/dictation -> personal`). A file added to a watched folder becomes a note (Markdown and text files), a recording (audio files, read by the node as above) or a file of that space's inbox, where the janitor files it like any other note. Without `-> SPACE` it goes to the person's À trier. The files stay where they are: nothing in a watched folder is moved, changed or deleted. A folder is taken in whole the first time it is looked at, so point it at a folder made for the purpose. The folders must be under `/share` or `/media` (the app maps both). `intake_person` names the person (the name in Memory) these folders and the voice notes work for; empty, it is `transcribe_person`, then `janitor_person`.
 
 ## The janitor (optional)
 
@@ -80,7 +84,7 @@ into an inbox has calmed down (`janitor_quiet` seconds after the last write, 120
 what the devices sent to **À trier** (the person's one box for everything that comes in, which belongs to no vault) goes to
 the inbox of the right vault, or waits on the person's page when the janitor is unsure; each note of a vault's inbox is filed,
 its text unchanged, in that vault; and a piece of a note absorbed from a folder becomes a few short, dated facts. It reads recordings no more:
-the bridge, where the speech model is, transcribes them.
+the node transcribes them itself (see above).
 
 | option | what |
 |---|---|

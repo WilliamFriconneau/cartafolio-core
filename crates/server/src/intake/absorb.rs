@@ -1,4 +1,4 @@
-//! Absorbing a folder of notes: the capture program reads the Markdown files of a folder the person keeps up to date (synced to
+//! Absorbing a folder of notes: the node reads the Markdown files of a folder the person keeps up to date (synced to
 //! this machine) and sends **what is new in them** to the inbox of a space, tagged `inbox/absorb`. The server's janitor
 //! then draws short, dated facts out of each piece, in the note's own words: what is memorised is the information, not
 //! a copy of the files.
@@ -16,10 +16,9 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::UNIX_EPOCH;
 
-use memcp_client::{Client, Error as ClientError};
 use serde_json::{Value, json};
 
-use crate::Error;
+use super::{Error, Failure, Memory};
 
 /// The longest text of one passage (the memory takes 4000 characters).
 const PASSAGE_MAX: usize = 3500;
@@ -28,7 +27,7 @@ const PASSAGE_MAX: usize = 3500;
 #[derive(Clone, Debug)]
 pub struct Source {
     pub dir: PathBuf,
-    pub vault: String,
+    pub space: String,
     /// Folders (relative to `dir`, any case) never read.
     pub exclude: Vec<String>,
     /// Words that keep a file closed when its name holds one (any case).
@@ -118,9 +117,6 @@ pub struct Absorbed {
     pub noted: u32,
     pub failed: u32,
     pub problems: Vec<String>,
-    /// The memory could not be reached: what is left goes at the next pass.
-    pub unreachable: bool,
-    pub key_refused: bool,
 }
 
 fn fold(s: &str) -> String {
@@ -262,7 +258,11 @@ fn cut(text: &str, size: usize) -> Vec<String> {
     parts
 }
 
-/// A short fingerprint of a passage's text (FNV-1a), to know it was sent.
+/// A short fingerprint of a text (FNV-1a), to know it was sent.
+pub(super) fn fingerprint(text: &str) -> String {
+    hash(text)
+}
+
 fn hash(text: &str) -> String {
     let mut h: u64 = 0xcbf2_9ce4_8422_2325;
     for b in text.bytes() {
@@ -305,7 +305,7 @@ impl State {
 
 /// One pass over `src`. `everything`: on a first pass, send what the folder holds instead of only taking stock.
 pub fn absorb(
-    client: &mut Client,
+    memory: &mut Memory,
     src: &Source,
     state_dir: &Path,
     everything: bool,
@@ -314,7 +314,7 @@ pub fn absorb(
     if !src.dir.is_dir() {
         return Err(Error::Invalid("the folder to absorb is not there".into()));
     }
-    let name = hash(&format!("{}\0{}", src.dir.display(), src.vault));
+    let name = hash(&format!("{}\0{}", src.dir.display(), src.space));
     let mut state = State::open(state_dir.join(format!("absorb-{name}.json")));
     let stock_only = state.fresh && !everything;
     for (rel, path) in files(src) {
@@ -347,7 +347,7 @@ pub fn absorb(
             report.noted += 1;
         } else {
             report.files_read += 1;
-            let (y, m, d, _, _) = crate::time::civil(i64::try_from(mtime).unwrap_or(0), 0);
+            let (y, m, d, _, _) = super::time::civil(i64::try_from(mtime).unwrap_or(0), 0);
             for (_, t) in &cut {
                 let h = hash(t);
                 if sent.contains(&h) {
@@ -357,24 +357,17 @@ pub fn absorb(
                     &format!("D'après la note {rel}, modifiée le {y:04}-{m:02}-{d:02} : {t}"),
                     &src.roles,
                 );
-                match client.call(
+                match memory.call(
                     "remember",
-                    json!({ "space": src.vault, "kind": "context", "tags": ["inbox/absorb"], "text": note }),
+                    json!({ "space": src.space, "kind": "context", "tags": ["inbox/absorb"], "text": note }),
                 ) {
                     Ok(_) => {
                         sent.push(h);
                         report.sent += 1;
                     }
-                    Err(ClientError::Tool(m)) => {
+                    Err(Failure(m)) => {
                         report.failed += 1;
                         report.problems.push(format!("{rel}: {m}"));
-                    }
-                    Err(e) => {
-                        note_error(&e, &mut report);
-                        // What was sent of this note is kept; it is read again next pass.
-                        state.data["files"][&rel] = json!({ "sent": sent });
-                        state.save()?;
-                        return Ok(report);
                     }
                 }
             }
@@ -395,21 +388,21 @@ pub fn absorb(
 /// `dir` (a folder an assistant that only reads files sees: the work assistant, say).
 #[derive(Clone, Debug)]
 pub struct Delivery {
-    pub vault: String,
+    pub space: String,
     pub tag: String,
     pub dir: PathBuf,
 }
 
 /// Puts down the proposals not put down yet. How many were written.
 pub fn deliver(
-    client: &mut Client,
+    memory: &mut Memory,
     d: &Delivery,
     state_dir: &Path,
     report: &mut Absorbed,
 ) -> Result<u32, Error> {
     let name = hash(&format!(
         "deliver\0{}\0{}\0{}",
-        d.vault,
+        d.space,
         d.tag,
         d.dir.display()
     ));
@@ -418,9 +411,9 @@ pub fn deliver(
         .ok()
         .and_then(|t| serde_json::from_str::<Vec<String>>(&t).ok())
         .unwrap_or_default();
-    let listed = match client.call(
+    let listed = match memory.call(
         "recall",
-        json!({ "space": d.vault, "query": "", "tags": [d.tag], "limit": 50 }),
+        json!({ "space": d.space, "query": "", "tags": [d.tag], "limit": 50 }),
     ) {
         Ok(l) => l,
         Err(e) => {
@@ -438,7 +431,7 @@ pub fn deliver(
             continue;
         }
         let created = f["created_at"].as_i64().unwrap_or(0);
-        let (y, m, day, _, _) = crate::time::civil(created, 0);
+        let (y, m, day, _, _) = super::time::civil(created, 0);
         let body = text.trim();
         let words: String = body
             .split_whitespace()
@@ -479,7 +472,7 @@ pub fn deliver(
 
 /// Proposes the app guide that tells the assistants of `d.space` what a proposal for this folder is (once per text: the
 /// person approves it on the memory's page, then every assistant of the space is told). Only for `proposals/<name>`.
-pub fn propose_guide(client: &mut Client, d: &Delivery, state_dir: &Path, report: &mut Absorbed) {
+pub fn propose_guide(memory: &mut Memory, d: &Delivery, state_dir: &Path, report: &mut Absorbed) {
     if !d.tag.starts_with("proposals/") {
         return;
     }
@@ -488,19 +481,19 @@ pub fn propose_guide(client: &mut Client, d: &Delivery, state_dir: &Path, report
         |n| n.to_string_lossy().into_owned(),
     );
     let text = format!(
-        "What is written in this vault with the tag `{tag}` is put down as a file in the person's work folder, under « {folder} », once, for the assistants that read that folder. \
+        "What is written in this space with the tag `{tag}` is put down as a file in the person's work folder, under « {folder} », once, for the assistants that read that folder. \
 Write there an idea or a note meant for that folder, when the person asks for it (« idée pour le pro », « note-le pour le pro »): one fact each, dated, in the person's words, no person's name (the post instead). \
 It is not filed elsewhere and not changed afterwards; to take one back, retire it.",
         tag = d.tag
     );
     let mark = state_dir.join(format!(
         "guide-{}.txt",
-        hash(&format!("{}\0{text}", d.vault))
+        hash(&format!("{}\0{text}", d.space))
     ));
     if mark.exists() {
         return;
     }
-    match client.call("guide_propose", json!({ "space": d.vault, "text": text })) {
+    match memory.propose_guide(&d.space, &text) {
         Ok(_) => {
             let _ = std::fs::create_dir_all(state_dir);
             let _ = std::fs::write(&mark, b"proposed");
@@ -509,12 +502,8 @@ It is not filed elsewhere and not changed afterwards; to take one back, retire i
     }
 }
 
-fn note_error(e: &ClientError, report: &mut Absorbed) {
-    match e {
-        ClientError::Refused => report.key_refused = true,
-        ClientError::Unreachable(_) | ClientError::RateLimited(_) => report.unreachable = true,
-        other => report.problems.push(other.to_string()),
-    }
+fn note_error(e: &Failure, report: &mut Absorbed) {
+    report.problems.push(e.to_string());
 }
 
 #[cfg(test)]

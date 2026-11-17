@@ -22,7 +22,16 @@ const USAGE: &str = "usage: memcp --data DIR <command>
                                          spaces, memcp.toml; prints the page address and one address with the key for an
                                          assistant. Asks questions on a terminal; --yes (or no terminal) asks nothing.
   config check|show|example              reads memcp.toml, shows it with every option, or prints the documented file
-  prepare janitor|transcribe --out DIR   what the service units run first: the key and the settings of a companion
+  prepare janitor --out DIR              what the janitor's service unit runs first: its key and its settings
+  transcribe [--user PERSON]             one pass over the recordings waiting in the inboxes (the node does it by itself
+                                         while it serves, as set by `transcribe` in memcp.toml)
+  watch [--once] [--user PERSON]         looks at the folders of `watch` in memcp.toml, every few seconds until stopped
+  intake send FILE... [--space SPACE]    puts files into a space's inbox (À trier by default): a text file becomes a note,
+                                         audio a recording, the rest a file
+  intake text TEXT | - [--space SPACE]   puts a note into the inbox
+  intake absorb [all]                    one pass over the folders of `absorb` (and the proposals of `deliver`)
+  intake status                          the recordings waiting for a text per space, and the folders watched
+  intake discover [--seconds N]          nodes found on this network and on the tailnet
   catalogue                              lists the kinds of vault this installation offers
   vault add KIND [--user PERSON]         creates a person's vault of a kind of the catalogue (named after them)
   space add NAME [--user PERSON] [--kind KIND] | space list [--kinds] | space kind NAME KIND
@@ -143,6 +152,7 @@ const VALUE_FLAGS: &[&str] = &[
     "--tailnet-user",
     "--login-url",
     "--oauth-redirect",
+    "--seconds",
 ];
 
 struct Args {
@@ -323,7 +333,26 @@ fn run(args: &[String]) -> Result<(), Failure> {
             setup::prepare(kind, &data, &settings, Path::new(need("--out")?))
         }
         ("catalogue", _) => cli::catalogue_list(&data),
-        ("serve", _) => serve(&data, &a, flag("--listen").unwrap_or("127.0.0.1:8791")),
+        ("serve", _) => serve(
+            &data,
+            &a,
+            &settings,
+            flag("--listen").unwrap_or("127.0.0.1:8791"),
+        ),
+        ("transcribe", _) => {
+            memcp_server::intake::cli::transcribe(&data, &settings, flag("--user"))
+        }
+        ("watch", _) => {
+            memcp_server::intake::cli::watch_folders(&data, &settings, flag("--user"), sw("--once"))
+        }
+        ("intake", _) => memcp_server::intake::cli::intake(
+            &data,
+            &settings,
+            flag("--user"),
+            &a.pos,
+            flag("--space"),
+            flag("--seconds"),
+        ),
         ("connect", _) => cli::connect(
             &data,
             cli::ConnectOpts {
@@ -412,7 +441,24 @@ fn run(args: &[String]) -> Result<(), Failure> {
     }
 }
 
-fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
+/// The intake's background tasks, from the settings. A setting that cannot work is said, and the node starts without it.
+fn start_intake(
+    brain: &Brain,
+    settings: &config::Settings,
+    data: &Path,
+) -> Option<memcp_server::intake::Running> {
+    let intake = memcp_server::intake::Settings::from_file(settings, &data.join("intake"))
+        .and_then(|s| memcp_server::intake::start(brain, s).map_err(|e| e.to_string()));
+    match intake {
+        Ok(running) => running,
+        Err(e) => {
+            eprintln!("intake: not started: {e}");
+            None
+        }
+    }
+}
+
+fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Result<(), Failure> {
     let flag = |name: &str| a.flags.get(name).map(String::as_str);
     // Tokens travel in clear between the client and this process: only a local TLS
     // proxy should reach it. A non-local address is refused without explicit consent.
@@ -477,6 +523,8 @@ fn serve(data: &Path, a: &Args, listen: &str) -> Result<(), Failure> {
     let app = Arc::new(app);
     // The peers this node keeps in step with, started again with it.
     memcp_server::replica::resume(&app);
+    // Voice notes, watched folders and absorbed folders: tasks of the node itself, as set in memcp.toml.
+    let _intake = start_intake(&app.brain, settings, data);
     let identity = match flag("--identity-listen") {
         Some(addr) => {
             let trusted: Option<std::net::IpAddr> = match flag("--identity-trust") {

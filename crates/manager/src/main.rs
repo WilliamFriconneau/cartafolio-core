@@ -131,11 +131,12 @@ fn options(a: &Args) -> Result<Options, Failure> {
 fn run(args: &[String]) -> Result<(), Failure> {
     let mut a = parse(args)?;
     // memcp.toml (the same file as `memcp`) fills in what the command line does not say.
+    let mut settings = memcp_server::config::Settings::default();
     if let Some(p) = memcp_server::config::locate(a.flags.get("--config").map(String::as_str))
         .map_err(|e| (2, e))?
     {
-        let s = memcp_server::config::Settings::load(&p).map_err(|e| (2, e))?;
-        memcp_server::config::fill_flags(&s, &mut a.flags, &mut a.switches);
+        settings = memcp_server::config::Settings::load(&p).map_err(|e| (2, e))?;
+        memcp_server::config::fill_flags(&settings, &mut a.flags, &mut a.switches);
     }
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
         println!("{USAGE}");
@@ -149,7 +150,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .ok_or_else(|| (2, format!("missing --data DIR\n\n{USAGE}")))?;
     let flag = |n: &str| a.flags.get(n).map(String::as_str);
     match (a.pos[0].as_str(), a.pos.get(1).map(String::as_str)) {
-        ("serve", _) => serve(&data, &a),
+        ("serve", _) => serve(&data, &a, &settings),
         ("people", _) => {
             let m = Manager::open(&data, options(&a)?)?;
             m.print_people()
@@ -223,7 +224,49 @@ fn m_doctor(data: &Path, a: &Args) -> Result<(), Failure> {
     Ok(())
 }
 
-fn serve(data: &Path, a: &Args) -> Result<(), Failure> {
+/// The intake's background tasks for the person the settings name (the first of the people when none is named). A setting
+/// that cannot work is said, and the node starts without it.
+fn start_intake(
+    manager: &Manager,
+    settings: &memcp_server::config::Settings,
+) -> Option<memcp_server::intake::Running> {
+    let probe = memcp_server::intake::Settings::from_file(settings, Path::new("."));
+    match probe {
+        Ok(p) if p.is_idle() => return None,
+        Err(e) => {
+            eprintln!("intake: not started: {e}");
+            return None;
+        }
+        Ok(_) => {}
+    }
+    let person = ["intake_person", "transcribe_person", "janitor_person"]
+        .iter()
+        .find_map(|k| settings.text(k).map(String::from));
+    let Some(person) = person else {
+        eprintln!("intake: not started: name the person it works for (intake_person)");
+        return None;
+    };
+    let Some(app) = manager.person_app(&person) else {
+        eprintln!("intake: not started: {person} has no memory on this node");
+        return None;
+    };
+    let started =
+        memcp_server::intake::Settings::from_file(settings, &app.brain.dir().join("intake"))
+            .and_then(|mut s| {
+                // Inside the person's own memory, the first administrator of it is the person.
+                s.person = None;
+                memcp_server::intake::start(&app.brain, s).map_err(|e| e.to_string())
+            });
+    match started {
+        Ok(running) => running,
+        Err(e) => {
+            eprintln!("intake: not started: {e}");
+            None
+        }
+    }
+}
+
+fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Result<(), Failure> {
     let flag = |n: &str| a.flags.get(n).map(String::as_str);
     let listen = flag("--listen").unwrap_or("127.0.0.1:8791");
     let loopback = listen.starts_with("127.")
@@ -239,6 +282,8 @@ fn serve(data: &Path, a: &Args) -> Result<(), Failure> {
     }
     let manager = Arc::new(Manager::open(data, options(a)?)?);
     manager.set_node_name(flag("--node-name").unwrap_or("MemCP"));
+    // Voice notes, watched folders and absorbed folders work for one person of this node: tasks of the node itself.
+    let _intake = start_intake(&manager, settings);
     // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
     let _advertised = if a.switches.iter().any(|s| s == "--advertise") {
         let port = listen

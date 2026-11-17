@@ -6,7 +6,7 @@ The same complete node as on Home Assistant, as a system service of your own mac
 
 Pick one.
 
-**A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp`, `memcp-janitor` and `memcp-capture` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
+**A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp` and `memcp-janitor` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
 
 **One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
 
@@ -60,7 +60,7 @@ Memory itself is never in the file: no key, no password. A service key (the jani
 ### Companions
 
 - **Janitor.** `janitor = true`, a person, and a model (`janitor_ollama_url` or `janitor_api_url`), then `sudo systemctl enable --now memcp-janitor`. The unit runs `memcp prepare janitor` first, which makes the janitor's own key and its settings from `memcp.toml`. See [JANITOR.md](JANITOR.md).
-- **Voice notes.** `transcribe = true` and `transcribe_api_url`, then `sudo systemctl enable --now memcp-transcribe.timer`. A recording leaves this machine for that service.
+- **Voice notes.** `transcribe = true` with `transcribe_api_url` (a speech service: the recording leaves this machine for it) or `transcribe_model` (whisper.cpp and `ffmpeg` on this machine). The node reads the recordings itself while it runs, with no other unit; `memcp transcribe` is one pass by hand. Folders to watch: `watch = ["/srv/dictation -> personal"]`. See [INTAKE.md](INTAKE.md). A system that had `memcp-transcribe.timer` can disable it (`sudo systemctl disable --now memcp-transcribe.timer`): the package no longer ships it.
 - **Backups.** `memcp-backup.timer` runs `memcp backup` every night: a consistent copy of every database and of the files in `backup_dir` (`/var/backups/memcp`), the last `backup_keep` (14) kept. The same by hand: `memcp backup --to DIR --keep 14`.
 
 ## Upgrade
@@ -96,7 +96,7 @@ Connections and their keys are in the backup (only their digests), so every assi
 ## Uninstall
 
 ```sh
-sudo systemctl disable --now memcp memcp-backup.timer memcp-janitor memcp-transcribe.timer
+sudo systemctl disable --now memcp memcp-backup.timer memcp-janitor
 sudo apt remove memcp        # or: sudo pacman -R memcp
 ```
 

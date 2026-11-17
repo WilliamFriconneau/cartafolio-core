@@ -1,9 +1,9 @@
-//! Finding nodes without typing an address, and joining one by asking.
+//! Finding nodes without typing an address.
 //!
 //! `discover` looks for nodes that advertise on the local network (mDNS, `_memcp._tcp`) and, when the Tailscale
 //! command is there, for nodes among the machines of the tailnet (a node answers `GET /.well-known/memcp`). Finding a
-//! node gives no access: `join` asks it, a person on the node answers after comparing a check phrase, and only then
-//! does the key come, once.
+//! node gives no access: joining one is asked of it, a person on that node answers after comparing a check phrase, and
+//! only then does the key come, once.
 
 use std::collections::BTreeSet;
 use std::process::Command;
@@ -29,7 +29,24 @@ pub struct Found {
 }
 
 /// Looks for nodes for `wait`, on the local network and on the tailnet.
+///
+/// `MEMCP_DISCOVER_FOUND` is a seam for tests of the page: lines `name<TAB>address<TAB>version<TAB>via` that stand for
+/// what the network would have shown, so that no network is needed.
 pub fn discover(wait: Duration) -> Vec<Found> {
+    if let Ok(fixed) = std::env::var("MEMCP_DISCOVER_FOUND") {
+        return fixed
+            .lines()
+            .filter_map(|l| {
+                let f: Vec<&str> = l.split('\t').collect();
+                (f.len() == 4).then(|| Found {
+                    name: f[0].into(),
+                    address: f[1].into(),
+                    version: f[2].into(),
+                    via: f[3].into(),
+                })
+            })
+            .collect();
+    }
     let mut found: BTreeSet<Found> = BTreeSet::new();
     let tail = std::thread::spawn(|| {
         let mut nodes = tailnet_nodes();
@@ -172,73 +189,4 @@ fn probe(host: &str) -> Option<Found> {
         version: v["version"].as_str().unwrap_or("").to_string(),
         via: "tailscale".into(),
     })
-}
-
-/// What a node hands to a device whose request was allowed.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Joined {
-    /// The address of the connection: `https://…/mcp/<name>`.
-    pub url: String,
-    pub key: String,
-    pub connection: String,
-}
-
-/// Asks the node at `address` to let this device join, and waits for the person's answer (two minutes at most).
-/// `check` is called once with the phrase the person compares on their side.
-pub fn join(address: &str, device: &str, mut check: impl FnMut(&str)) -> Result<Joined, String> {
-    let base = address.trim_end_matches('/');
-    let agent: ureq::Agent = ureq::Agent::config_builder()
-        .timeout_global(Some(Duration::from_secs(15)))
-        .http_status_as_error(false)
-        .build()
-        .into();
-    let mut r = agent
-        .post(format!("{base}/join"))
-        .header("Content-Type", "application/json")
-        .send(
-            serde_json::json!({ "device": device })
-                .to_string()
-                .as_bytes(),
-        )
-        .map_err(|e| format!("the node cannot be reached: {e}"))?;
-    let status = r.status().as_u16();
-    let body: Value =
-        serde_json::from_str(&r.body_mut().read_to_string().map_err(|e| e.to_string())?)
-            .map_err(|_| "the node answered badly".to_string())?;
-    if status != 200 {
-        return Err(body["error"]
-            .as_str()
-            .unwrap_or("the node refused")
-            .to_string());
-    }
-    let (id, secret) = (
-        body["id"].as_str().ok_or("no request id")?.to_string(),
-        body["secret"].as_str().ok_or("no secret")?.to_string(),
-    );
-    check(body["check"].as_str().unwrap_or(""));
-    let end = Instant::now() + Duration::from_secs(body["expires_in"].as_u64().unwrap_or(120) + 5);
-    while Instant::now() < end {
-        std::thread::sleep(Duration::from_secs(2));
-        let mut p = agent
-            .get(format!("{base}/join/{id}"))
-            .header("X-Join-Secret", &secret)
-            .call()
-            .map_err(|e| format!("the node cannot be reached: {e}"))?;
-        let v: Value =
-            serde_json::from_str(&p.body_mut().read_to_string().map_err(|e| e.to_string())?)
-                .map_err(|_| "the node answered badly".to_string())?;
-        match v["state"].as_str() {
-            Some("approved") => {
-                return Ok(Joined {
-                    url: v["join"]["mcp_url"].as_str().unwrap_or("").to_string(),
-                    key: v["join"]["key"].as_str().unwrap_or("").to_string(),
-                    connection: v["join"]["agent"].as_str().unwrap_or("").to_string(),
-                });
-            }
-            Some("denied") => return Err("the person on the node said no".into()),
-            Some("expired") => return Err("nobody answered in time".into()),
-            _ => {}
-        }
-    }
-    Err("nobody answered in time".into())
 }

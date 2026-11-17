@@ -431,40 +431,13 @@ pub fn prepare(kind: &str, data: &Path, s: &Settings, out: &Path) -> Result<(), 
             );
             Ok(())
         }
+        // Voice notes are the node's own work now (it reads them itself); an old unit that still calls this has nothing to
+        // prepare, and the settings file an older version left is removed.
         "transcribe" => {
-            let conf = out.join("bridge.conf");
-            let person = s
-                .text("transcribe_person")
-                .map(String::from)
-                .unwrap_or_else(|| s.text_or_default("janitor_person"));
-            if !s.flag("transcribe") || s.text("transcribe_api_url").is_none() {
-                let _ = std::fs::remove_file(&conf);
-                println!("transcribe: off, or no speech service named: nothing to do");
-                return Ok(());
-            }
-            let _key = service_key(&brain, &person, "voice", out)?;
-            let spaces = s
-                .text("transcribe_spaces")
-                .map(|x| x.replace(' ', ""))
-                .unwrap_or_else(|| format!("{person}-a-trier"));
-            let mut text = format!(
-                "url = http://{listen}/mcp/voice\nkey_file = {}\noutbox = {}\ntranscribe = {spaces}\nwhisper_api_url = {}\nwhisper_api_model = {}\n",
-                out.join("key").display(),
-                out.join("outbox").display(),
-                s.text_or_default("transcribe_api_url"),
-                s.text_or_default("transcribe_api_model")
-            );
-            if let Some(k) = s.text("transcribe_api_key_file") {
-                let key = std::fs::read_to_string(k).map_err(fail)?;
-                text.push_str(&format!("whisper_api_key = {}\n", key.trim()));
-            }
-            if let Some(l) = s.text("transcribe_language") {
-                text.push_str(&format!("whisper_lang = {l}\n"));
-            }
-            write_private(&conf, &text)?;
-            println!("transcribe: settings in {}", conf.display());
+            let _ = std::fs::remove_file(out.join("bridge.conf"));
+            println!("transcribe: the node reads voice notes itself, nothing to prepare");
             Ok(())
         }
-        _ => Err(bad("prepare janitor | transcribe")),
+        _ => Err(bad("prepare janitor")),
     }
 }

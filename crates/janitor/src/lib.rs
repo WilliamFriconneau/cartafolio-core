@@ -7,10 +7,10 @@
 //!    keywords for the spaces (`keywords`), and the router runs again when they changed.
 //! 1. **Every note of an inbox is filed, in the vault of that inbox**: a model picks tags and a title, and the note's text
 //!    is written there **as it is**. If no model answers, the note stays.
-//! 2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
+//! 2. **A piece of a note that the node absorbed (`inbox/absorb`) is turned into a few short, dated facts**, in that
 //!    vault, never a person's name.
 //!
-//! Recordings are not its business: the bridge, where the speech model is, reads them and erases them. A model only ever
+//! Recordings are not its business: the node, where the speech model is, reads them and erases them. A model only ever
 //! picks a place or draws facts: it calls no tool and writes nothing.
 
 use std::collections::BTreeMap;
@@ -463,7 +463,7 @@ impl Janitor {
                     continue;
                 }
                 budget -= 1;
-                // A piece of a note the bridge absorbed: its facts are drawn out, in this vault, and the piece leaves.
+                // A piece of a note the node absorbed: its facts are drawn out, in this vault, and the piece leaves.
                 if tags_of(note).contains(&"inbox/absorb") {
                     let vault_tags = tags.get(&vault).cloned().unwrap_or_default();
                     self.extract_one(&models, note, id, text, &vault, &vault_tags, &today, report);
@@ -716,7 +716,7 @@ impl Janitor {
         unplaced
     }
 
-    /// The files of one « À trier » (documents, images; never a recording, which the bridge reads): the same router as for
+    /// The files of one « À trier » (documents, images; never a recording, which the node reads): the same router as for
     /// notes, on the words of the file's name, its readable text (a text or markdown file), its description and its tags.
     /// A file the router places goes, as it is, to the inbox of that vault (`triage_send`); the others stay, with the reason.
     /// A file goes to the first space named when the person names several: nothing is copied.
@@ -747,7 +747,7 @@ impl Janitor {
                 continue;
             };
             let mime = file["mime"].as_str().unwrap_or("");
-            // A recording is the bridge's: its text is made there, and when that fails it is tagged and left.
+            // A recording is the node's: its text is made there, and when that fails it is tagged and left.
             if mime.starts_with("audio/") || file["status"].as_str().is_some_and(|s| s != "active")
             {
                 continue;

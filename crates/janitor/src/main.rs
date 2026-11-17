@@ -11,7 +11,7 @@ const USAGE: &str = "usage: memcp-janitor [--config FILE] [run]
 
 One pass: every note and file of À trier is sent to the inbox of a vault (or left there when it is unsure), every note of an inbox is
 filed in the vault of that inbox, its
-text unchanged; a piece of a note the bridge absorbed is turned into short, dated facts. If no model answers, the notes stay.
+text unchanged; a piece of a note the node absorbed is turned into short, dated facts. If no model answers, the notes stay.
 With --watch FILE (the memory's mark of the last write into an inbox), it stays: a pass once the writing has calmed down
 (--quiet SECONDS, 120 by default) and one a night (--night HH:MM, 03:00 by default). How the Home Assistant app runs it. The settings are in FILE (default ~/.config/memcp-janitor/janitor.conf); see docs/JANITOR.md.";
 

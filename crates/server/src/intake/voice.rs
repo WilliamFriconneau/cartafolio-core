@@ -12,11 +12,10 @@
 
 use std::path::{Path, PathBuf};
 
-use memcp_client::{Client, Error as ClientError};
 use serde_json::{Value, json};
 
-use crate::Error;
-use crate::whisper::{Heard, VoiceSettings, Whisper};
+use super::whisper::{Heard, VoiceSettings, Whisper};
+use super::{Error, Failure, Memory};
 
 /// The longest text of one note (the memory takes 4000 characters).
 const NOTE_MAX: usize = 3800;
@@ -34,7 +33,6 @@ pub struct VoiceReport {
     pub nothing_audible: u32,
     pub erased: u32,
     pub problems: Vec<String>,
-    pub key_refused: bool,
 }
 
 fn now() -> i64 {
@@ -141,28 +139,25 @@ fn made_at(f: &Value, name: &str, offset_minutes: i32) -> i64 {
         && (0..24).contains(&h)
         && (0..60).contains(&mi)
     {
-        return crate::time::unix(y, mo, d, h, mi) - i64::from(offset_minutes) * 60;
+        return super::time::unix(y, mo, d, h, mi) - i64::from(offset_minutes) * 60;
     }
     f["created_at"]
         .as_str()
-        .and_then(crate::time::parse_iso)
+        .and_then(super::time::parse_iso)
         .unwrap_or_else(now)
 }
 
-fn fail(report: &mut VoiceReport, what: &str, e: &ClientError) {
-    if matches!(e, ClientError::Refused) {
-        report.key_refused = true;
-    }
+fn fail(report: &mut VoiceReport, what: &str, e: &Failure) {
     report.problems.push(format!("{what}: {e}"));
 }
 
 /// The spaces to read: the list as given, or, when it holds `all`, every space the key can write to (a space made
 /// since is read too, nothing is named twice).
-pub fn resolve_spaces(client: &mut Client, wanted: &[String]) -> Result<Vec<String>, ClientError> {
+pub fn resolve_spaces(memory: &mut Memory, wanted: &[String]) -> Result<Vec<String>, Failure> {
     if !wanted.iter().any(|w| w.eq_ignore_ascii_case("all")) {
         return Ok(wanted.to_vec());
     }
-    let listed = client.call("spaces", json!({}))?;
+    let listed = memory.call("spaces", json!({}))?;
     let mut out: Vec<String> = listed["spaces"]
         .as_array()
         .into_iter()
@@ -179,8 +174,8 @@ pub fn resolve_spaces(client: &mut Client, wanted: &[String]) -> Result<Vec<Stri
 }
 
 /// Recordings that wait for a text, per space: `(space, how many, age in seconds of the oldest)`.
-pub fn waiting(client: &mut Client) -> Result<Vec<(String, u64, i64)>, ClientError> {
-    let listed = client.call("spaces", json!({}))?;
+pub fn waiting(memory: &mut Memory) -> Result<Vec<(String, u64, i64)>, Failure> {
+    let listed = memory.call("spaces", json!({}))?;
     Ok(listed["spaces"]
         .as_array()
         .into_iter()
@@ -195,8 +190,8 @@ pub fn waiting(client: &mut Client) -> Result<Vec<(String, u64, i64)>, ClientErr
 
 /// One pass over the inboxes of `spaces`: recordings transcribed, old ones erased.
 pub fn transcribe(
-    client: &mut Client,
-    vaults: &[String],
+    memory: &mut Memory,
+    spaces: &[String],
     settings: &VoiceSettings,
     state_dir: &Path,
     offset_minutes: i32,
@@ -215,38 +210,35 @@ pub fn transcribe(
     }
     let mut state = State::open(state_dir)?;
     let whisper = Whisper::new(settings);
-    let vaults = &match resolve_spaces(client, vaults) {
+    let spaces = &match resolve_spaces(memory, spaces) {
         Ok(v) => v,
         Err(e) => {
             fail(&mut report, "the spaces cannot be listed", &e);
             return Ok(report);
         }
     };
-    for vault in vaults {
+    for space in spaces {
         // The recordings waiting are the descriptions under inbox/audio, newest first.
-        let listed = match client.call(
+        let listed = match memory.call(
             "recall",
-            json!({ "space": vault, "query": "", "tags": ["inbox/audio"], "limit": 50 }),
+            json!({ "space": space, "query": "", "tags": ["inbox/audio"], "limit": 50 }),
         ) {
             Ok(l) => l,
             Err(e) => {
                 fail(
                     &mut report,
-                    &format!("the recordings of {vault} cannot be listed"),
+                    &format!("the recordings of {space} cannot be listed"),
                     &e,
                 );
-                if report.key_refused {
-                    break;
-                }
                 continue;
             }
         };
-        let files = match client.call("file_list", json!({ "space": vault, "limit": 50 })) {
+        let files = match memory.call("file_list", json!({ "space": space, "limit": 50 })) {
             Ok(f) => f,
             Err(e) => {
                 fail(
                     &mut report,
-                    &format!("the files of {vault} cannot be listed"),
+                    &format!("the files of {space} cannot be listed"),
                     &e,
                 );
                 continue;
@@ -287,7 +279,7 @@ pub fn transcribe(
                     state.save()?;
                 } else {
                     if !marked {
-                        mark_failed(client, &mut state, id, &mut report);
+                        mark_failed(memory, &mut state, id, &mut report);
                         state.save()?;
                     }
                     continue;
@@ -298,10 +290,10 @@ pub fn transcribe(
                 .and_then(|e| e["parts"].as_array())
                 .is_some_and(|p| !p.is_empty());
             if !started {
-                match named_by_a_note(client, name, desc_id) {
+                match named_by_a_note(memory, name, desc_id) {
                     Ok(Some(note)) => {
                         let e = state.entry(id);
-                        e["vault"] = json!(vault);
+                        e["space"] = json!(space);
                         e["name"] = json!(name);
                         e["done_at"] = json!(now());
                         e["text"] = json!(note);
@@ -316,10 +308,10 @@ pub fn transcribe(
                 }
             }
             one(
-                client,
+                memory,
                 &whisper,
                 &mut state,
-                vault,
+                space,
                 f,
                 id,
                 name,
@@ -327,29 +319,21 @@ pub fn transcribe(
                 state_dir,
                 &mut report,
             )?;
-            if report.key_refused {
-                state.save()?;
-                return Ok(report);
-            }
         }
     }
-    erase_old(client, &mut state, &mut report);
+    erase_old(memory, &mut state, &mut report);
     state.save()?;
     Ok(report)
 }
 
 /// A note other than the recording's own description that names it: the id of the first.
-fn named_by_a_note(
-    client: &mut Client,
-    name: &str,
-    own: &str,
-) -> Result<Option<String>, ClientError> {
+fn named_by_a_note(memory: &mut Memory, name: &str, own: &str) -> Result<Option<String>, Failure> {
     let stem = name.rsplit_once('.').map_or(name, |(s, _)| s);
-    let found = client.call(
+    let found = memory.call(
         "recall",
         json!({ "query": stem.replace(['-', '_'], " "), "tags": ["inbox"], "limit": 20 }),
     )?;
-    let plain = client.call(
+    let plain = memory.call(
         "recall",
         json!({ "query": stem.replace(['-', '_'], " "), "limit": 20 }),
     )?;
@@ -371,10 +355,10 @@ fn named_by_a_note(
 
 #[allow(clippy::too_many_arguments)]
 fn one(
-    client: &mut Client,
+    memory: &mut Memory,
     whisper: &Whisper,
     state: &mut State,
-    vault: &str,
+    space: &str,
     f: &Value,
     id: &str,
     name: &str,
@@ -384,10 +368,10 @@ fn one(
 ) -> Result<(), Error> {
     {
         let e = state.entry(id);
-        e["vault"] = json!(vault);
+        e["space"] = json!(space);
         e["name"] = json!(name);
     }
-    let bytes = match client.file_get(id) {
+    let bytes = match memory.file_get(id) {
         Ok((_, b)) => b,
         Err(e) => {
             fail(report, &format!("{name} cannot be read"), &e);
@@ -397,7 +381,7 @@ fn one(
     // A private folder for its files, under the state folder.
     let base = state_dir.join("work");
     std::fs::create_dir_all(&base).map_err(|e| Error::Io(e.to_string()))?;
-    crate::private::set_private_dir(&base).map_err(|e| Error::Io(e.to_string()))?;
+    memcp_core::fsx::set_private_dir(&base).map_err(|e| Error::Io(e.to_string()))?;
     let work = base.join(id.replace(['/', '.'], "_"));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir(&work).map_err(|e| Error::Io(e.to_string()))?;
@@ -415,15 +399,15 @@ fn one(
         Ok(Heard::Nothing) => {
             state.entry(id)["done_at"] = json!(now());
             // Nothing to wait for: the recording leaves the inbox (its bytes stay: `file_retire` erases nothing).
-            let _ = client.call(
+            let _ = memory.call(
                 "file_retire",
-                json!({ "id": id, "reason": "nothing audible in it (silence or noise), said the bridge" }),
+                json!({ "id": id, "reason": "nothing audible in it (silence or noise), said the node" }),
             );
             report.nothing_audible += 1;
         }
         Ok(Heard::Text { text, seconds }) => {
             let at = made_at(f, name, offset_minutes);
-            let (y, m, d, hh, mm) = crate::time::civil(at, offset_minutes);
+            let (y, m, d, hh, mm) = super::time::civil(at, offset_minutes);
             let head = format!(
                 "Dictée du {y:04}-{m:02}-{d:02} à {hh:02}h{mm:02}, {seconds} s, audio {name} ({id})"
             );
@@ -438,8 +422,8 @@ fn one(
                 } else {
                     String::new()
                 };
-                let args = json!({ "space": vault, "kind": "context", "tags": ["inbox", "dictee"], "text": format!("{head}{of} : {part}") });
-                match client.call("remember", args) {
+                let args = json!({ "space": space, "kind": "context", "tags": ["inbox", "dictee"], "text": format!("{head}{of} : {part}") });
+                match memory.call("remember", args) {
                     Ok(r) => {
                         let Some(fact) = r["fact"]["id"].as_str() else {
                             report
@@ -478,7 +462,7 @@ fn one(
             };
             report.problems.push(format!("{name}: {why}{last}"));
             if n >= MAX_FAILS {
-                mark_failed(client, state, id, report);
+                mark_failed(memory, state, id, report);
             }
         }
     }
@@ -489,8 +473,8 @@ fn one(
 const FAILED_TAG: &str = "failed/transcription";
 
 /// Tags the recording `id` as failed, so that it is visible and counted apart from what waits for the person.
-fn mark_failed(client: &mut Client, state: &mut State, id: &str, report: &mut VoiceReport) {
-    match client.call("transcription_failed", json!({ "id": id })) {
+fn mark_failed(memory: &mut Memory, state: &mut State, id: &str, report: &mut VoiceReport) {
+    match memory.call("transcription_failed", json!({ "id": id })) {
         Ok(_) => state.entry(id)["marked"] = json!(true),
         Err(e) => fail(report, "the failed recording cannot be tagged", &e),
     }
@@ -498,7 +482,7 @@ fn mark_failed(client: &mut Client, state: &mut State, id: &str, report: &mut Vo
 
 /// The recordings whose text is old enough, wherever it was filed: erased. The text is found by the recording's id, which
 /// it carries (« audio <name> (<id>) »), so a note filed in another space, or corrected since, is found too.
-fn erase_old(client: &mut Client, state: &mut State, report: &mut VoiceReport) {
+fn erase_old(memory: &mut Memory, state: &mut State, report: &mut VoiceReport) {
     let due: Vec<(String, i64)> = state.data["files"]
         .as_object()
         .map(|o| {
@@ -528,7 +512,7 @@ fn erase_old(client: &mut Client, state: &mut State, report: &mut VoiceReport) {
         let hits: Vec<Value> = queries
             .iter()
             .filter_map(|q| {
-                client
+                memory
                     .call("recall", json!({ "query": q, "limit": 20 }))
                     .ok()
             })
@@ -577,18 +561,13 @@ fn erase_old(client: &mut Client, state: &mut State, report: &mut VoiceReport) {
         let mut last = None;
         let mut done = false;
         for t in &candidates {
-            match client.call("file_erase", json!({ "id": id, "transcript": t })) {
+            match memory.call("file_erase", json!({ "id": id, "transcript": t })) {
                 Ok(_) => {
                     done = true;
                     report.erased += 1;
                     break;
                 }
-                Err(e @ ClientError::Tool(_)) => last = Some(e),
-                Err(e) => {
-                    fail(report, &format!("{name} cannot be erased now"), &e);
-                    last = None;
-                    break;
-                }
+                Err(e) => last = Some(e),
             }
         }
         let e = state.entry(&id);

@@ -113,66 +113,50 @@ if bashio::config.true 'janitor'; then
   fi
 fi
 
-# Voice notes, optional: a recording kept in a space (recorded on the page, sent by a phone) waits under `inbox/audio`.
-# With a speech service named here (an API of the OpenAI kind: `…/v1/audio/transcriptions`), the bridge reads each
-# recording, puts its text in the same space, and erases the recording a week later. The recording LEAVES this machine
-# for that service: turn it on only for a service you trust. Computers that run their own bridge with a local speech
-# model do the same without any service.
-if bashio::config.true 'transcribe'; then
-  TPERSON=$(bashio::config 'transcribe_person')
-  [ -z "$TPERSON" ] && TPERSON=$(bashio::config 'janitor_person')
-  TDIR=/data/transcribe
-  if [ -z "$TPERSON" ]; then
-    bashio::log.warning "transcribe: transcribe_person is needed; it is not started"
-  elif ! bashio::config.has_value 'transcribe_api_url'; then
-    bashio::log.warning "transcribe: no speech service (transcribe_api_url); it is not started"
-  else
-    (
-      umask 077
-      mkdir -p "$TDIR"
-      until curl -sf http://127.0.0.1:8791/health >/dev/null; do sleep 2; done
-      if [ -s "$TDIR/key" ]; then
-        CODE=$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "Authorization: Bearer $(cat "$TDIR/key")" \
-               -H 'Content-Type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"ping"}' \
-               http://127.0.0.1:8791/mcp/haos-voice || echo 000)
-        if [ "$CODE" = "401" ] || [ "$CODE" = "403" ]; then rm -f "$TDIR/key"; fi
-      fi
-      if [ ! -s "$TDIR/key" ]; then
-        OUT=$(/usr/bin/memcp --data "$DATA/people/$TPERSON" connect haos-voice --all 2>&1 ||
-              /usr/bin/memcp --data "$DATA/people/$TPERSON" connect haos-voice --all --rotate 2>&1 || true)
-        echo "$OUT" | grep -oE 'hcp_[A-Za-z0-9_-]+' | head -1 | tr -d '\n' > "$TDIR/key"
-      fi
-      if [ ! -s "$TDIR/key" ]; then
-        bashio::log.error "transcribe: no key could be made for $TPERSON; it is not started"
-        exit 0
-      fi
-      SPACES=$(bashio::config 'transcribe_spaces' | tr -d ' ')
-      # Empty means every space the key can write to, those made later included.
-      [ -z "$SPACES" ] && SPACES="all"
-      CONF="$TDIR/bridge.conf"
+# The node's own intake, optional: the voice notes and the watched folders are tasks of the node itself, not of another
+# program. The options are written once into a settings file (memcp.toml format) that the node reads.
+#  - transcribe: a recording kept in a space (recorded on the page, sent by a phone) waits under `inbox/audio`. With a
+#    speech service named here (an API of the OpenAI kind: `.../v1/audio/transcriptions`), the node reads each recording
+#    and puts its text in the same space. The recording LEAVES this machine for that service: turn it on only for a
+#    service you trust.
+#  - watch: a file added to a folder (`/share/...`, `/media/...`) becomes a note or a file of a space. The files stay.
+INTAKE_CONF=/data/memcp.toml
+{
+  umask 077
+  : > "$INTAKE_CONF"
+  PERSON_NAMED=$(bashio::config 'intake_person')
+  [ -z "$PERSON_NAMED" ] && PERSON_NAMED=$(bashio::config 'transcribe_person')
+  [ -z "$PERSON_NAMED" ] && PERSON_NAMED=$(bashio::config 'janitor_person')
+  if [ -n "$PERSON_NAMED" ]; then echo "intake_person = \"$PERSON_NAMED\"" >> "$INTAKE_CONF"; fi
+  if bashio::config.true 'transcribe'; then
+    if ! bashio::config.has_value 'transcribe_api_url'; then
+      bashio::log.warning "transcribe: no speech service (transcribe_api_url); voice notes are not read"
+    else
       {
-        echo "url = http://127.0.0.1:8791/mcp/haos-voice"
-        echo "key_file = $TDIR/key"
-        echo "outbox = $TDIR/outbox"
-        echo "transcribe = $SPACES"
-        echo "whisper_api_url = $(bashio::config 'transcribe_api_url')"
-        echo "whisper_api_model = $(bashio::config 'transcribe_api_model')"
+        echo "transcribe = true"
+        echo "transcribe_api_url = \"$(bashio::config 'transcribe_api_url')\""
+        echo "transcribe_api_model = \"$(bashio::config 'transcribe_api_model')\""
+        SPACES=$(bashio::config 'transcribe_spaces' | tr -d ' ')
+        # Empty means every space the person writes to, those made later included.
+        echo "transcribe_spaces = \"${SPACES:-all}\""
         if bashio::config.has_value 'transcribe_api_key'; then
-          echo "whisper_api_key = $(bashio::config 'transcribe_api_key')"
+          printf '%s' "$(bashio::config 'transcribe_api_key')" > /data/transcribe.key
+          echo "transcribe_api_key_file = \"/data/transcribe.key\""
         fi
         if bashio::config.has_value 'transcribe_language'; then
-          echo "whisper_lang = $(bashio::config 'transcribe_language')"
+          echo "transcribe_language = \"$(bashio::config 'transcribe_language')\""
         fi
-      } > "$CONF"
-      chmod 600 "$CONF"
-      bashio::log.info "transcribe: reading the recordings of $SPACES every minute, by the speech service"
-      while true; do
-        /usr/bin/memcp-capture transcribe --config "$CONF" || true
-        sleep 60
-      done
-    ) &
+      } >> "$INTAKE_CONF"
+      bashio::log.info "transcribe: the node reads the voice notes by the speech service"
+    fi
   fi
-fi
+  WATCH=$(bashio::config 'watch' | sed 's/"/\\"/g; s/.*/"&"/' | paste -sd, -)
+  if [ -n "$WATCH" ]; then
+    echo "watch = [$WATCH]" >> "$INTAKE_CONF"
+    bashio::log.info "watch: the node takes what is added to $(bashio::config 'watch' | paste -sd' ' -)"
+  fi
+}
+ARGS+=(--config "$INTAKE_CONF")
 
 bashio::log.info "memcp-manager starting"
 exec "$MANAGER" "${ARGS[@]}"
