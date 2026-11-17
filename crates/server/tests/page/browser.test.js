@@ -28,8 +28,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const ctx = await browser.newContext({ acceptDownloads: true, locale: "en-US", viewport: { width: 1200, height: 1500 } });
   const page = await ctx.newPage();
   const problems = [];
-  // A refused request (the page before sign-in, and my deliberate wrong key) logs a 401: expected.
-  page.on("console", m => { if (["error", "warning"].includes(m.type()) && !/status of 401/.test(m.text())) problems.push(m.type() + ": " + m.text()); });
+  // A refused request (the page before sign-in, my deliberate wrong key, a code used twice) logs a 401 or 400: expected.
+  page.on("console", m => { if (["error", "warning"].includes(m.type()) && !/status of 40[01]/.test(m.text())) problems.push(m.type() + ": " + m.text()); });
   page.on("pageerror", e => problems.push("pageerror: " + e.message));
   page.on("requestfailed", r => problems.push("requestfailed: " + r.url()));
   await page.addInitScript(() => { window.__csp = []; document.addEventListener("securitypolicyviolation", e => window.__csp.push(e.violatedDirective + " " + e.blockedURI)); });
@@ -181,6 +181,21 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.mouse.down(); await sleep(1600); await page.mouse.up();
   await page.waitForFunction(() => !document.querySelector("#connections").innerText.includes("work-laptop"));
   check("holding revokes it and closes the confirmation", !(await page.locator("#confirm-dlg").isVisible()));
+  // a bare code typed alone on this node's page goes to its own pairing route
+  const made = await (await fetch(BASE + "/admin/api/pairing", { method: "POST", headers: { Authorization: "Bearer " + console_token, "X-Requested-With": "memcp", "Content-Type": "application/json" }, body: "{}" })).json();
+  await page.fill("#code-input", made.code.replace("-", "").toLowerCase());
+  await page.click("#code-go");
+  await sleep(400);
+  check("eight lower-case letters with no dash are not taken for a code", !(await page.locator("#secret").evaluate(d => d.open)) && (await page.locator("#code-note").innerText()).length > 0);
+  await page.fill("#code-input", made.code);
+  await page.click("#code-go");
+  await page.waitForSelector("#secret[open]", { timeout: 5000 });
+  check("a bare code makes a connection of its own and shows its key once", /hcp_/.test(await page.locator("#secret-body").innerText()));
+  await page.click("#secret form button");
+  await page.fill("#code-input", made.code);
+  await page.click("#code-go");
+  await sleep(500);
+  check("the code works once", !(await page.locator("#secret").evaluate(d => d.open)) && (await page.locator("#code-note").innerText()).includes("unknown, used or expired"));
   await page.locator("#connections .tile").first().waitFor().catch(() => {});
   check("no violation of the content security policy", csp.length === 0, JSON.stringify(csp));
   check("no error or warning in the console, no failed request", problems.length === 0, problems.join(" | "));

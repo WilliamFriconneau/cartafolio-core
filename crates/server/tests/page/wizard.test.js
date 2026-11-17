@@ -17,6 +17,12 @@ const state = () => ({
 });
 const calls = [];
 const mockFetch = async (url, opts = {}) => {
+  if (String(url).endsWith("/pair")) {
+    const b = JSON.parse(opts.body);
+    world.pairCall = b;
+    if (b.code !== "ABCDEFGH") return { ok: false, status: 400, json: async () => ({ error: "this code is unknown, used or expired" }) };
+    return { ok: true, status: 200, json: async () => ({ agent: "this-page-1", key: "hcp_paired_key", mcp_url: "https://memory.example.net/mcp/this-page-1", vaults: ["sam-a-trier"] }) };
+  }
   const path = String(url).split("admin/api/")[1];
   calls.push([opts.method || "GET", path, opts.body]);
   const ok = body => ({ ok: true, status: 200, json: async () => body });
@@ -111,6 +117,31 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("nothing left, the list says so and the tile is hidden", !$("#tr-empty").hidden && $("#triage-tile").hidden);
   w.location.hash = "";
   await sleep(50);
+
+  // --- a bare code typed alone, on a node that already has people: the node's own pairing route
+  const typeCode = v => { $("#code-input").value = v; $("#code-form").dispatchEvent(new w.Event("submit", { cancelable: true })); };
+  typeCode("memory.example.net");
+  await sleep(50);
+  check("an address is not a code: said, and nothing is called", world.pairCall === undefined && text("#code-note").includes("eight characters"), text("#code-note"));
+  typeCode("internet");
+  await sleep(50);
+  check("eight lower-case letters are a host name, not a code", world.pairCall === undefined);
+  typeCode("WRONG-123");
+  await sleep(50);
+  check("a wrong length is refused before any call", world.pairCall === undefined);
+  typeCode("ZZZZ-ZZZZ");
+  await sleep(100);
+  check("an unknown code is refused with the server's words", world.pairCall && world.pairCall.code === "ZZZZZZZZ" && text("#code-note").includes("unknown, used or expired"), text("#code-note"));
+  typeCode("abcd-efgh");
+  await sleep(150);
+  check("a code typed in lower case with its dash is still a code", world.pairCall.code === "ABCDEFGH");
+  $("#secret").removeAttribute("open");
+  typeCode("ABCD-EFGH");
+  await sleep(150);
+  check("the bare code goes to the pairing route with its eight characters", world.pairCall.code === "ABCDEFGH" && world.pairCall.device.length > 0, JSON.stringify(world.pairCall));
+  check("the connection it made is shown once, with its address and key", $("#secret").hasAttribute("open") && text("#secret-title").includes("this-page-1") && text("#secret-body").includes("hcp_paired_key") && $("#code-input").value === "", text("#secret-body"));
+  check("no error is left on the page", text("#code-note") === "");
+  $("#secret").removeAttribute("open");
 
   // --- OAuth platform: nothing to create, the steps show the address, then it waits
   click($("#open-wizard"));
