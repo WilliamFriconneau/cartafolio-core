@@ -119,6 +119,36 @@ The answer of the `peers` tool and of `GET /sync/status` (the same rows):
 
 For a peer that holds a connection on this node, `connection` is its name (`peer-…`), `allowed` (the `peers` tool only) says whether that connection is still allowed, and `created_at` / `last_used_at` are dates. The rows of direct peers come first, then the others, the most recently seen first. Revoked nodes are not listed.
 
+## Adding a node: an id, a link, from any node
+
+Like adding a device in Syncthing: one node is shown to another, once, and the two become peers. It is done from ANY node the person holds; no node is the one that invites.
+
+- **The node id.** Each node makes a random id once (60 bits, `ABCD-EFGH-IJKL`: twelve characters of the base32 alphabet `A-Z 2-7`), keeps it in its control database (`meta`, key `node_id`) and tells it everywhere it speaks: `GET /.well-known/memcp` (`id`), its own directory entry (`id`, `peer_directory.node_id`, migration 22) and so to every peer. **The id names a node and proves nothing**: whoever knows it can say it, and this is not a key pair. What lets a node in is always a person's answer (three words) or a one-time ticket, never the id. What the id does give: the node that answers at an address must say the id the link names (`memcp-sync --join A --expect-id ID`), otherwise the request is not sent (`the node at that address is not the one the link names`).
+- **The link.** `memcp://node?id=ABCD-EFGH-IJKL&name=alpha&addr=https%3A%2F%2F…&addr=http%3A%2F%2F192.168.1.5%3A8791[&t=TICKET]`, shown as text and as a QR code. Addresses come from the node's `--public-url` and its exposures (the internet, the tailnet, the local network, this machine, in that order). `GET /admin/api/node` answers it without a ticket; with `t`, the ticket is the one-time introducer ticket of `POST /join` (below). A bare id, a bare address and the older `memcp://join?server=…` are read too.
+- **Add a node** (`POST /admin/api/nodes/add` `{"link": "<what was pasted or scanned>"}`, administrator): this node asks THAT node to let it in with the existing `POST /join` (three words, shown on both sides), through `memcp-sync --join`, trying the addresses in order until one answers. The answer is `{id, state: "asking", node: {id, name}}`; `GET /admin/api/join-memory?id=` follows it (`asking`, `waiting` with `check`, `approved`, `denied`, `expired`, `failed` with `error`). Approved, the asking node keeps the peer (the key stays in `peers/`, private) and syncs by itself, both ways. A bare id is looked up in the peer directory (a node a peer told about is added without typing an address); an id that is this node, or a node already linked, is refused with words.
+- **No words.** `POST /admin/api/nodes/invite` `{}` on a node the person already holds (or `POST /mcp/<peer>/join/invite` with a peer's key, which now also answers `link`) makes a link with a one-time ticket (ten minutes, kept as a hash). Scanning it on the new node joins at once, with a key of its own, no words: the ticket is the introduction from a node the person already holds. A ticket works once; a spent one is refused (`403`), it never falls back to waiting for a person. The ticket travels to `memcp-sync` in the environment (`MEMCP_JOIN_TICKET`), never on a command line.
+- **The same three words on both sides, and the person from any of their nodes.** The asked node shows the request (`GET /admin/api/join/pending`: `{id, device, check, node_id, waited, expires_in}`) and the asking node shows the same `check`. The asked node also tells its peers: its entry in `GET /sync/peers` carries `pending: [{id, device, check, node_id, expires_in}]` (only to a peer of the person: a key that reads and writes all their spaces). Each peer keeps them (`remote_joins`, migration 22) and lists them in its own `join/pending` with `node` (the node that was asked) and `remote: true`. Answering there (`POST /join/approve|deny` `{id}`, or the same by a peer's key under `/mcp/<peer>/join/`) clears it at once on that node and answers `{result, via, queued: true}`; the answer goes to the asked node with the next exchange (`POST /sync/peers` `{node, peers, answers: [{id, result: "approved"|"denied"}]}`), which applies it as the person's click and drops the request from its list. Answered on one node, gone on the others at their next exchange with it (the pass is every ten seconds). A request is shown to the DIRECT peers of the asked node, not to peers of peers.
+- **A request expires** after two minutes (`MEMCP_JOIN_TTL` seconds, 2 to 3600, is for tests): the asking node reads `expired`, the list is empty everywhere, and answering it is `404`.
+- **Introducer.** The directory gossips each node's `id` and addresses (`exposures`), so a node that joined only B learns A (name, id, addresses) from B, without typing anything. `GET /sync/status` rows carry `id`, `addresses` (best first) and `via`. Such a row has `direct: false`; the page offers **Add this node**, which is `nodes/add` with the id alone: the node asks A at the addresses it was told. **Reachable via**: `POST /admin/api/nodes/via` `{name | id | peer, address}` chooses, among the addresses a node told, the one this node asks it at first (`address: null` clears it); an address the node never told is refused. The choice is the order of asking when a node is added again; it does not move a connection that already exists.
+- **Revocation** is unchanged: revoking a peer's connection flags its directory entry, the flag sticks and spreads to every node, and the revoked node is refused at its next contact.
+
+```json
+// POST /admin/api/nodes/add
+{ "link": "memcp://node?id=ABCD-EFGH-IJKL&name=alpha&addr=https%3A%2F%2Falpha.example.net" }
+// -> { "id": "p3q9x2…", "state": "asking", "node": { "id": "ABCD-EFGH-IJKL", "name": "alpha" } }
+
+// GET /admin/api/node
+{ "id": "ABCD-EFGH-IJKL", "name": "alpha", "version": "…", "addresses": ["https://alpha.example.net"],
+  "exposures": [{ "kind": "public", "address": "https://alpha.example.net" }],
+  "link": "memcp://node?id=…", "qr": "<svg …>" }
+
+// POST /admin/api/nodes/invite {}  ->  a link with a ticket, valid once
+{ "link": "memcp://node?id=…&t=…", "qr": "<svg …>", "expires_in": 600, "single_use": true }
+
+// GET /admin/api/join/pending, on a peer of the asked node
+{ "requests": [{ "id": "k3…", "device": "beta", "check": "amber-river-moss", "node": "alpha", "remote": true, "expires_in": 97 }] }
+```
+
 ## What this is not
 
 - Not a replacement for a file synchroniser: mounted folders can still be synchronised by Syncthing or a Drive, and MemCP only reads and writes them with the care of SPACES.md. MemCP synchronises **memory** (facts, layout, guides, files it holds), not the disk.
@@ -129,6 +159,7 @@ For a peer that holds a connection on this node, `connection` is its name (`peer
 A swarm holds the whole memory of a person, on several machines, so each of these is a rule and a test, not an intention.
 
 **Identity and joining**
+- *Today*: a node has a random id and joins by a person's answer or a one-time ticket (section above); the key pair, the signed membership and the keystore below are the target design, not what runs.
 - Every node has a signing key pair (Ed25519), made on the node and kept in the system keystore, never in the data directory. A node is known by its public key.
 - **Joining** is an act of the person, on a node they already trust: they ask it for a join code (shown as text and as a QR code, one use, ten minutes). The new node scans or types it and the two nodes exchange their public keys over an encrypted channel. Both then show the same **short check code** (a few words derived from both keys), and the person confirms on both screens that they match: this is what defeats a node in the middle. Until then the new node holds nothing.
 - The list of nodes (the **membership**) is a document signed by the nodes that are administrators: who is in, with what role, since when. A node accepts a peer only if the membership says so, and a change of membership counts only if it is signed by an administrator. Roles: *administrator* (changes the membership), *member* (holds and syncs the spaces it is given), *blind* (stores encrypted spaces and cannot read them), *read-only* (receives, never sends).
