@@ -12,7 +12,8 @@ use memcp_core::users::OWNER;
 use memcp_core::{Brain, util};
 use serde_json::{Value, json};
 
-const READ: [&str; 12] = [
+const READ: [&str; 13] = [
+    "triage_waiting",
     "living_get",
     "peers",
     "rules_get",
@@ -38,7 +39,13 @@ const WRITE: [&str; 10] = [
     "file_retire",
     "file_erase",
 ];
-const SORT: [&str; 3] = ["tidy", "triage_claim", "triage_release"];
+const SORT: [&str; 5] = [
+    "tidy",
+    "triage_claim",
+    "triage_release",
+    "triage_send",
+    "transcription_failed",
+];
 const GUIDE: [&str; 2] = ["guide_set", "guide_propose"];
 
 fn every_tool() -> Vec<&'static str> {
@@ -197,7 +204,12 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         "retire" => json!({"id": fact, "reason": "test"}),
         "recall" => json!({"query": "review", "space": space}),
         "read_fact" | "history" => json!({"id": fact}),
-        "tidy" | "triage_claim" | "triage_release" | "peers" | "spaces" | "stats" => json!({}),
+        "tidy" | "triage_claim" | "triage_release" | "triage_waiting" | "peers" | "spaces"
+        | "stats" => {
+            json!({})
+        }
+        "triage_send" => json!({"id": "nothing", "to": space}),
+        "transcription_failed" => json!({"id": "nothing"}),
         "living_get" => json!({"space": space, "page": "next"}),
         "living_set" => {
             json!({"space": space, "page": "next", "add": [{"column": "now", "text": "Call"}]})

@@ -198,3 +198,67 @@ pub(super) fn rules(
         json!({ "space": space_name, "rules": serde_json::from_str::<Value>(&doc).unwrap_or(Value::Null) }),
     )
 }
+
+#[allow(unused_variables)]
+pub(super) fn triage_waiting(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    let limit = args
+        .get("limit")
+        .and_then(Value::as_u64)
+        .unwrap_or(100)
+        .clamp(1, 500) as usize;
+    let mut out = Vec::new();
+    for s in caller.readable() {
+        if crate::triage::is_triage(brain, &s) && caller.read_paths(&s).is_none() {
+            out.push(crate::triage::waiting(brain, &s, limit)?);
+        }
+    }
+    Ok(json!({ "triage": out, "notice": NOTICE }))
+}
+
+#[allow(unused_variables)]
+pub(super) fn triage_send(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    let id = str_arg(args, "id")?;
+    let to = Space::new(str_arg(args, "to")?)?;
+    if !caller.can_write(&to) {
+        return Err(ToolError::Invalid(format!("no access to {to}")));
+    }
+    for from in caller.writable() {
+        if !crate::triage::is_triage(brain, &from) {
+            continue;
+        }
+        let holds = crate::files::info(brain, &from, id)?.is_some_and(|f| f.status == "active")
+            || facts::read_fact(&brain.open_space(&from)?, id)?
+                .is_some_and(|f| f.status == "active");
+        if holds {
+            let new = crate::triage::send(brain, &from, id, &to, &caller.agent)?;
+            return Ok(json!({ "result": "sent", "id": new, "to": to.as_str() }));
+        }
+    }
+    Err(ToolError::Invalid("nothing waits under this id".into()))
+}
+
+#[allow(unused_variables)]
+pub(super) fn transcription_failed(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    let id = str_arg(args, "id")?;
+    let failed = args.get("failed").and_then(Value::as_bool).unwrap_or(true);
+    let Some(space) = locate_file(brain, &caller.writable(), id)? else {
+        return Err(ToolError::Invalid("unknown file".into()));
+    };
+    let f = crate::files::mark_transcription_failed(brain, &space, id, failed)?;
+    Ok(json!({ "result": if failed { "marked" } else { "cleared" }, "file": f.to_json() }))
+}

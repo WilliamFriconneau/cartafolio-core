@@ -5,6 +5,8 @@
 //! It is a space of the kind [`TRIAGE`], made the first time a device is paired, named after the person
 //! (`alice-a-trier`). A device's key writes only its inbox and reads nothing back.
 
+use std::collections::BTreeMap;
+
 use rusqlite::OptionalExtension;
 use serde_json::{Value, json};
 
@@ -45,50 +47,108 @@ pub fn is_triage(brain: &Brain, space: &Space) -> bool {
     brain.space_kind(space).is_ok_and(|k| k == TRIAGE)
 }
 
-/// What waits in an « À trier »: its notes (a recording's own description apart: the bridge reads the recording and puts
-/// its text here) and its files, newest first.
+/// The tag of the note in which the janitor says why it could not place what waits (`{"version":1,"reasons":{id: why}}`).
+pub const REASONS_TAG: &str = "janitor/reasons";
+
+/// The reasons the janitor gave, by id of the note or file that waits.
+fn reasons(conn: &rusqlite::Connection) -> BTreeMap<String, String> {
+    let text: Option<String> = conn
+        .query_row(
+            "SELECT f.text FROM facts f WHERE f.status = 'active' AND f.id IN
+             (SELECT fact_id FROM fact_tags WHERE tag = ?1) ORDER BY f.created_at DESC LIMIT 1",
+            [REASONS_TAG],
+            |r| r.get(0),
+        )
+        .optional()
+        .ok()
+        .flatten();
+    text.and_then(|t| serde_json::from_str::<Value>(t.trim()).ok())
+        .and_then(|d| d.get("reasons").and_then(Value::as_object).cloned())
+        .map(|m| {
+            m.into_iter()
+                .filter_map(|(k, v)| v.as_str().map(|s| (k, s.to_string())))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// What waits in an « À trier » **for a decision**: its notes (a recording's own description apart: the bridge reads the
+/// recording and puts its text here) and its files, newest first, each with its `age_seconds` and the `reason` the janitor
+/// left (why it could not place it). Not counted as waiting: a recording whose text is already here (`transcribed`), and one
+/// whose transcription failed three times and carries the tag [`files::FAILED_TRANSCRIPTION`] (`failed_transcription`, a
+/// list apart).
 pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
     let conn = brain.open_space(space)?;
+    let now = crate::util::now();
+    let why = reasons(&conn);
+    let reason_of = |id: &str| {
+        why.get(id)
+            .cloned()
+            .unwrap_or_else(|| "not looked at by the janitor yet".to_string())
+    };
     let opts = RecallOptions {
         limit,
         tags: vec!["inbox".into()],
         ..RecallOptions::default()
     };
-    let mut notes: Vec<Value> = facts::recall(&conn, "", &opts, crate::util::now())?
+    let mut notes: Vec<Value> = facts::recall(&conn, "", &opts, now)?
         .into_iter()
         .map(|h| h.fact)
         .filter(|f| f.typ.as_deref() != Some("file"))
         .map(|f| {
             json!({ "id": f.id, "text": f.text, "tags": f.tags,
-                "created_at": crate::util::iso(f.created_at) })
+                "created_at": crate::util::iso(f.created_at),
+                "age_seconds": (now - f.created_at).max(0), "reason": reason_of(&f.id) })
         })
         .collect();
     notes.sort_by(|a, b| b["created_at"].as_str().cmp(&a["created_at"].as_str()));
     // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the bridge
-    // erases it. Only what nothing has read yet, and what is not a recording, is for the person to look at.
+    // erases it. A recording the bridge gave up on carries a tag and is counted apart. Only what nothing has read yet, and
+    // is for the person to decide, is waiting.
     let mut transcribed = 0usize;
-    let kept: Vec<Value> = files::list(brain, space, None, limit.max(1000))?
-        .iter()
-        .filter(|f| {
-            let named = f.is_audio()
-                && conn
-                    .query_row(
-                        "SELECT 1 FROM facts WHERE status = 'active' AND type IS NOT 'file' AND instr(text, ?1) > 0 LIMIT 1",
-                        [&f.name],
-                        |_| Ok(()),
-                    )
-                    .is_ok();
+    let mut kept: Vec<Value> = vec![];
+    let mut failed: Vec<Value> = vec![];
+    for f in files::list(brain, space, None, limit.max(1000))? {
+        let mut json = f.to_json();
+        json["age_seconds"] = json!((now - f.created_at).max(0));
+        let tags: Vec<String> = match &f.fact_id {
+            Some(fid) => facts::read_fact(&conn, fid)?
+                .map(|x| x.tags)
+                .unwrap_or_default(),
+            None => vec![],
+        };
+        if f.is_audio() {
+            if tags.iter().any(|t| t == files::FAILED_TRANSCRIPTION) {
+                json["tags"] = json!(tags);
+                json["reason"] = json!(
+                    "the transcription failed three times; take the tag failed/transcription off to retry"
+                );
+                failed.push(json);
+                continue;
+            }
+            let named = conn
+                .query_row(
+                    "SELECT 1 FROM facts WHERE status = 'active' AND type IS NOT 'file' AND instr(text, ?1) > 0 LIMIT 1",
+                    [&f.name],
+                    |_| Ok(()),
+                )
+                .is_ok();
             if named {
                 transcribed += 1;
+                continue;
             }
-            !named
-        })
-        .take(limit)
-        .map(files::FileInfo::to_json)
-        .collect();
-    Ok(
-        json!({ "space": space.as_str(), "notes": notes, "files": kept, "transcribed": transcribed }),
-    )
+        }
+        json["tags"] = json!(tags);
+        json["reason"] = json!(reason_of(&f.id));
+        kept.push(json);
+    }
+    kept.truncate(limit);
+    failed.truncate(limit);
+    let count = notes.len() + kept.len();
+    Ok(json!({
+        "space": space.as_str(), "notes": notes, "files": kept, "transcribed": transcribed,
+        "failed_transcription": failed, "count": count,
+    }))
 }
 
 /// Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves

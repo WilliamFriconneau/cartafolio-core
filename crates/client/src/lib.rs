@@ -341,18 +341,22 @@ impl Client {
         }
         let meta: Value = serde_json::from_str(text)
             .map_err(|_| Error::Unreadable("file_get: no description of the file".into()))?;
-        // The bytes come in the block after the description: an embedded resource, or an image.
-        let data = blocks
-            .iter()
-            .find_map(|b| {
-                b["resource"]["blob"]
-                    .as_str()
-                    .or_else(|| b["data"].as_str())
-            })
-            .ok_or_else(|| Error::Unreadable("file_get: no bytes in the answer".into()))?;
-        let bytes = base64::engine::general_purpose::STANDARD
-            .decode(data)
-            .map_err(|_| Error::Unreadable("file_get: the bytes are not base64".into()))?;
+        // The bytes come in the block after the description: an embedded resource, or an image; a text file, as text.
+        let blob = blocks.iter().find_map(|b| {
+            b["resource"]["blob"]
+                .as_str()
+                .or_else(|| b["data"].as_str())
+        });
+        let bytes = match blob {
+            Some(data) => base64::engine::general_purpose::STANDARD
+                .decode(data)
+                .map_err(|_| Error::Unreadable("file_get: the bytes are not base64".into()))?,
+            None => blocks
+                .get(1)
+                .and_then(|b| b["text"].as_str())
+                .map(|t| t.as_bytes().to_vec())
+                .ok_or_else(|| Error::Unreadable("file_get: no bytes in the answer".into()))?,
+        };
         Ok((meta["file"].clone(), bytes))
     }
 

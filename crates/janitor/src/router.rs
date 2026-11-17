@@ -228,11 +228,21 @@ pub fn route(
     rules: &BTreeMap<String, Rules>,
     layout: &[Place],
 ) -> Vec<String> {
+    decide(text, tags, rules, layout).unwrap_or_default()
+}
+
+/// [`route`], saying why when nothing is chosen: `Err` holds the reason (`no keyword matched`, `two spaces tie: a, b`).
+pub fn decide(
+    text: &str,
+    tags: &[&str],
+    rules: &BTreeMap<String, Rules>,
+    layout: &[Place],
+) -> Result<Vec<String>, String> {
     let words = tokens(text);
     let known = names(layout);
     let named = named_spaces(&words, &known);
     if !named.is_empty() {
-        return named;
+        return Ok(named);
     }
     // The tags of the note are read as words too (`#finances`), each one apart.
     let mut seen = words;
@@ -294,9 +304,15 @@ pub fn route(
     unique.retain(|s| !folder(s));
     score.retain(|s, _| !folder(s));
     match unique.len() {
-        1 => return unique.iter().map(|s| (*s).to_string()).collect(),
+        1 => return Ok(unique.iter().map(|s| (*s).to_string()).collect()),
         0 => {}
-        _ => return vec![],
+        _ => {
+            let names: Vec<&str> = unique.iter().copied().collect();
+            return Err(format!(
+                "two spaces tie: keywords of {} are all in it",
+                names.join(", ")
+            ));
+        }
     }
     for (space, hits) in by_tag {
         if !folder(space) {
@@ -304,12 +320,16 @@ pub fn route(
         }
     }
     let Some(best) = score.values().copied().max() else {
-        return vec![];
+        return Err("no keyword matched".into());
     };
-    let mut leaders = score.iter().filter(|(_, n)| **n == best);
-    match (leaders.next(), leaders.next()) {
-        (Some((space, _)), None) => vec![(*space).to_string()],
-        _ => vec![],
+    let leaders: Vec<&str> = score
+        .iter()
+        .filter(|(_, n)| **n == best)
+        .map(|(s, _)| *s)
+        .collect();
+    match leaders[..] {
+        [only] => Ok(vec![only.to_string()]),
+        _ => Err(format!("two spaces tie: {}", leaders.join(", "))),
     }
 }
 

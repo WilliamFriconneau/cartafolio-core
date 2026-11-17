@@ -460,6 +460,40 @@ pub fn retire(
     info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))
 }
 
+/// The tag a recording whose transcription failed three times carries on its description: visible on the page and to an
+/// assistant, and counted apart from what waits for the person. Taking it off is the retry.
+pub const FAILED_TRANSCRIPTION: &str = "failed/transcription";
+
+/// Puts the tag [`FAILED_TRANSCRIPTION`] on a recording's description, or takes it off (`failed` false: the bridge tries
+/// the recording again). Only a recording that is still active; the tag is the only thing that changes.
+pub fn mark_transcription_failed(
+    brain: &Brain,
+    space: &Space,
+    id: &str,
+    failed: bool,
+) -> Result<FileInfo> {
+    let f = info(brain, space, id)?
+        .filter(|f| f.status == "active" && f.is_audio())
+        .ok_or_else(|| Error::Invalid("no active recording under this id".into()))?;
+    let fact = f
+        .fact_id
+        .as_deref()
+        .ok_or_else(|| Error::Invalid("this recording has no description".into()))?;
+    let conn = brain.open_space(space)?;
+    if failed {
+        conn.execute(
+            "INSERT OR IGNORE INTO fact_tags (fact_id, tag) VALUES (?1, ?2)",
+            params![fact, FAILED_TRANSCRIPTION],
+        )?;
+    } else {
+        conn.execute(
+            "DELETE FROM fact_tags WHERE fact_id = ?1 AND tag = ?2",
+            params![fact, FAILED_TRANSCRIPTION],
+        )?;
+    }
+    Ok(f)
+}
+
 /// How long a recording is kept after its transcription was written (seven days).
 pub const ERASE_AFTER: i64 = 7 * 24 * 3600;
 

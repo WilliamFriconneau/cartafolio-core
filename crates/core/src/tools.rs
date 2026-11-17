@@ -41,7 +41,8 @@ const WRITE_TOOLS: [&str; 10] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 13] = [
+const READ_TOOLS: [&str; 14] = [
+    "triage_waiting",
     "vocabulary_terms",
     "living_get",
     "peers",
@@ -132,6 +133,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             }),
         });
         out.push(ToolDef {
+            name: "triage_waiting",
+            description: "What waits in « À trier » for a decision, with why: the notes and the files the janitor could not place (`no keyword matched`, `two spaces tie`…), each with its age in seconds. A recording whose text is already filed is not counted; one whose transcription failed three times (tag `failed/transcription`) is listed apart, in `failed_transcription`.".into(),
+            schema: json!({ "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1 } } }),
+        });
+        out.push(ToolDef {
             name: "read_fact",
             description: "Reads a fact by its id, whatever its status.".into(),
             schema: json!({ "type": "object", "properties": { "id": { "type": "string" } }, "required": ["id"] }),
@@ -212,6 +218,16 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             name: "triage_claim",
             description: "For a sorter outside the memory (an assistant on a device): reserves up to `limit` notes waiting in « À trier » for `minutes` (default 10), so that two sorters do not take the same notes. Send each one on with `supersede` (the clean fact in its space, with its tags) or `retire` it; what is not sorted comes back to the others when the lease ends or after `triage_release`.".into(),
             schema: json!({ "type": "object", "properties": { "limit": { "type": "integer" }, "minutes": { "type": "integer" } } }),
+        });
+        out.push(ToolDef {
+            name: "triage_send",
+            description: "Sends one note or one file waiting in « À trier » to the inbox of a vault, as it is; it leaves « À trier » once the write is certain. The janitor files it there. Returns the id of what holds it now.".into(),
+            schema: json!({ "type": "object", "properties": { "id": { "type": "string" }, "to": { "type": "string", "description": "The vault that gets it." } }, "required": ["id", "to"] }),
+        });
+        out.push(ToolDef {
+            name: "transcription_failed",
+            description: "Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the bridge tries the recording again.".into(),
+            schema: json!({ "type": "object", "properties": { "id": { "type": "string", "description": "The recording's id." }, "failed": { "type": "boolean", "description": "Default true." } }, "required": ["id"] }),
         });
         out.push(ToolDef {
             name: "triage_release",
@@ -462,7 +478,10 @@ fn visible(caller: &Caller, name: &str) -> bool {
         return !guide_spaces(caller).is_empty();
     }
     // Putting the vaults in order is asked by someone who writes a vault whole.
-    if name == "tidy" || name == "triage_claim" || name == "triage_release" {
+    if matches!(
+        name,
+        "tidy" | "triage_claim" | "triage_release" | "triage_send" | "transcription_failed"
+    ) {
         return !caller.is_scoped() && caller.can_write_anywhere();
     }
     // A connection limited to paths inside a vault gets only the tools that can be bounded to a
@@ -1055,6 +1074,11 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         }
         "triage_claim" => crate::tools::sorting::triage_claim(brain, caller, name, args),
         "triage_release" => crate::tools::sorting::triage_release(brain, caller, name, args),
+        "triage_waiting" => crate::tools::sorting::triage_waiting(brain, caller, name, args),
+        "triage_send" => crate::tools::sorting::triage_send(brain, caller, name, args),
+        "transcription_failed" => {
+            crate::tools::sorting::transcription_failed(brain, caller, name, args)
+        }
         "peers" => crate::tools::overview::peers(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
