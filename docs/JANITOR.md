@@ -38,7 +38,18 @@ The router, for one note:
   keywords of two spaces in one note are an ambiguity: the note stays where it is.
 - **Ordinary** keywords (listed by several spaces) and tags (a note tag under a rule tag) each score one point per space.
   With no unique keyword, the best score wins; a tie, or no match, leaves the note where it is.
-- Keywords match whole words, in any case; a keyword of several words matches word for word.
+- Keywords match whole words, in any case, without accents (hyphens count as spaces); a keyword of several words matches word for word.
+- **The names of the spaces are tags.** The name of a space, its name without the person's prefix (`sam-cars` gives
+  `cars`) and its label are implicit keywords of that space, matched in the text and in the tags of a note: `#finances`,
+  or the word « finances », is a unique-keyword match for the space `finances`. The labels of the ancestors are not used.
+- **Several spaces at once.** A phrase that names two spaces or more after `dans`, `in`, `ranger` or `file` (« à ranger
+  dans finances et santé », « file in health and finances ») files the note in each: the first space gets the note, the
+  others a copy in their inbox (every one tagged `janitor/copy`, which is never copied again), and the reason for retiring
+  the original says where the copies went. Nothing is erased, and it is no ambiguity.
+- **Sub-spaces.** A space with a parent in the layout and no `rules` note gets one from the janitor, with its label and its
+  name as keywords (the person's page can change them). A space with children is a folder: when it and one of its
+  descendants match a note, the most specific wins, and the parent only gets a note that no child matches. A keyword listed
+  by a parent and by its child belongs to the child.
 - The health rule (`#santé`) and the work rule (`work_words`, meeting recordings) still come first, as before.
 
 A note found in the inbox of a vault goes to another vault only when the router names that vault; otherwise it is filed in its
