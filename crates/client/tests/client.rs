@@ -441,7 +441,9 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
             .expect("user")
             .id;
         brain.add_vault(&sam, "sam", "me").expect("vault");
-        pairing::create(&ctl, &sam, &["sam-me".into()], memcp_core::util::now()).expect("code")
+        pairing::create_for_peer(&brain, &sam, "sam", memcp_core::util::now())
+            .expect("code")
+            .0
     };
     let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
     let port = listener.local_addr().expect("addr").port();
@@ -465,7 +467,13 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
     }
     let server = format!("http://127.0.0.1:{port}");
     let p = memcp_client::pair(&server, &code.to_lowercase(), "Sam's laptop").expect("paired");
-    assert_eq!(p.vaults, ["sam-me"]);
+    // A peer: every space of the person, read and write.
+    assert!(
+        p.vaults.iter().any(|v| v.starts_with("sam-me")),
+        "{:?}",
+        p.vaults
+    );
+    assert!(p.agent.starts_with("peer-"), "{}", p.agent);
     assert!(p.url.ends_with(&format!("/mcp/{}", p.agent)));
     let mut c = Client::new(&p.url, &p.key);
     let r = c
