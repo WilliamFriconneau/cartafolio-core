@@ -127,7 +127,7 @@ Rights: Owner of the box (page) or a connection holding write on it.
 | `of` | The person's « À trier », if it was made | `Error::Sqlite`/`Io` on storage failure |
 | `ensure` | The person's « À trier », made now if they have none | `Error::Sqlite`/`Io` on storage failure |
 | `is_triage` | Whether `space` is an « À trier » | `Error::Sqlite`/`Io` on storage failure |
-| `waiting` | What waits in an « À trier »: its notes (a recording's own description apart: the bridge reads the recording and puts its text here) and its files, newest first | `Error::Sqlite`/`Io` on storage failure |
+| `waiting` | What waits in an « À trier »: its notes (a recording's own description apart: the node reads the recording and puts its text here) and its files, newest first | `Error::Sqlite`/`Io` on storage failure |
 | `send` | Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves `from`, once the write is certain | `Error::Sqlite`/`Io` on storage failure |
 
 ## `sync`: Peer synchronisation: the log, applying events, cursors, the window
@@ -228,7 +228,7 @@ Rights: The person makes the code on their page; the device holds the code (ten 
 |---|---|---|
 | `normalize` | A code as the person may type it: lower case, with a dash or spaces | none (pure) |
 | `display` | `ABCD-EFGH`, the way it is shown | none (pure) |
-| `rights_for` | The rights a bridge gets for the vaults ticked: the inbox of each, nothing else | `Error::Invalid` for a malformed value |
+| `rights_for` | The rights a device gets for the spaces ticked: the inbox of each, nothing else | `Error::Invalid` for a malformed value |
 | `create` | A new code for `user_id`, valid `CODE_TTL` seconds from `now`, for the inboxes of `vaults` | `Error::Sqlite`/`Io` on storage failure |
 | `create_for_triage` | A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as the server does | none (pure) |
 | `standing` | Where the code `code` made by `user_id` stands at time `now` | `Error::Sqlite`/`Io` on storage failure |

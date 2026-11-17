@@ -9,7 +9,7 @@ four sections, in the same order, with the same words. A platform differs only w
 | Mac, Windows, Linux | the whole memory; recording calls and meetings (everyone told, everyone agreeing) |
 | Node page | the whole memory; the administration of the node (people, connections, peers, updates) |
 
-Words never used: *bridge*, *proxy*, *vault* (say *space*). Vulgar or slang words are never used in the interface.
+Words never used: *bridge*, *capture program*, *capture app*, *proxy*, *vault* (say *space*, and *the app* or *the node*). Vulgar or slang words are never used in the interface.
 
 ## What matters most to a person (the order of everything below)
 

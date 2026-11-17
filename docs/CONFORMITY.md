@@ -8,7 +8,7 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 
 | Doc and section | Requirement | Status | Test or code |
 |---|---|---|---|
-| UI-SPEC, top | The words *bridge*, *proxy*, *vault* appear on no screen | done | `crates/server/tests/conformity.rs::no_screen_holds_a_forbidden_word` (text and translations); `tests/page/onboarding.test.js` in a real browser; texts built by the page's scripts are not scanned (partial for those) |
+| UI-SPEC, top | The words *bridge*, *capture program*, *capture app*, *proxy*, *vault* appear on no screen | done | `crates/server/tests/conformity.rs::no_screen_holds_a_forbidden_word` (text and translations); `tests/page/onboarding.test.js` in a real browser; texts built by the page's scripts are not scanned (partial for those) |
 | Principles 1, 3 | Machines first, with whether they are in step; a synchronisation in progress is visible | done | `crates/server/src/admin.html` (Machines), `core/tests/sync.rs::status_reports_direction_progress_and_goes_idle` |
 | Principles 2 | After joining, a device shows one memory | partial | `server/src/replica.rs` (the replica is shown as the one memory); no page test |
 | Principles 5 | Join a machine first, connect an assistant second | done | order of the screens in `admin.html` |

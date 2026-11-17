@@ -10,7 +10,7 @@ like any other client, with a connection of its own, and does three jobs:
    inboxes, and compares it with the keywords and tags of every space (see Keywords). A note that clearly belongs to a space
    is written there **as it is**, still in the inbox, and retired from À trier once the write is certain. A note the router
    cannot place stays in À trier: the person decides on their page, where every note and file waiting there has a « Send »
-   to the vault they choose. **Files are routed too** (documents, images; never a recording, which is the bridge's): the
+   to the vault they choose. **Files are routed too** (documents, images; never a recording, which is the node's): the
    router reads the words of the file's name, its text when it is readable (a text or markdown file; a PDF or Word file
    has no text extractor here, so it goes by name, description and tags), its description (the note it came with) and its
    tags, with the same keywords, space names and vocabularies as for a note. A file the router places is sent as it is
@@ -26,14 +26,14 @@ like any other client, with a connection of its own, and does three jobs:
    a vault it did not name rightly becomes the inbox's own, a tag that is not a plain path (64 characters at most) or that aims at `inbox`, `sources`,
    `dossier`, `guide`, `proposals`, `index`, `code`, `decision`, `journal` or `ticket` is dropped. If no model answers, the
    note stays; a note that cannot be written three times is left alone.
-2. **A piece of a note that the bridge absorbed (`inbox/absorb`) is turned into facts.** At most eight short, dated facts in
+2. **A piece of a note that the node absorbed (`inbox/absorb`) is turned into facts.** At most eight short, dated facts in
    the note's words, never a person's name (the post instead), never health or social data of someone a service supports;
    each ends with where it came from and is written in the vault of that inbox, tagged `absorb`. Then the piece leaves.
 
-**Recordings are not its business.** The bridge, where the speech model is, transcribes them, puts their text in the inbox,
-and erases them a week after the text was filed (`memcp-capture transcribe`). A recording whose transcription failed three
+**Recordings are not its business.** The node, where the speech model is, transcribes them, puts their text in the inbox,
+and erases them a week after the text was filed (`memcp transcribe`, see [INTAKE.md](INTAKE.md)). A recording whose transcription failed three
 times gets the tag `failed/transcription` on its description (the tool `transcription_failed`): it stays visible, with a
-« Retry » on the page (the tag comes off, the bridge tries again), and it is counted apart.
+« Retry » on the page (the tag comes off, the node tries again), and it is counted apart.
 
 **What « À trier » counts.** The number on the page and the `facts` of `spaces` for À trier mean what waits for a decision:
 the notes and files the janitor could not place, not the janitor's own notes, not a recording whose text is already
@@ -145,6 +145,6 @@ own network.
 ## The connection
 
 Create it with `memcp connect janitor --all` (or `--grant <vault>:rw,…` to limit what it files into). The capturing
-devices (phone, laptop, the Bridge) keep a key limited to the inbox of À trier: they can drop a note, a file or a recording
+devices (phone, laptop) keep a key limited to the inbox of À trier: they can drop a note, a file or a recording
 there, and read nothing back.
 The janitor is internal to the memory's owner: it reads and files everywhere his connection allows, so give it `--all`.

@@ -1,6 +1,6 @@
 # Code reviews, 2 and 3 November 2026
 
-Three read-only reviews (the server and core changes, the janitor, the bridge) were run on 2 November, next to another
+Three read-only reviews (the server and core changes, the janitor, the capture client) were run on 2 November, next to another
 review (`memcp-capture/docs/reviews/2026-11-02-code-review.md`). Their results were not reported to the owner at
 the time; this file is that report, with what was done since.
 
@@ -15,7 +15,7 @@ the time; this file is that report, with what was done since.
 | high | janitor: a note could be "filed" as itself and retired; a dictation cut halfway lost its end; two recordings of one name erased the wrong one | 0.18.0 |
 | medium | signing in at the address of an existing connection took it over; at `console-<name>` it gave a console key | 0.18.1 |
 | medium | the client took `http://010.0.0.1` as private (the system reads it as 8.0.0.1, public), followed redirects, read streams without a bound | 0.18.0 |
-| medium | bridge: a captive portal failed captures for good; two processes corrupted the outbox; `forget` took a path | bridge 2409fc5 |
+| medium | capture client: a captive portal failed captures for good; two processes corrupted the outbox; `forget` took a path | capture client 2409fc5 |
 | medium | the inbox listing hid an old waiting note behind 200 sorted ones | 0.18.0 |
 | medium | the server read up to 34 MB of any request before knowing its key, in one of a few workers, with no timeout: a few slow clients stopped everything | 0.18.3 |
 | medium | behind a local proxy the client's address was the first `X-Forwarded-For` entry, which the client writes | 0.18.3 |
@@ -27,8 +27,8 @@ the time; this file is that report, with what was done since.
 
 ## Still open
 
-- Bridge: the HTTP listener on this machine has no authentication (the Unix socket, mode 600, is the alternative).
-  (`capture_file` no longer reads the bridge's own folder, a file private to its owner, or one that holds a key.)
+- Capture client: the HTTP listener on this machine has no authentication (the Unix socket, mode 600, is the alternative).
+  (`capture_file` no longer reads the client's own folder, a file private to its owner, or one that holds a key.)
 - Core: migrations are not run in an immediate transaction; multi-step file writes are not atomic; an export fails on a
   leftover temporary file; a few silent discards (`let _ =`) hide storage errors.
 - CI: third-party actions pinned by tag, not by commit.

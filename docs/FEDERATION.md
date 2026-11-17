@@ -4,7 +4,7 @@ Status: plan. Built after the spaces (see SPACES.md), the mounted folders and th
 
 ## The idea
 
-There is no central server. A MemCP **node** is a program with a local store and a list of peers: a server, a bridge on a laptop, a Windows PC, a phone. Nodes synchronise with each other the way torrent clients and Syncthing do: any node that has something gives it to any node that lacks it. A node that holds everything is a complete copy, so **synchronisation and backup are the same thing**: losing a machine loses nothing as long as one other node holds the memory.
+There is no central server. A MemCP **node** is a program with a local store and a list of peers: a server, a laptop, a Windows PC, a phone. Nodes synchronise with each other the way torrent clients and Syncthing do: any node that has something gives it to any node that lacks it. A node that holds everything is a complete copy, so **synchronisation and backup are the same thing**: losing a machine loses nothing as long as one other node holds the memory.
 
 A node can be switched off for days. When it comes back it asks its peers what it missed and sends what they missed. Nothing needs to be online at the same time and nothing needs a hub.
 

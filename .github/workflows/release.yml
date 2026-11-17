@@ -22,7 +22,7 @@ jobs:
       - name: Build with cross
         run: |
           cargo install cross --locked
-          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor -p memcp-capture
+          cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor
           # Apart: `--bin` would apply to every package of the line above.
           cross build --release --locked --target ${{ matrix.target }} -p memcp-client --features sync --bin memcp-sync
       - name: Package
@@ -31,13 +31,12 @@ jobs:
           cp target/${{ matrix.target }}/release/memcp dist/memcp-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-manager dist/memcp-manager-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-janitor dist/memcp-janitor-${{ github.ref_name }}-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/memcp-capture dist/memcp-capture-${{ github.ref_name }}-${{ matrix.target }}
           cp target/${{ matrix.target }}/release/memcp-sync dist/memcp-sync-${{ github.ref_name }}-${{ matrix.target }}
           # The archive install.sh installs from: programs, units, memcp.toml (see packaging/linux).
           V=${GITHUB_REF_NAME#v}
           n=memcp-$V-${{ matrix.target }}
           mkdir -p pkg/$n/bin pkg/$n/units
-          for b in memcp memcp-janitor memcp-capture; do cp target/${{ matrix.target }}/release/$b pkg/$n/bin/; done
+          for b in memcp memcp-janitor; do cp target/${{ matrix.target }}/release/$b pkg/$n/bin/; done
           cp packaging/linux/*.service packaging/linux/*.timer packaging/linux/memcp.sysusers packaging/linux/memcp.tmpfiles pkg/$n/units/
           cp packaging/linux/memcp.toml docs/LINUX.md LICENSE install.sh pkg/$n/
           tar -C pkg -czf dist/$n.tar.gz $n
@@ -47,7 +46,7 @@ jobs:
           path: dist/*
 
   native:
-    # The server and the bridge for the computers: macOS and Windows build on their own runners.
+    # The node for the computers: macOS and Windows build on their own runners.
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -65,13 +64,13 @@ jobs:
           targets: ${{ matrix.target }}
       - name: Build
         run: |
-          cargo build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-janitor -p memcp-capture
+          cargo build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-janitor
           cargo build --release --locked --target ${{ matrix.target }} -p memcp-client --features sync --bin memcp-sync
       - name: Package
         shell: bash
         run: |
           mkdir dist
-          for b in memcp memcp-janitor memcp-capture memcp-sync; do
+          for b in memcp memcp-janitor memcp-sync; do
             cp "target/${{ matrix.target }}/release/${b}${{ matrix.ext }}" "dist/${b}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.ext }}"
           done
       - uses: actions/upload-artifact@v4

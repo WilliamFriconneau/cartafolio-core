@@ -1,6 +1,6 @@
 # The desktop node, installed for real on a Mac and on Windows: the installers of packaging/ run with the programs of
-# this commit, the node and the bridge start as tasks of the user, a note and a file reach « À trier » through the bridge,
-# an assistant's request goes through `memcp-capture connect`, then everything is removed.
+# this commit, the node starts as a task of the user, a note and a file reach « À trier » through the node's own commands,
+# an assistant's request goes through the node's address with the key of its connection, then everything is removed.
 name: desktop
 
 on:
@@ -20,22 +20,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build --release --locked -p memcp-server -p memcp-capture -p memcp-janitor
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor
       - name: Install
-        run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791 --bridge-port 18792
-      - name: A note, a file and an assistant's request through the bridge
+        run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791
+      - name: A note, a file and an assistant's request through the node
         run: |
-          B="$HOME/Library/Application Support/MemCP/bin/memcp-capture"
-          CONF="$HOME/Library/Application Support/MemCP/bridge/bridge.conf"
+          APP="$HOME/Library/Application Support/MemCP"
+          M="$APP/bin/memcp"
+          URL=http://127.0.0.1:18791/mcp/desktop
           launchctl list | grep org.memcp
-          "$B" text "a note from the desktop test" --config "$CONF"
+          test -f "$APP/memcp.toml"
+          "$M" --data "$APP/data" intake text "a note from the desktop test"
           printf 'a file\n' > file.txt
-          "$B" send file.txt --note "a file from the desktop test" --config "$CONF"
-          printf '%s\n' \
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}' \
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | "$B" connect 127.0.0.1:18792 | tee answers.txt
+          "$M" --data "$APP/data" intake send file.txt
+          KEY=$(security find-generic-password -s memcp -a "$URL" -w)
+          curl -fsS -X POST "$URL" -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+            -H 'Accept: application/json, text/event-stream' \
+            -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | tee answers.txt
           grep -q '"tools"' answers.txt
-          "$HOME/Library/Application Support/MemCP/bin/memcp" --data "$HOME/Library/Application Support/MemCP/data" space list | tee spaces.txt
+          "$M" --data "$APP/data" space list | tee spaces.txt
           grep -q 'owner-a-trier' spaces.txt
       - name: Logs
         if: always()
@@ -52,31 +55,31 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build --release --locked -p memcp-server -p memcp-capture -p memcp-janitor
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor
       - name: Install
         shell: pwsh
-        run: ./packaging/windows/install.ps1 -Yes -From target\release -Port 18791 -BridgePort 18792
-      - name: A note, a file and an assistant's request through the bridge
+        run: ./packaging/windows/install.ps1 -Yes -From target\release -Port 18791
+      - name: A note, a file and an assistant's request through the node
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:LOCALAPPDATA 'MemCP'
-          $b = Join-Path $root 'bin\memcp-capture.exe'
-          $conf = Join-Path $root 'bridge\bridge.conf'
+          $m = Join-Path $root 'bin\memcp.exe'
+          $data = Join-Path $root 'data'
           Get-ScheduledTask -TaskPath '\MemCP\' | Format-Table TaskName, State
-          & $b text "a note from the desktop test" --config $conf
+          if (-not (Test-Path (Join-Path $root 'memcp.toml'))) { throw 'no settings file' }
+          & $m --data $data intake text "a note from the desktop test"
           if ($LASTEXITCODE -ne 0) { throw "text: $LASTEXITCODE" }
           Set-Content -Path file.txt -Value 'a file'
-          & $b send file.txt --note "a file from the desktop test" --config $conf
+          & $m --data $data intake send file.txt
           if ($LASTEXITCODE -ne 0) { throw "send: $LASTEXITCODE" }
-          $requests = @(
-            '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"ci","version":"1"}}}',
-            '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
-          ) -join "`n"
-          $answers = $requests | & $b connect 127.0.0.1:18792
-          $answers
-          if (-not ($answers -match '"tools"')) { throw 'no tools through the bridge' }
-          $spaces = & (Join-Path $root 'bin\memcp.exe') --data (Join-Path $root 'data') space list
+          $key = (Get-Content (Join-Path $root 'keys\desktop.key') -Raw).Trim()
+          $answers = Invoke-RestMethod -Method Post -Uri http://127.0.0.1:18791/mcp/desktop `
+            -Headers @{ Authorization = "Bearer $key"; Accept = 'application/json, text/event-stream' } `
+            -ContentType 'application/json' -Body '{"jsonrpc":"2.0","id":2,"method":"tools/list"}'
+          $answers | ConvertTo-Json -Depth 5
+          if (-not $answers.result.tools) { throw 'no tools through the node' }
+          $spaces = & $m --data $data space list
           $spaces
           if (-not ($spaces -match 'owner-a-trier')) { throw 'no À trier' }
       - name: Logs

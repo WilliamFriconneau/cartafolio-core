@@ -121,7 +121,7 @@ else
 fi
 
 mkdir -p "$PREFIX"
-for prog in memcp memcp-janitor memcp-capture; do
+for prog in memcp memcp-janitor; do
   install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"
 done
 say "installed in $PREFIX"

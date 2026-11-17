@@ -16,5 +16,5 @@ for n in $(grep -rhoE "^\s*pub(\([a-z]+\))? (const|static|fn|struct|enum|type|tr
 done || true
 echo "== docs not linked from docs/README.md"
 for f in docs/*.md; do b=$(basename "$f"); [ "$b" = README.md ] || grep -q "$b" docs/README.md || echo "$f"; done
-echo "== forbidden words in code and docs (bridge, vault): only the names kept on purpose are listed in docs/FIVE-S.md"
-grep -rniE "\b(bridge|vault)s?\b" --include=*.rs --include=*.md --include=*.html --include=*.sh crates docs ha-addon | grep -v "docs/reviews/\|RELAIS.md" | head -20 || true
+echo "== forbidden words in code and docs (bridge, capture program, vault): only the names kept on purpose are listed in docs/FIVE-S.md"
+grep -rniE "\b(bridge|vault)s?\b|capture (program|app)" --include=*.rs --include=*.md --include=*.html --include=*.sh crates docs ha-addon | grep -v "docs/reviews/\|RELAIS.md" | head -20 || true
