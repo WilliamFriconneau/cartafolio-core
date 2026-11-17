@@ -143,14 +143,14 @@ fn each_connection_has_its_own_outbox_and_all_old_captures_move_into_it() {
         ),
         "the same connection, the same folder"
     );
-    // Captures kept in the old shared folder, whatever vault they were made for: all of them move, once.
+    // Captures kept in the old shared folder, whatever space they were made for: all of them move, once.
     let old = dir("old");
     let mut c = config(&old);
     let intake = Intake::new(c.clone()).expect("old");
     let first = intake.submit_text("Avant.".into()).expect("note");
     let second = intake.submit_text("Pour le travail.".into()).expect("note");
     drop(intake);
-    // One made by a version that still named a vault: it goes to À trier too.
+    // One made by a version that still named a space: it goes to À trier too.
     let q = old.join("queue");
     let made_for_work = std::fs::read_dir(&q)
         .expect("queue")

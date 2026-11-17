@@ -16,4 +16,4 @@
 - [MODEL.md](MODEL.md), [STORAGE.md](STORAGE.md), [FEDERATION.md](FEDERATION.md) (peers and sync), [ENCRYPTION.md](ENCRYPTION.md) (planned), [LOCAL-TOOLS.md](LOCAL-TOOLS.md), [CONFIG-UI.md](CONFIG-UI.md).
 
 **Project**
-- [RELAIS.md](RELAIS.md): the state of the work. [reviews/](reviews/): security and code reviews.
+- [FIVE-S.md](FIVE-S.md): the 5S pass and its tools. [CONFORMITY.md](CONFORMITY.md): what the docs require and what is done. [RELAIS.md](RELAIS.md): the state of the work. [reviews/](reviews/): security and code reviews.

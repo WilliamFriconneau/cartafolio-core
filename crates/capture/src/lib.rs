@@ -316,7 +316,7 @@ pub fn adopt_old_captures(old: &Path, new: &Path) -> Result<u32, Error> {
     Ok(n)
 }
 
-/// A client of the memory for this bridge: it never refuses the person's address (they are warned instead).
+/// A client of the memory for this capture program: it never refuses the person's address (they are warned instead).
 pub fn client_for(url: &str, key: &str) -> Client {
     let mut c = Client::new(url, key);
     c.allow_clear = true;

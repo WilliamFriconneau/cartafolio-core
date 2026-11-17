@@ -91,7 +91,7 @@ pub struct IntakeFlush {
 }
 
 /// What pairing gave: the connection's address and key (put the key in the Keychain at once). `vaults` names the one
-/// box the key writes to, the person's « À trier » (`<person>-a-trier`): it is no vault, and there is nothing to choose.
+/// box the key writes to, the person's « À trier » (`<person>-a-trier`): it is no space, and there is nothing to choose.
 #[derive(Clone, uniffi::Record)]
 pub struct Pairing {
     pub agent: String,
@@ -422,7 +422,7 @@ pub fn connection_outbox(base: String, url: String) -> String {
 }
 
 /// Moves the captures left in the outbox the app used before (`old`, the folder that was `IntakeConfig.outbox`) into the
-/// connection's own (`new`, from `connection_outbox`), all of them, whatever vault they were made for: they go to
+/// connection's own (`new`, from `connection_outbox`), all of them, whatever space they were made for: they go to
 /// « À trier ». Call it once at start, before `Intake(config:)`; calling it again moves nothing. How many moved.
 #[uniffi::export]
 pub fn adopt_old_captures(old: String, new: String) -> Result<u32, IntakeError> {
@@ -513,7 +513,7 @@ pub fn summary_join_prompt(summaries: Vec<String>) -> Option<String> {
     memcp_capture::plan::summary_join_prompt(&summaries)
 }
 
-/// A note as one dated `.md` in `folder` (a folder the person chose, often an Obsidian vault). Returns the file.
+/// A note as one dated `.md` in `folder` (a folder the person chose, often an Obsidian folder). Returns the file.
 #[uniffi::export]
 pub fn markdown_note(
     folder: String,
