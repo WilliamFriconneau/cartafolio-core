@@ -106,7 +106,7 @@ A folder held by a cloud service is allowed, read and write. The node recognises
 
 - The path is the full path on the node's machine. The folder is made if it does not exist.
 - In `readwrite` mode the folder must be **outside the node's data directory** and must not hold it (the databases must never sit in a folder that others write), and must not overlap the folder of another space on this node. The root of the disk is refused.
-- A file over 100 MB is left alone. Folders are read 12 levels deep.
+- A file over 24 MB is left alone (the biggest a space keeps, so that it can reach every node). Folders are read 12 levels deep.
 - One pass at a time on a node, across processes (a lock file in the data directory): `memcp folder sync` while the node serves waits its turn or says a pass is already running.
 - The person chooses the folder: through the page (administrators), the command line, or an assistant with write rights on the whole space. The assistant's tool, `folder_set`, names a path on the machine; give that right as you would any write right on the space.
 

@@ -4,7 +4,7 @@
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
     SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
-    SPACE_V10, SPACE_V11, SPACE_V12,
+    SPACE_V10, SPACE_V11, SPACE_V12, SPACE_V13,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -589,6 +589,40 @@ DROP TRIGGER fact_events_no_delete;
 CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
   WHEN NOT EXISTS (SELECT 1 FROM meta WHERE k = 'window_pruning')
   BEGIN SELECT RAISE(ABORT,'append-only'); END;
+";
+
+/// What the exchange between peers must remember beyond the log itself:
+/// - `sync_unheld`: the events of this log a peer took without keeping them (it refused them, or left them out of
+///   its window). The peer does not hold them, so the window of this replica never counts them as acknowledged by it.
+/// - `sync_rejected`: the events received here and refused, so that an event that needs one of them is refused too
+///   instead of waiting for it for ever.
+/// - `sync_waiting`: how many exchanges stopped on an event that has not arrived (`needs`, its eid), so that what needs
+///   one that never comes goes on without it in the end.
+/// - `sync_deferred`: a layout change that names a parent space this node does not hold yet: kept aside and tried
+///   again at each exchange, then logged once it applies.
+const SPACE_V13: &str = r"
+CREATE TABLE sync_unheld (
+  peer TEXT NOT NULL,
+  eid  TEXT NOT NULL,
+  at   INTEGER NOT NULL,
+  PRIMARY KEY (peer, eid)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_rejected (
+  eid TEXT PRIMARY KEY,
+  why TEXT NOT NULL,
+  at  INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_waiting (
+  needs TEXT PRIMARY KEY,
+  stops INTEGER NOT NULL,
+  since INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_deferred (
+  eid   TEXT PRIMARY KEY,
+  via   TEXT NOT NULL,
+  event TEXT NOT NULL,
+  at    INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
 ";
 
 /// A connection of the program's own tools (the janitor, voice transcription, the weekly report, the device

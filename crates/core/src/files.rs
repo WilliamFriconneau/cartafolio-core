@@ -273,6 +273,11 @@ pub(crate) fn clean_name(name: &str) -> String {
         .to_string()
 }
 
+/// The biggest file a space keeps: 24 MiB. A file travels to the other nodes inside one event, in base64 (a third
+/// bigger), and a node reads at most 34 MiB in one request: every way in (an assistant, an app, a watched folder, a
+/// space's folder) takes this limit, so that every file kept can reach every node.
+pub const MAX_BYTES: usize = 24 * 1024 * 1024;
+
 /// Stores a file in a space and describes it with a fact. Returns its record.
 pub fn put(
     brain: &Brain,
@@ -298,6 +303,12 @@ pub fn put_tagged(
 ) -> Result<FileInfo> {
     if bytes.is_empty() {
         return Err(Error::Invalid("the file is empty".into()));
+    }
+    if bytes.len() > MAX_BYTES {
+        return Err(Error::Invalid(format!(
+            "the file is over {} MB, the most a file may be to reach the other nodes",
+            MAX_BYTES / 1024 / 1024
+        )));
     }
     let name = clean_name(name);
     if name.is_empty() {
@@ -466,7 +477,7 @@ pub fn retire(
     if let Some(fact) = &f.fact_id {
         let _ = facts::retire(&conn, author, fact, &format!("file retired: {reason}"));
     }
-    crate::sync::record_file_retired(&conn, id, reason)?;
+    crate::sync::record_file_retired(&conn, id, reason, false)?;
     info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))
 }
 
@@ -510,6 +521,11 @@ pub const ERASE_AFTER: i64 = 0;
 
 const ERASED: &str = "erased: ";
 
+/// Whether a retirement reason says the bytes were erased for good (see [`erase`]).
+pub(crate) fn is_erased_reason(reason: &str) -> bool {
+    reason.starts_with(ERASED)
+}
+
 /// The recording is gone for good (see [`erase`]); its record stays.
 pub fn erased(brain: &Brain, space: &Space, id: &str) -> Result<bool> {
     let conn = brain.open_space(space)?;
@@ -522,7 +538,7 @@ pub fn erased(brain: &Brain, space: &Space, id: &str) -> Result<bool> {
         .optional()?;
     Ok(reason
         .flatten()
-        .is_some_and(|reason| reason.starts_with(ERASED)))
+        .is_some_and(|reason| is_erased_reason(&reason)))
 }
 
 /// Erases a voice memo for good, once the text that replaces it is written.
@@ -646,7 +662,7 @@ pub fn erase_at(
     if let Some(fact) = &f.fact_id {
         let _ = facts::retire(&conn, author, fact, &format!("file {reason}"));
     }
-    crate::sync::record_file_retired(&conn, id, &reason)?;
+    crate::sync::record_file_retired(&conn, id, &reason, true)?;
     // The bytes go with the last record that holds them.
     let others: i64 = conn.query_row(
         "SELECT count(*) FROM files WHERE sha256 = ?1 AND id <> ?2

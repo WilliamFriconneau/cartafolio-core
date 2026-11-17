@@ -351,3 +351,183 @@ fn status_reports_direction_progress_and_goes_idle() -> Res {
     assert_eq!(sync::status(&a, 1100)?[0].direction, "idle");
     Ok(())
 }
+
+#[test]
+fn what_needs_a_refused_event_is_refused_too_and_the_rest_goes_on() -> Res {
+    let t = Temp::new("sync-refused-chain");
+    let (a, b) = (node(&t, "a")?, node(&t, "b")?);
+    // A note B refuses (an author longer than a peer accepts), its replacement, and a note after them.
+    let conn = a.open_space(&sp("notes"))?;
+    let Remembered::Created(first) = facts::remember(
+        &conn,
+        &sp("notes"),
+        &"x".repeat(300),
+        NewFact::agent("The gate code is 1234", "agent:t"),
+        &[],
+    )?
+    else {
+        return Err("not created".into());
+    };
+    replace(&a, &first.id, "The gate code is 4321")?;
+    write(&a, "The bins go out on Monday")?;
+    // Nothing waits for ever: the replacement is refused with its reason, and the later note arrives.
+    let r = catch_up(&a, &b, "a", "b", &sp("notes"))?;
+    assert_eq!(r.rejected.len(), 3, "{:?}", r.rejected);
+    assert!(
+        r.rejected[1..]
+            .iter()
+            .all(|(_, why)| why.contains("which this node refused")),
+        "{:?}",
+        r.rejected
+    );
+    let texts: Vec<String> = state(&b)?.into_iter().map(|(id, _, _)| id).collect();
+    assert_eq!(texts.len(), 1);
+    Ok(())
+}
+
+#[test]
+fn what_waits_for_an_event_no_peer_has_goes_on_without_it_in_the_end() -> Res {
+    let t = Temp::new("sync-never");
+    let (a, b) = (node(&t, "a")?, node(&t, "b")?);
+    let first = write(&a, "The boiler is serviced in March")?;
+    let second = replace(&a, &first, "The boiler is serviced in April")?;
+    // B is given the replacement only, as from a peer that no longer holds the first note.
+    let page = sync::events_after(&a, &sp("notes"), 0, 100, 1 << 20, None)?;
+    let only: Vec<Event> = page
+        .events
+        .into_iter()
+        .filter(|e| e.eid != format!("c:{first}"))
+        .collect();
+    for _ in 0..10 {
+        let r = sync::apply(&b, &sp("notes"), &only, "a")?;
+        assert!(r.stopped.is_some(), "{r:?}");
+    }
+    let r = sync::apply(&b, &sp("notes"), &only, "a")?;
+    assert!(r.stopped.is_none(), "{r:?}");
+    assert_eq!(r.gave_up.len(), 1, "{r:?}");
+    assert_eq!(
+        state(&b)?,
+        vec![(second, "active".to_string(), None)],
+        "the replacement is there, without the note it replaced"
+    );
+    Ok(())
+}
+
+fn recording() -> Vec<u8> {
+    let mut memo = vec![0, 0, 0, 0x20];
+    memo.extend_from_slice(b"ftypM4A \0\0\0\0");
+    memo.resize(300, 9);
+    memo
+}
+
+#[test]
+fn a_recording_erased_on_one_node_is_erased_on_the_others_and_its_bytes_never_travel_again() -> Res
+{
+    let t = Temp::new("sync-erase");
+    let (a, b, c) = (node(&t, "a")?, node(&t, "b")?, node(&t, "c")?);
+    let s = sp("notes");
+    let rec = memcp_core::files::put_tagged(
+        &a,
+        &s,
+        "device",
+        "memo.m4a",
+        "",
+        &recording(),
+        &["inbox/audio".to_string()],
+    )?;
+    catch_up(&a, &b, "a", "b", &s)?;
+    assert!(
+        memcp_core::files::get(&b, &s, &rec.id)?.is_some(),
+        "B holds the bytes"
+    );
+    let text = write(&a, &format!("Memo, audio {}: buy bread.", rec.name))?;
+    memcp_core::files::erase(&a, &s, "dictation", &rec.id, &s, &text)?;
+    catch_up(&a, &b, "a", "b", &s)?;
+    assert!(memcp_core::files::erased(&b, &s, &rec.id)?);
+    assert!(
+        memcp_core::files::get(&b, &s, &rec.id)?.is_none(),
+        "B erased its bytes"
+    );
+    // A node that joins later gets the record from either, never the bytes.
+    for from in [&a, &b] {
+        let page = sync::events_after(from, &s, 0, 100, 1 << 20, None)?;
+        let put = page
+            .events
+            .iter()
+            .find(|e| e.kind == "file_put")
+            .ok_or("no file")?;
+        assert!(put.payload.get("data").is_none(), "{:?}", put.payload);
+    }
+    catch_up(&b, &c, "b", "c", &s)?;
+    assert!(memcp_core::files::get(&c, &s, &rec.id)?.is_none());
+    Ok(())
+}
+
+#[test]
+fn a_move_under_a_space_not_here_yet_waits_and_applies_once_it_is() -> Res {
+    let t = Temp::new("sync-parent");
+    let a = Brain::init(
+        &t.path().join("a"),
+        &[sp("notes"), sp("house")],
+        Language::English,
+    )?;
+    let b = node(&t, "b")?;
+    let s = sp("notes");
+    a.set_layout(
+        OWNER,
+        &s,
+        &Change {
+            parent: Some(Some(sp("house"))),
+            ..Change::default()
+        },
+    )?;
+    let r = catch_up(&a, &b, "a", "b", &s)?;
+    assert!(r.rejected.is_empty(), "{:?}", r.rejected);
+    let parent = |n: &Brain| -> Result<Option<String>, Boxed> {
+        Ok(n.layout(OWNER)?
+            .into_iter()
+            .find(|p| p.space == s)
+            .ok_or("no place")?
+            .parent
+            .map(|p| p.as_str().to_string()))
+    };
+    assert_eq!(parent(&b)?, None);
+    // The parent comes (made by a later exchange): the next one applies the move.
+    b.add_space_for(&sp("house"), OWNER)?;
+    catch_up(&a, &b, "a", "b", &s)?;
+    assert_eq!(parent(&b)?, Some("house".to_string()));
+    Ok(())
+}
+
+#[test]
+fn a_file_is_never_bigger_than_a_node_reads_and_a_page_stays_under_its_size() -> Res {
+    let t = Temp::new("sync-size");
+    let a = node(&t, "a")?;
+    let s = sp("notes");
+    let mut big = b"%PDF-1.4\n".to_vec();
+    big.resize(memcp_core::files::MAX_BYTES + 1, b'a');
+    assert!(memcp_core::files::put(&a, &s, "me", "big.pdf", "", &big).is_err());
+    // Two files that fit: a page of 1.5 of them holds one, and the next page the other.
+    let mut one = b"%PDF-1.4\n".to_vec();
+    one.resize(1 << 20, b'b');
+    let mut two = b"%PDF-1.4\n".to_vec();
+    two.resize(1 << 20, b'c');
+    memcp_core::files::put(&a, &s, "me", "one.pdf", "", &one)?;
+    memcp_core::files::put(&a, &s, "me", "two.pdf", "", &two)?;
+    let limit = (1 << 20) * 2;
+    let mut after = 0;
+    loop {
+        let page = sync::events_after(&a, &s, after, 100, limit, None)?;
+        let bytes: usize = page
+            .events
+            .iter()
+            .map(|e| e.payload.to_string().len())
+            .sum();
+        assert!(page.events.len() <= 1 || bytes <= limit, "{bytes}");
+        after = page.next;
+        if !page.more {
+            break;
+        }
+    }
+    Ok(())
+}
