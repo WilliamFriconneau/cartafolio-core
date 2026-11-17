@@ -124,7 +124,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                     || paths.iter().any(|(s, _, _)| *s == space)
                 {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 whole.push((space, grant));
@@ -137,7 +137,7 @@ pub fn parse_spec(spec: &str) -> Result<ParsedSpec> {
                 }
                 if whole.iter().any(|(s, _)| *s == space) {
                     return Err(Error::Invalid(format!(
-                        "space {space} is listed twice (a vault is granted whole or by paths)"
+                        "space {space} is listed twice (a space is granted whole or by paths)"
                     )));
                 }
                 if paths.iter().any(|(s, p, _)| *s == space && *p == path) {
@@ -352,7 +352,7 @@ fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
         .optional()?;
     if is_vault.is_some() {
         return Err(Error::Invalid(format!(
-            "{name} is the name of a vault: a connection needs another name"
+            "{name} is the name of a space: a connection needs another name"
         )));
     }
     Ok(())

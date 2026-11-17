@@ -1093,7 +1093,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
         r.status >= 400
             && r.body_json()["error"]
                 .as_str()
-                .is_some_and(|m| m.contains("owns no vault")),
+                .is_some_and(|m| m.contains("owns no space")),
         "{}",
         r.body_json()
     );

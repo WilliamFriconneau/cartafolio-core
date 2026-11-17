@@ -599,7 +599,7 @@ fn an_unknown_kind_becomes_custom_and_a_person_with_nothing_has_nothing_to_expor
     assert!(
         export::export_person(&b2, &nobody, &out_dir(&w), 1_900_000_001)
             .err()
-            .is_some_and(|e| e.to_string().contains("owns no vault"))
+            .is_some_and(|e| e.to_string().contains("owns no space"))
     );
     let inside = w.brain.dir().join("exports");
     assert!(

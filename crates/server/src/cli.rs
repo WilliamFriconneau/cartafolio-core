@@ -289,7 +289,7 @@ pub fn adopt(
         );
     }
     println!(
-        "{} vault(s) now belong to {}. Instructions came with them; connections do not: make new ones.",
+        "{} space(s) now belong to {}. Instructions came with them; connections do not: make new ones.",
         done.len(),
         owner.name
     );

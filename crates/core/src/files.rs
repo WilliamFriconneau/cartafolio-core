@@ -618,7 +618,7 @@ pub fn erase_at(
         .optional()?;
     let Some((status, kind, at, text)) = written else {
         return Err(Error::Invalid(
-            "the transcript is not a fact of a vault you can read".into(),
+            "the transcript is not a fact of a space you can read".into(),
         ));
     };
     if status != "active" || kind.as_deref() == Some("file") {
