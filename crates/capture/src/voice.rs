@@ -22,6 +22,8 @@ use crate::whisper::{Heard, VoiceSettings, Whisper};
 const NOTE_MAX: usize = 3800;
 /// Tries before a recording that cannot be read is left alone.
 const MAX_FAILS: u64 = 3;
+/// The tag of the note left when a recording is given up: the page shows it and offers a retry.
+const FAILED_TAG: &str = "inbox/audio/failed";
 /// A recording is erased when its filed text is this old: seven days, and an hour (the memory refuses earlier).
 const ERASE_AFTER: i64 = 7 * 86_400 + 3600;
 /// Passes refused by the memory before an erasure is given up (the text was retired by someone, say).
@@ -156,6 +158,43 @@ fn fail(report: &mut VoiceReport, what: &str, e: &ClientError) {
     report.problems.push(format!("{what}: {e}"));
 }
 
+/// The spaces to read: the list as given, or, when it holds `all`, every space the key can write to (a space made
+/// since is read too, nothing is named twice).
+pub fn resolve_spaces(client: &mut Client, wanted: &[String]) -> Result<Vec<String>, ClientError> {
+    if !wanted.iter().any(|w| w.eq_ignore_ascii_case("all")) {
+        return Ok(wanted.to_vec());
+    }
+    let listed = client.call("spaces", json!({}))?;
+    let mut out: Vec<String> = listed["spaces"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|s| s["writable"] == true)
+        .filter_map(|s| s["name"].as_str().map(String::from))
+        .collect();
+    for w in wanted {
+        if !w.eq_ignore_ascii_case("all") && !out.contains(w) {
+            out.push(w.clone());
+        }
+    }
+    Ok(out)
+}
+
+/// Recordings that wait for a text, per space: `(space, how many, age in seconds of the oldest)`.
+pub fn waiting(client: &mut Client) -> Result<Vec<(String, u64, i64)>, ClientError> {
+    let listed = client.call("spaces", json!({}))?;
+    Ok(listed["spaces"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| {
+            let n = s["recordings_waiting"].as_u64().filter(|n| *n > 0)?;
+            let age = now() - s["oldest_recording_at"].as_i64().unwrap_or_else(now);
+            Some((s["name"].as_str()?.to_string(), n, age.max(0)))
+        })
+        .collect())
+}
+
 /// One pass over the inboxes of `vaults`: recordings transcribed, old ones erased.
 pub fn transcribe(
     client: &mut Client,
@@ -178,6 +217,13 @@ pub fn transcribe(
     }
     let mut state = State::open(state_dir)?;
     let whisper = Whisper::new(settings);
+    let vaults = &match resolve_spaces(client, vaults) {
+        Ok(v) => v,
+        Err(e) => {
+            fail(&mut report, "the spaces cannot be listed", &e);
+            return Ok(report);
+        }
+    };
     for vault in vaults {
         // The recordings waiting are the descriptions under inbox/audio, newest first.
         let listed = match client.call(
@@ -229,12 +275,25 @@ pub fn transcribe(
                 continue;
             }
             let seen = state.get(id);
-            if seen.is_some_and(|e| e["done_at"].is_i64())
-                || seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0) >= MAX_FAILS
-            {
+            if seen.is_some_and(|e| e["done_at"].is_i64()) {
                 continue;
             }
-            let started = seen
+            let fails = seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0);
+            if fails >= MAX_FAILS {
+                // Given up: left alone while its failure note stands; the person retires that note (the page's retry
+                // button) to have it read again.
+                let marked = listed["results"].as_array().into_iter().flatten().any(|m| {
+                    m["status"] == "active"
+                        && tags_of(m).contains(&FAILED_TAG)
+                        && m["text"].as_str().is_some_and(|t| t.contains(id))
+                });
+                if marked {
+                    continue;
+                }
+                state.entry(id)["fails"] = json!(0);
+            }
+            let started = state
+                .get(id)
                 .and_then(|e| e["parts"].as_array())
                 .is_some_and(|p| !p.is_empty());
             if !started {
@@ -417,6 +476,18 @@ fn one(
                 ""
             };
             report.problems.push(format!("{name}: {why}{last}"));
+            if n >= MAX_FAILS {
+                // Say it where the person looks: the id only (the note must not pass for the recording's text).
+                let args = json!({ "space": vault, "kind": "context", "tags": [FAILED_TAG],
+                    "text": format!("The recording {id} could not be transcribed after {MAX_FAILS} tries: {}", why.chars().take(200).collect::<String>()) });
+                if let Err(e) = client.call("remember", args) {
+                    fail(
+                        report,
+                        &format!("the failure of {name} cannot be noted"),
+                        &e,
+                    );
+                }
+            }
         }
     }
     state.save()

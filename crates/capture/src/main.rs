@@ -719,8 +719,12 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             Ok(code)
         }
         "transcribe" => {
+            // No `transcribe` line: every space the key can write to.
             if voice.0.is_empty() {
-                return Err("transcribe needs --config with `transcribe = VAULT, VAULT` and `whisper_model` (or `whisper_api_url`)".into());
+                if voice.1.whisper_model.as_os_str().is_empty() && voice.1.api_url.is_none() {
+                    return Err("transcribe needs --config with `whisper_model` (or `whisper_api_url`), and `transcribe = all` or `transcribe = SPACE, SPACE`".into());
+                }
+                voice.0 = vec!["all".into()];
             }
             let mut client = memcp_capture::client_for(&config.url, &config.key);
             let r = memcp_capture::transcribe(
@@ -770,8 +774,25 @@ fn run(raw: &[String]) -> Result<ExitCode, String> {
             Ok(ExitCode::SUCCESS)
         }
         _ => {
+            let url_key = (config.url.clone(), config.key.clone());
             let intake = Intake::open(config).map_err(|e| e.to_string())?;
             let items = intake.items();
+            // Recordings waiting for a text in the memory, per space (when it can be reached).
+            if let Ok(w) =
+                memcp_capture::waiting(&mut memcp_capture::client_for(&url_key.0, &url_key.1))
+            {
+                for (space, n, age) in w {
+                    println!(
+                        "recordings waiting for a text: {space}: {n}, the oldest for {}{}",
+                        if age >= 3600 {
+                            format!("{} h {} min", age / 3600, age % 3600 / 60)
+                        } else {
+                            format!("{} min", age / 60)
+                        },
+                        if age > 1800 { " (LATE)" } else { "" }
+                    );
+                }
+            }
             if items.is_empty() {
                 println!("nothing waits and nothing was sent lately");
             }
