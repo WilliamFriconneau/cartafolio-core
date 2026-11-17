@@ -35,7 +35,9 @@
 //! let retired = facts::retire(&conn, "me", &newer.id, "sold the boiler")?;
 //! assert_eq!(retired.status, "retired");
 //! assert_eq!(facts::history(&conn, &newer.id)?.len(), 2);
-//! # std::fs::remove_dir_all(&dir)?;
+//! # drop(conn);
+//! # drop(brain);
+//! # let _ = std::fs::remove_dir_all(&dir);
 //! # Ok::<(), memcp_core::Error>(())
 //! ```
 
