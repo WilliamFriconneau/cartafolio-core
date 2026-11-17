@@ -774,6 +774,47 @@ pub(crate) fn retire_as(
     read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))
 }
 
+/// Brings a retired fact back as a new version: a new active fact with the same text, tags, kind and validity, which
+/// points back at the retired one (`replaces`). The retired fact stays retired, in the history.
+pub fn restore(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
+    id: &str,
+    reason: Option<&str>,
+) -> Result<Fact> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let old = read_fact(&tx, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;
+    if old.status != "retired" {
+        return Err(Error::Invalid(format!(
+            "fact {id} is {}: only a retired fact can be restored",
+            old.status
+        )));
+    }
+    if let Some(other) = active_by_hash(&tx, &text::text_hash(&old.text))? {
+        return Err(Error::Invalid(format!(
+            "this text is active again already, as {}",
+            other.id
+        )));
+    }
+    let mut new = NewFact::agent(&old.text, author);
+    new.kind = old.kind.clone();
+    new.tags = old.tags.clone();
+    new.valid_from = Some(old.valid_from);
+    new.valid_to = old.valid_to;
+    let t = check_text(&new.text)?;
+    let fact = insert(&tx, space, author, &new, &t, Some(id))?;
+    event(
+        &tx,
+        id,
+        author,
+        "repoint",
+        json!({ "restored_as": fact.id, "reason": reason }),
+    )?;
+    tx.commit()?;
+    read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
+}
+
 /// The replacement chain around a fact, from the oldest version to the newest.
 pub fn history(conn: &Connection, id: &str) -> Result<Vec<Fact>> {
     let start = read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))?;

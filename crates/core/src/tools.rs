@@ -28,7 +28,7 @@ mod living;
 mod overview;
 mod sorting;
 
-const WRITE_TOOLS: [&str; 10] = [
+const WRITE_TOOLS: [&str; 11] = [
     "living_set",
     "rules_set",
     "library_raise",
@@ -36,6 +36,7 @@ const WRITE_TOOLS: [&str; 10] = [
     "deposit",
     "supersede",
     "retire",
+    "restore",
     "file_put",
     "file_retire",
     "file_erase",
@@ -286,6 +287,15 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 "type": "object",
                 "properties": { "id": { "type": "string" }, "reason": { "type": "string" } },
                 "required": ["id", "reason"]
+            }),
+        });
+        out.push(ToolDef {
+            name: "restore",
+            description: "Brings a retired fact back as a new version (same text and tags, pointing at the retired one, which stays retired in the history). A reason is optional.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": { "id": { "type": "string" }, "reason": { "type": "string" } },
+                "required": ["id"]
             }),
         });
         out.push(ToolDef {
@@ -935,6 +945,19 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             let f = facts::retire(&conn, author, id, reason)?;
             Ok(json!({ "result": "retired", "fact": f.to_json() }))
+        }
+        "restore" => {
+            let id = str_arg(args, "id")?;
+            let found = locate(brain, &caller.writable(), id)?;
+            let Some((space, conn, fact)) = found else {
+                return Err(ToolError::Invalid("unknown fact".into()));
+            };
+            if !caller.may_write_tags(&space, &fact.tags) {
+                return Err(ToolError::Invalid("unknown fact".into()));
+            }
+            let reason = args.get("reason").and_then(Value::as_str);
+            let f = facts::restore(&conn, &space, author, id, reason)?;
+            Ok(json!({ "result": "restored", "fact": f.to_json() }))
         }
         "recall" => {
             let query = str_arg(args, "query")?;

@@ -21,6 +21,8 @@ mod migration_tests;
 mod moves;
 pub mod origin;
 pub mod pairing;
+pub mod peers;
+pub mod people;
 pub mod rules;
 mod schema;
 mod space;

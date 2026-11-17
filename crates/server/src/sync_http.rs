@@ -44,6 +44,10 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         return refused(403, "this key does not reach this address");
     }
     let _ = access::touch(&ctl, &caller, req.ip.as_deref(), now);
+    // A machine the person paused is not served until they resume it (its status stays readable).
+    if op != "status" && memcp_core::peers::is_paused(&ctl, &caller.agent) {
+        return refused(423, "the sync with this machine is paused");
+    }
     let space = || -> Result<Space, Response> {
         let name = req.query.get("space").map(String::as_str).unwrap_or("");
         Space::new(name).map_err(|_| refused(400, "space: a space name"))

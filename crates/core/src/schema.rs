@@ -28,6 +28,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V17,
     CONTROL_V18,
     CONTROL_V19,
+    CONTROL_V20,
 ];
 
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
@@ -571,4 +572,16 @@ CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
 /// section, with its own controls.
 const CONTROL_V19: &str = r"
 ALTER TABLE connections ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
+";
+
+/// What the person says of each machine (peer): a name they gave it, a note, whether its sync is paused, and when it
+/// was forgotten (hidden from the lists). The peer's own key and progress live in `connections` and `sync_state`.
+const CONTROL_V20: &str = r"
+CREATE TABLE peer_meta (
+  peer TEXT PRIMARY KEY,
+  label TEXT,
+  note TEXT NOT NULL DEFAULT '',
+  paused_at INTEGER,
+  forgotten_at INTEGER
+) STRICT, WITHOUT ROWID;
 ";

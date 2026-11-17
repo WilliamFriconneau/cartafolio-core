@@ -73,6 +73,16 @@ impl Peer {
 
     /// One pass over every space the peer's key reaches.
     pub fn sync_once(&self, brain: &Brain, now: i64) -> Result<Pass, String> {
+        // The person paused this machine: nothing is exchanged until they resume it.
+        if brain
+            .open_control()
+            .is_ok_and(|c| memcp_core::peers::is_paused(&c, &self.name))
+        {
+            return Ok(Pass {
+                problems: vec!["paused".into()],
+                ..Pass::default()
+            });
+        }
         let listed = self.get("spaces")?;
         let theirs = listed["protocol"].as_i64().unwrap_or(1);
         if theirs > sync::PROTOCOL {

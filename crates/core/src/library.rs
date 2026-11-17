@@ -124,6 +124,24 @@ pub fn add_root(conn: &Connection, dir: &Path, now: i64) -> Result<i64> {
     Ok(conn.last_insert_rowid())
 }
 
+/// Unmounts a folder: forgets its index (entries, links). The person's folder is never touched. Whether it was mounted.
+pub fn remove_root(conn: &Connection, root_id: i64) -> Result<bool> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute(
+        "DELETE FROM library_fts WHERE rowid IN (SELECT id FROM library_entries WHERE root_id = ?1)",
+        [root_id],
+    )?;
+    tx.execute("DELETE FROM library_raised WHERE root_id = ?1", [root_id])?;
+    tx.execute(
+        "DELETE FROM library_links WHERE entry_id IN (SELECT id FROM library_entries WHERE root_id = ?1)",
+        [root_id],
+    )?;
+    tx.execute("DELETE FROM library_entries WHERE root_id = ?1", [root_id])?;
+    let n = tx.execute("DELETE FROM library_roots WHERE id = ?1", [root_id])?;
+    tx.commit()?;
+    Ok(n == 1)
+}
+
 /// The folders mounted on this space.
 pub fn roots(conn: &Connection) -> Result<Vec<Root>> {
     let mut st = conn.prepare(

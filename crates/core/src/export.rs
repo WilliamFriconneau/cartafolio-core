@@ -282,6 +282,16 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
     export_vaults(brain, who, &vaults, to, "", at)
 }
 
+/// A person's whole memory, to a folder the caller chose (inside the data directory is fine). `None` when they own
+/// no vault.
+pub(crate) fn export_all(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Option<PathBuf>> {
+    let vaults = owned(&brain.open_control()?, &who.id)?;
+    if vaults.is_empty() {
+        return Ok(None);
+    }
+    export_vaults(brain, who, &vaults, to, "", at).map(Some)
+}
+
 /// The export of one space of a person (what an archive keeps). `to` may be inside the data directory: the caller
 /// chose it (the archive folder).
 pub(crate) fn export_space(
