@@ -420,6 +420,7 @@ fn fts_query(stems: &[String]) -> Option<String> {
     let terms: Vec<String> = stems
         .iter()
         .filter(|s| seen.insert((*s).clone()))
+        .take(64)
         .map(|s| format!("\"{}\"", s.replace('"', "")))
         .collect();
     (!terms.is_empty()).then(|| terms.join(" OR "))

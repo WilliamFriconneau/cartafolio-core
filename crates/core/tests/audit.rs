@@ -110,3 +110,35 @@ fn a_peer_cannot_store_a_file_under_a_hostile_name_or_type() -> Res {
     assert_eq!(applied(&b, ev)?.rejected.len(), 1);
     Ok(())
 }
+
+#[test]
+fn tags_are_bounded_in_number_and_a_search_in_terms() -> Res {
+    let many: Vec<String> = (0..100).map(|i| format!("t{i}")).collect();
+    assert!(memcp_core::facts::normalize_tags(&many).is_err());
+    let ok: Vec<String> = (0..20).map(|i| format!("t{i}")).collect();
+    assert_eq!(memcp_core::facts::normalize_tags(&ok)?.len(), 20);
+    let words: String = (0..5000).map(|i| format!("word{i} ")).collect();
+    assert!(memcp_core::facts::fts_terms(&words) <= 64);
+    Ok(())
+}
+
+#[cfg(unix)]
+#[test]
+fn an_export_that_holds_a_link_is_not_verified() -> Res {
+    use memcp_core::users::{self, OWNER};
+    let t = Temp::new("audit-export-link");
+    let brain = Brain::init(&t.path().join("data"), &[sp("legacy")], Language::English)?;
+    let ctl = brain.open_control()?;
+    let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
+    brain.add_vault(&sam.id, "sam", "work")?;
+    let out = t.path().join("out");
+    let root = memcp_core::export::export_person(&brain, &sam, &out, 1_900_000_000)?;
+    memcp_core::export::verify_export(&root)?;
+    // The same bytes, reached through a link: the fingerprint matches, the file is still not in the export.
+    let readme = root.join("README.txt");
+    let elsewhere = t.path().join("elsewhere.txt");
+    std::fs::rename(&readme, &elsewhere)?;
+    std::os::unix::fs::symlink(&elsewhere, &readme)?;
+    assert!(memcp_core::export::verify_export(&root).is_err());
+    Ok(())
+}

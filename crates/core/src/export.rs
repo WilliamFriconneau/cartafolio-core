@@ -383,6 +383,12 @@ pub fn export_person(brain: &Brain, who: &User, to: &Path, at: i64) -> Result<Pa
 fn walk(dir: &Path, base: &Path, out: &mut Vec<String>) -> Result<()> {
     for entry in fs::read_dir(dir)? {
         let path = entry?.path();
+        if fs::symlink_metadata(&path)?.file_type().is_symlink() {
+            return Err(Error::Invalid(format!(
+                "{} is a link: an export holds only plain files",
+                path.display()
+            )));
+        }
         if path.is_dir() {
             walk(&path, base, out)?;
         } else if let Ok(rel) = path.strip_prefix(base) {
@@ -416,6 +422,11 @@ pub fn verify_export(dir: &Path) -> Result<Value> {
             return Err(Error::Invalid(format!(
                 "the manifest names a path outside the export: {rel}"
             )));
+        }
+        let kind = fs::symlink_metadata(dir.join(rel))
+            .map_err(|e| Error::Invalid(format!("{rel} cannot be read: {e}")))?;
+        if !kind.file_type().is_file() {
+            return Err(Error::Invalid(format!("{rel} is not a plain file")));
         }
         let bytes = fs::read(dir.join(rel))
             .map_err(|e| Error::Invalid(format!("{rel} cannot be read: {e}")))?;

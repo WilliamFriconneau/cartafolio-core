@@ -896,6 +896,13 @@ fn copy_file(
     f: &TheirFile,
     undo: &mut Undo,
 ) -> Result<()> {
+    // A fingerprint is 64 hexadecimal digits and nothing else: it names a file under `blobs`, never a path.
+    if f.sha256.len() != 64 || !f.sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
+        return Err(Error::Invalid(format!(
+            "{} carries a fingerprint that is not one",
+            f.name
+        )));
+    }
     let from = blobs.join(&f.sha256);
     let bytes = fs::read(&from)
         .map_err(|e| Error::Invalid(format!("the bytes of {} cannot be read: {e}", f.name)))?;

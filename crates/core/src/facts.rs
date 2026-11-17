@@ -230,6 +230,9 @@ pub fn inbox(conn: &Connection) -> Result<(i64, Option<i64>)> {
     )?)
 }
 
+/// Tags on one note, at most.
+pub const MAX_TAGS: usize = 64;
+
 /// A tag in its one accepted form, or an error that says what is accepted (an assistant
 /// reads it and tries again). Lowercase, accents and spaces tolerated and normalised:
 /// `Évaluation / Maths` becomes `evaluation/maths`. Segments of letters, digits, `-` and
@@ -269,6 +272,11 @@ pub fn normalize_tag(raw: &str) -> Result<String> {
 
 /// The tags of a fact, each normalised, without repeats, in order.
 pub fn normalize_tags(raw: &[String]) -> Result<Vec<String>> {
+    if raw.len() > MAX_TAGS {
+        return Err(Error::Invalid(format!(
+            "at most {MAX_TAGS} tags on one note"
+        )));
+    }
     let mut out: Vec<String> = Vec::new();
     for r in raw {
         let t = normalize_tag(r)?;
@@ -461,11 +469,20 @@ fn insert_unlogged(
     read_fact(conn, &id)?.ok_or_else(|| Error::Schema("fact not found after writing".into()))
 }
 
+/// The most distinct words one search looks for: an OR of thousands of terms is a slow query, not a better one.
+const MAX_SEARCH_TERMS: usize = 64;
+
+/// How many terms the search of `text` would use (see `MAX_SEARCH_TERMS`).
+pub fn fts_terms(text: &str) -> usize {
+    fts_query(&text::stems(text)).map_or(0, |q| q.matches(" OR ").count() + 1)
+}
+
 fn fts_query(stems: &[String]) -> Option<String> {
     let mut seen = std::collections::BTreeSet::new();
     let terms: Vec<String> = stems
         .iter()
         .filter(|s| seen.insert((*s).clone()))
+        .take(MAX_SEARCH_TERMS)
         .map(|s| format!("\"{}\"", s.replace('"', "")))
         .collect();
     if terms.is_empty() {
