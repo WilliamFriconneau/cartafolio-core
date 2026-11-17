@@ -1,0 +1,28 @@
+# tiny_http 0.12.0 (MIT OR Apache-2.0, https://github.com/tiny-http/tiny-http), kept here with two fixes, each marked
+# "memcp:" in the code: the connection pool starts a thread for every connection no idle thread is free to take
+# (src/util/task_pool.rs), and a body left unread is drained through a small buffer (src/util/equal_reader.rs).
+# The TLS features are not offered. Used through [patch.crates-io] in the workspace manifest.
+[package]
+name = "tiny_http"
+version = "0.12.0"
+description = "Low level HTTP server library"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/tiny-http/tiny-http"
+edition = "2018"
+publish = false
+
+[features]
+default = []
+ssl = []
+ssl-openssl = []
+ssl-rustls = []
+
+[dependencies]
+ascii = "1.0"
+chunked_transfer = "1"
+log = "0.4.4"
+httpdate = "1.0.2"
+
+# Warnings of the original code, left as they were.
+[lints.rust]
+unused = { level = "allow", priority = -1 }

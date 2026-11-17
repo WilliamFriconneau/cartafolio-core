@@ -20,6 +20,7 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      - run: cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib
 
   e2e:
     # Real processes: the programs of the project talk to each other on loopback ports (scripts/e2e.sh).

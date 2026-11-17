@@ -7,6 +7,7 @@ echo "== format";  cargo fmt --all --check
 echo "== lints";   cargo clippy --workspace --all-targets -- -D warnings
 [ "${1:-}" = quick ] && exit 0
 echo "== tests";   cargo test --workspace
+cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib
 if command -v cargo-deny >/dev/null 2>&1; then echo "== deny"; cargo deny check; fi
 if command -v cargo-audit >/dev/null 2>&1; then echo "== audit"; cargo audit; fi
 echo "ok"
