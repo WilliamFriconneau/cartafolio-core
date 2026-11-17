@@ -1,5 +1,14 @@
 # Changelog
 
+## 20261117.0.19
+
+- Adding a node from any node, like Syncthing: each node has an id and a link (QR); a request shows the same three words on both sides and on every peer of the person; an introducer ticket needs no words; the page lists this node, the nodes and the requests, the older codes are under Advanced (routes and forms in docs/CHANGELOG-API.md).
+
+## 20261117.0.18
+
+- `notes_move`: move the notes of a tag to another space by MCP; `space_create` and `space_move` documented.
+- The keyword learning ignores more empty words (French, English, Spanish).
+
 ## Unreleased
 
 - **« À trier » is now called Inbox**, in English, French and Spanish: on the page, in the tool descriptions and the instructions given to assistants, in the janitor's notes, the command line and the docs. The box is stored as before (kind `a-trier`, space `<person>-a-trier`), so a box made by an earlier version is the same box: nothing is renamed or migrated, and the swarm still pairs the boxes of a person by kind, whatever their names. A spaces file whose default space is still labelled « À trier » is read as « Inbox ».

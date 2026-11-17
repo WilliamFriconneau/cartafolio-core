@@ -105,7 +105,7 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          the connection commands, under one word (`connections`, `connect`... still work)
   invite code|ticket|pending|approve ID|deny ID|allow DEVICE [--minutes N]
                                          devices joining the person's memory (a running node: --node)
-  join ADDRESS [--ticket TICKET]         asks another node to let this one in (a running node: --node)
+  join LINK|ID|ADDRESS [--ticket TICKET] asks another node to let this one in (a running node: --node)
 
 Against a running node, with a key (docs/CLI.md): `memcp --node ADDRESS --key-file FILE <command>`, or MEMCP_NODE and
 MEMCP_KEY_FILE / MEMCP_KEY. The same commands print the same text; --json prints the node's JSON; --agent NAME (or

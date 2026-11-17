@@ -330,7 +330,7 @@ pub const COMMANDS: &[Entry] = &[
     ),
     e(
         "invite ticket",
-        "a one-time ticket another device joins with",
+        "a link with a one-time ticket another node joins with",
         Remote::Direct,
         false,
     ),
@@ -350,7 +350,7 @@ pub const COMMANDS: &[Entry] = &[
     ),
     e(
         "join",
-        "asks another node to let this one in",
+        "asks another node (link, id or address) to let this node in",
         Remote::Direct,
         true,
     ),

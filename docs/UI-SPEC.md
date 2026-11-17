@@ -75,12 +75,27 @@ else is paid. An ended subscription only pauses that synchronisation, and says s
 
 ### 4. Settings
 
-Machines (the map: assistants in the cloud and through which node, assistants on the machines, every node with its
-version, last activity and how it is reached; a machine reachable only locally « syncs on opening »), Assistants
+Machines (see below), Assistants
 (connect one: address and key, or the line for Claude Code; rights per space), Engines (transcription: the device's
 own or Whisper in the app; reading documents; summaries: Apple Intelligence when the device has it), Privacy (Face ID
 or Touch ID at every opening, the veil in the app switcher), MemCP Health, Advanced (export, start over). On the node
 page: People, Updates, the janitor.
+
+**Machines** is the one place where nodes meet, the same on every platform and kept lean. In this order, and nothing else
+above Advanced:
+
+1. *This node*: its name, its **id** (`ABCD-EFGH-IJKL`), its addresses, and **Show my link**: the link and its QR code
+   (`memcp://node?id=…&addr=…`), with a button to make a link without words (one use, ten minutes).
+2. *The nodes*: one line each, with its state (in step, sending, receiving, paused, revoked), its last sync, its
+   version, « older version » when it is behind, how it is reached and, when it told several addresses, **reachable via**.
+   A node a peer told about (not yet linked) shows **Add this node**.
+3. **Add a node**: one field (a link, an id or an address; the camera scans a code on a phone) and one button. This node
+   asks THAT node; the three words appear here and on the other node; with a link made without words there are none.
+4. *Pending requests*: a device or node asking to join shows on every node of the person, with its three words, the node
+   that was asked and its id. Answering on one clears it everywhere.
+
+Codes (show a code, type a code), the older way, are under Advanced, with the other less used controls. The routes are in
+FEDERATION.md (« Adding a node »); none was removed.
 
 ## First opening
 
@@ -112,12 +127,17 @@ Then, once, every permission the app will need, each with why. Then the use case
 12. *Organise*: a space created inside a folder, its keywords set, a note refiled by hand and the router learning it.
 13. *Connect*: Claude Code on the same computer through `memcp mcp`; Home Assistant Assist through its MCP integration.
 14. *Own it*: export everything with fingerprints; read it back on another node.
+15. *Add a node*: Settings › Machines › paste or scan the other node's link, compare the three words (or none, with a
+    link made without words on a node already held), the other node's person answers from any of their nodes; both become
+    peers and the list shows the new node in step.
 
 ## What each screen reads
 
 | Screen | Source |
 |---|---|
 | Machines map, sync | `GET /sync/status`, MCP `peers` (node, peers with version, last_seen, behind, exposures, only_local; connections with kind and via) |
+| This node (id, link, QR), add a node | `GET /admin/api/node`, `POST /admin/api/nodes/add`, `POST /admin/api/nodes/invite`, `POST /admin/api/nodes/via`; the request: `GET /admin/api/join-memory?id=` |
+| Pending requests | `GET /admin/api/join/pending` (also those of the peers), `POST /admin/api/join/approve`, `POST /admin/api/join/deny` |
 | Space tree | MCP `spaces` |
 | Boards and lists | MCP `living_get`, `living_set` |
 | Journal | `GET /admin/api/journal`; on a device, the local copy (`node_recent`) and `living_get` on `index` |

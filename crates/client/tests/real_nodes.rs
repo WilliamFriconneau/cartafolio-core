@@ -170,6 +170,8 @@ struct Node {
     port: u16,
     server: Proc,
     console: Option<String>,
+    /// Variables of the environment of the served node (the tests that need a short wait for a request to expire).
+    env: Vec<(String, String)>,
     /// The `memcp.toml` the node and its commands read (`MEMCP_CONFIG`), when the test has one.
     config: Option<PathBuf>,
 }
@@ -183,6 +185,7 @@ impl Node {
             port: 0,
             server: Proc(None),
             console: None,
+            env: Vec::new(),
             config: None,
         };
         let mut args = vec!["init"];
@@ -241,7 +244,8 @@ impl Node {
                 "--threads",
                 "8",
             ]);
-            cmd.env("MEMCP_SYNC_BIN", exe("memcp-sync"));
+            cmd.envs(self.env.clone())
+                .env("MEMCP_SYNC_BIN", exe("memcp-sync"));
             self.server = Proc::spawn(cmd);
             let end = Instant::now() + Duration::from_secs(20);
             loop {
@@ -1061,6 +1065,7 @@ fn backup_export_adopt_and_merge_make_the_same_memory_again() {
         port: 0,
         server: Proc(None),
         console: None,
+        env: Vec::new(),
         config: None,
     };
     assert_eq!(restored.fingerprint(), a.fingerprint());
@@ -1206,6 +1211,381 @@ fn a_node_killed_in_the_middle_of_a_sync_resumes_where_it_stopped() {
     a.serve();
     b.sync_ok(&peer);
     assert_eq!(b.fingerprint(), a.fingerprint());
+}
+
+// --- (h) adding a node by its id or link, from any node ------------------------------------------------------------
+
+/// This node's card (`GET /node`): id, name, addresses, link.
+fn card(n: &mut Node) -> Value {
+    let (status, v) = n.admin_get("/node");
+    assert_eq!(status, 200, "{v}");
+    v
+}
+
+/// `joiner`'s page asks the node a pasted text names; the id to follow the request by.
+fn add(joiner: &mut Node, text: &str) -> String {
+    let (status, v) = joiner.admin_post("/nodes/add", &json!({ "link": text }));
+    assert_eq!(status, 200, "{v}");
+    v["id"].as_str().unwrap().to_string()
+}
+
+/// The state of a request this node started, until it is one of `want` (or any final one).
+fn watch(n: &mut Node, id: &str, secs: u64, want: &str) -> Value {
+    let mut last = Value::Null;
+    until(secs, &format!("the request to be {want}"), || {
+        let (_, v) = n.admin_get(&format!("/join-memory?id={id}"));
+        last = v;
+        last["state"] == json!(want)
+    });
+    last
+}
+
+/// A node that holds the memory of `host` and keeps in step with it by itself (its own page asked, the host's person
+/// approved): returns it served.
+fn peer_of(root: &Root, host: &mut Node, name: &str) -> Node {
+    let mut n = Node::init(root, name, false);
+    n.serve();
+    let link = card(host)["link"].as_str().unwrap().to_string();
+    let id = add(&mut n, &link);
+    approve(host, name);
+    watch(&mut n, &id, 30, "approved");
+    n
+}
+
+#[test]
+fn a_node_has_an_id_that_it_tells_with_its_addresses_in_a_link() {
+    let root = Root::new("h1");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let c = card(&mut a);
+    let id = c["id"].as_str().unwrap();
+    assert_eq!(id.len(), 14, "{id}");
+    assert_eq!(id.matches('-').count(), 2);
+    // The same id after a restart, and in the well-known answer.
+    a.stop();
+    a.serve();
+    assert_eq!(card(&mut a)["id"], c["id"]);
+    let mut r = http()
+        .get(&format!("{}/.well-known/memcp", a.base()))
+        .call()
+        .unwrap();
+    let (_, wk) = read_json(&mut r);
+    assert_eq!(wk["id"], c["id"], "{wk}");
+    // The link carries the id and the addresses, and no ticket.
+    let link = c["link"].as_str().unwrap();
+    assert!(link.starts_with("memcp://node?id="), "{link}");
+    assert!(
+        link.contains(&format!("addr=http%3A%2F%2F127.0.0.1%3A{}", a.port)),
+        "{link}"
+    );
+    assert!(!link.contains("&t="), "{link}");
+    assert!(c["qr"].as_str().unwrap().contains("<svg"));
+    // Nonsense is refused with words, not started.
+    let (status, v) = a.admin_post("/nodes/add", &json!({ "link": "hello there" }));
+    assert_eq!(status, 400, "{v}");
+    let (status, v) = a.admin_post("/nodes/add", &json!({ "link": id }));
+    assert_eq!(status, 400, "{v}");
+    assert!(v["error"].as_str().unwrap().contains("this node"), "{v}");
+}
+
+#[test]
+fn a_link_names_a_node_and_the_one_that_answers_must_be_it() {
+    let root = Root::new("h2");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let mut other = Node::init(&root, "other", false);
+    other.serve();
+    // The link of A with the id of another node: the address answers, but it is not that node.
+    let wrong = card(&mut other)["id"].as_str().unwrap().to_string();
+    let link = format!(
+        "memcp://node?id={wrong}&addr=http%3A%2F%2F127.0.0.1%3A{}",
+        a.port
+    );
+    let id = add(&mut b, &link);
+    let v = watch(&mut b, &id, 20, "failed");
+    assert!(v["error"].as_str().unwrap().contains("not the one"), "{v}");
+    let (_, pending) = a.admin_get("/join/pending");
+    assert!(
+        pending["requests"].as_array().unwrap().is_empty(),
+        "nothing was asked of A"
+    );
+}
+
+#[test]
+fn a_node_adds_another_by_its_link_and_a_peer_of_the_other_answers() {
+    let root = Root::new("h3");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut ca = a.client("claude", "all");
+    fill(&mut ca, &SPACES, 9, 800);
+    // A2 is a peer of A (the same person); it keeps in step with it by itself.
+    let mut a2 = peer_of(&root, &mut a, "alpha2");
+    until(60, "A2 to hold the memory of A", || a2.count() == 9);
+    // B, a new node, is given A's id and asks A: three words on its side.
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let a_card = card(&mut a);
+    let (status, v) = b.admin_post("/nodes/add", &json!({ "link": a_card["link"] }));
+    assert_eq!(status, 200, "{v}");
+    let id = v["id"].as_str().unwrap().to_string();
+    let shown = watch(&mut b, &id, 20, "waiting")["check"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    // A shows the request with the same three words, and the id of the node that asks.
+    let (_, on_a) = a.admin_get("/join/pending");
+    let req = on_a["requests"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["device"] == json!("beta"))
+        .cloned()
+        .unwrap();
+    assert_eq!(req["check"], json!(shown));
+    assert_eq!(req["node_id"], card(&mut b)["id"]);
+    // A2, a node of the same person, learns of it at its next exchange with A and shows the same three words.
+    let mut theirs = Value::Null;
+    until(60, "A2 to show the request of B", || {
+        let (_, v) = a2.admin_get("/join/pending");
+        theirs = v["requests"]
+            .as_array()
+            .and_then(|l| l.iter().find(|r| r["device"] == json!("beta")).cloned())
+            .unwrap_or(Value::Null);
+        !theirs.is_null()
+    });
+    assert_eq!(theirs["check"], json!(shown), "{theirs}");
+    assert_eq!(theirs["node"], json!("alpha"), "{theirs}");
+    // The person answers on A2: it leaves A2's list at once.
+    let (status, done) = a2.admin_post("/join/approve", &json!({ "id": theirs["id"] }));
+    assert_eq!(status, 200, "{done}");
+    assert_eq!(done["queued"], json!(true), "{done}");
+    let (_, again) = a2.admin_get("/join/pending");
+    assert!(
+        again["requests"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|r| r["device"] != json!("beta")),
+        "{again}"
+    );
+    // The answer reaches A with the next exchange, and B is in: its own key, and the whole memory.
+    watch(&mut b, &id, 60, "approved");
+    let (_, on_a) = a.admin_get("/join/pending");
+    assert!(on_a["requests"].as_array().unwrap().is_empty(), "{on_a}");
+    until(60, "B to hold the memory", || b.count() == 9);
+    assert_eq!(b.fingerprint(), a.fingerprint());
+    // A answer given twice finds nothing (it was answered elsewhere).
+    let (status, _) = a.admin_post("/join/approve", &json!({ "id": req["id"] }));
+    assert_eq!(status, 404);
+}
+
+#[test]
+fn a_denial_from_a_peer_reaches_the_node_that_asked() {
+    let root = Root::new("h4");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut a2 = peer_of(&root, &mut a, "alpha2");
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let link = card(&mut a)["link"].as_str().unwrap().to_string();
+    let id = add(&mut b, &link);
+    watch(&mut b, &id, 20, "waiting");
+    let mut found = Value::Null;
+    until(60, "A2 to show the request", || {
+        let (_, v) = a2.admin_get("/join/pending");
+        found = v["requests"]
+            .as_array()
+            .and_then(|l| l.first().cloned())
+            .unwrap_or(Value::Null);
+        !found.is_null()
+    });
+    let (status, v) = a2.admin_post("/join/deny", &json!({ "id": found["id"] }));
+    assert_eq!(status, 200, "{v}");
+    assert_eq!(v["result"], json!("denied"));
+    watch(&mut b, &id, 60, "denied");
+    assert!(
+        b.data
+            .join("peers")
+            .read_dir()
+            .map_or(true, |d| d.count() == 0)
+    );
+}
+
+#[test]
+fn a_request_nobody_answers_expires_everywhere() {
+    let root = Root::new("h5");
+    let mut a = Node::init(&root, "alpha", true);
+    a.env.push(("MEMCP_JOIN_TTL".into(), "6".into()));
+    a.serve();
+    let mut b = Node::init(&root, "beta", false);
+    b.serve();
+    let link = card(&mut a)["link"].as_str().unwrap().to_string();
+    let id = add(&mut b, &link);
+    watch(&mut b, &id, 20, "waiting");
+    let (_, on_a) = a.admin_get("/join/pending");
+    let req = on_a["requests"][0].clone();
+    assert!(req["expires_in"].as_i64().unwrap() <= 6, "{req}");
+    // Nobody answers: it is expired for the asker, gone from the list, and answering it is refused.
+    watch(&mut b, &id, 30, "expired");
+    let (_, on_a) = a.admin_get("/join/pending");
+    assert!(on_a["requests"].as_array().unwrap().is_empty(), "{on_a}");
+    let (status, _) = a.admin_post("/join/approve", &json!({ "id": req["id"] }));
+    assert_eq!(status, 404);
+    assert!(
+        b.data
+            .join("peers")
+            .read_dir()
+            .map_or(true, |d| d.count() == 0)
+    );
+}
+
+#[test]
+fn a_link_with_a_ticket_from_a_held_node_joins_without_words_and_a_third_node_learns_the_others() {
+    let root = Root::new("h6");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut ca = a.client("claude", "all");
+    fill(&mut ca, &SPACES, 6, 900);
+    // B is a peer of A. The person scans the QR of B (a node they hold) on C: a link with a one-time ticket.
+    let mut b = peer_of(&root, &mut a, "beta");
+    until(60, "B to hold the memory", || b.count() == 6);
+    let (status, inv) = b.admin_post("/nodes/invite", &json!({}));
+    assert_eq!(status, 200, "{inv}");
+    let link = inv["link"].as_str().unwrap().to_string();
+    assert!(link.contains("&t="), "{link}");
+    assert!(inv["qr"].as_str().unwrap().contains("<svg"));
+    let mut c = Node::init(&root, "gamma", false);
+    c.serve();
+    let id = add(&mut c, &link);
+    // No words: it is in at once, and holds the memory of the person.
+    watch(&mut c, &id, 30, "approved");
+    until(60, "C to hold the memory", || c.count() == 6);
+    assert_eq!(c.fingerprint(), a.fingerprint());
+    let (_, pending) = b.admin_get("/join/pending");
+    assert!(
+        pending["requests"].as_array().unwrap().is_empty(),
+        "{pending}"
+    );
+    // The ticket works once: the same link is refused the second time, and nothing waits for a person.
+    let mut d = Node::init(&root, "delta", false);
+    d.serve();
+    let again = add(&mut d, &link);
+    let v = watch(&mut d, &again, 30, "failed");
+    assert!(v["error"].as_str().unwrap().contains("ticket"), "{v}");
+    let (_, on_b) = b.admin_get("/join/pending");
+    assert!(on_b["requests"].as_array().unwrap().is_empty(), "{on_b}");
+    // C is a peer of B only: through B it learns A, with its id and its addresses (the introducer pattern).
+    let a_card = card(&mut a);
+    let mut row = Value::Null;
+    until(90, "C to learn A through B", || {
+        let (_, st) = c.admin_get("/sync/status");
+        row = st["peers"]
+            .as_array()
+            .and_then(|l| l.iter().find(|p| p["name"] == json!("alpha")).cloned())
+            .unwrap_or(Value::Null);
+        !row.is_null()
+            && row["id"] == a_card["id"]
+            && row["addresses"].as_array().is_some_and(|l| !l.is_empty())
+    });
+    assert_eq!(row["direct"], json!(false), "{row}");
+    // The person chooses the address by which C will ask A, among those A told.
+    let addr = row["addresses"][0].as_str().unwrap().to_string();
+    let (status, v) = c.admin_post(
+        "/nodes/via",
+        &json!({ "id": a_card["id"], "address": addr }),
+    );
+    assert_eq!(status, 200, "{v}");
+    let (status, v) = c.admin_post(
+        "/nodes/via",
+        &json!({ "id": a_card["id"], "address": "http://203.0.113.9:1" }),
+    );
+    assert_eq!(status, 400, "an address A never told is refused: {v}");
+    let (_, st) = c.admin_get("/sync/status");
+    let seen = st["peers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == json!("alpha"))
+        .unwrap();
+    assert_eq!(seen["via"], json!(addr));
+    // C adds A with the id alone: no address typed; A's person compares the three words and says yes.
+    let id = add(&mut c, a_card["id"].as_str().unwrap());
+    let shown = watch(&mut c, &id, 20, "waiting")["check"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let on_a = approve(&mut a, "gamma");
+    assert_eq!(on_a, shown);
+    watch(&mut c, &id, 30, "approved");
+    // A direct peer from now on, with two ways to the memory.
+    until(60, "C to be direct with A", || {
+        let (_, st) = c.admin_get("/sync/status");
+        st["peers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == json!("alpha") && p["direct"] == json!(true))
+    });
+    // A node already linked is not asked again.
+    // (the first exchange with A records the link: a moment after the approval)
+    let mut said = Value::Null;
+    until(60, "C to know it is linked to A", || {
+        let (status, v) = c.admin_post("/nodes/add", &json!({ "link": a_card["id"] }));
+        said = v;
+        status == 400
+    });
+    assert!(
+        said["error"].as_str().unwrap().contains("already"),
+        "{said}"
+    );
+}
+
+#[test]
+fn a_revoked_node_is_refused_and_the_revocation_reaches_a_third_node() {
+    let root = Root::new("h7");
+    let mut a = Node::init(&root, "alpha", true);
+    a.serve();
+    let mut ca = a.client("claude", "all");
+    fill(&mut ca, &SPACES, 3, 1_000);
+    let b = peer_of(&root, &mut a, "beta");
+    let mut c = peer_of(&root, &mut a, "gamma");
+    let mut seen = false;
+    until(90, "C to list B", || {
+        let (_, st) = c.admin_get("/sync/status");
+        seen = st["peers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == json!("beta"));
+        seen
+    });
+    // The person revokes B on A: its key stops, and the revocation spreads to C through A.
+    let (_, st) = a.admin_get("/sync/status");
+    let conn = st["peers"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|p| p["name"] == json!("beta"))
+        .unwrap()["connection"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    let (status, v) = a.admin_post("/nodes/revoke", &json!({ "peer": conn }));
+    assert_eq!(status, 200, "{v}");
+    until(90, "C to drop B", || {
+        let (_, st) = c.admin_get("/sync/status");
+        !st["peers"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == json!("beta"))
+    });
+    // B holds what it had and is refused from now on.
+    let peering = peering_of(&b.data);
+    let (code, said) = b.sync(&peering, &[]);
+    assert_eq!(code, 1, "{said}");
 }
 
 // --- (j) the node's own intake: voice notes and watched folders ---------------------------------------------------
@@ -2055,7 +2435,11 @@ fn devices_join_through_the_command_line_and_the_folder_command_is_pending() {
     );
     let ticket = remote(&node, &key, &[], &["invite", "ticket"]);
     assert!(ticket.status.success(), "{}", text_of(&ticket));
-    assert!(text_of(&ticket).contains("Ticket"), "{}", text_of(&ticket));
+    assert!(
+        text_of(&ticket).contains("memcp://node?"),
+        "{}",
+        text_of(&ticket)
+    );
     let pending = remote(&node, &key, &[], &["invite", "pending"]);
     assert!(
         text_of(&pending).contains("No device is waiting"),

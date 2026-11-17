@@ -539,18 +539,16 @@ fn direct(t: &Target, a: &Args, words: &str) -> Result<(), Failure> {
             Ok(())
         }
         "invite ticket" => {
-            let v = call_json(t, "POST", "/join/invite", &json!({}))?;
+            let v = call_json(t, "POST", "/nodes/invite", &json!({}))?;
             if t.json {
                 show(&v);
             } else {
                 crate::sayln!(
-                    "Ticket (once, valid {} minutes): {}",
+                    "Link with a one-time ticket (valid {} minutes): {}",
                     v["expires_in"].as_i64().unwrap_or(600) / 60,
-                    v["ticket"].as_str().unwrap_or("?")
+                    v["link"].as_str().unwrap_or("?")
                 );
-                crate::sayln!(
-                    "On the other node: `memcp --node ... join ADDRESS --ticket TICKET`."
-                );
+                crate::sayln!("On the other node: `memcp --node ... join LINK`.");
             }
             Ok(())
         }
@@ -643,17 +641,23 @@ fn folder_answer(t: &Target, status: u16, text: &str) -> Result<(), Failure> {
 
 /// `join ADDRESS [--ticket T]`: asks that node to let this node in, and follows the answer.
 fn join(t: &Target, a: &Args) -> Result<(), Failure> {
-    let address = a
+    let target = a
         .pos
         .get(1)
-        .ok_or_else(|| bad("join ADDRESS [--ticket TICKET]"))?;
-    let ticket = a.flags.get("--ticket");
-    let started = call_json(
-        t,
-        "POST",
-        "/join-memory",
-        &json!({ "address": address, "ticket": ticket }),
-    )?;
+        .ok_or_else(|| bad("join LINK|ID|ADDRESS [--ticket TICKET]"))?;
+    // A ticket given apart goes into a link with the address, as the node reads it.
+    let link = match a.flags.get("--ticket") {
+        Some(ticket) if target.starts_with("http") => {
+            format!("memcp://node?addr={}&t={}", pct(target), pct(ticket))
+        }
+        Some(_) => {
+            return Err(bad(
+                "--ticket goes with an address (a link carries its own)",
+            ));
+        }
+        None => target.clone(),
+    };
+    let started = call_json(t, "POST", "/nodes/add", &json!({ "link": link }))?;
     let id = started["id"]
         .as_str()
         .ok_or_else(|| (EXIT_ODD, "the node gave no request id".to_string()))?

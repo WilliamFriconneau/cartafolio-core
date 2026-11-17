@@ -367,9 +367,9 @@ fn pairings_made_under_the_old_table_name_are_kept_and_still_redeemed() {
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
             .unwrap();
-        // The program as it was one release ago: the table under its old name.
-        migrate(&conn, &CONTROL_MIGRATIONS[..CONTROL_MIGRATIONS.len() - 1]).unwrap();
-        assert_eq!(version(&conn), CONTROL_MIGRATIONS.len() - 1);
+        // The program as it was two releases ago (before the pairing table was renamed and the node id was added): the old table name.
+        migrate(&conn, &CONTROL_MIGRATIONS[..CONTROL_MIGRATIONS.len() - 2]).unwrap();
+        assert_eq!(version(&conn), CONTROL_MIGRATIONS.len() - 2);
         conn.execute("INSERT INTO meta (k, v) VALUES ('kind', 'control')", [])
             .unwrap();
         conn.execute(

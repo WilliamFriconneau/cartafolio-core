@@ -66,6 +66,43 @@ fn recover(app: &App, ctl: &Connection, req: &Request, now: i64) -> Response {
     }
 }
 
+/// `GET /node`: this node as a person shows it to another: its id, its name, the addresses it can be reached at and
+/// its link (what a QR code carries), without a ticket.
+fn node_card(app: &App, now: i64) -> Response {
+    let Ok(mut node) = memcp_core::directory::node_json(&app.brain, now) else {
+        return err(500, "storage failed");
+    };
+    let Ok(link) = memcp_core::directory::own_link(&app.brain, &app.public_url, None) else {
+        return err(500, "storage failed");
+    };
+    let text = link.to_link();
+    node["addresses"] = json!(link.addresses);
+    node["link"] = json!(text);
+    node["qr"] = json!(qr_svg(&text));
+    Response::json(200, &node)
+}
+
+/// The directory name of the node a request names: by `name`, by its `id`, or by the `peer` connection that reaches it.
+fn nodes_name(app: &App, body: &Value) -> Result<String, Response> {
+    let entries = memcp_core::directory::entries(&app.brain).map_err(fail)?;
+    let text = |k: &str| {
+        body.get(k)
+            .and_then(Value::as_str)
+            .filter(|v| !v.is_empty())
+    };
+    entries
+        .into_iter()
+        .find(|e| {
+            text("name") == Some(e.name.as_str())
+                || text("peer").is_some_and(|p| e.link.as_deref() == Some(p))
+                || text("id").is_some_and(|i| {
+                    memcp_core::directory::valid_id(i).as_deref() == Some(e.node_id.as_str())
+                })
+        })
+        .map(|e| e.name)
+        .ok_or_else(|| err(404, "no such node"))
+}
+
 /// A text made safe for the value of a query parameter.
 fn percent(text: &str) -> String {
     text.bytes()
@@ -222,6 +259,7 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/fact" => crate::explore::one(app, &ctl, &me, req),
             "/layout" => crate::explore::layout_get(app, &me),
             "/join/pending" => crate::join::pending(app, &me),
+            "/node" => node_card(app, now),
             "/sync/status" => match crate::sync_http::status_body(&app.brain, now, &me.id) {
                 Ok(body) => Response::json(200, &body),
                 Err(e) => err(500, &e),
@@ -262,8 +300,6 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         crate::cli_remote::exec(app, &me, &body, req.ip.as_deref())
     } else if path == "/upload/discard" {
         crate::cli_remote::discard(app, &me, &body)
-    } else if path == "/join/invite" {
-        crate::join::invite_by_person(app, &ctl, &me)
     } else if path.starts_with("/fact/") {
         crate::explore::write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/join/") {
@@ -487,14 +523,43 @@ fn action(
             let name = body.get("name").and_then(Value::as_str).unwrap_or("");
             crate::replica::start(app, ctl, me, name).map_err(fail)
         }
+        "/nodes/add" => {
+            // This node asks the node the person pasted or scanned (see replica::add_node).
+            admin_only(me)?;
+            crate::replica::add_node(app, body.get("link").and_then(Value::as_str).unwrap_or(""))
+                .map_err(|m| err(400, &m))
+        }
+        "/nodes/invite" => {
+            // A link of this node with a one-time ticket: whoever scans it from a node of this person joins at once.
+            let ticket = crate::join::make_ticket(app, &me.id, &me.name, util::now())?;
+            let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+                .map_err(fail)?
+                .to_link();
+            Ok(json!({
+                "link": link, "qr": qr_svg(&link), "expires_in": crate::join::TICKET_TTL, "single_use": true,
+            }))
+        }
+        "/nodes/via" => {
+            // The address by which this node asks another one (one it told), or none to go back to the default.
+            let name = nodes_name(app, body)?;
+            memcp_core::directory::set_via(
+                &app.brain,
+                &name,
+                body.get("address").and_then(Value::as_str),
+            )
+            .map_err(fail)?;
+            Ok(json!({ "ok": true, "name": name }))
+        }
         "/join-memory" => {
             admin_only(me)?;
-            crate::replica::join_start(
-                app,
-                body.get("address").and_then(Value::as_str).unwrap_or(""),
-                body.get("ticket").and_then(Value::as_str),
-            )
-            .map_err(|m| err(400, &m))
+            let address = body.get("address").and_then(Value::as_str).unwrap_or("");
+            // An address, or a link a person was given: both are accepted here.
+            let started = if address.starts_with("memcp://") {
+                crate::replica::add_node(app, address)
+            } else {
+                crate::replica::join_start(app, address)
+            };
+            started.map_err(|m| err(400, &m))
         }
         "/spaces" => {
             // A vault comes from a kind of the catalogue, named after the person.
@@ -1144,7 +1209,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                 vec![]
             },
             "public_url": app.public_url,
-            "node": { "name": app.node_name, "version": env!("CARGO_PKG_VERSION") },
+            "node": { "name": app.node_name, "version": env!("CARGO_PKG_VERSION"), "id": memcp_core::directory::node_id(&app.brain).ok() },
             "catalogue": app.brain.catalogue()?.iter().map(|k| json!({
                 "key": k.key, "label": k.label, "description": k.description,
                 "feature": k.feature.map(|f| f.word()),

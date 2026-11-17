@@ -500,3 +500,171 @@ fn a_node_renamed_never_comes_back_as_another_machine_under_its_old_name() -> Re
     assert!(rows.iter().all(|r| r["name"] != old.as_str()), "{rows:?}");
     Ok(())
 }
+
+#[test]
+fn a_node_has_a_stable_id_that_its_entry_and_the_wire_carry() -> Res {
+    let t = Temp::new("dir-id");
+    let a = node(&t, "alpha")?;
+    let id = directory::node_id(&a)?;
+    assert_eq!(id.len(), 14, "{id}");
+    assert_eq!(directory::valid_id(&id).as_deref(), Some(id.as_str()));
+    assert_eq!(directory::node_id(&a)?, id, "made once, kept");
+    directory::touch_self(&a, NOW)?;
+    assert_eq!(directory::entries(&a)?[0].node_id, id);
+    assert_eq!(directory::node_json(&a, NOW)?["id"], json!(id));
+    assert_eq!(directory::to_wire(&a)?[0]["id"], json!(id));
+    // Typed any way, an id reads the same; anything else is not one.
+    let loose = id.replace('-', " ").to_lowercase();
+    assert_eq!(directory::valid_id(&loose).as_deref(), Some(id.as_str()));
+    assert!(directory::valid_id("ABCD-EFGH").is_none());
+    assert!(
+        directory::valid_id("ABCD-EFGH-IJK1").is_none(),
+        "1 is not in the alphabet"
+    );
+    // Two nodes do not share an id.
+    let b = node(&t, "beta")?;
+    assert_ne!(directory::node_id(&b)?, id);
+    Ok(())
+}
+
+#[test]
+fn a_third_node_learns_the_id_and_the_addresses_and_never_takes_its_own_id_for_another_node() -> Res
+{
+    let t = Temp::new("dir-id-merge");
+    let a = node(&t, "alpha")?;
+    let c = node(&t, "gamma")?;
+    directory::set_exposures(
+        &a,
+        &directory::exposures_from(
+            "127.0.0.1:8791",
+            "https://a.example.net",
+            Some("http://100.64.0.1:8791"),
+        ),
+    )?;
+    directory::touch_self(&a, NOW)?;
+    let wire = directory::to_wire(&a)?;
+    directory::merge(&c, "beta", &wire, NOW)?;
+    let seen = directory::find_by_id(&c, &directory::node_id(&a)?)?.unwrap();
+    assert_eq!(seen.name, "alpha");
+    let list = directory::union(&c, NOW, vec![])?;
+    let row = row(&list, "alpha").unwrap();
+    assert_eq!(row["id"], json!(directory::node_id(&a)?));
+    assert_eq!(
+        row["addresses"],
+        json!([
+            "https://a.example.net",
+            "http://100.64.0.1:8791",
+            "http://127.0.0.1:8791"
+        ])
+    );
+    // An entry that carries this node's own id (it went by another name) is not listed as another machine.
+    let mine = json!({ "name": "gamma-old", "last_seen": NOW, "version": "1", "id": directory::node_id(&c)? });
+    assert_eq!(
+        directory::merge(&a, "x", std::slice::from_ref(&mine), NOW)?,
+        1,
+        "unknown to A: taken"
+    );
+    assert_eq!(
+        directory::merge(&c, "x", &[mine], NOW)?,
+        0,
+        "C's own id: skipped"
+    );
+    // The choice of an address is among the addresses the node told.
+    directory::set_via(&c, "alpha", Some("https://a.example.net"))?;
+    assert_eq!(row_via(&c)?, Some("https://a.example.net".to_string()));
+    assert!(directory::set_via(&c, "alpha", Some("https://elsewhere.example.net")).is_err());
+    assert!(directory::set_via(&c, "nobody", Some("https://a.example.net")).is_err());
+    let entry = directory::find_by_id(&c, &directory::node_id(&a)?)?.unwrap();
+    assert_eq!(directory::ways_in(&c, &entry)?[0], "https://a.example.net");
+    directory::set_via(&c, "alpha", None)?;
+    assert_eq!(row_via(&c)?, None);
+    Ok(())
+}
+
+fn row_via(b: &Brain) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    Ok(row(&rows(b, NOW)?, "alpha").and_then(|r| r["via"].as_str().map(String::from)))
+}
+
+#[test]
+fn a_node_link_reads_back_and_refuses_what_is_not_one() -> Res {
+    let l = directory::NodeLink {
+        id: Some("ABCD-EFGH-IJKL".into()),
+        name: Some("my node & co".into()),
+        addresses: vec![
+            "https://a.example.net".into(),
+            "http://192.168.1.5:8791".into(),
+        ],
+        ticket: Some("t0k3n".into()),
+    };
+    let text = l.to_link();
+    assert!(
+        text.starts_with("memcp://node?id=ABCD-EFGH-IJKL&name=my%20node%20%26%20co&addr=https%3A%2F%2Fa.example.net"),
+        "{text}"
+    );
+    assert_eq!(directory::NodeLink::parse(&text)?, l);
+    assert_eq!(directory::NodeLink::parse(&format!("  {text}\n"))?, l);
+    // An id, an address, and the older join link are accepted as what they name.
+    assert_eq!(
+        directory::NodeLink::parse("abcd efgh ijkl")?.id.as_deref(),
+        Some("ABCD-EFGH-IJKL")
+    );
+    assert_eq!(
+        directory::NodeLink::parse("https://a.example.net/")?.addresses,
+        ["https://a.example.net"]
+    );
+    assert_eq!(
+        directory::NodeLink::parse(
+            "memcp://join?server=https%3A%2F%2Fa.example.net&code=ABCD-EFGH"
+        )?
+        .addresses,
+        ["https://a.example.net"]
+    );
+    for bad in [
+        "",
+        "hello",
+        "ftp://a",
+        "memcp://node?id=nope",
+        "memcp://node?name=x",
+        "memcp://node?addr=javascript%3Aalert(1)",
+        "https://a b",
+    ] {
+        assert!(directory::NodeLink::parse(bad).is_err(), "{bad}");
+    }
+    Ok(())
+}
+
+#[test]
+fn requests_told_by_a_peer_are_shown_answered_once_and_forgotten_when_gone() -> Res {
+    let t = Temp::new("dir-remote-joins");
+    let b = node(&t, "beta")?;
+    let ask = |id: &str, device: &str| json!({ "id": id, "device": device, "check": "amber-river-moss", "expires_in": 100 });
+    directory::store_remote_joins(&b, "alpha", &[ask("r1", "phone"), ask("r2", "tablet")], NOW)?;
+    let shown = directory::remote_joins(&b, NOW)?;
+    assert_eq!(shown.len(), 2);
+    assert_eq!(shown[0]["node"], json!("alpha"));
+    assert_eq!(shown[0]["check"], json!("amber-river-moss"));
+    // Past its time, a request is not shown.
+    assert!(directory::remote_joins(&b, NOW + 101)?.is_empty());
+    // The person answers one: it leaves the list, the answer waits for alpha, and a second answer finds nothing.
+    assert_eq!(
+        directory::answer_remote_join(&b, "r1", "approved", NOW)?.as_deref(),
+        Some("alpha")
+    );
+    assert_eq!(
+        directory::answer_remote_join(&b, "r1", "denied", NOW)?,
+        None
+    );
+    assert_eq!(directory::remote_joins(&b, NOW)?.len(), 1);
+    assert_eq!(
+        directory::answers_for(&b, "alpha")?,
+        vec![json!({ "id": "r1", "result": "approved" })]
+    );
+    assert!(directory::answers_for(&b, "gamma")?.is_empty());
+    // The next list of alpha no longer has r2 (answered or expired there): gone here; the answer for r1 stays until told.
+    directory::store_remote_joins(&b, "alpha", &[], NOW + 5)?;
+    assert!(directory::remote_joins(&b, NOW + 5)?.is_empty());
+    assert_eq!(directory::answers_for(&b, "alpha")?.len(), 1);
+    directory::answers_delivered(&b, "alpha")?;
+    assert!(directory::answers_for(&b, "alpha")?.is_empty());
+    Ok(())
+}

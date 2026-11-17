@@ -371,12 +371,12 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <p class="mute small">The machines that hold this memory, and whether they are in step. Refreshed every two seconds.</p>
       <div id="machines"></div>
       <p class="mute mfoot" id="mfoot"></p>
-      <div class="acts" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px">
-        <form id="pair-form" style="margin:0"><button class="primary" id="add-node">Add a node</button></form>
-        <form id="code-form" style="margin:0;display:flex;gap:6px;align-items:center"><input id="code-input" placeholder="ABCD-EFGH" size="11" maxlength="12" autocomplete="off" spellcheck="false" aria-label="Have a code? Type it here."><button id="code-go">Use a code</button></form>
-      </div>
-      <p class="err small" id="code-note" role="alert"></p>
-      <p class="mute small">A new machine or phone asks to join: its request appears here with three words, and you allow it. Or show a code that it types or scans.</p>
+      <form id="add-form" style="margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+        <input id="add-link" placeholder="Link, id or address of the other node" size="34" autocomplete="off" spellcheck="false" aria-label="Link, id or address of the other node" style="flex:1;min-width:14em">
+        <button class="primary" id="add-node">Add a node</button>
+      </form>
+      <div id="add-state" class="small" role="status"></div>
+      <p class="mute small">Paste the link or the id that the other node shows, or scan its code. Someone there compares three words and says yes, from any of their nodes. A link made without words needs none.</p>
     </section>
     <div class="bento" id="actions" style="margin-bottom:16px" data-part="settings">
       <div class="tile t2">
@@ -506,6 +506,14 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     <details class="fold" id="advanced" data-part="settings">
       <summary>Advanced</summary>
 
+      <h3 class="sub">Codes</h3>
+      <p class="mute small">The older way: show a code that a device types or scans, or type one you were given.</p>
+      <div class="acts" style="display:flex;flex-wrap:wrap;gap:8px;margin-top:6px">
+        <form id="pair-form" style="margin:0"><button class="primary" id="show-code">Show a code</button></form>
+        <form id="code-form" style="margin:0;display:flex;gap:6px;align-items:center"><input id="code-input" placeholder="ABCD-EFGH" size="11" maxlength="12" autocomplete="off" spellcheck="false" aria-label="Have a code? Type it here."><button id="code-go">Use a code</button></form>
+      </div>
+      <p class="err small" id="code-note" role="alert"></p>
+
       <h3 class="sub">New space</h3>
       <form data-act="spaces">
         <select name="kind" data-kinds required></select>
@@ -620,6 +628,18 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
   <h2>Send these notes?</h2>
   <div id="move-body"></div>
   <form method="dialog" style="justify-content:flex-end"><button>Cancel</button><button type="button" class="primary" id="move-go">Move them</button></form>
+</dialog>
+
+<dialog id="link-dlg">
+  <h2>This node's link</h2>
+  <p class="mute small">On the other node, choose “Add a node” and scan this code, or paste this link.</p>
+  <div id="link-qr" style="text-align:center;margin:8px 0"></div>
+  <div class="small mute">Link</div>
+  <div class="pair-row"><code id="link-text" style="overflow-wrap:anywhere"></code><button type="button" class="link" data-copy="link-text">copy</button></div>
+  <div class="small mute">Node id</div>
+  <div class="pair-row"><code id="link-id"></code><button type="button" class="link" data-copy="link-id">copy</button></div>
+  <p class="mute small" id="link-note"></p>
+  <form method="dialog" style="justify-content:flex-end"><button type="button" id="link-ticket">Make a link without words</button><button class="primary">Done</button></form>
 </dialog>
 
 <dialog id="pair-dlg">
@@ -747,7 +767,31 @@ const FR = {
   "The machines that hold this memory, and whether they are in step. Refreshed every two seconds.": "Les machines qui détiennent cette mémoire, et si elles sont à jour. Actualisé toutes les deux secondes.",
   "Join a memory": "Rejoindre une mémoire",
   "Add a node": "Ajouter un nœud",
-  "Add a node": "Ajouter un nœud",
+  "Link, id or address of the other node": "Lien, identifiant ou adresse de l’autre nœud",
+  "Paste the link or the id that the other node shows, or scan its code. Someone there compares three words and says yes, from any of their nodes. A link made without words needs none.": "Collez le lien ou l’identifiant que l’autre nœud affiche, ou scannez son code. Quelqu’un là-bas compare trois mots et dit oui, depuis n’importe lequel de ses nœuds. Un lien fait sans mots n’en demande pas.",
+  "Show my link": "Afficher mon lien",
+  "node id": "identifiant du nœud",
+  "Node id": "Identifiant du nœud",
+  "This node's link": "Lien de ce nœud",
+  "On the other node, choose “Add a node” and scan this code, or paste this link.": "Sur l’autre nœud, choisissez « Ajouter un nœud » et scannez ce code, ou collez ce lien.",
+  "Link": "Lien",
+  "QR code of this node": "Code QR de ce nœud",
+  "Make a link without words": "Faire un lien sans mots",
+  "No words needed: it works once, for ten minutes. Show it only to the person who adds the node.": "Pas de mots à comparer : il ne sert qu’une fois, pendant dix minutes. Ne le montrez qu’à la personne qui ajoute le nœud.",
+  "Whoever adds this node from the link compares three words with you, and you say yes.": "Celui qui ajoute ce nœud avec le lien compare trois mots avec vous, et vous dites oui.",
+  "Asking…": "Demande en cours…",
+  "Add this node": "Ajouter ce nœud",
+  "reachable via": "joignable par",
+  "automatic": "automatique",
+  "Codes": "Codes",
+  "The older way: show a code that a device types or scans, or type one you were given.": "L’ancienne façon : afficher un code qu’un appareil saisit ou scanne, ou saisir celui qu’on vous a donné.",
+  "Show a code": "Afficher un code",
+  "Check that it shows the same three words, then allow it. It will hold the same memory as this node.": "Vérifiez qu’il affiche les mêmes trois mots, puis autorisez-le. Il détiendra la même mémoire que ce nœud.",
+  "that is this node": "c’est ce nœud",
+  "this node is not known here yet: paste its link or its address": "ce nœud n’est pas encore connu ici : collez son lien ou son adresse",
+  "not a node link, an id (ABCD-EFGH-IJKL) or an address": "ce n’est ni un lien de nœud, ni un identifiant (ABCD-EFGH-IJKL), ni une adresse",
+  "the node at that address is not the one the link names": "le nœud à cette adresse n’est pas celui que le lien nomme",
+  "this ticket is unknown, used or expired": "ce billet est inconnu, déjà utilisé ou expiré",
   "A new machine or phone asks to join: its request appears here with three words, and you allow it. Or show a code that it types or scans.": "Une nouvelle machine ou un téléphone demande à rejoindre : sa demande apparaît ici avec trois mots, et vous l’autorisez. Ou affichez un code qu’il saisit ou scanne.",
   "No other machine yet. Add a node below.": "Pas d’autre machine pour l’instant. Ajoutez un nœud ci-dessous.",
   "Looking for nodes on your network…": "Recherche de nœuds sur votre réseau…",
@@ -1346,6 +1390,8 @@ const FRX = [
   [/^expires in (\d+) s$/, n => "expire dans " + n + " s"],
   [/^key expires (.+)$/, d => "la clé expire le " + d],
   [/^(.+) wants to join$/, d => d + " veut rejoindre"],
+  [/^Asked of (.+): your answer is passed on to it\.$/, n => "Demandé à " + n + " : votre réponse lui est transmise."],
+  [/^(.+) is already one of your nodes$/, n => n + " est déjà l’un de vos nœuds"],
   [/^(.+) \(read only\)$/, a => a + " (lecture seule)"],
   [/^(.+) \(read and write\)$/, a => a + " (lecture et écriture)"],
   [/^Good (morning|afternoon|evening), (.+)$/, (g, n) => ({ morning: "Bonjour", afternoon: "Bon après-midi", evening: "Bonsoir" }[g]) + ", " + n],
@@ -1523,7 +1569,9 @@ async function pollJoins() {
   box.hidden = list.length === 0;
   box.replaceChildren(...list.map(j => el("section", { style: "border:2px solid var(--primary)" },
     el("h2", { style: "margin:0 0 6px" }, "📱 " + j.device + " wants to join"),
-    el("p", { class: "mute small", style: "margin:0 0 8px" }, "Check that the device shows the same three words, then allow it. It reaches Inbox only."),
+    el("p", { class: "mute small", style: "margin:0 0 8px" }, "Check that it shows the same three words, then allow it. It will hold the same memory as this node."),
+    j.node ? el("p", { class: "mute small", style: "margin:0 0 8px" }, "Asked of " + j.node + ": your answer is passed on to it.") : "",
+    j.node_id ? el("p", { class: "mute small", style: "margin:0 0 8px" }, el("span", {}, "node id"), " ", el("code", {}, j.node_id)) : "",
     el("div", { style: "font-size:30px;letter-spacing:.04em;margin:6px 0 12px" }, el("b", {}, j.check)),
     el("div", { class: "row" },
       el("button", { type: "button", class: "primary", onclick: async () => { try { await api("join/approve", { id: j.id }); toast("Allowed"); pollJoins(); load(); } catch (x) { fail(x); } } }, "Allow"),
@@ -3265,12 +3313,21 @@ function machineRow(p) {
     how.length ? el("span", {}, el("span", {}, "reached by"), " ", ...how.flatMap((k, i) => [i ? ", " : "", el("span", {}, "exposure." + k)])) : null,
     p.only_local ? el("span", {}, "syncs when opened with the peers it can reach") : null].filter(Boolean);
   const facts = el("span", {}, ...parts.flatMap((x, i) => i ? [" · ", x] : [x]));
+  // A node a peer told about: added with its id alone, by the address the person prefers among the ones it told.
+  const ways = p.addresses || [];
+  const reach = [];
+  if (!direct && p.id) reach.push(el("button", { type: "button", class: "link", onclick: () => addNode(p.id) }, "Add this node"));
+  if (ways.length > 1) reach.push(el("label", { class: "msub" }, el("span", {}, "reachable via"), " ",
+    el("select", { onchange: e => api("nodes/via", { name: p.name, address: e.target.value || null }).then(nodeDone).catch(fail) },
+      el("option", { value: "" }, "automatic"), ...ways.map(w => el("option", { value: w, selected: p.via === w ? "" : null }, w)))));
+  else if (p.via) reach.push(el("span", { class: "msub" }, el("span", {}, "reachable via"), " " + p.via));
   return el("div", { class: "mrow" + (p.gone ? " gone" : ""), "data-peer": p.peer || p.name },
     el("span", { class: "dot " + (p.gone ? "" : busy ? "busy" : seen ? "ok" : ""), title: p.gone ? "gone" : busy ? "catching up" : seen ? "in step" : "not seen yet" }),
     el("div", {}, el("div", { class: "mname" }, p.name, p.state && p.state !== "active" ? el("span", { class: "badge off", style: "margin-left:6px" }, p.state) : null), el("div", { class: "msub" }, p.note ? p.note + " · " : "", arrow), facts ? el("div", { class: "msub" }, facts) : ""),
     el("div", { class: "mprog" }, direct ? el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")) : "",
       direct ? el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" })) : ""),
-    el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""), (direct || p.state) ? peerActs(p) : "");
+    el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""), (direct || p.state) ? peerActs(p) : "",
+    reach.length ? el("div", { class: "macts" }, ...reach) : "");
 }
 function renderMachines() {
   if (!S || !$("#machines")) return;
@@ -3280,9 +3337,10 @@ function renderMachines() {
   const node = S.node || { name: "MemCP", version: "" };
   const me = el("div", { class: "mrow", "data-peer": "self" },
     el("span", { class: "dot ok", title: "this machine" }),
-    el("div", {}, el("div", { class: "mname" }, node.name), el("div", { class: "msub" }, "This machine" + (node.version ? " · version " + node.version : ""))),
+    el("div", {}, el("div", { class: "mname" }, node.name), el("div", { class: "msub" }, "This machine" + (node.version ? " · version " + node.version : "")),
+      node.id ? el("div", { class: "msub" }, el("span", {}, "node id"), " ", el("code", { id: "this-id" }, node.id)) : ""),
     el("div", { class: "mprog" }, el("div", { class: "msub" }, S.public_url)),
-    el("span", { class: "mwhen" }, ""));
+    el("span", { class: "mwhen" }, el("button", { type: "button", class: "link", id: "show-link", onclick: showLink }, "Show my link")));
   const known = new Set(SYNC.peers.map(p => p.peer));
   const rows = [...SYNC.peers, ...Object.values(SYNC.nodes).filter(n => !known.has(n.peer)).map(n => ({ peer: n.peer, name: n.name, direction: "idle", spaces: [], last_activity: null, direct: true }))];
   const others = rows.filter(p => !(SYNC.nodes[p.peer] && SYNC.nodes[p.peer].hidden)).map(p => {
@@ -3295,9 +3353,47 @@ function renderMachines() {
   $("#mfoot").textContent = "Memory of " + name + " · " + (1 + SYNC.peers.length) + (SYNC.peers.length ? " machines" : " machine") + " · last sync " + (last ? since(last) : "never");
 }
 
+// ---- Adding a node: paste or scan its link or id, then the three words (none with a ticket) ----
+const addNote = (...kids) => $("#add-state").replaceChildren(...kids);
+function addWatch(id) {
+  joinWatch(id, r => {
+    if (r.state === "approved") { addNote(el("p", {}, el("b", {}, "Joined."), " ", "The copy starts now: follow it in Machines.")); pollSync(true); return; }
+    if (r.state === "waiting") { addNote(el("div", { class: "three-words", id: "add-words" }, r.check), el("p", { class: "mute small" }, "The other machine shows the same three words. Someone there allows this machine, and the copy begins. Waiting for the answer…")); return; }
+    if (r.state === "asking") { addNote(el("p", { class: "mute small" }, "Asking…")); return; }
+    addNote(el("p", { class: "warn" }, joinProblem(r)));
+  });
+}
+async function addNode(text) {
+  addNote();
+  try { const r = await api("nodes/add", { link: text }); $("#add-link").value = ""; addNote(el("p", { class: "mute small" }, "Asking…")); addWatch(r.id); }
+  catch (x) { addNote(el("p", { class: "err", role: "alert" }, x.message)); }
+}
+$("#add-form").addEventListener("submit", e => { e.preventDefault(); const v = $("#add-link").value.trim(); if (v) addNode(v); });
+function fillLink(r, ticket) {
+  $("#link-text").textContent = r.link;
+  $("#link-id").textContent = r.id || (S.node && S.node.id) || "";
+  const qr = $("#link-qr");
+  qr.replaceChildren();
+  if (r.qr) qr.append(el("img", { alt: "QR code of this node", width: 220, height: 220, src: "data:image/svg+xml;utf8," + encodeURIComponent(r.qr) }));
+  $("#link-note").textContent = ticket ? "No words needed: it works once, for ten minutes. Show it only to the person who adds the node." : "Whoever adds this node from the link compares three words with you, and you say yes.";
+  $("#link-ticket").hidden = !!ticket;
+  $$("#link-dlg [data-copy]").forEach(b => { b.textContent = "copy"; });
+}
+async function showLink() {
+  try { fillLink(await api("node"), false); $("#link-dlg").showModal(); } catch (x) { fail(x); }
+}
+$("#link-ticket").addEventListener("click", async () => {
+  try { fillLink(await api("nodes/invite", {}), true); } catch (x) { fail(x); }
+});
+$$("#link-dlg [data-copy]").forEach(b => b.addEventListener("click", async () => {
+  try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "copied"; }
+  catch (_) { b.textContent = "select and copy by hand"; }
+}));
+
 // ---- Joining a memory: ask, three words, wait ----
 function parseAddress(text) {
   const v = (text || "").trim();
+  if (/^memcp:\/\/node\?/i.test(v)) return v;
   const m = /^memcp:\/\/join\?(.*)$/i.exec(v);
   if (m) { const server = new URLSearchParams(m[1]).get("server"); return server || ""; }
   // An address typed without its scheme is taken as secure.

@@ -55,6 +55,9 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     if !app.rate_ok(now, &format!("sync:{}", caller.id), caller.rate_per_min) {
         return refused(429, "rate limit exceeded").with("Retry-After", "60");
     }
+    // A peer of the person (reads and writes all their spaces): the one that may be told, and answer, the requests to join.
+    let full_peer =
+        caller.agent.starts_with("peer-") && !caller.is_scoped() && !caller.read_only_forced;
     // The log is the whole vault: a vault reached only through tag paths is not the peer's to copy or to write.
     let whole = |s: &Space| caller.read_paths(s).is_none();
     // A machine the person paused is not served until they resume it (its status stays readable).
@@ -72,7 +75,13 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         },
         // The peer directory, as this node tells it: its own entry first-hand, the others as it learned them.
         ("GET", "peers") => match (directory::node_json(brain, now), directory::to_wire(brain)) {
-            (Ok(node), Ok(peers)) => Response::json(200, &json!({ "node": node, "peers": peers })),
+            (Ok(mut node), Ok(peers)) => {
+                // The devices asking to join this node: told to a peer of the person, who may answer them (join.rs).
+                if full_peer {
+                    node["pending"] = json!(crate::join::pending_here(app));
+                }
+                Response::json(200, &json!({ "node": node, "peers": peers }))
+            }
             (Err(e), _) | (_, Err(e)) => refused(500, &e.to_string()),
         },
         // A peer tells its directory: merged here, and the peer is known as the node behind this connection.
@@ -82,6 +91,13 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             };
             let from = body["node"]["name"].as_str().unwrap_or(&caller.agent);
             let list = body["peers"].as_array().cloned().unwrap_or_default();
+            // What the person answered, on the peer, to the requests this node told it about.
+            if full_peer
+                && let Some(answers) = body["answers"].as_array()
+                && let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id)
+            {
+                crate::join::apply_answers(app, &ctl, &me, answers);
+            }
             match directory::merge(brain, from, &list, now) {
                 Ok(changed) => {
                     if let Some(name) = body["node"]["name"].as_str() {

@@ -136,12 +136,12 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `note` | add, show, list, recall, tags, edit, retire, restore | yes | yes, runs on the node | any person |
 | `console-token` | a token that opens the page | yes | yes, runs on the node | administrator |
 | `invite code` | a code (and link) a device exchanges for a key to the inbox | needs a node | yes, through the page's routes | any person |
-| `invite ticket` | a one-time ticket another device joins with | needs a node | yes, through the page's routes | any person |
+| `invite ticket` | a link with a one-time ticket another node joins with | needs a node | yes, through the page's routes | any person |
 | `invite pending` | devices asking to join | needs a node | yes, through the page's routes | any person |
 | `invite approve` | lets a device in | needs a node | yes, through the page's routes | any person |
 | `invite deny` | turns a device away | needs a node | yes, through the page's routes | any person |
 | `invite allow` | lets a named device come back without the words | needs a node | yes, through the page's routes | any person |
-| `join` | asks another node to let this one in | needs a node | yes, through the page's routes | administrator |
+| `join` | asks another node (link, id or address) to let this node in | needs a node | yes, through the page's routes | administrator |
 | `export` | writes a person's memory to a folder | yes | yes, streamed down | any person |
 | `adopt` | takes the spaces of an export into the node | yes | yes, files are sent first | administrator |
 | `merge` | plans or applies the merge of another memory | yes | yes, files are sent first | administrator |
@@ -191,10 +191,10 @@ memcp adopt ~/backup/memory/memcp-export-alex-... --prefix old   # sent up in ch
 memcp merge --plan ~/other-export --user alex --out plan.txt     # plan.txt is written here
 memcp merge --apply plan.txt
 memcp invite code                                          # a code and a link for a phone
-memcp invite ticket                                        # one-time ticket for another computer
+memcp invite ticket                                        # a link with a one-time ticket, for another node
 memcp invite pending                                       # devices waiting for a yes
 memcp invite approve REQUEST_ID
-memcp join https://memory.example.net --ticket TICKET      # this node asks another to let it in
+memcp join 'memcp://node?id=...&t=...'                      # this node asks another to let it in (or ID, or ADDRESS)
 memcp --json status                                        # {"code":0,"stdout":"...","stderr":""}
 memcp --local --data ~/memcp status                        # the directory, whatever MEMCP_NODE says
 ```
@@ -211,8 +211,8 @@ runs). See [CHANGELOG-API.md](CHANGELOG-API.md).
 | `POST /upload?id=&path=&offset=` | one chunk of one file of a folder sent for a command (raw bytes) |
 | `POST /upload/discard` `{id}` | forgets a folder that was sent |
 | `GET /export` | the person's memory as a tar, streamed |
-| `POST /join/invite` | a one-time ticket for a device of the person |
-| `POST /join-memory` `{address, ticket?}` | asks another node to let this one in |
+| `POST /nodes/invite` | a link with a one-time ticket, for another node of the person |
+| `POST /nodes/add` `{link}`, `GET /join-memory?id=` | asks another node (link, id or address) to let this one in, and follows it |
 | `GET /join/pending`, `POST /join/approve`, `/join/deny`, `/join/allow-device`, `POST /pairing` | the devices joining |
 | `GET /space/folder?space=`, `POST /space/folder` `{space, folder}` | the folder of a space (**pending**: with the space folders; the command says so on a 404) |
 
