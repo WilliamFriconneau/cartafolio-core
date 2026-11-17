@@ -305,6 +305,8 @@ pub struct ConnectionInfo {
     pub last_used_at: Option<i64>,
     pub read_only_forced: bool,
     pub no_person_guide: bool,
+    /// One of the program's own tools (janitor, transcription, report, rangers), not an assistant.
+    pub internal: bool,
 }
 
 pub fn hash_token(token: &str) -> Vec<u8> {
@@ -892,6 +894,21 @@ pub fn set_read_only(ctl: &Connection, agent: &str, on: bool) -> Result<bool> {
     Ok(n == 1)
 }
 
+/// Marks a connection as one of the program's own tools (or back to an assistant).
+pub fn set_internal(ctl: &Connection, agent: &str, on: bool) -> Result<bool> {
+    let n = ctl.execute(
+        "UPDATE connections SET internal = ?2 WHERE agent = ?1 AND console = 0",
+        params![agent, i64::from(on)],
+    )?;
+    if n == 1 {
+        ctl.execute(
+            "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'internal', ?3)",
+            params![util::now(), agent, if on { "on" } else { "off" }],
+        )?;
+    }
+    Ok(n == 1)
+}
+
 /// `key`: `rate` (requests/minute) or `max-text` (characters). There is no daily budget of writes.
 pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result<bool> {
     if value < 1 {
@@ -915,7 +932,7 @@ pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result
 pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
     let mut st = ctl.prepare(
         "SELECT id, agent, coalesce(user_id, 'owner'), created_at, expires_at, revoked_at, last_used_at,
-         read_only_forced, all_spaces, no_person_guide FROM connections WHERE console = 0 ORDER BY created_at, agent",
+         read_only_forced, all_spaces, no_person_guide, internal FROM connections WHERE console = 0 ORDER BY created_at, agent",
     )?;
     let rows = st.query_map([], |r| {
         Ok((
@@ -930,6 +947,7 @@ pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
                 last_used_at: r.get(6)?,
                 read_only_forced: r.get::<_, i64>(7)? != 0,
                 no_person_guide: r.get::<_, i64>(9)? != 0,
+                internal: r.get::<_, i64>(10)? != 0,
             },
             r.get::<_, i64>(8)? != 0,
         ))

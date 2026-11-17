@@ -613,6 +613,19 @@ fn action(
             access::set_no_person_guide(ctl, agent, !told).map_err(fail)?;
             Ok(json!({ "ok": true }))
         }
+        "/connections/internal" => {
+            // Whether this connection is one of the program's own tools (janitor, transcription, report, rangers).
+            let agent = arg(body, "agent")?;
+            if access::owner_of(ctl, agent).map_err(fail)?.as_deref() != Some(me.id.as_str()) {
+                return Err(err(403, "not your connection"));
+            }
+            let on = body
+                .get("internal")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            access::set_internal(ctl, agent, on).map_err(fail)?;
+            Ok(json!({ "ok": true, "internal": on }))
+        }
         "/connections/revoke" => {
             let agent = arg(body, "agent")?;
             let owner = access::owner_of(ctl, agent).map_err(fail)?;
@@ -854,7 +867,7 @@ fn activity(
 fn attention(ctl: &Connection, me: &User, now: i64) -> Result<Value, Error> {
     let mut idle = vec![];
     for c in access::list(ctl)? {
-        if c.revoked_at.is_some() || !(me.admin || c.user_id == me.id) {
+        if c.revoked_at.is_some() || c.internal || !(me.admin || c.user_id == me.id) {
             continue;
         }
         let never = c.last_used_at.is_none() && now - c.created_at > IDLE_NEVER_USED_DAYS * 86_400;
@@ -1026,7 +1039,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
             .map(|c| {
                 json!({ "agent": c.agent, "user": c.user_id, "rights": c.rights,
                     "read_only": c.read_only_forced, "revoked": c.revoked_at.is_some(),
-                    "person_guide": !c.no_person_guide,
+                    "person_guide": !c.no_person_guide, "internal": c.internal,
                     "created_at": iso(c.created_at), "last_used_at": c.last_used_at.map(iso),
                     "expires_at": c.expires_at.map(iso) })
             })

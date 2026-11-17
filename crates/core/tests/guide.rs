@@ -318,7 +318,7 @@ fn a_database_from_before_guides_gets_the_table_and_keeps_its_people() -> Res {
     let data = w._t.path().join("data");
     {
         let c = Connection::open(data.join("control.sqlite"))?;
-        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE bridge_pairings; DROP TABLE sync_state; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
+        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE bridge_pairings; DROP TABLE sync_state; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
     }
     let ctl = Brain::open(&data)?.open_control()?;
     assert!(users::user(&ctl, &w.sam)?.is_some(), "people are untouched");

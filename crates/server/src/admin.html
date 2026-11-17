@@ -372,6 +372,14 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <div id="connections" class="bento conns"></div>
     </section>
 
+    <section id="internal-section" hidden>
+      <details>
+        <summary><h2 style="display:inline">Internal tools</h2></summary>
+        <p class="mute small">The program's own tools (the janitor, voice transcription, the weekly report, the device rangers). They are not assistants and are kept out of the list above. Revoke one and it stops at once.</p>
+        <div id="internal" class="bento conns"></div>
+      </details>
+    </section>
+
     <section id="captures-section" hidden>
       <h2>Capture apps</h2>
       <p class="mute small">The capture apps already paired: one tile per device. Revoke one and it stops at once.</p>
@@ -641,6 +649,12 @@ const FR = {
   "Connected assistants": "Assistants connectés",
   "What is connected to your memory now, and what it can reach. Revoke one and it stops at once.": "Ce qui est connecté à votre mémoire en ce moment, et ce qu’il peut atteindre. Révoquez-en un et il s’arrête aussitôt.",
   "Capture apps": "Applications de capture",
+  "Internal tools": "Outils internes",
+  "treat as an assistant": "traiter comme un assistant",
+  "mark as internal tool": "marquer comme outil interne",
+  "The program's own tools (the janitor, voice transcription, the weekly report, the device rangers). They are not assistants and are kept out of the list above. Revoke one and it stops at once.": "Les outils propres au programme (le rangeur, la transcription vocale, le bilan de la semaine, les rangeurs d'appareils). Ce ne sont pas des assistants : ils restent hors de la liste ci-dessus. Révoquez-en un et il s'arrête aussitôt.",
+  "It is an assistant of yours after all: it goes back to the list of connected assistants": "C'est finalement un de vos assistants : il revient dans la liste des assistants connectés",
+  "One of the program's own tools, not an assistant: it moves to Internal tools": "Un outil propre au programme, pas un assistant : il passe dans les outils internes",
   "The capture apps already paired: one tile per device. Revoke one and it stops at once.": "Les applications de capture déjà associées : une tuile par appareil. Révoquez-en une et elle s’arrête aussitôt.",
   "Instructions apps proposed": "Consignes proposées par les applications",
   "An app that may propose its own instructions wrote these. They are only text until you read them and approve: then the assistants that reach that space are told them, as coming from that app and approved by you, and only as the form of what that app keeps: how to read its records and how to write for it. If the app changes its text, it waits for you again. Nothing here is approved for you, whatever an assistant says.": "Une application autorisée à proposer ses propres consignes a écrit ceci. Ce n’est que du texte tant que vous ne l’avez pas lu et approuvé : les assistants qui atteignent cet espace en sont alors informés, comme venant de cette application et approuvées par vous, et seulement comme la forme de ce que l’application garde : comment lire ses enregistrements et comment écrire pour elle. Si l’application change son texte, il attend de nouveau votre accord. Rien ici n’est approuvé à votre place, quoi que dise un assistant.",
@@ -1250,7 +1264,9 @@ setInterval(() => { if (!document.hidden && $("#app") && !$("#app").hidden) load
 
 async function load() {
   S = await api("state");
-  S.connections = (S.connections || []).filter(c => c.agent !== "janitor");
+  const isInternal = c => c.internal || c.agent === "janitor";
+  S.internal = (S.connections || []).filter(isInternal);
+  S.connections = (S.connections || []).filter(c => !isInternal(c));
   $("#login").hidden = true; $("#app").hidden = false;
   const me = S.me;
   $("#who").textContent = (me.display || me.name) + " · " + (isAdmin() ? "administrator" : "member");
@@ -2038,6 +2054,7 @@ function render() {
       c.person_guide === false ? el("span", { class: "chip" }, "not told your instructions") : null];
   };
   const live = S.connections.filter(c => !c.revoked);
+  const tools = (S.internal || []).filter(c => !c.revoked);
   const isCapture = c => c.agent.startsWith("bridge-");
   const connTile = c => el("div", { class: "tile" + (regranting && regranting.agent === c.agent ? " wide" : "") },
     el("div", { class: "tilehead" },
@@ -2055,9 +2072,18 @@ function render() {
     el("div", { class: "acts" },
       isCapture(c) ? null : el("button", { class: "link", title: "Add or remove spaces for this assistant; its key and address stay the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
       isCapture(c) ? null : el("button", { class: "link", title: "Your own instructions (my instructions) speak of your whole life: an assistant for work need not be told them", onclick: () => act("connections/person-guide", { agent: c.agent, told: c.person_guide === false }) }, c.person_guide === false ? "tell my instructions" : "keep my instructions from it"),
+      isCapture(c) ? null : el("button", { class: "link", title: "One of the program's own tools, not an assistant: it moves to Internal tools", onclick: () => act("connections/internal", { agent: c.agent, internal: true }) }, "mark as internal tool"),
       el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")));
   const assistants = live.filter(c => !isCapture(c)), captures = live.filter(isCapture);
   $("#connections").replaceChildren(...(assistants.length ? assistants.map(connTile) : [el("p", { class: "mute", style: "grid-column:1/-1" }, "Nothing is connected.")]));
+  $("#internal-section").hidden = tools.length === 0;
+  $("#internal").replaceChildren(...tools.map(c => el("div", { class: "tile" },
+    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", {}, c.agent),
+      el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),
+    el("div", {}, reach(c)),
+    el("div", { class: "acts" },
+      el("button", { class: "link", title: "It is an assistant of yours after all: it goes back to the list of connected assistants", onclick: () => act("connections/internal", { agent: c.agent, internal: false }) }, "treat as an assistant"),
+      el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")))));
   $("#captures-section").hidden = captures.length === 0;
   $("#captures").replaceChildren(...captures.map(connTile));
 }
@@ -2434,7 +2460,7 @@ function startWaiting() {
   const tick = async () => {
     try {
       const st = await api("state");
-      S.connections = st.connections.filter(c => c.agent !== "janitor");
+      S.connections = st.connections.filter(c => !c.internal && c.agent !== "janitor");
       const live = S.connections.filter(c => !c.revoked);
       let hit = null;
       if (p.token && W.created) hit = live.find(c => c.agent === W.created.agent && c.last_used_at);

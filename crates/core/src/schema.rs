@@ -27,6 +27,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V16,
     CONTROL_V17,
     CONTROL_V18,
+    CONTROL_V19,
 ];
 
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
@@ -563,4 +564,11 @@ DROP TRIGGER fact_events_no_delete;
 CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
   WHEN NOT EXISTS (SELECT 1 FROM meta WHERE k = 'window_pruning')
   BEGIN SELECT RAISE(ABORT,'append-only'); END;
+";
+
+/// A connection of the program's own tools (the janitor, voice transcription, the weekly report, the device
+/// rangers) is marked `internal`: the page keeps it out of the list of connected assistants and shows it in its own
+/// section, with its own controls.
+const CONTROL_V19: &str = r"
+ALTER TABLE connections ADD COLUMN internal INTEGER NOT NULL DEFAULT 0;
 ";

@@ -187,7 +187,7 @@ fn a_database_from_before_users_upgrades_without_loss() -> Res {
         let c = Connection::open(data.join("control.sqlite"))?;
         c.execute_batch(
             "PRAGMA foreign_keys = OFF;
-             DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; DROP TABLE person_requests; DROP TABLE pairing_codes; DROP TABLE bridge_pairings; DROP TABLE sync_state; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; DROP TABLE oauth_refresh; DROP TABLE oauth_codes; DROP TABLE oauth_clients;
+             DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; DROP TABLE person_requests; DROP TABLE pairing_codes; DROP TABLE bridge_pairings; DROP TABLE sync_state; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; DROP TABLE oauth_refresh; DROP TABLE oauth_codes; DROP TABLE oauth_clients;
              DROP TABLE group_members; DROP TABLE group_spaces; DROP TABLE groups; DROP TABLE space_members;
              ALTER TABLE connections DROP COLUMN user_id; ALTER TABLE connections DROP COLUMN console;
              ALTER TABLE devices DROP COLUMN user_id; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; ALTER TABLE spaces DROP COLUMN kind;
