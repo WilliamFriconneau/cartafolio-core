@@ -66,7 +66,7 @@ fn join_a_node_with_a_code_then_sync_with_the_peer() -> Res {
     let a = brain(&t)?;
     // Join: the person makes a code on the page, the device exchanges it once for a key.
     let ctl = a.open_control()?;
-    let code = pairing::create(&ctl, OWNER, &["health".into()], NOW)?;
+    let (code, _) = pairing::create_for_peer(&a, OWNER, "owner", NOW)?;
     let paired = pairing::redeem(&ctl, &code, "Second node", NOW + 1)?;
     assert!(paired.agent.starts_with("peer-second-node-"));
     // Sync: the second node reads the log of the first after its cursor and applies it.

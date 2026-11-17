@@ -1,4 +1,4 @@
-//! Pairing a bridge: a code shown once, exchanged once, for a connection limited to inboxes.
+//! Pairing a node: a code shown once, exchanged once, for a peer of the person.
 
 mod common;
 
@@ -12,12 +12,11 @@ use serde_json::json;
 const NOW: i64 = 1_900_000_000;
 
 #[test]
-fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -> Res {
+fn a_code_is_exchanged_once_for_a_peer_key() -> Res {
     let t = Temp::new("pairing");
     let brain = brain(&t)?;
     let ctl = brain.open_control()?;
-    let vaults: Vec<String> = vec!["health".into(), "home".into()];
-    let code = pairing::create(&ctl, users::OWNER, &vaults, NOW)?;
+    let (code, _) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     assert_eq!(code.len(), 9, "ABCD-EFGH: {code}");
     assert!(
         code.chars()
@@ -32,10 +31,6 @@ fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -
         "{}",
         paired.agent
     );
-    assert_eq!(paired.vaults, ["health", "home"]);
-    let caller = access::authenticate(&ctl, &paired.token, NOW + 6)?.ok_or("the key works")?;
-    assert!(caller.may_write_tags(&common::sp("health"), &["inbox".to_string()]));
-    assert!(!caller.may_write_tags(&common::sp("health"), &["sante".to_string()]));
     // Once only, and the same answer as an unknown code.
     let again = pairing::redeem(&ctl, &code, "other", NOW + 7);
     let unknown = pairing::redeem(&ctl, "AAAA-AAAA", "other", NOW + 7);
@@ -48,20 +43,12 @@ fn a_code_is_exchanged_once_for_a_key_that_writes_only_to_the_inboxes_ticked() -
 }
 
 #[test]
-fn a_code_expires_and_cannot_reach_beyond_the_person() -> Res {
+fn a_code_expires() -> Res {
     let t = Temp::new("pairing-expire");
     let brain = brain(&t)?;
     let ctl = brain.open_control()?;
-    let code = pairing::create(&ctl, users::OWNER, &["health".into()], NOW)?;
+    let (code, _) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     assert!(pairing::redeem(&ctl, &code, "x", NOW + CODE_TTL).is_err());
-    assert!(
-        pairing::create(&ctl, users::OWNER, &[], NOW).is_err(),
-        "no vault ticked"
-    );
-    assert!(
-        pairing::create(&ctl, users::OWNER, &["nowhere".into()], NOW).is_err(),
-        "a vault the person does not have"
-    );
     Ok(())
 }
 
@@ -69,7 +56,7 @@ fn a_code_expires_and_cannot_reach_beyond_the_person() -> Res {
 fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     let t = Temp::new("pairing-triage");
     let brain = brain(&t)?;
-    let (code, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
+    let (code, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     assert_eq!(triage, "owner-a-trier");
     let ctl = brain.open_control()?;
     let p = pairing::redeem(&ctl, &code, "phone", NOW + 1)?;
@@ -79,7 +66,7 @@ fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     assert!(c.can_write(&box_));
     assert!(c.readable().contains(&box_));
     // A second device gets the same box, never a second one.
-    let (_, again) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW + 3)?;
+    let (_, again) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW + 3)?;
     assert_eq!(again, triage);
     assert!(memcp_core::triage::is_triage(&brain, &box_));
     Ok(())
@@ -90,7 +77,7 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     use memcp_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("triage-send");
     let brain = brain(&t)?;
-    let (_, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
+    let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
     let work = brain.add_vault(users::OWNER, "owner", "work")?;
     let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "bridge-phone");
@@ -144,7 +131,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
         );
     }
     // The person's « À trier » now exists: a key on all spaces writes there, and nowhere else.
-    let (_, triage) = pairing::create_for_triage(&brain, users::OWNER, "owner", NOW)?;
+    let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
     let all = key("assistant-2", "all")?;
     let r = tools::call(&brain, &all, "remember", &note)?;

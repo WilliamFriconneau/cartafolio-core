@@ -20,7 +20,7 @@ const CODE_LEN: usize = 8;
 /// What a device gets for a code.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paired {
-    /// Name of the connection created for the device (`peer-...` or a bridge name).
+    /// Name of the connection created for the device (`peer-<device>-xxxx`).
     pub agent: String,
     /// The bearer token of that connection. Shown once: only its hash is stored.
     pub token: String,
@@ -50,23 +50,9 @@ pub fn display(code: &str) -> String {
     }
 }
 
-/// The rights a bridge gets for the vaults ticked: the inbox of each, nothing else.
-pub fn rights_for(vaults: &[String]) -> Result<Rights> {
-    if vaults.is_empty() {
-        return Err(Error::Invalid("tick at least one vault".into()));
-    }
-    let spec: Vec<String> = vaults.iter().map(|v| format!("{v}/inbox:rw")).collect();
-    Rights::parse(&spec.join(","))
-}
-
-/// A new code for `user_id`, valid [`CODE_TTL`] seconds from `now`, for the inboxes of `vaults`.
-pub fn create(ctl: &Connection, user_id: &str, vaults: &[String], now: i64) -> Result<String> {
-    create_with(ctl, user_id, rights_for(vaults)?, now)
-}
-
 /// A new code for a node of the person's own (a peer): it reads and writes every space the person owns, as the
 /// server does. Nothing is shut in a box: a peer holds the same memory.
-pub fn create_for_triage(
+pub fn create_for_peer(
     brain: &crate::Brain,
     user_id: &str,
     person: &str,

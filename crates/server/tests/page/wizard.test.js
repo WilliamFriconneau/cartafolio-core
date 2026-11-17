@@ -88,13 +88,13 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("there is no address for the whole memory", $("#mcp-url") === null);
   check("a vault row offers to connect an assistant", $$("#spaces button").some(b => b.textContent === "Connect"));
 
-  // --- Connect a bridge: no vault to choose, everything goes to À trier
-  check("no vault is offered to a bridge", $("#pair-all") === null && $("#pair-vaults") === null);
+  // --- Add a node: no space to choose, the new node holds the whole memory
+  check("no space is offered to a node", $("#pair-all") === null && $("#pair-vaults") === null);
   $("#pair-form").dispatchEvent(new w.Event("submit", { cancelable: true }));
   await sleep(100);
   check("one code, asked for no vault", JSON.stringify(world.paired) === "{}" && $("#pair-dlg").hasAttribute("open"), JSON.stringify(world.paired));
   check("the code is shown big with the address", text("#pair-code") === "ABCD-EFGH" && text("#pair-server") === "https://memory.example.net");
-  check("it says everything goes to À trier", text("#pair-into") === "À trier");
+  check("it says the new node holds the same memory", text("#pair-waiting").includes("same memory"));
   check("a countdown runs", /^\d+:\d\d$/.test(text("#pair-left")), text("#pair-left"));
   $("#pair-dlg").removeAttribute("open");
 

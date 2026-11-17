@@ -127,7 +127,7 @@ pub fn request(app: &App, req: &Request) -> Response {
     let mut state = State::Waiting;
     if let Some((user_id, user_name, _)) = allowed
         && let Ok(ctl) = app.brain.open_control()
-        && let Ok((code, _)) = pairing::create_for_triage(&app.brain, &user_id, &user_name, now)
+        && let Ok((code, _)) = pairing::create_for_peer(&app.brain, &user_id, &user_name, now)
         && let Ok(paired) = pairing::redeem(&ctl, &code, &device, now)
     {
         memcp_core::access::auth_event(&ctl, Some(&paired.agent), None, "joined", &device);
@@ -254,7 +254,7 @@ pub fn decide(
         j.state = State::Denied;
         return Ok(json!({ "result": "denied" }));
     }
-    let (code, _) = pairing::create_for_triage(&app.brain, &me.id, &me.name, now)
+    let (code, _) = pairing::create_for_peer(&app.brain, &me.id, &me.name, now)
         .map_err(|e| refused(400, &e.to_string()))?;
     let paired =
         pairing::redeem(ctl, &code, &j.device, now).map_err(|e| refused(400, &e.to_string()))?;

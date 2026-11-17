@@ -496,7 +496,7 @@ fn action(
             // A code a bridge exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
             // never chooses a vault, the janitor or the person sorts what it sends.
             let (code, triage) =
-                memcp_core::pairing::create_for_triage(&app.brain, &me.id, &me.name, util::now())
+                memcp_core::pairing::create_for_peer(&app.brain, &me.id, &me.name, util::now())
                     .map_err(fail)?;
             // What a phone scans: one link, `memcp://join?server=…&code=…`, so that nothing is typed.
             let link = format!(
