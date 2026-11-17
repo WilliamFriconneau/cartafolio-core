@@ -1309,3 +1309,191 @@ fn the_key_can_ride_in_the_address_so_one_url_is_enough() -> Res {
     assert_eq!(e.app.handle(&r).status, 401, "a wrong key does not");
     Ok(())
 }
+
+/// A request to `tools/call` with the key given as the test says: in the header, in the address, in both.
+fn keyed(
+    e: &Env,
+    token: &str,
+    header: Option<&str>,
+    query: Option<&str>,
+    tool: &str,
+    args: Value,
+) -> Response {
+    let auth = header.map(|h| format!("Bearer {h}"));
+    let hs: Vec<(&str, &str)> = auth.iter().map(|a| ("authorization", a.as_str())).collect();
+    let body = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": tool, "arguments": args } });
+    let mut r = rq("POST", &address_of(e, token), &hs, &body.to_string());
+    if let Some(q) = query {
+        r.query.insert("key".into(), q.into());
+    }
+    e.app.handle(&r)
+}
+
+#[test]
+fn the_key_in_the_address_and_the_key_in_the_header_are_the_same_key() -> Res {
+    let e = env()?;
+    let token = connect(&e, "both-ways", "work:rw", false)?;
+    let args = json!({"space": "work", "text": "Written by the address key."});
+    // Header only, address only, both: the same answer.
+    let by_header = keyed(
+        &e,
+        &token,
+        Some(&token),
+        None,
+        "recall",
+        json!({"query": "x", "space": "work"}),
+    );
+    let by_query = keyed(
+        &e,
+        &token,
+        None,
+        Some(&token),
+        "recall",
+        json!({"query": "x", "space": "work"}),
+    );
+    let by_both = keyed(
+        &e,
+        &token,
+        Some(&token),
+        Some(&token),
+        "recall",
+        json!({"query": "x", "space": "work"}),
+    );
+    for r in [&by_header, &by_query, &by_both] {
+        assert_eq!(r.status, 200);
+        assert_eq!(
+            r.body_json()["result"]["content"][0]["text"],
+            by_header.body_json()["result"]["content"][0]["text"]
+        );
+    }
+    // A write by the address key is attributed to the same connection.
+    let w = keyed(&e, &token, None, Some(&token), "remember", args);
+    assert_eq!(
+        text_of(&w.body_json())["fact"]["author"],
+        "both-ways",
+        "{:?}",
+        w.body_json()
+    );
+    // Whitespace around the key in the address does not matter (a pasted address often carries it).
+    assert_eq!(
+        keyed(
+            &e,
+            &token,
+            None,
+            Some(&format!(" {token} ")),
+            "recall",
+            json!({"query": "x", "space": "work"})
+        )
+        .status,
+        200
+    );
+    Ok(())
+}
+
+#[test]
+fn a_wrong_key_is_refused_wherever_it_is_and_the_right_one_does_not_save_it() -> Res {
+    let e = env()?;
+    let token = connect(&e, "strict", "work:rw", false)?;
+    let other = connect(&e, "stranger", "health:rw", false)?;
+    let q = json!({"query": "x", "space": "work"});
+    let cases: [(&str, Option<&str>, Option<&str>); 6] = [
+        ("wrong in the header", Some("hcp_wrong"), None),
+        ("wrong in the address", None, Some("hcp_wrong")),
+        ("none at all", None, None),
+        ("empty in the address", None, Some("")),
+        // The header is read first: a wrong one is not rescued by a right key in the address.
+        (
+            "wrong header, right address",
+            Some("hcp_wrong"),
+            Some(token.as_str()),
+        ),
+        // Another connection's key does not open this address.
+        ("another key", None, Some(other.as_str())),
+    ];
+    for (what, header, query) in cases {
+        let r = keyed(&e, &token, header, query, "recall", q.clone());
+        assert!(matches!(r.status, 401 | 403), "{what}: {}", r.status);
+        assert!(r.body_json().get("result").is_none(), "{what}: no result");
+    }
+    // A right header with a wrong address key is served: the header is the key.
+    assert_eq!(
+        keyed(&e, &token, Some(&token), Some("hcp_wrong"), "recall", q).status,
+        200
+    );
+    // Revoked: the key in the address no longer opens anything.
+    let ctl = e.app.brain.open_control()?;
+    access::revoke(&ctl, "strict")?;
+    let r = keyed(
+        &e,
+        &token,
+        None,
+        Some(&token),
+        "recall",
+        json!({"query": "x", "space": "work"}),
+    );
+    assert_eq!(r.status, 401);
+    Ok(())
+}
+
+#[test]
+fn no_key_is_written_in_the_logs_the_audit_or_the_answers() -> Res {
+    let e = env()?;
+    let token = connect(&e, "quiet", "work:rw", false)?;
+    let secret_try = "hcp_SECRETMARK_0123456789abcdef";
+    let mut answers = vec![];
+    for (h, q) in [
+        (Some(token.as_str()), None),
+        (None, Some(token.as_str())),
+        (None, Some(secret_try)),
+        (Some(secret_try), None),
+    ] {
+        let r = keyed(
+            &e,
+            &token,
+            h,
+            q,
+            "remember",
+            json!({"space": "work", "text": "A note about the weather today."}),
+        );
+        answers.push(r);
+    }
+    answers.push(keyed(
+        &e,
+        &token,
+        None,
+        Some(&token),
+        "recall",
+        json!({"query": "weather", "space": "work"}),
+    ));
+    for r in &answers {
+        let body = String::from_utf8_lossy(&r.body).to_string();
+        let heads = format!("{:?}", r.headers);
+        for key in [token.as_str(), secret_try] {
+            assert!(
+                !body.contains(key) && !heads.contains(key),
+                "a key is echoed: {body} {heads}"
+            );
+        }
+    }
+    // Neither the keys that opened the door nor the one that did not are kept anywhere in the data directory (the
+    // control database and the audit of the spaces hold hashes and names only).
+    drop(e.app.brain.open_control()?);
+    let mut checked = 0;
+    for entry in fs::read_dir(&e.dir)? {
+        let path = entry?.path();
+        if !path.is_file() {
+            continue;
+        }
+        let bytes = fs::read(&path)?;
+        for key in [token.as_str(), secret_try] {
+            assert!(
+                !bytes.windows(key.len()).any(|w| w == key.as_bytes()),
+                "{} holds a key",
+                path.display()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked >= 5, "the databases were looked at ({checked})");
+    Ok(())
+}

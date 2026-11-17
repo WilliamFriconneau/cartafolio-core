@@ -27,7 +27,7 @@ fn rig(tag: &str) -> Rig {
     use memcp_core::text::Language;
     use memcp_core::{Brain, users};
     use memcp_server::app::App;
-    use memcp_server::net::{Listeners, serve};
+    use memcp_server::net::{Listeners, serve_on};
 
     let dir = std::env::temp_dir().join(format!("memcp-janitor-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
@@ -50,11 +50,8 @@ fn rig(tag: &str) -> Rig {
             })
             .collect()
     };
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("bind")
-        .local_addr()
-        .expect("addr")
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").expect("bind");
+    let port = listener.local_addr().expect("addr").port();
     let app = Arc::new(App::new(brain));
     std::thread::spawn(move || {
         let l = Listeners {
@@ -63,7 +60,7 @@ fn rig(tag: &str) -> Rig {
             ingress: None,
             threads: 2,
         };
-        let _ = serve(app, &l, "");
+        let _ = serve_on(app, listener, &l, "");
     });
     for _ in 0..50 {
         if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {

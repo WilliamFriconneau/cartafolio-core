@@ -1486,7 +1486,11 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             let doc = json!({ "version": 1, "tags": clean("tags", true), "keywords": clean("keywords", false) }).to_string();
             let mut new = NewFact::agent(&doc, &caller.agent);
             new.tags = vec!["rules".into()];
+            let unchanged = found.is_some()
+                && serde_json::from_str::<Value>(&doc).ok() == Some(current.clone());
             match found {
+                // The same rules again: nothing to write (a supersede with an identical text is refused).
+                Some(_) if unchanged => {}
                 Some(old) => {
                     facts::supersede(
                         &conn,

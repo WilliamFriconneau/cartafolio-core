@@ -13,7 +13,7 @@ use memcp_core::facts::{self, NewFact, Remembered};
 use memcp_core::text::Language;
 use memcp_core::{Brain, Space, users};
 use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve};
+use memcp_server::net::{Listeners, serve_on};
 use serde_json::json;
 
 const NOW: i64 = 1_794_800_000;
@@ -111,11 +111,8 @@ fn node(name: &str, connections: &[(&str, &str)]) -> Node {
             })
             .collect()
     };
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
+    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let port = listener.local_addr().unwrap().port();
     let app = Arc::new(App::new(Brain::open(&dir).unwrap()));
     std::thread::spawn(move || {
         let l = Listeners {
@@ -124,7 +121,7 @@ fn node(name: &str, connections: &[(&str, &str)]) -> Node {
             ingress: None,
             threads: 8,
         };
-        let _ = serve(app, &l, "");
+        let _ = serve_on(app, listener, &l, "");
     });
     for _ in 0..50 {
         if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
