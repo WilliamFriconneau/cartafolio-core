@@ -1,5 +1,14 @@
 # Changelog
 
+## 20261117.0.8
+
+- **Audit of the core** (docs/reviews/2026-11-17-core-audit.md): a connection limited to tag paths can no longer read or write the log of a space through the sync routes; joining another memory from the page is for administrators; a wrong key with a large declared body counts as a failed attempt; hostile file names and types from a peer are refused; databases opened with trusted_schema off; the failure guard is bounded; OAuth is rate limited; the join check phrase uses all its words.
+- **Peer directory:** every node knows every peer of the memory (name, last activity, version, how it can be reached, which node told it); `peers` and `GET /sync/status` return the union, with `behind` for older versions; assistant connections carry a kind (local or cloud).
+- **Page:** sub-spaces inside their folder, a global journal, a graph of spaces, tags and keywords, assistants listed apart from the machines, French complete.
+- **Janitor:** the names of spaces are tags; "to file in finances and health" copies to both; sub-spaces get their keywords and the most specific wins.
+- **API:** every public item of the core is documented (docs/CORE-API.md), docs/TOOLS.md is exact for all tools and checked by a test, an error vocabulary with HTTP statuses.
+- Conformity table (docs/CONFORMITY.md) and the 5S notes (docs/FIVE-S.md).
+
 ## 20261117.0.7
 
 - The add-on is no longer on the host network: its ingress port clashed with another process on the host and the node did not start. Advertising on the network is left for later.
