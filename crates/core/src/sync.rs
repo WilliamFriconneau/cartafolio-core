@@ -1589,12 +1589,30 @@ impl PeerStatus {
 
 /// Makes the space on this node when a peer has it and this node does not (the first join is a full copy).
 pub fn ensure_space(brain: &Brain, space: &Space, kind: &str) -> Result<()> {
+    use crate::catalogue::{CUSTOM, TRIAGE};
+    // « À trier » is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here: a node that lost
+    // the kind could not tell its own box from any space, nor pair a device for it.
+    let set = |brain: &Brain| -> Result<()> {
+        if kind == TRIAGE {
+            brain.open_control()?.execute(
+                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
+                [space.as_str(), TRIAGE],
+            )?;
+            Ok(())
+        } else {
+            brain.set_space_kind(space, kind)
+        }
+    };
     if brain.has_space(space)? {
+        // A box that an earlier version made `custom` here is put right.
+        if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
+            set(brain)?;
+        }
         return Ok(());
     }
     brain.add_space(space)?;
     // A kind this node's catalogue does not know stays `custom`.
-    let _ = brain.set_space_kind(space, kind);
+    let _ = set(brain);
     Ok(())
 }
 
