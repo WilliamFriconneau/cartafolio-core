@@ -224,7 +224,7 @@ fn a_long_list_of_records_goes_in_batches_with_the_positions_of_the_whole_list()
     let total = 2 * BATCH + 50;
     let records: Vec<Value> = (0..total)
         .map(
-            |i| json!({"text": format!("t{i}"), "origin": {"app":"kalios","id": format!("n/{i}")}}),
+            |i| json!({"text": format!("t{i}"), "origin": {"app":"healthapp","id": format!("n/{i}")}}),
         )
         .collect();
     let d = c.deposit("owner-health", &records).expect("deposited");
@@ -314,13 +314,13 @@ fn engine(rights: &[(&str, &str)]) -> (String, Vec<String>, std::path::PathBuf) 
 #[test]
 fn against_the_real_engine_a_feed_and_a_recording_are_kept_under_the_keys_own_paths() {
     let (base, tokens, dir) = engine(&[
-        ("kalios", "sam-me/sources/kalios:rw"),
+        ("healthapp", "sam-me/sources/healthapp:rw"),
         ("bridge", "sam-me/inbox:rw"),
     ]);
     // An app's feed: 1030 records in three calls, and the same again changes nothing.
-    let mut feed = Client::new(&format!("{base}/kalios"), &tokens[0]);
+    let mut feed = Client::new(&format!("{base}/healthapp"), &tokens[0]);
     let records: Vec<Value> = (0..2 * BATCH + 30)
-        .map(|i| json!({"text": format!("[Kalios] note e{i}: sommeil {i}"), "origin": {"app":"kalios","id": format!("note/e{i}"),"at":"2026-11-02"}}))
+        .map(|i| json!({"text": format!("[HealthApp] note e{i}: sommeil {i}"), "origin": {"app":"healthapp","id": format!("note/e{i}"),"at":"2026-11-02"}}))
         .collect();
     let d = feed.deposit("sam-me", &records).expect("first send");
     assert_eq!((d.results.len(), d.failed), (2 * BATCH + 30, 0));

@@ -270,7 +270,7 @@ fn merge_json(held: &mut serde_json::Map<String, Value>, new: &serde_json::Map<S
     }
 }
 
-/// A record's text split into the label an app puts before its JSON object (`[Kalios] event E1: `)
+/// A record's text split into the label an app puts before its JSON object (`[HealthApp] event E1: `)
 /// and the object itself; the label is empty for plain JSON. `None` when no object follows.
 fn labelled_json(t: &str) -> Option<(&str, serde_json::Map<String, Value>)> {
     let at = t.find('{')?;

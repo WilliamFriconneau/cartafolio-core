@@ -12,7 +12,7 @@ One node may be the **admin**: the one whose page the person uses to see all the
 
 ## How a person grows into it
 
-1. **One Windows PC.** The person installs the app (Kalios). All the data is on this PC, in a folder an assistant such as Claude can read, with the instructions in it. No server, nothing else.
+1. **One Windows PC.** The person installs the app (HealthApp). All the data is on this PC, in a folder an assistant such as Claude can read, with the instructions in it. No server, nothing else.
 2. **A second computer** joins as a peer. They synchronise. An assistant runs on either. If one is lost, the other has everything.
 3. **Their own server**, when they want one, is one more node (Linux, Windows or anything that runs the program). It is "the MemCP server" only because it is always on and reachable. It can rebuild every other node.
 4. **Three nodes or more**, each synchronising with the others, whichever are on. A laptop closed for a week catches up when it opens.

@@ -66,7 +66,7 @@ words that file a note there), and its **graph**: spaces, tags and keywords link
 ### Health: a space, inside Spaces
 
 Health is not a section of its own: it is the health space, in Spaces, with the boards every space has by default
-(What's next, Ideas, Targets with their signs, lists) and its dashboard. Its sub-space *Kalios* keeps the history of the
+(What's next, Ideas, Targets with their signs, lists) and its dashboard. Its sub-space *HealthApp* keeps the history of the
 original health journal, apart from dictated notes, so one always knows where a measure comes from. « Prepare an
 appointment » (a PDF laid out as nurses hand over, SBAR) is free, on every app.
 
@@ -113,7 +113,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 4. *A second device*: install, « Continue with the memory of <device> », the same memory in a minute.
 5. *An assistant*: Settings › Assistants › Connect, paste the line in Claude, ask « what's next at home? ».
 
-**Health (the nurse's paths, from Kalios)**
+**Health (the nurse's paths, from HealthApp)**
 6. *A symptom noted*: « headache since this morning » → the sign counted under its target, the target's trend in Spaces › Health.
 7. *A measure said*: « blood pressure 12/8 leaving the doctor's » → « Add to Apple Health? » (accept, always for this
    kind, always for Apple Health, refuse).

@@ -140,7 +140,7 @@ fn a_json_record_merges_field_by_field_and_a_null_erases_nothing() -> Res {
     let id = "vitals_day/2026-11-05";
     send(
         &b,
-        "kalios",
+        "healthapp",
         id,
         "2026-11-05",
         r#"{"date":"2026-11-05","steps":100,"sleep_total_h":7.5,"resting_heart_rate_bpm":50,"naps":[{"min":20}],"extra":{"a":1,"b":2}}"#,
@@ -148,7 +148,7 @@ fn a_json_record_merges_field_by_field_and_a_null_erases_nothing() -> Res {
     // A thinner reading: a new field is added, a non-null value updates, null / empty / absent erase nothing.
     let Deposit::Updated { replaced, .. } = send(
         &b,
-        "kalios",
+        "healthapp",
         id,
         "2026-11-05",
         r#"{"date":"2026-11-05","steps":900,"sleep_total_h":null,"naps":[],"stand":1,"extra":{"b":3,"c":null}}"#,
@@ -156,7 +156,7 @@ fn a_json_record_merges_field_by_field_and_a_null_erases_nothing() -> Res {
     else {
         return Err("not updated".into());
     };
-    let day = active_text(&b, "kalios", id)?;
+    let day = active_text(&b, "healthapp", id)?;
     assert_eq!(day["steps"], 900);
     assert_eq!(day["sleep_total_h"], 7.5);
     assert_eq!(day["resting_heart_rate_bpm"], 50);
@@ -170,13 +170,13 @@ fn a_json_record_merges_field_by_field_and_a_null_erases_nothing() -> Res {
     // A reading that adds nothing is not a new version.
     let none = send(
         &b,
-        "kalios",
+        "healthapp",
         id,
         "2026-11-05",
         r#"{"date":"2026-11-05","steps":null,"stand":1}"#,
     )?;
     assert!(matches!(none, Deposit::Unchanged(_)), "{none:?}");
-    assert_eq!(origin::cursor(&b.conn, "kalios")?.facts, 1);
+    assert_eq!(origin::cursor(&b.conn, "healthapp")?.facts, 1);
     Ok(())
 }
 
@@ -185,7 +185,7 @@ fn the_dossier_layer_is_still_rewritten_whole() -> Res {
     let b = bench()?;
     let dep = |text: &str| -> Result<Deposit, Box<dyn std::error::Error>> {
         let o =
-            Origin::parse("kalios", "d/1", Some("2026-11-05"))?.in_layer(origin::Layer::Dossier);
+            Origin::parse("healthapp", "d/1", Some("2026-11-05"))?.in_layer(origin::Layer::Dossier);
         Ok(origin::deposit(
             &b.conn,
             &sp("health"),
@@ -511,22 +511,22 @@ fn the_dossier_is_a_layer_of_its_own_and_is_read_where_the_raw_is_not() -> Res {
     Ok(())
 }
 
-/// Kalios sends `[Kalios] event <id>: {json}`: a label before the object. Two versions of it merge
+/// HealthApp sends `[HealthApp] event <id>: {json}`: a label before the object. Two versions of it merge
 /// field by field, like plain JSON, instead of the whole text being appended at every send.
 #[test]
 fn a_labelled_json_record_merges_field_by_field() -> Res {
     let b = bench()?;
-    let label = "[Kalios] event E1: ";
+    let label = "[HealthApp] event E1: ";
     send(
         &b,
-        "kalios",
+        "healthapp",
         "event/E1",
         "2026-11-06",
         &format!("{label}{{\"text\":\"note\",\"mood\":3}}"),
     )?;
     let Deposit::Updated { fact, .. } = send(
         &b,
-        "kalios",
+        "healthapp",
         "event/E1",
         "2026-11-06",
         &format!("{label}{{\"text\":\"note\",\"mood\":null,\"energy\":2}}"),
@@ -534,7 +534,7 @@ fn a_labelled_json_record_merges_field_by_field() -> Res {
     else {
         return Err("not updated".into());
     };
-    assert_eq!(fact.text.matches("[Kalios]").count(), 1, "{}", fact.text);
+    assert_eq!(fact.text.matches("[HealthApp]").count(), 1, "{}", fact.text);
     let json: serde_json::Value =
         serde_json::from_str(fact.text.strip_prefix(label).ok_or("label lost")?)?;
     assert_eq!(json["mood"], 3, "a null erases nothing");
@@ -546,10 +546,10 @@ fn a_labelled_json_record_merges_field_by_field() -> Res {
 #[test]
 fn there_is_no_size_limit() -> Res {
     let b = bench()?;
-    let first = format!("[Kalios] event E2 (part 1/2): {}", "a".repeat(3000));
-    let second = format!("[Kalios] event E2 (part 1/2): {}", "b".repeat(3000));
-    send(&b, "kalios", "event/E2#1", "2026-11-06", &first)?;
-    let Deposit::Updated { fact, .. } = send(&b, "kalios", "event/E2#1", "2026-11-06", &second)?
+    let first = format!("[HealthApp] event E2 (part 1/2): {}", "a".repeat(3000));
+    let second = format!("[HealthApp] event E2 (part 1/2): {}", "b".repeat(3000));
+    send(&b, "healthapp", "event/E2#1", "2026-11-06", &first)?;
+    let Deposit::Updated { fact, .. } = send(&b, "healthapp", "event/E2#1", "2026-11-06", &second)?
     else {
         return Err("not updated".into());
     };
@@ -558,12 +558,12 @@ fn there_is_no_size_limit() -> Res {
         "nothing dropped"
     );
     let long = "x".repeat(200_000);
-    let Deposit::Created(f) = send(&b, "kalios", "event/long", "2026-11-06", &long)? else {
+    let Deposit::Created(f) = send(&b, "healthapp", "event/long", "2026-11-06", &long)? else {
         return Err("not created".into());
     };
     assert_eq!(f.text.len(), 200_000);
     let id = "y".repeat(500);
-    send(&b, "kalios", &id, "2026-11-06", "a long id")?;
+    send(&b, "healthapp", &id, "2026-11-06", "a long id")?;
     Ok(())
 }
 

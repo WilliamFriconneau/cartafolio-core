@@ -166,3 +166,21 @@ pub fn remove_terms(conn: &mut Connection, name: &str, terms: &[String]) -> Resu
     tx.commit()?;
     Ok(gone)
 }
+
+/// The terms of the space's vocabularies that are among `candidates` (lowercase, as the text writes them).
+pub fn matching(conn: &Connection, candidates: &[String]) -> Result<Vec<String>> {
+    let any: Option<i64> = conn
+        .query_row("SELECT 1 FROM vocabularies LIMIT 1", [], |r| r.get(0))
+        .ok();
+    if any.is_none() {
+        return Ok(vec![]);
+    }
+    let mut st = conn.prepare_cached("SELECT 1 FROM vocabulary_terms WHERE term = ?1 LIMIT 1")?;
+    let mut out = Vec::new();
+    for c in candidates {
+        if st.exists([c])? {
+            out.push(c.clone());
+        }
+    }
+    Ok(out)
+}

@@ -92,6 +92,7 @@ impl Fact {
             "status_by": self.status_by,
             "status_reason": self.status_reason,
             "tags": self.tags,
+            "fields": crate::autotag::fields_of(&self.tags),
         })
     }
 }

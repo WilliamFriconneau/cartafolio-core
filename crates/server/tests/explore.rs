@@ -656,6 +656,41 @@ fn second_space(e: &Env, who: (&str, &str), space: &str) -> Result<(), Box<dyn E
 }
 
 #[test]
+fn a_note_written_on_the_page_is_tagged_and_the_journal_shows_its_tags_and_fields() -> Res {
+    let e = env()?;
+    person_with(&e, SAM, "health")?;
+    let r = post(
+        &e,
+        "fact/add",
+        SAM,
+        json!({ "space": "health", "text": "Douleur 2/10 ce matin, tension 12/8", "tags": ["journal"] }),
+    );
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let fact = &r.body_json()["fact"];
+    let tags: Vec<&str> = fact["tags"]
+        .as_array()
+        .ok_or("tags")?
+        .iter()
+        .filter_map(|t| t.as_str())
+        .collect();
+    for t in ["journal", "health", "signe/douleur", "mesure/tension"] {
+        assert!(tags.contains(&t), "{t}: {tags:?}");
+    }
+    assert_eq!(fact["fields"]["level"], "2/10");
+    let all = get(&e, "journal", &[], SAM).body_json();
+    let row = &all["facts"][0];
+    assert!(row["tags"].to_string().contains("signe/douleur"), "{all}");
+    assert_eq!(row["fields"]["tension"], "12/8");
+    // The tag cloud shows the tags, not the plumbing of the fields.
+    let cloud = all["tags"].to_string();
+    assert!(
+        cloud.contains("mesure/tension") && !cloud.contains("field"),
+        "{cloud}"
+    );
+    Ok(())
+}
+
+#[test]
 fn the_journal_reads_every_space_of_the_person_newest_first_and_nobody_elses() -> Res {
     let e = env()?;
     person_with(&e, SAM, "notes")?;

@@ -42,6 +42,7 @@
 //! ```
 
 pub mod access;
+pub mod autotag;
 mod brain;
 pub mod catalogue;
 pub mod directory;

@@ -357,7 +357,7 @@ fn visible_tools_follow_rights_and_read_only() -> Res {
     assert!(
         !owner
             .iter()
-            .any(|n| n.starts_with("kalios") || n.starts_with("health_")),
+            .any(|n| n.starts_with("healthapp") || n.starts_with("health_")),
         "{owner:?}"
     );
     let reader = tool_names(&e, &connect(&e, "reader", "health:rw", true)?);
@@ -884,7 +884,7 @@ fn the_stdio_server_speaks_mcp_with_the_rights_of_its_key_and_nothing_else_on_st
         names.contains(&"remember".to_string())
             && names
                 .iter()
-                .all(|n| !n.starts_with("health_") && !n.starts_with("kalios_"))
+                .all(|n| !n.starts_with("health_") && !n.starts_with("healthapp_"))
     );
     assert_eq!(text_of(&by_id(3))["result"], "created");
     assert_eq!(
@@ -1017,7 +1017,7 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
     assert!(
         names
             .iter()
-            .all(|n| !n.starts_with("health_") && !n.starts_with("kalios_")),
+            .all(|n| !n.starts_with("health_") && !n.starts_with("healthapp_")),
         "no health tool at the address of the work vault"
     );
     let denied = rpc_at(&e, "/mcp/work", &all, json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x", "space": "health" } } })).body_json();
@@ -1196,7 +1196,7 @@ fn doctor_fails_on_a_missing_vault_file_and_on_a_data_directory_that_is_not_ther
 fn the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key() -> Res {
     let e = env()?;
     let mine = connect(&e, "claudeai", "work:rw", false)?;
-    let other = connect(&e, "kalios", "health:rw", false)?;
+    let other = connect(&e, "healthapp", "health:rw", false)?;
     let ping = json!({ "jsonrpc": "2.0", "id": 1, "method": "ping" });
     // Its own address and the address of a vault it reaches take it; the bare /mcp is nobody's.
     for path in ["/mcp/claudeai", "/mcp/work"] {
@@ -1204,7 +1204,7 @@ fn the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key() -> Res
     }
     assert_eq!(rpc_at(&e, "/mcp", &mine, ping.clone()).status, 404);
     // Another connection's address does not, nor an address that is nobody's.
-    for path in ["/mcp/kalios", "/mcp/nobody"] {
+    for path in ["/mcp/healthapp", "/mcp/nobody"] {
         let r = rpc_at(&e, path, &mine, ping.clone());
         assert_eq!(r.status, 403, "{path}");
         assert_eq!(
@@ -1212,7 +1212,10 @@ fn the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key() -> Res
             "this key does not reach this address"
         );
     }
-    assert_eq!(rpc_at(&e, "/mcp/kalios", &other, ping.clone()).status, 200);
+    assert_eq!(
+        rpc_at(&e, "/mcp/healthapp", &other, ping.clone()).status,
+        200
+    );
     // A key that is not one is sent to discover the address it was given, not the general one.
     let r = rpc_at(&e, "/mcp/claudeai", "wrong", ping);
     assert_eq!(r.status, 401);

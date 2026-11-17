@@ -68,6 +68,7 @@ fn fact_row(f: &facts::Fact) -> Value {
         "text": f.text,
         "extract": extract(&f.text, 160),
         "tags": f.tags,
+        "fields": memcp_core::autotag::fields_of(&f.tags),
         "author": f.author,
         "created_at": f.created_at,
         "created": iso(f.created_at),
@@ -695,7 +696,7 @@ pub fn journal(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) 
         };
         if before.is_none() {
             for (t, n) in facts::tag_counts(&conn).unwrap_or_default() {
-                if !system_tag(&t) {
+                if !system_tag(&t) && t != "field" && !t.starts_with("field/") {
                     *tag_totals.entry(t).or_insert(0) += n;
                 }
             }
@@ -937,10 +938,13 @@ pub fn write(
     let who = author(me);
     match path {
         "/fact/add" => {
-            let new = NewFact {
+            let mut new = NewFact {
                 tags: tags_of(body),
                 ..NewFact::agent(text_of(body)?, "web-page")
             };
+            // The node tags what the page writes, as it tags every write.
+            let text = new.text.clone();
+            memcp_core::autotag::add_to(&app.brain, &me.id, &space, &conn, &text, &mut new.tags);
             let distinct: Vec<String> = body
                 .get("distinct_from")
                 .and_then(Value::as_array)
@@ -977,7 +981,15 @@ pub fn write(
                 ..NewFact::agent(text_of(body)?, "web-page")
             };
             let reason = body.get("reason").and_then(Value::as_str);
+            let old = facts::read_fact(&conn, id).map_err(fail)?;
+            let retagged = !new.tags.is_empty();
             let f = facts::supersede(&conn, &space, &who, id, new, reason).map_err(fail)?;
+            // The person changed the tags of a note: the node learns it.
+            if let (true, Some(old)) = (retagged, old) {
+                memcp_core::autotag::learn_change(
+                    &app.brain, &who, &space, &f.text, &old.tags, &f.tags,
+                );
+            }
             Ok(json!({ "result": "replaced", "fact": fact_row(&f) }))
         }
         "/fact/restore" => {

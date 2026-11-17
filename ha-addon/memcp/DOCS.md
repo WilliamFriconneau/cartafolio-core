@@ -32,7 +32,7 @@ The memory is not encrypted at rest: whoever can read the disk can read it. Prot
 
 ## Connecting an assistant
 
-The page asks the connection's name first: it is the end of its address, `http://<home-assistant>:8791/mcp/<name>`. It then shows the token once and the line to paste (or, for Kalios, a configuration to paste). Any MCP client with a bearer header works: that address, header `Authorization: Bearer <token>`. A key only works at its own connection's address (or at `/mcp/<vault>`, which is limited to that vault); the bare `/mcp` answers nothing. The key says whose memory it is.
+The page asks the connection's name first: it is the end of its address, `http://<home-assistant>:8791/mcp/<name>`. It then shows the token once and the line to paste (or, for HealthApp, a configuration to paste). Any MCP client with a bearer header works: that address, header `Authorization: Bearer <token>`. A key only works at its own connection's address (or at `/mcp/<vault>`, which is limited to that vault); the bare `/mcp` answers nothing. The key says whose memory it is.
 
 Port 8791 carries tokens in clear: reach it through Tailscale or a TLS proxy, not from the internet.
 
