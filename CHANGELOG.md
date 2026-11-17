@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.16
+
+- **A note sent out of À trier is tagged like one written in its space:** the tag of the space, then what the text says there (signs, levels and measures in a health space, the space's own keywords elsewhere). Notes dictated on a device, which wait in À trier first, now get their tags when the janitor or the person files them.
+
 ## 20261117.0.15
 
 - **The node keeps answering:** a request declaring a huge body no longer aborts it, clients that declare a body and send nothing no longer hold its workers, and a burst of connections kept open no longer leaves later ones unread (the HTTP server tiny_http is kept in `vendor/` with these fixes).

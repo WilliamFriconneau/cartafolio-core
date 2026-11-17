@@ -153,7 +153,16 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
 
 /// Sends one note or one file of `from` (an « À trier ») to the inbox of the vault `to`, as it is; then it leaves
 /// `from`, once the write is certain. The id of what holds it now.
-pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> Result<String> {
+/// `user_id` is the person the space belongs to: the note gets the tags of `to` and what its text says there, as if it
+/// had been written in it (the same as `remember`), with what that person taught the node.
+pub fn send(
+    brain: &Brain,
+    from: &Space,
+    id: &str,
+    to: &Space,
+    author: &str,
+    user_id: &str,
+) -> Result<String> {
     if !is_triage(brain, from) {
         return Err(Error::Invalid(format!("{from} is not an « À trier »")));
     }
@@ -164,12 +173,20 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
     if let Some(f) = files::info(brain, from, id)?.filter(|f| f.status == "active") {
         let (_, bytes) =
             files::get(brain, from, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))?;
-        let tags = match &f.fact_id {
+        let mut tags = match &f.fact_id {
             Some(fid) => facts::read_fact(&brain.open_space(from)?, fid)?
                 .map(|x| x.tags)
                 .unwrap_or_default(),
             None => vec!["inbox".into()],
         };
+        crate::autotag::add_to(
+            brain,
+            user_id,
+            to,
+            &brain.open_space(to)?,
+            &f.note,
+            &mut tags,
+        );
         let new = files::put_tagged(brain, to, author, &f.name, &f.note, &bytes, &tags)?;
         files::retire(brain, from, author, id, &reason(&new.id))?;
         learn_route(
@@ -200,6 +217,7 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         t
     };
     let dst = brain.open_space(to)?;
+    crate::autotag::add_to(brain, user_id, to, &dst, &fact.text, &mut new.tags);
     let new_id = match facts::remember(&dst, to, author, new, &[])? {
         Remembered::Created(f) | Remembered::Duplicate(f) => f.id,
         // An inbox note is never held back by the ones it resembles.

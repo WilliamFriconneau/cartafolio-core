@@ -240,7 +240,7 @@ pub(super) fn triage_send(
             || facts::read_fact(&brain.open_space(&from)?, id)?
                 .is_some_and(|f| f.status == "active");
         if holds {
-            let new = crate::triage::send(brain, &from, id, &to, &caller.agent)?;
+            let new = crate::triage::send(brain, &from, id, &to, &caller.agent, &caller.user_id)?;
             return Ok(json!({ "result": "sent", "id": new, "to": to.as_str() }));
         }
     }

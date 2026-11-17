@@ -90,10 +90,10 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     let waiting = memcp_core::triage::waiting(&brain, &box_, 20)?;
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(1));
     assert!(
-        memcp_core::triage::send(&brain, &work, &note.id, &box_, "owner").is_err(),
+        memcp_core::triage::send(&brain, &work, &note.id, &box_, "owner", "owner").is_err(),
         "only out of À trier"
     );
-    let new = memcp_core::triage::send(&brain, &box_, &note.id, &work, "owner")?;
+    let new = memcp_core::triage::send(&brain, &box_, &note.id, &work, "owner", "owner")?;
     let moved = facts::read_fact(&brain.open_space(&work)?, &new)?.ok_or("moved")?;
     assert_eq!(moved.text, note.text, "as it is");
     assert!(

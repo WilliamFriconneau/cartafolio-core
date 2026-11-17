@@ -528,8 +528,9 @@ fn action(
                     "{to} is not one of your vaults"
                 ))));
             }
-            let id = memcp_core::triage::send(&app.brain, &from, arg(body, "id")?, &to, &me.id)
-                .map_err(fail)?;
+            let id =
+                memcp_core::triage::send(&app.brain, &from, arg(body, "id")?, &to, &me.id, &me.id)
+                    .map_err(fail)?;
             Ok(json!({ "ok": true, "id": id, "space": to.as_str() }))
         }
         "/triage/send-many" => {
@@ -558,7 +559,7 @@ fn action(
             }
             let (mut sent, mut failed) = (0usize, Vec::<String>::new());
             for id in ids {
-                match memcp_core::triage::send(&app.brain, &from, id, &to, &me.id) {
+                match memcp_core::triage::send(&app.brain, &from, id, &to, &me.id, &me.id) {
                     Ok(_) => sent += 1,
                     Err(_) => failed.push(id.to_string()),
                 }

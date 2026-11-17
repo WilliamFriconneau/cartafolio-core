@@ -93,6 +93,10 @@ to-sort box on Linux).
 `NodeRecordingsWaiting`; the protocol `NodeAudioDecoder { func decode(path:) throws -> [Float] }`; the error `NodeIntakeError`
 (`invalid`, `failed`). Types and meanings: [INTAKE.md](INTAKE.md#the-apps).
 
+## 20261117.0.16
+
+- **`triage_send`** and the page's « send »: the note gets the automatic tags of the space it goes to, as `remember` gives them.
+
 ## 20261117.0.14
 
 - **MCP `tags_suggest`** (read) `{space, text}` -> `{space, tags, fields, field_tags, all_tags, route: [{space, score}]}`: what the tagger would give for a text, without writing.

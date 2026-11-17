@@ -423,7 +423,14 @@ fn where_the_person_sends_notes_is_learned_and_the_janitors_choice_is_not() -> R
     };
     // The janitor sends: not learned.
     for text in ["Facture plombier chaudière", "Plombier facture robinet"] {
-        triage::send(&b, &box_, &drop(text)?, &sp("home"), "memcp-janitor")?;
+        triage::send(
+            &b,
+            &box_,
+            &drop(text)?,
+            &sp("home"),
+            "memcp-janitor",
+            "owner",
+        )?;
     }
     let p = tools::call(
         &b,
@@ -437,7 +444,7 @@ fn where_the_person_sends_notes_is_learned_and_the_janitors_choice_is_not() -> R
         "Contrat assurance auto renouvelé",
         "Assurance auto contrat échéance",
     ] {
-        triage::send(&b, &box_, &drop(text)?, &sp("personal"), "owner")?;
+        triage::send(&b, &box_, &drop(text)?, &sp("personal"), "owner", "owner")?;
     }
     let p = tools::call(
         &b,
@@ -481,5 +488,49 @@ fn the_tags_come_back_in_a_living_page_and_in_recall() -> Res {
     )?;
     assert!(has(&r["results"][0], "signe/douleur"), "{r}");
     assert_eq!(r["results"][0]["fields"]["level"], "2/10");
+    Ok(())
+}
+
+#[test]
+fn a_note_sent_out_of_a_triage_space_is_tagged_like_one_written_there() -> Res {
+    let t = Temp::new("autotag-triage");
+    let b = brain(&t)?;
+    let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
+    let device = caller(&b, "peer-phone-y", &format!("{box_name}:rw"))?;
+    let janitor = caller(&b, "memcp-janitor", "all")?;
+    // A device writes with no space: the note waits in À trier, untagged by the space it will go to.
+    let r = tools::call(
+        &b,
+        &device,
+        "remember",
+        &json!({ "text": "Douleur 3/10 ce matin. Tension 12/8.", "tags": ["inbox"] }),
+    )?;
+    let id = r["fact"]["id"].as_str().ok_or("id")?;
+    let sent = tools::call(
+        &b,
+        &janitor,
+        "triage_send",
+        &json!({ "id": id, "to": "health" }),
+    )?;
+    let new = sent["id"].as_str().ok_or("id")?;
+    let f = tools::call(
+        &b,
+        &janitor,
+        "read_fact",
+        &json!({ "space": "health", "id": new }),
+    )?;
+    let fact = if f["fact"].is_object() {
+        &f["fact"]
+    } else {
+        &f
+    };
+    assert!(has(fact, "health"), "the tag of the space first: {f}");
+    assert!(has(fact, "inbox"), "still to be read: {f}");
+    assert!(
+        fact["tags"].as_array().is_some_and(|a| a
+            .iter()
+            .any(|t| t.as_str().is_some_and(|s| s.starts_with("field/")))),
+        "the levels and measures said: {f}"
+    );
     Ok(())
 }
