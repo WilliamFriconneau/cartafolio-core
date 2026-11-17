@@ -307,12 +307,19 @@ pub fn transcribe(
                     }
                 }
             }
+            // What the recording says of its call (participants, app) goes on to its text.
+            let call_tags: Vec<String> = tags_of(desc)
+                .into_iter()
+                .filter(|t| memcp_core::call::is_call_tag(t))
+                .map(String::from)
+                .collect();
             one(
                 memory,
                 &whisper,
                 &mut state,
                 space,
                 f,
+                &call_tags,
                 id,
                 name,
                 offset_minutes,
@@ -360,6 +367,7 @@ fn one(
     state: &mut State,
     space: &str,
     f: &Value,
+    call_tags: &[String],
     id: &str,
     name: &str,
     offset_minutes: i32,
@@ -422,7 +430,9 @@ fn one(
                 } else {
                     String::new()
                 };
-                let args = json!({ "space": space, "kind": "context", "tags": ["inbox", "dictee"], "text": format!("{head}{of} : {part}") });
+                let mut tags = vec!["inbox".to_string(), "dictee".to_string()];
+                tags.extend(call_tags.iter().cloned());
+                let args = json!({ "space": space, "kind": "context", "tags": tags, "text": format!("{head}{of} : {part}") });
                 match memory.call("remember", args) {
                     Ok(r) => {
                         let Some(fact) = r["fact"]["id"].as_str() else {

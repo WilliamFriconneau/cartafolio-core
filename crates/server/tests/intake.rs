@@ -206,6 +206,78 @@ fn recordings_with_no_text_are_read_here_and_the_rest_left_alone() {
 }
 
 #[test]
+fn the_transcription_of_a_call_recording_inherits_its_call() {
+    use base64::Engine as _;
+    let w = world("voice-call", false);
+    let dir = w.dir.join("tools");
+    std::fs::create_dir_all(&dir).expect("dir");
+    let settings = speech(&dir);
+    let mut mem = w.memory();
+    mem.call(
+        "file_put",
+        json!({
+            "space": "sam-me", "name": "2026-11-02-13h34-call.wav", "note": "call recording",
+            "tags": ["inbox/audio"],
+            "data_base64": base64::engine::general_purpose::STANDARD.encode(audio("rendez-vous alpha demain")),
+            "call": { "caller": ["Alice Martin"], "callee": ["+33 6 12 34 56 78"], "app": "phone", "direction": "in" },
+        }),
+    )
+    .expect("recording");
+    // A recording with no call stays as it was.
+    mem.file_put(
+        "sam-me",
+        "2026-11-02-14h00-note.wav",
+        "dictée",
+        &["inbox/audio"],
+        &audio("simple dictée beta"),
+    )
+    .expect("recording");
+    let state = dir.join("state");
+    let spaces = vec!["sam-me".to_string()];
+    let r = voice::transcribe(&mut mem, &spaces, &settings, &state, 60).expect("pass");
+    assert_eq!(r.transcribed, 2, "{r:?}");
+    let found = mem
+        .call(
+            "recall",
+            json!({ "space": "sam-me", "query": "alpha", "tags": ["inbox"], "limit": 10 }),
+        )
+        .expect("recall");
+    let note = &found["results"][0];
+    let tags: Vec<&str> = note["tags"]
+        .as_array()
+        .expect("tags")
+        .iter()
+        .filter_map(|t| t.as_str())
+        .collect();
+    for tag in [
+        "inbox",
+        "dictee",
+        "appel",
+        "appel/phone",
+        "personnes/alice-martin",
+        "field/caller/alice-martin",
+        "field/callee/33612345678",
+        "field/call_app/phone",
+        "field/call_direction/in",
+    ] {
+        assert!(tags.contains(&tag), "{tag} missing in {tags:?}");
+    }
+    assert_eq!(note["fields"]["caller"], json!(["alice-martin"]), "{note}");
+    assert_eq!(note["fields"]["callee"], json!(["+33612345678"]), "{note}");
+    let plain = mem
+        .call(
+            "recall",
+            json!({ "space": "sam-me", "query": "beta", "tags": ["inbox"], "limit": 10 }),
+        )
+        .expect("recall");
+    let plain_tags = plain["results"][0]["tags"].to_string();
+    assert!(
+        !plain_tags.contains("appel") && !plain_tags.contains("personnes/"),
+        "{plain_tags}"
+    );
+}
+
+#[test]
 fn every_space_the_person_writes_to_is_read_once_a_space_made_later_included() {
     let w = world("voice-all", true);
     let dir = w.dir.join("tools");

@@ -92,6 +92,18 @@ fn filed_text(title: &str, text: &str) -> String {
     }
 }
 
+/// Whether a tag comes from the `call` of a note (its participants, its app): the janitor keeps those when it files.
+fn is_call_tag(tag: &str) -> bool {
+    tag == "appel"
+        || tag.starts_with("appel/")
+        || tag.starts_with("personnes/")
+        || tag.strip_prefix("field/").is_some_and(|r| {
+            ["caller/", "callee/", "call_"]
+                .iter()
+                .any(|p| r.starts_with(p))
+        })
+}
+
 fn tags_of(fact: &Value) -> Vec<&str> {
     fact["tags"]
         .as_array()
@@ -676,6 +688,8 @@ impl Janitor {
                     && work_rule::applies(text, &self.config.work_words)
                 {
                     (vec![work_rule::WORK.to_string()], "the person's work rule")
+                } else if let Some(v) = self.people_route(&tags_of(note), triage, vaults) {
+                    (vec![v], "the people of the note")
                 } else {
                     let routed =
                         router::decide(text, &tags_of(note), &self.routing_rules(), &self.layout)
@@ -723,6 +737,32 @@ impl Janitor {
             }
         }
         unplaced
+    }
+
+    /// Where the person sent earlier notes with the same people (the `personnes/` tags of the note), as the node learned it:
+    /// a strong hint, ahead of the keywords. A note with no person, or a node that learned nothing, says nothing.
+    fn people_route(&mut self, tags: &[&str], triage: &str, vaults: &[String]) -> Option<String> {
+        let people: Vec<&str> = tags
+            .iter()
+            .copied()
+            .filter(|t| t.starts_with("personnes/"))
+            .collect();
+        if people.is_empty() {
+            return None;
+        }
+        let answer = self
+            .client
+            .call("tags_suggest", json!({ "text": "-", "tags": people }))
+            .ok()?;
+        let first = answer["route"].as_array()?.first()?;
+        if first.get("by")?.as_str() != Some("people") {
+            return None;
+        }
+        first
+            .get("space")?
+            .as_str()
+            .filter(|s| *s != triage && vaults.iter().any(|v| v == s))
+            .map(String::from)
     }
 
     /// Where the person has sent notes like this one, as the node learned it (`tags_suggest`, `route`): the first space,
@@ -1120,6 +1160,12 @@ impl Janitor {
     ) -> Result<String, ClientError> {
         let mut tags_out = choice.tags.clone();
         tags_out.push("janitor".into());
+        // The participants of a call stay on the note, whatever the model chose.
+        for t in tags_of(note) {
+            if is_call_tag(t) && !tags_out.iter().any(|x| x == t) {
+                tags_out.push(t.to_string());
+            }
+        }
         let kind = note["kind"].as_str().unwrap_or("fact");
         let body = filed_text(&choice.title, text);
         if choice.vault == vault {
