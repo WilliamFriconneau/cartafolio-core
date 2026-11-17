@@ -735,6 +735,14 @@ fn the_graph_has_spaces_tags_and_keywords_of_the_person_only() -> Res {
         .and_then(|a| a.iter().find(|n| n["id"] == "keyword:tomatoes"))
         .ok_or("no keyword")?;
     assert_eq!(kw["count"], 2, "two notes cite it");
+    // Every count is the number of notes the journal lists: the rules note is not one.
+    let garden = g["nodes"]
+        .as_array()
+        .and_then(|a| a.iter().find(|n| n["id"] == "space:garden"))
+        .ok_or("no space")?;
+    assert_eq!(garden["count"], 2);
+    let ov = get(&e, "space", &[("space", "garden")], SAM).body_json();
+    assert_eq!(ov["counts"]["active"], 2);
     assert!(
         g["edges"]
             .as_array()

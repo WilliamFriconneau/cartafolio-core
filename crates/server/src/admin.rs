@@ -934,7 +934,10 @@ fn vault_stats(app: &App, space: &Space) -> Value {
         .ok()
         .flatten();
     json!({
-        "facts": count("SELECT count(*) FROM facts WHERE status = 'active'"),
+        "facts": count(&format!(
+            "SELECT count(*) FROM facts WHERE status = 'active' AND {}",
+            crate::explore::NOT_FURNITURE
+        )),
         "files": count("SELECT count(*) FROM files WHERE status = 'active'"),
         "last_write": last.map(iso),
     })
@@ -967,10 +970,11 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
             }
             let mut counts = vec![0_i64; TIMELINE_BUCKETS as usize];
             let conn = app.brain.open_space(&s)?;
-            let mut st = conn.prepare(
+            let mut st = conn.prepare(&format!(
                 "SELECT (created_at - ?1) / ?2, count(*) FROM facts
-                 WHERE created_at >= ?1 GROUP BY 1",
-            )?;
+                     WHERE created_at >= ?1 AND {} GROUP BY 1",
+                crate::explore::NOT_FURNITURE
+            ))?;
             let rows = st.query_map([from, width], |r| {
                 Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?))
             })?;

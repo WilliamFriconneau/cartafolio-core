@@ -19,6 +19,10 @@ const DAY: i64 = 86_400;
 const WINDOW_DAYS: i64 = 30;
 const PAGE_MAX: usize = 100;
 
+/// SQL: what counts as a note of the person. The page's own furniture (filing rules, dashboard, living pages) does
+/// not, so every count on every screen is the number of notes the journal lists.
+pub const NOT_FURNITURE: &str = "id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')";
+
 fn err(status: u16, msg: &str) -> Response {
     Response::json(status, &json!({ "error": msg }))
 }
@@ -113,7 +117,14 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
         .layout(&me.id)
         .ok()
         .and_then(|l| l.into_iter().find(|p| p.space == space));
-    let counts = facts::counts(&conn).unwrap_or(Value::Null);
+    let mut counts = facts::counts(&conn).unwrap_or(Value::Null);
+    if let Ok(n) = conn.query_row(
+        &format!("SELECT count(*) FROM facts WHERE status = 'active' AND {NOT_FURNITURE}"),
+        [],
+        |r| r.get::<_, i64>(0),
+    ) {
+        counts["active"] = json!(n);
+    }
     let tags: Vec<Value> = facts::tag_counts(&conn)
         .unwrap_or_default()
         .into_iter()
@@ -758,6 +769,22 @@ pub fn graph(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response 
         );
         in_scope(a) && in_scope(b) && !hidden_tag(a) && !hidden_tag(b)
     });
+    // A space is as big as the notes the journal lists for it.
+    for n in nodes.iter_mut().filter(|n| n["type"] == "space") {
+        let Some(name) = n["id"].as_str().and_then(|i| i.strip_prefix("space:")) else {
+            continue;
+        };
+        if let Ok(space) = Space::new(name)
+            && let Ok(conn) = app.brain.open_space(&space)
+            && let Ok(c) = conn.query_row(
+                &format!("SELECT count(*) FROM facts WHERE status = 'active' AND {NOT_FURNITURE}"),
+                [],
+                |r| r.get::<_, i64>(0),
+            )
+        {
+            n["count"] = json!(c);
+        }
+    }
     // The keywords of each space: a node each, joined to every space that lists it, sized by the notes that cite it.
     let mut seen: std::collections::BTreeMap<String, i64> = Default::default();
     for space in &spaces {
