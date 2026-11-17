@@ -348,6 +348,14 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const parsed = cfg && JSON.parse(cfg);
   check("it gives a configuration to paste: one server, its address, its key", parsed && Object.keys(parsed.mcpServers).join() === "kalios" && parsed.mcpServers.kalios.url === "https://memory.example.net/mcp/kalios" && parsed.mcpServers.kalios.headers.Authorization === "Bearer hcp_secret_token", cfg);
   click($("#wizard form button"));
+
+  // --- a voice note shows where it stands, and a failed one offers a retry
+  const badge = v => w.voiceBadge(v);
+  check("a waiting recording says so", badge({ state: "waiting" }).textContent.includes("waiting for its text"));
+  check("a read recording says so", badge({ state: "transcribed" }).textContent.includes("transcribed"));
+  const bad = badge({ state: "failed", marker: "fact_x" });
+  check("a failed one says so and has a retry button", bad.textContent.includes("failed") && bad.querySelector("button") && bad.querySelector("button").textContent === "Retry");
+  check("a plain attachment shows no state", badge(undefined) === null);
   console.log(failed ? "\n" + failed + " FAILED" : "\nall wizard checks passed");
   process.exit(failed ? 1 : 0);
 })();

@@ -1501,7 +1501,7 @@ function noteRows(facts, o) {
       rows.push(el("div", { class: "note", onclick: () => o.open(f) },
         el("div", { class: "meta" }, hm, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
         el("div", { class: "tx" },
-          ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file) : null]),
+          ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file, f.voice) : null]),
           tags.length ? el("div", { class: "tg" }, ...tags.map(t => el("button", { type: "button", class: "chip", onclick: e => { e.stopPropagation(); o.onTag(t); } }, t))) : null)));
     }
   }
@@ -1665,7 +1665,7 @@ function thread(facts, open) {
     box.append(el("div", { class: "bubble " + (machine ? "other" : "mine"), onclick: () => open(f) },
       el("div", { class: "who" }, (machine ? (app || f.author) : f.author) + " · " + (f.created || "").slice(11, 16)),
       ...(machine ? traceBody(f.extract) : [el("div", { class: "tx" }, f.extract)]),
-      f.file ? attachmentLine(f.file) : null,
+      f.file ? attachmentLine(f.file, f.voice) : null,
       (f.tags || []).length ? el("div", { class: "tags" }, ...f.tags.map(t => el("span", { class: "chip" }, t))) : null));
   }
   setTimeout(() => box.lastElementChild && box.lastElementChild.scrollIntoView({ block: "nearest" }), 0);
@@ -1719,7 +1719,18 @@ async function fileBlobUrl(f) {
   if (!r.ok) throw new Error("Cannot open " + f.name);
   return URL.createObjectURL(await r.blob());
 }
-function attachmentLine(f) {
+// The state of a voice note: waiting for its text, transcribed, or failed (with a button to try again).
+function voiceBadge(v) {
+  if (!v) return null;
+  if (v.state === "transcribed") return el("span", { class: "mute small voice-state" }, " · transcribed");
+  if (v.state === "waiting") return el("span", { class: "mute small voice-state" }, " · waiting for its text");
+  return el("span", { class: "small voice-state" }, " · transcription failed ",
+    el("button", { type: "button", class: "link", onclick: async e => {
+      e.stopPropagation();
+      try { await api("fact/retire", { space: SP.name, id: v.marker, reason: "retry the transcription" }); toast("It will be read again"); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); }
+    } }, "Retry"));
+}
+function attachmentLine(f, voice) {
   const holder = el("span", { class: "mute small" });
   const open = el("button", { type: "button", class: "link", onclick: async e => {
     e.stopPropagation();
@@ -1729,7 +1740,7 @@ function attachmentLine(f) {
       else window.open(url, "_blank", "noopener");
     } catch (x) { fail(x); }
   } }, (f.mime || "").startsWith("audio/") ? "▶ Play" : "Open");
-  return el("div", { class: "small", style: "margin-top:4px" }, "📎 " + f.name + " · " + sizeOf(f.size) + " ", open, holder);
+  return el("div", { class: "small", style: "margin-top:4px" }, "📎 " + f.name + " · " + sizeOf(f.size) + " ", open, holder, voiceBadge(voice));
 }
 let REC = null, RECTIMER = null;
 async function toggleRecord(btn, body) {
@@ -1795,7 +1806,7 @@ async function openNote(body, id) {
   $$(".editor", body).forEach(e => e.remove());
   body.insertBefore(el("div", { class: "editor" },
     el("div", { class: "mute small" }, r.fact.author + " · " + (r.fact.created || "") + " · " + r.fact.status),
-    r.fact.file ? attachmentLine(r.fact.file) : null,
+    r.fact.file ? attachmentLine(r.fact.file, r.fact.voice) : null,
     f.text, f.tags, active ? reason : null,
     el("div", { class: "row" },
       active ? el("button", { type: "button", class: "primary", onclick: async () => {

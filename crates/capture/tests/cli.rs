@@ -433,11 +433,21 @@ fn status_lists_the_recordings_waiting_per_space() {
     let mut c = memcp_client::Client::new(&mem.url(1), &mem.tokens[1]);
     let mut wav = b"RIFF\0\0\0\0WAVE".to_vec();
     wav.extend_from_slice(b"hello");
-    c.file_put("sam-me", "2026-11-02-13h34-un.wav", "dictee", &["inbox/audio"], &wav)
-        .expect("recording");
+    c.file_put(
+        "sam-me",
+        "2026-11-02-13h34-un.wav",
+        "dictee",
+        &["inbox/audio"],
+        &wav,
+    )
+    .expect("recording");
     let outbox = unique("outbox-waiting");
     let (url, o) = (mem.url(1), outbox.to_str().expect("path"));
-    let r = bridge(&["status", "--url", &url, "--outbox", o], &mem.tokens[1], None);
+    let r = bridge(
+        &["status", "--url", &url, "--outbox", o],
+        &mem.tokens[1],
+        None,
+    );
     assert_eq!(r.status.code(), Some(0), "{}", err(&r));
     assert!(
         out(&r).contains("recordings waiting for a text: sam-me: 1, the oldest for 0 min"),

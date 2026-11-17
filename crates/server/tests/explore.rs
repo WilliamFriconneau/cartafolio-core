@@ -467,6 +467,75 @@ fn an_attachment_and_a_voice_note_show_up_as_notes_with_their_file() -> Res {
 }
 
 #[test]
+fn a_voice_note_shows_whether_it_waits_was_read_or_failed() -> Res {
+    use base64::Engine as _;
+    let e = env()?;
+    person_with(&e, SAM, "notes")?;
+    let webm = [
+        0x1A, 0x45, 0xDF, 0xA3, 1, 0, 0, 0, 0, 0, 0, 0x1F, 0x42, 0x86, 0x81, 1,
+    ];
+    let v = post(
+        &e,
+        "files",
+        SAM,
+        json!({ "space": "notes", "name": "dictation-2026-11-16-18h30.webm", "note": "Voice note",
+                "tags": ["inbox/audio"], "data": base64::engine::general_purpose::STANDARD.encode(webm) }),
+    );
+    assert_eq!(v.status, 200, "{}", v.body_json());
+    let id = v.body_json()["file"]["id"]
+        .as_str()
+        .ok_or("id")?
+        .to_string();
+    let state = |e: &Env| -> Result<Value, Box<dyn std::error::Error>> {
+        let all = get(
+            e,
+            "facts",
+            &[("space", "notes"), ("tag", "inbox/audio")],
+            SAM,
+        )
+        .body_json();
+        Ok(all["facts"]
+            .as_array()
+            .ok_or("facts")?
+            .iter()
+            .find(|f| f["file"]["id"].is_string())
+            .ok_or("no recording")?["voice"]
+            .clone())
+    };
+    assert_eq!(state(&e)?["state"], "waiting");
+    let m = post(
+        &e,
+        "fact/add",
+        SAM,
+        json!({ "space": "notes", "text": format!("The recording {id} could not be transcribed after 3 tries: broken"),
+                "tags": ["inbox/audio/failed"] }),
+    );
+    assert_eq!(m.status, 200, "{}", m.body_json());
+    let failed = state(&e)?;
+    assert_eq!(failed["state"], "failed", "{failed}");
+    let marker = failed["marker"].as_str().ok_or("marker")?.to_string();
+    // Retry: the page retires the failure note, and the recording waits again.
+    let r = post(
+        &e,
+        "fact/retire",
+        SAM,
+        json!({ "space": "notes", "id": marker, "reason": "retry" }),
+    );
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    assert_eq!(state(&e)?["state"], "waiting");
+    let t = post(
+        &e,
+        "fact/add",
+        SAM,
+        json!({ "space": "notes", "text": format!("Dictée du 2026-11-16, audio dictation-2026-11-16-18h30.webm ({id}) : hello"),
+                "tags": ["inbox", "dictee"] }),
+    );
+    assert_eq!(t.status, 200, "{}", t.body_json());
+    assert_eq!(state(&e)?["state"], "transcribed");
+    Ok(())
+}
+
+#[test]
 fn joining_a_network_gives_a_link_and_a_qr_code_to_scan() -> Res {
     let e = env()?;
     person_with(&e, SAM, "notes")?;
