@@ -37,7 +37,7 @@ pub fn write_decision(
 }
 
 /// A copy made by a sync tool: « nom (1).md », « .sync-conflict- »,
-/// « conflicted copy », « nom-<machine>.md » when `machines` names it.
+/// « conflicted copy », « nom-`<machine>`.md » when `machines` names it.
 pub fn is_conflict_copy(file_name: &str, machines: &[String]) -> bool {
     let lower = file_name.to_lowercase();
     let stem = lower.rsplit_once('.').map(|(s, _)| s).unwrap_or(&lower);
@@ -60,7 +60,7 @@ pub fn is_ignored(name: &str) -> bool {
     name.starts_with('.') || matches!(name, "node_modules" | "target" | "Icon\r")
 }
 
-/// The conflict copy's name: « nom (kalios <date>).md ».
+/// The conflict copy's name: « nom (kalios `<date>`).md ».
 pub fn conflict_name(file_name: &str, stamp: &str) -> String {
     match file_name.rsplit_once('.') {
         Some((stem, ext)) => format!("{stem} (kalios {stamp}).{ext}"),

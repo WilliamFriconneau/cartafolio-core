@@ -53,10 +53,7 @@ fn tools_md_lists_every_tool_and_every_field() -> Res {
     let mut documented: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
     let mut current: Option<String> = None;
     for line in doc.lines() {
-        if let Some(name) = line
-            .strip_prefix("### `")
-            .and_then(|r| r.split('`').next())
-        {
+        if let Some(name) = line.strip_prefix("### `").and_then(|r| r.split('`').next()) {
             current = Some(name.to_string());
             documented.entry(name.to_string()).or_default();
         } else if line.starts_with('#') {
