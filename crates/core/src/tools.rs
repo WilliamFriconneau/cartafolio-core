@@ -30,7 +30,9 @@ mod overview;
 mod sorting;
 mod tagging;
 
-const WRITE_TOOLS: [&str; 12] = [
+const WRITE_TOOLS: [&str; 14] = [
+    "space_create",
+    "space_move",
     "living_set",
     "tags_set",
     "rules_set",
@@ -213,6 +215,18 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array" }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
         });
+        if caller.all_spaces && !caller.read_only_forced {
+            out.push(ToolDef {
+                name: "space_create",
+                description: "Makes a space of the person, or a sub-space inside another (`parent`, the name of an existing space), with its label and, if wanted, the keywords and tags that file notes there. Every node of the person gets it at the next exchange. Returns the space with its name.".into(),
+                schema: json!({ "type": "object", "properties": { "label": { "type": "string" }, "parent": { "type": "string", "description": "The space it goes inside; left out for the top level." }, "keywords": { "type": "array", "items": { "type": "string" } }, "tags": { "type": "array", "items": { "type": "string" } } }, "required": ["label"] }),
+            });
+            out.push(ToolDef {
+                name: "space_move",
+                description: "Renames a space of the person (`label`) or moves it inside another (`parent`; an empty string puts it at the top level). Its notes stay with it; every node follows.".into(),
+                schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "label": { "type": "string" }, "parent": { "type": "string" } }, "required": ["space"] }),
+            });
+        }
         out.push(ToolDef {
             name: "rules_set",
             description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.".into(),
@@ -1149,6 +1163,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
         "rules_get" | "rules_set" => crate::tools::sorting::rules(brain, caller, name, args),
+        "space_create" | "space_move" => space_layout(brain, caller, name, args),
         "library_search" => {
             let query = str_arg(args, "query")?;
             let limit = args.get("limit").and_then(Value::as_u64).unwrap_or(10) as usize;
@@ -1681,4 +1696,62 @@ fn links(brain: &Brain, caller: &Caller, args: &Value) -> Result<Value, ToolErro
         }
     }
     Ok(json!({ "nodes": nodes, "edges": edges, "notice": NOTICE }))
+}
+
+/// `space_create` and `space_move`: the person's own layout, from a connection that reaches all their spaces.
+fn space_layout(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+) -> Result<Value, ToolError> {
+    if !caller.all_spaces || caller.read_only_forced || caller.is_scoped() {
+        return Err(ToolError::Invalid(
+            "only a connection that reaches all the person's spaces arranges them".into(),
+        ));
+    }
+    let ctl = brain.open_control()?;
+    let person = crate::users::user(&ctl, &caller.user_id)?
+        .ok_or_else(|| ToolError::Invalid("unknown person".into()))?;
+    let parent = |key: &str| -> Result<Option<Option<Space>>, ToolError> {
+        match args.get(key).and_then(Value::as_str) {
+            None => Ok(None),
+            Some("") => Ok(Some(None)),
+            Some(p) => Ok(Some(Some(Space::new(p)?))),
+        }
+    };
+    let strings = |key: &str| -> Vec<String> {
+        args.get(key)
+            .and_then(Value::as_array)
+            .map(|a| {
+                a.iter()
+                    .filter_map(|v| v.as_str().map(String::from))
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    if name == "space_create" {
+        let new = crate::lifecycle::SpaceNew {
+            kind: None,
+            label: str_arg(args, "label")?.to_string(),
+            parent: parent("parent")?.flatten(),
+            keywords: strings("keywords"),
+            tags: strings("tags"),
+        };
+        let space = brain.create_space_with(&person.id, &person.name, &new)?;
+        let info = brain.space_info(&person.id, &space)?;
+        return Ok(json!({ "result": "created", "space": info.to_json() }));
+    }
+    let space = Space::new(str_arg(args, "space")?)?;
+    let u = crate::lifecycle::SpaceUpdate {
+        layout: crate::layout::Change {
+            label: args.get("label").and_then(Value::as_str).map(String::from),
+            parent: parent("parent")?,
+            position: None,
+        },
+        kind: None,
+        rules: Default::default(),
+    };
+    let info = brain.update_space(&person.id, &person.name, &space, &u)?;
+    Ok(json!({ "result": "updated", "space": info.to_json() }))
 }
