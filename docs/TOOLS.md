@@ -8,8 +8,8 @@ The tools of this page and their fields are checked against `tools::definitions`
 
 | Rights | Tools |
 |---|---|
-| read on a space | `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `spaces`, `stats`, `file_list`, `file_get` |
-| write on a space | `living_set`, `rules_set`, `triage_claim`, `triage_release`, `tidy`, `remember`, `library_raise`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `spaces`, `stats`, `file_list`, `file_get` |
+| write on a space | `living_set`, `rules_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a vault | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
 | a money vault (bank statements) | `finances_balances`, `finances_movements`, `finances_monthly`, `finances_rules` (read), `finances_import` (write): see the end |
@@ -617,6 +617,121 @@ Example call and answer:
 }
 ```
 
+### `triage_waiting`
+
+What waits in « À trier » for a decision, with why: the notes and the files the janitor could not place (`no keyword matched`, `two spaces tie: a, b`, …), each with its age in seconds. A recording whose text is already filed is not counted; one whose transcription failed three times (tag `failed/transcription`) is listed apart, in `failed_transcription`, and is not a decision to take.
+
+- **Seen with:** read access on at least one space; not offered to a key limited to paths.
+- **Answer:** `{ triage: [ { space, notes: [{id, text, tags, created_at, age_seconds, reason}...], files: [{id, name, mime, note, tags, created_at, age_seconds, reason}...], transcribed, failed_transcription: [file...], count } ], notice }`; `count` is the notes and files that wait for a decision (the number shown by the page and by `spaces`). The reason comes from the note tagged `janitor/reasons` that the janitor keeps; `not looked at by the janitor yet` when it has none.
+- **Errors:** None.
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `limit` | integer | no | 1 or more (default 100, at most 500) |
+
+Example call and answer:
+
+```json
+{
+  "name": "triage_waiting",
+  "arguments": {
+    "limit": 20
+  }
+}
+```
+
+```json
+{
+  "triage": [
+    {
+      "space": "alice-a-trier",
+      "notes": [],
+      "files": [
+        {
+          "id": "file_3",
+          "name": "scan.pdf",
+          "age_seconds": 7200,
+          "reason": "no keyword matched"
+        }
+      ],
+      "transcribed": 0,
+      "failed_transcription": [],
+      "count": 1
+    }
+  ]
+}
+```
+
+### `triage_send`
+
+Sends one note or one file waiting in « À trier » to the inbox of a vault, as it is; it leaves « À trier » once the write is certain. The janitor files it there. Returns the id of what holds it now.
+
+- **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
+- **Answer:** `{ result: "sent", id, to }`.
+- **Errors:** `invalid` when nothing waits under the id or the target is not a vault; `denied` when the target is not writable.
+- **Effects:** Writes the note or the file in the inbox of `to` and retires the original from « À trier » with a reason.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes | - |
+| `to` | string | yes | - |
+
+Example call and answer:
+
+```json
+{
+  "name": "triage_send",
+  "arguments": {
+    "id": "file_3",
+    "to": "alice-home"
+  }
+}
+```
+
+```json
+{
+  "result": "sent",
+  "id": "file_9",
+  "to": "alice-home"
+}
+```
+
+### `transcription_failed`
+
+Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the bridge tries the recording again.
+
+- **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
+- **Answer:** `{ result: "marked" | "cleared", file }`.
+- **Errors:** `invalid` for an unknown file, a file that is not an active recording or has no description.
+- **Effects:** Adds or removes the tag on the description of the recording; nothing else changes.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `id` | string | yes | - |
+| `failed` | boolean | no | default true |
+
+Example call and answer:
+
+```json
+{
+  "name": "transcription_failed",
+  "arguments": {
+    "id": "file_4"
+  }
+}
+```
+
+```json
+{
+  "result": "marked",
+  "file": {
+    "id": "file_4",
+    "name": "memo.m4a"
+  }
+}
+```
+
 ### `tidy`
 
 Puts the vaults in order now (« range le coffre »): wakes the janitor, if it is on, which files what waits in the inboxes at once. Returns what waits in each vault you write: notes in the inbox, expired facts.
@@ -1149,6 +1264,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 |---|---|---|
 | `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | built (0.25.x) |
 | `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
+| `triage_waiting` / `triage_send` / `transcription_failed` | what waits in À trier for a decision with the reason it waits, sending a note or a file on, and the tag of a recording whose transcription failed | built |
 | `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of À trier for some minutes, and gives them back | built (20261116.0.3) |
 | `rules_get` / `rules_set` | read and write the filing rules (tags, keywords) of a space as versions of its `rules` note | built (20261116.0.4) |
 | `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |

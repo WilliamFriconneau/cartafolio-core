@@ -68,3 +68,35 @@ fn a_recording_with_its_text_does_not_wait_for_the_person_but_one_without_does()
     assert_eq!(w["transcribed"], 1);
     Ok(())
 }
+
+#[test]
+fn a_recording_given_up_on_is_tagged_and_counted_apart_and_retried_when_the_tag_goes() -> Res {
+    let t = Temp::new("triage-failed");
+    let b = brain(&t)?;
+    let space = triage::ensure(&b, OWNER, "owner")?;
+    let tags = vec!["inbox/audio".to_string()];
+    let rec = files::put_tagged(&b, &space, "bridge", "memo.m4a", "kept", &m4a(), &tags)?;
+    files::put_tagged(
+        &b,
+        &space,
+        "edge",
+        "scan.txt",
+        "a scan",
+        b"plain words",
+        &["inbox".to_string()],
+    )?;
+    let before = triage::waiting(&b, &space, 50)?;
+    assert_eq!(
+        before["count"], 2,
+        "the recording waits until it is given up"
+    );
+    files::mark_transcription_failed(&b, &space, &rec.id, true)?;
+    let w = triage::waiting(&b, &space, 50)?;
+    assert_eq!(w["count"], 1, "only the document waits for a decision");
+    assert_eq!(w["failed_transcription"].as_array().map(Vec::len), Some(1));
+    assert_eq!(w["files"][0]["reason"], "not looked at by the janitor yet");
+    assert!(w["files"][0]["age_seconds"].is_number());
+    files::mark_transcription_failed(&b, &space, &rec.id, false)?;
+    assert_eq!(triage::waiting(&b, &space, 50)?["count"], 2);
+    Ok(())
+}

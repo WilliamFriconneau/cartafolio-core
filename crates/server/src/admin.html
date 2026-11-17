@@ -383,7 +383,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
       <div class="tile t3" id="triage-tile" hidden>
         <h3>À trier <span class="badge" id="triage-count"></span></h3>
-        <p class="mute small" style="margin:0">What your devices sent and the janitor has not sent on yet.</p>
+        <p class="mute small" style="margin:0">What waits for your decision: what your devices sent and the janitor could not place.</p>
         <div class="acts"><button type="button" class="primary" onclick="location.hash='#triage'">Sort them</button></div>
       </div>
     </div>
@@ -537,6 +537,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
       <div id="tr-list" class="trlist"></div>
       <p class="mute small" id="tr-empty" hidden>Nothing waits here.</p>
+      <div id="tr-failed"></div>
     </section>
     </div>
   </div>
@@ -2031,8 +2032,13 @@ const trItems = () => {
 };
 function renderTriage() {
   const all = trItems();
-  $("#triage-tile").hidden = all.length === 0;
   $("#triage-count").textContent = String(all.length);
+  const fails = (S.triage && S.triage.failed_transcription) || [];
+  $("#triage-tile").hidden = all.length === 0 && fails.length === 0;
+  $("#tr-failed").replaceChildren(...(fails.length ? [el("p", { class: "mute small" }, fails.length + " recording(s) could not be transcribed after three tries; they do not wait for a decision (tag failed/transcription)."),
+    ...fails.map(f => el("div", { class: "trrow" }, el("span", { class: "tx" }, f.name, " ", el("span", { class: "badge" }, "failed/transcription")),
+      el("span", { class: "when" }, ago(f.created_at)),
+      el("button", { type: "button", onclick: async () => { if (await act("triage/retry-transcription", { id: f.id })) location.reload(); } }, "Retry")))] : []));
   const ids = new Set(all.map(i => i.id));
   for (const id of [...TR.picked]) if (!ids.has(id)) TR.picked.delete(id);
   const q = $("#tr-filter").value.trim().toLowerCase(), k = $("#tr-kind").value;
@@ -2047,7 +2053,8 @@ function renderTriage() {
     const row = el("div", { class: "trrow" + (box.checked ? " on" : "") },
       box,
       el("span", { class: "tx" }, it.what.length > 220 ? it.what.slice(0, 220) + "…" : it.what,
-        " ", el("span", { class: "badge" }, it.kind === "file" ? "file" : "note")),
+        " ", el("span", { class: "badge" }, it.kind === "file" ? "file" : "note"),
+        it.reason ? el("span", { class: "mute small", style: "display:block" }, "Why it waits: " + it.reason) : ""),
       el("span", { class: "when" }, ago(it.created_at)));
     const toggle = (on, range) => {
       if (range && TR.last !== null) {

@@ -543,6 +543,15 @@ fn action(
                 json!({ "ok": failed.is_empty(), "sent": sent, "failed": failed, "space": to.as_str() }),
             )
         }
+        "/triage/retry-transcription" => {
+            // A recording the bridge gave up on: the tag comes off, the bridge tries again at its next pass.
+            let from = memcp_core::triage::of(&app.brain, &me.id)
+                .map_err(fail)?
+                .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
+            memcp_core::files::mark_transcription_failed(&app.brain, &from, arg(body, "id")?, false)
+                .map_err(fail)?;
+            Ok(json!({ "ok": true }))
+        }
         "/spaces/open" => {
             // Opens one vault to an assistant: a connection limited to it.
             let space = Space::new(arg(body, "space")?).map_err(fail)?;

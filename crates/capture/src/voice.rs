@@ -229,11 +229,27 @@ pub fn transcribe(
                 continue;
             }
             let seen = state.get(id);
-            if seen.is_some_and(|e| e["done_at"].is_i64())
-                || seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0) >= MAX_FAILS
-            {
+            if seen.is_some_and(|e| e["done_at"].is_i64()) {
                 continue;
             }
+            if seen.and_then(|e| e["fails"].as_u64()).unwrap_or(0) >= MAX_FAILS {
+                let marked = seen.is_some_and(|e| e["marked"] == true);
+                let tagged = tags_of(desc).contains(&FAILED_TAG);
+                if marked && !tagged {
+                    // The person took the tag off: another round of tries.
+                    let e = state.entry(id);
+                    e["fails"] = json!(0);
+                    e["marked"] = json!(false);
+                    state.save()?;
+                } else {
+                    if !marked {
+                        mark_failed(client, &mut state, id, &mut report);
+                        state.save()?;
+                    }
+                    continue;
+                }
+            }
+            let seen = state.get(id);
             let started = seen
                 .and_then(|e| e["parts"].as_array())
                 .is_some_and(|p| !p.is_empty());
@@ -417,9 +433,23 @@ fn one(
                 ""
             };
             report.problems.push(format!("{name}: {why}{last}"));
+            if n >= MAX_FAILS {
+                mark_failed(client, state, id, report);
+            }
         }
     }
     state.save()
+}
+
+/// The tag a recording given up on carries on its description (see `transcription_failed`).
+const FAILED_TAG: &str = "failed/transcription";
+
+/// Tags the recording `id` as failed, so that it is visible and counted apart from what waits for the person.
+fn mark_failed(client: &mut Client, state: &mut State, id: &str, report: &mut VoiceReport) {
+    match client.call("transcription_failed", json!({ "id": id })) {
+        Ok(_) => state.entry(id)["marked"] = json!(true),
+        Err(e) => fail(report, "the failed recording cannot be tagged", &e),
+    }
 }
 
 /// The recordings whose text is old enough, wherever it was filed: erased. The text is found by the recording's id, which
