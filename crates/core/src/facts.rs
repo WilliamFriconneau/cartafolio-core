@@ -28,7 +28,7 @@ pub struct Fact {
     pub space: Space,
     /// `fact`, `decision`, `context` or `passage` (a passage of an imported note).
     pub kind: String,
-    /// Reserved type label; the tools never set it.
+    /// Sub-type label: `file` for the fact that describes a stored file, `None` otherwise.
     pub typ: Option<String>,
     /// The text, normalised (NFC, single spaces).
     pub text: String,
