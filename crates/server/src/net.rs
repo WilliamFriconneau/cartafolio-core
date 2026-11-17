@@ -165,9 +165,19 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     });
 }
 
+/// Whether a header may be written as it is: no line break or other control character (a value that came from a
+/// stored file name or type must never be able to end the header and start another, or a second response).
+pub fn header_is_safe(name: &str, value: &str) -> bool {
+    let plain = |s: &str| !s.chars().any(|c| c.is_control() && c != '\t');
+    !name.is_empty() && plain(name) && plain(value)
+}
+
 fn send(rq: tiny_http::Request, resp: http::Response) {
     let mut out = tiny_http::Response::from_data(resp.body).with_status_code(resp.status);
     for (k, v) in resp.headers {
+        if !header_is_safe(&k, &v) {
+            continue;
+        }
         if let Ok(h) = tiny_http::Header::from_bytes(k.as_bytes(), v.as_bytes()) {
             out.add_header(h);
         }

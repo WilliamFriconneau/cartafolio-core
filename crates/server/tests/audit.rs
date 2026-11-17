@@ -179,3 +179,13 @@ fn guessing_a_key_by_the_size_of_a_body_is_counted_like_any_wrong_key() -> Res {
     assert!(after.starts_with("HTTP/1.1 429"), "{after}");
     Ok(())
 }
+
+#[test]
+fn a_header_value_cannot_carry_a_line_break() {
+    use memcp_server::net::header_is_safe;
+    assert!(header_is_safe("Content-Type", "image/png"));
+    assert!(header_is_safe("Content-Disposition", "inline; filename=\"a b.png\""));
+    assert!(!header_is_safe("Content-Type", "text/plain\r\nSet-Cookie: x=1"));
+    assert!(!header_is_safe("Content-Disposition", "inline\nX: y"));
+    assert!(!header_is_safe("X\r\nY", "z"));
+}

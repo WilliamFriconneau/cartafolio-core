@@ -704,7 +704,7 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
                         } else {
                             "inline"
                         },
-                        f.name.replace(['"', '\\'], "_")
+                        f.name.replace(['"', '\\'], "_").replace(|c: char| c.is_control(), "_")
                     ),
                 ),
                 (
