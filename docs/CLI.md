@@ -110,6 +110,7 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `space archived` | lists the archived spaces | yes | yes, runs on the node | any person |
 | `space restore` | brings an archived space back | yes | yes, runs on the node | any person |
 | `folder get` | the folder of a space | needs a node | yes, through the page's routes | any person |
+| `folder sync` | one pass of the folder of a space now | needs a node | yes, through the page's routes | any person |
 | `folder set` | sets or clears the folder of a space | needs a node | yes, through the page's routes | any person |
 | `rules` | keywords and tags of a space | yes | yes, runs on the node | any person |
 | `vocabulary import` | imports a list of terms into a space | yes | yes, files are sent first | administrator |

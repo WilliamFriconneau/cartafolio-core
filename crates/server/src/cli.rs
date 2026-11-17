@@ -619,22 +619,115 @@ pub fn backup(data: &Path, to: &Path, keep: usize) -> Result<(), Failure> {
     Ok(())
 }
 
-/// `library add PATH --space NAME`: mounts an existing folder on a space, read-only, and indexes it. Nothing in the
-/// folder is copied, changed or moved.
+/// `library add PATH --space NAME`: an alias of `folder set NAME PATH --read`: the folder of the space on this node,
+/// only read, indexed for search. Nothing in the folder is copied, changed or moved. It replaces the folder the space
+/// had (a space has one folder on a node).
 pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failure> {
+    folder_set(data, space, Some(folder), memcp_core::folders::Mode::Read)
+}
+
+pub fn folder_line(info: &serde_json::Value) -> String {
+    let text = |k: &str| info[k].as_str().unwrap_or("-").to_string();
+    let mut line = format!(
+        "{}\t{}\t{}",
+        text("space"),
+        text("path"),
+        if info["custom"] == true {
+            text("mode")
+        } else {
+            "default (no mirror)".into()
+        }
+    );
+    if let Some(c) = info["cloud"].as_str() {
+        line.push_str(&format!("\tcloud: {c}"));
+    }
+    if let Some(t) = info["last_scan"].as_str() {
+        line.push_str(&format!("\tscanned {t}, {} files", info["files"]));
+    }
+    line
+}
+
+/// `folder set SPACE PATH [--read]` | `folder set SPACE --default`: the folder of a space on THIS node (never shared
+/// with the other nodes). A first pass runs at once.
+pub fn folder_set(
+    data: &Path,
+    space: &str,
+    folder: Option<&Path>,
+    mode: memcp_core::folders::Mode,
+) -> Result<(), Failure> {
     let brain = open(data)?;
     let space = Space::new(space).map_err(fail)?;
-    if !brain.has_space(&space).map_err(fail)? {
-        return Err(bad(&format!("unknown space {space}")));
+    let path = match folder {
+        Some(p) => Some(std::path::absolute(p).map_err(fail)?),
+        None => None,
+    };
+    let info =
+        memcp_core::folders::set(&brain, &space, path.as_deref(), mode, now()).map_err(fail)?;
+    sayln!("{}", folder_line(&info));
+    if let Some(w) = info["warning"].as_str() {
+        sayln!("warning: {w}");
     }
-    let conn = brain.open_space(&space).map_err(fail)?;
-    let id = memcp_core::library::add_root(&conn, folder, now()).map_err(fail)?;
-    let report = memcp_core::library::rescan(&conn, id, now()).map_err(fail)?;
-    sayln!(
-        "mounted on {space}: {} added, {} unchanged",
-        report.added,
-        report.unchanged
-    );
+    if path.is_some() {
+        let r = memcp_core::folders::sync_space(
+            &brain,
+            &space,
+            now(),
+            memcp_core::folders::Options::default(),
+        )
+        .map_err(fail)?;
+        sayln!("{}", r.to_json());
+    }
+    Ok(())
+}
+
+/// `folder get [SPACE]`: the folder of a space on this node, or of every space that has one.
+pub fn folder_get(data: &Path, space: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    match space {
+        Some(s) => {
+            let s = Space::new(s).map_err(fail)?;
+            let info = memcp_core::folders::info(&brain, &s).map_err(fail)?;
+            sayln!("{}", folder_line(&info));
+            if let Some(w) = info["warning"].as_str() {
+                sayln!("warning: {w}");
+            }
+            for e in info["errors"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|e| e.as_str())
+            {
+                sayln!("error: {e}");
+            }
+        }
+        None => {
+            for f in memcp_core::folders::all(&brain).map_err(fail)? {
+                sayln!(
+                    "{}",
+                    folder_line(&memcp_core::folders::info(&brain, &f.space).map_err(fail)?)
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+/// `folder sync [SPACE]`: one pass now (the node does it by itself every few seconds while it serves).
+pub fn folder_sync(data: &Path, space: Option<&str>) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let opts = memcp_core::folders::Options::default();
+    let spaces = match space {
+        Some(s) => vec![Space::new(s).map_err(fail)?],
+        None => memcp_core::folders::all(&brain)
+            .map_err(fail)?
+            .into_iter()
+            .map(|f| f.space)
+            .collect(),
+    };
+    for s in spaces {
+        let r = memcp_core::folders::sync_space(&brain, &s, now(), opts).map_err(fail)?;
+        sayln!("{s}: {}", r.to_json());
+    }
     Ok(())
 }
 

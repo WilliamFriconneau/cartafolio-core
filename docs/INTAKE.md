@@ -69,7 +69,7 @@ watch_every = 10                                                          # seco
 - What was taken is remembered (path, size and time), so a restart never sends a file twice. A file edited later is taken again as it
   now reads; the memory ignores a text or a file name it already holds.
 - The first look takes what is already in the folder: it is a drop box, not a library. For a folder of notes to keep up to date, use
-  `absorb`.
+  `absorb`; for a folder that **is** a space on this node (notes and files kept as Markdown, both ways), see [FOLDERS.md](FOLDERS.md).
 - A file the memory refuses is tried three times, then left alone, said once.
 
 ## Folders absorbed, proposals put down as files

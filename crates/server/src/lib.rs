@@ -14,6 +14,7 @@ pub mod crud;
 pub mod discovery;
 pub mod doctor;
 pub mod explore;
+pub mod folder_sync;
 pub mod http;
 pub mod intake;
 pub mod join;

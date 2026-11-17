@@ -510,12 +510,32 @@ fn direct(t: &Target, a: &Args, words: &str) -> Result<(), Failure> {
         }
         "folder set" => {
             let space = arg(2, "the space")?;
-            let folder = if a.switches.iter().any(|s| s == "--clear") {
+            let path = if a
+                .switches
+                .iter()
+                .any(|s| s == "--default" || s == "--clear")
+            {
                 Value::Null
             } else {
-                json!(arg(3, "the folder (or --clear)")?)
+                json!(arg(3, "the folder (or --default)")?)
             };
-            let body = json!({ "space": space, "folder": folder });
+            let mode = if a.switches.iter().any(|s| s == "--read") {
+                "read"
+            } else {
+                "readwrite"
+            };
+            let body = json!({ "space": space, "path": path, "mode": mode });
+            let (status, text) = call(
+                t,
+                "POST",
+                "/space/folder",
+                Some(body.to_string().as_bytes()),
+            )?;
+            folder_answer(t, status, &text)
+        }
+        "folder sync" => {
+            let space = arg(2, "the space")?;
+            let body = json!({ "space": space, "op": "sync" });
             let (status, text) = call(
                 t,
                 "POST",
@@ -617,13 +637,6 @@ fn direct(t: &Target, a: &Args, words: &str) -> Result<(), Failure> {
 }
 
 fn folder_answer(t: &Target, status: u16, text: &str) -> Result<(), Failure> {
-    if status == 404 || status == 405 {
-        return Err((
-            EXIT_ODD,
-            "pending: this node has no space folders yet (the routes /admin/api/space/folder come with the branch space-folders)"
-                .into(),
-        ));
-    }
     if status != 200 {
         return Err(refusal(status, text));
     }
@@ -631,9 +644,15 @@ fn folder_answer(t: &Target, status: u16, text: &str) -> Result<(), Failure> {
     if t.json {
         crate::sayln!("{v}");
     } else {
-        match v["folder"].as_str() {
-            Some(f) => crate::sayln!("{f}"),
-            None => crate::sayln!("(no folder)"),
+        // `folder sync` answers `{folder: info}`; get and set answer the info itself.
+        let info = if v["folder"].is_object() {
+            &v["folder"]
+        } else {
+            &v
+        };
+        crate::sayln!("{}", crate::cli::folder_line(info));
+        if let Some(w) = info["warning"].as_str() {
+            crate::sayln!("warning: {w}");
         }
     }
     Ok(())

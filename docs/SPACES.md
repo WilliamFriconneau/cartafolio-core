@@ -21,6 +21,8 @@ A **space** is the unit of rights (one SQLite file). A person organises their sp
 
 ## 2. Folder-backed spaces (phase 3)
 
+> **Built, in a simpler shape: [FOLDERS.md](FOLDERS.md).** Each space points, on each node, to one local folder (by default the node's own storage folder), kept in step with the memory in both directions, never shared in the swarm. The text below is the wider plan (several mounts per space, replication of the files between nodes); what FOLDERS.md says is what the node does.
+
 A space can be fed by **several folders scattered on the machine** (Markdown, text), as a drive does.
 
 - A *mount* is a **logical folder** attached to a space (or a sub-space): it has an id and a name, and each node that holds it says **where it is on its own disk** (or that it does not hold it). The same folder is `~/Drive/Work` on one computer and `D:\\Work` on another, and a node picks, on its own machine, the path and the space it feeds. The mount has a mode: **source** (the folder is the truth: changes made by hand are picked up, the facts follow) or **export** (the memory is the truth: the folder is rewritten from it). Both modes exist. A space may have several mounts of either mode.

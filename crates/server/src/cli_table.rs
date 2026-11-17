@@ -198,6 +198,12 @@ pub const COMMANDS: &[Entry] = &[
     ),
     e("folder get", "the folder of a space", Remote::Direct, false),
     e(
+        "folder sync",
+        "one pass of the folder of a space now",
+        Remote::Direct,
+        false,
+    ),
+    e(
         "folder set",
         "sets or clears the folder of a space",
         Remote::Direct,

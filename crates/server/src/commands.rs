@@ -97,8 +97,11 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
   backup --to DIR [--keep 14]            consistent copy of every database (safe while serving), outside the data dir
 
   status [--user PERSON]                 what this memory holds: version, people, spaces with their counts, connections
-  folder get SPACE | folder set SPACE (FOLDER | --clear)
-                                         the folder of a space (needs a node: pending the space folders)
+  folder set SPACE FOLDER [--read] | folder set SPACE --default
+                                         the local folder of a space ON THIS NODE (never shared with the other nodes):
+                                         the node keeps the notes and files there as Markdown, both ways; --read: only read
+  folder get [SPACE] | folder sync [SPACE]
+                                         the folder of a space (path, mode, cloud, last pass) | one pass now
   person new NAME [--display D] [--role admin|member]
   note recall SPACE WORDS [--tag T] [--limit N] | note tags SPACE ID [--tag a,b | --add a,b | --remove a,b]
   connection list|new|regrant|revoke|internal|readonly|person-guide|limit ...
@@ -308,6 +311,22 @@ pub fn dispatch(
         ("space", Some("make")) | ("vault", Some("add")) => {
             cli::vault_add(&data, arg(2, "the kind")?, flag("--user"))
         }
+        ("folder", Some("set")) => cli::folder_set(
+            &data,
+            arg(2, "the space")?,
+            if sw("--default") || sw("--clear") {
+                None
+            } else {
+                Some(Path::new(arg(3, "the folder (or --default)")?))
+            },
+            if sw("--read") {
+                memcp_core::folders::Mode::Read
+            } else {
+                memcp_core::folders::Mode::ReadWrite
+            },
+        ),
+        ("folder", Some("get")) => cli::folder_get(&data, a.pos.get(2).map(String::as_str)),
+        ("folder", Some("sync")) => cli::folder_sync(&data, a.pos.get(2).map(String::as_str)),
         ("library", Some("add")) => {
             cli::library_add(&data, Path::new(arg(2, "the folder")?), need("--space")?)
         }

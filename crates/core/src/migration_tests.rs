@@ -354,6 +354,9 @@ fn a_hostile_schema_cannot_call_unsafe_functions_when_a_database_is_opened() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
+/// The control migrations before the one that renamed `bridge_pairings` to `pairings` (`CONTROL_V22`).
+const BEFORE_RENAME: usize = 21;
+
 /// The pairing table was called `bridge_pairings`: a database made before the rename keeps every code, used or waiting,
 /// and the waiting code still opens a connection.
 #[test]
@@ -367,9 +370,9 @@ fn pairings_made_under_the_old_table_name_are_kept_and_still_redeemed() {
         let conn = Connection::open(&path).unwrap();
         conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
             .unwrap();
-        // The program as it was two releases ago (before the pairing table was renamed and the node id was added): the old table name.
-        migrate(&conn, &CONTROL_MIGRATIONS[..CONTROL_MIGRATIONS.len() - 2]).unwrap();
-        assert_eq!(version(&conn), CONTROL_MIGRATIONS.len() - 2);
+        // The program as it was before the pairing table was renamed: the table under its old name.
+        migrate(&conn, &CONTROL_MIGRATIONS[..BEFORE_RENAME]).unwrap();
+        assert_eq!(version(&conn), BEFORE_RENAME);
         conn.execute("INSERT INTO meta (k, v) VALUES ('kind', 'control')", [])
             .unwrap();
         conn.execute(

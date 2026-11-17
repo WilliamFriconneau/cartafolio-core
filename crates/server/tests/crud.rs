@@ -687,3 +687,118 @@ fn a_retired_note_comes_back_and_keywords_vocabularies_and_libraries_are_edited(
     assert_eq!(r.status, 403);
     Ok(())
 }
+
+#[test]
+fn the_folder_of_a_space_on_this_node_is_set_read_synced_and_put_back() -> Res {
+    let e = env()?;
+    let t = e.admin.clone();
+    let s = post(&e, &t, "spaces/create", json!({ "label": "Notes" }))?["space"]["space"]
+        .as_str()
+        .ok_or("n")?
+        .to_string();
+    post(
+        &e,
+        &t,
+        "fact/add",
+        json!({ "space": s, "text": "Water the plants on Sunday" }),
+    )?;
+    let base = std::env::temp_dir().join(format!("memcp-crud-folder-{}", std::process::id()));
+    let dir = base
+        .join("CloudStorage")
+        .join("GoogleDrive-me@example.org")
+        .join("notes");
+    let _ = fs::remove_dir_all(&base);
+    let path = dir.to_string_lossy().to_string();
+    // Nothing chosen: the node's own folder, no mirror.
+    let none = get(&e, &t, &format!("space/folder?space={s}"))?;
+    assert_eq!(
+        (none["custom"].as_bool(), none["mode"].is_null()),
+        (Some(false), true)
+    );
+    // A preview first, then the setting; a cloud folder is flagged and allowed.
+    let pre = post(
+        &e,
+        &t,
+        "space/folder",
+        json!({ "space": s, "path": path, "dry_run": true }),
+    )?;
+    assert_eq!(pre["dry_run"], true);
+    assert!(
+        pre["would"]
+            .as_str()
+            .is_some_and(|w| w.contains("not shared with the other nodes"))
+    );
+    assert!(!dir.exists(), "a preview changes nothing");
+    let set = post(&e, &t, "space/folder", json!({ "space": s, "path": path }))?;
+    assert_eq!(set["folder"]["cloud"], "google-drive");
+    assert!(set["folder"]["warning"].is_string());
+    assert_eq!(set["folder"]["mode"], "readwrite");
+    let synced = post(&e, &t, "space/folder", json!({ "space": s, "op": "sync" }))?;
+    assert_eq!(synced["scan"]["written"], 1, "{synced}");
+    assert_eq!(synced["folder"]["files"], 1);
+    assert!(synced["folder"]["last_scan"].is_string());
+    let mds: Vec<_> = fs::read_dir(&dir)?.flatten().collect();
+    assert_eq!(mds.len(), 1);
+    assert!(fs::read_to_string(mds[0].path())?.contains("Water the plants on Sunday"));
+    assert_eq!(audits(&e, "folder_edit"), 2);
+    // A member names no path of the machine, and sees no one else's space.
+    let r = call(
+        &e,
+        &e.member,
+        "POST",
+        "space/folder",
+        json!({ "space": s, "path": path }),
+    );
+    assert_eq!(r.status, 403);
+    let r = call(
+        &e,
+        &e.member,
+        "GET",
+        &format!("space/folder?space={s}"),
+        json!({}),
+    );
+    assert_eq!(r.status, 403);
+    // The library list does not need to show the folder twice (the page filters it); `library add` is the
+    // read-only alias of the same setting and replaces the folder.
+    let ro = base.join("vault");
+    fs::create_dir_all(&ro)?;
+    fs::write(ro.join("a.md"), "# Hello")?;
+    post(
+        &e,
+        &t,
+        "space/library",
+        json!({ "space": s, "op": "add", "path": ro.to_string_lossy() }),
+    )?;
+    let now = get(&e, &t, &format!("space/folder?space={s}"))?;
+    assert_eq!(now["mode"], "read");
+    assert_eq!(
+        now["path"],
+        fs::canonicalize(&ro)?.to_string_lossy().to_string()
+    );
+    assert_eq!(
+        get(&e, &t, &format!("space/libraries?space={s}"))?["libraries"]
+            .as_array()
+            .map(Vec::len),
+        Some(1),
+        "one folder, one index"
+    );
+    // Back to the default: the folder it had stays as it is.
+    let back = post(&e, &t, "space/folder", json!({ "space": s, "path": null }))?;
+    assert_eq!(back["folder"]["custom"], false);
+    assert_eq!(fs::read_dir(&dir)?.count(), 1);
+    assert!(
+        post(&e, &t, "space/folder", json!({ "space": s, "op": "sync" })).is_err(),
+        "nothing to sync"
+    );
+    assert!(
+        post(
+            &e,
+            &t,
+            "space/folder",
+            json!({ "space": s, "mode": "nope", "path": path })
+        )
+        .is_err()
+    );
+    let _ = fs::remove_dir_all(&base);
+    Ok(())
+}

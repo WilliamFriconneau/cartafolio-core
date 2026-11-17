@@ -212,6 +212,7 @@ pub struct NodeIntake {
     settings: Settings,
     by_hand: Mutex<Intake>,
     running: Mutex<Option<Running>>,
+    folders: Mutex<Option<memcp_server::folder_sync::FolderTask>>,
 }
 
 #[uniffi::export]
@@ -236,6 +237,7 @@ impl NodeIntake {
             settings,
             by_hand: Mutex::new(by_hand),
             running: Mutex::new(None),
+            folders: Mutex::new(None),
         }))
     }
 
@@ -244,6 +246,11 @@ impl NodeIntake {
         let mut running = self.running.lock().map_err(failed)?;
         if running.is_none() {
             *running = intake::start(&self.brain, self.settings.clone()).map_err(failed)?;
+        }
+        // The folders of the spaces on this node (see docs/FOLDERS.md): kept in step with the memory.
+        let mut folders = self.folders.lock().map_err(failed)?;
+        if folders.is_none() {
+            *folders = memcp_server::folder_sync::start(&self.brain);
         }
         Ok(())
     }
@@ -254,6 +261,11 @@ impl NodeIntake {
             && let Some(r) = running.take()
         {
             r.stop();
+        }
+        if let Ok(mut folders) = self.folders.lock()
+            && let Some(f) = folders.take()
+        {
+            f.stop();
         }
     }
 

@@ -78,8 +78,10 @@ fn http(port: u16, raw: &str) -> Result<(String, String), Box<dyn Error>> {
     let mut s = TcpStream::connect(("127.0.0.1", port))?;
     s.set_read_timeout(Some(Duration::from_secs(5)))?;
     s.write_all(raw.as_bytes())?;
-    let mut out = String::new();
-    s.read_to_string(&mut out)?;
+    // Bytes, then text: a chunked page may have a chunk boundary inside a multi-byte character.
+    let mut raw = Vec::new();
+    s.read_to_end(&mut raw)?;
+    let out = String::from_utf8_lossy(&raw).into_owned();
     let (h, b) = out.split_once("\r\n\r\n").unwrap_or((&out, ""));
     Ok((h.to_string(), b.to_string()))
 }

@@ -96,6 +96,7 @@ pub fn get(
             | "/user"
             | "/space/vocabularies"
             | "/space/libraries"
+            | "/space/folder"
     ) {
         return None;
     }
@@ -164,6 +165,10 @@ pub fn get(
                 })).collect::<Vec<_>>() }),
                 )
             }
+            "/space/folder" => {
+                let s = owned(ctl, me, q("space"))?;
+                memcp_core::folders::info(&app.brain, &s).map_err(fail)
+            }
             _ => Err(err(404, "not found")),
         }
     })();
@@ -204,6 +209,7 @@ pub fn post(
         }
         "/space/vocabulary" => vocabulary(app, ctl, me, body),
         "/space/library" => library(app, ctl, me, body),
+        "/space/folder" => folder(app, ctl, me, body),
         _ => return None,
     })
 }
@@ -467,8 +473,22 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
                     json!({ "dry_run": true, "would": format!("{path} is mounted read-only on {s} and indexed; it is never copied or changed") }),
                 );
             }
-            let id = memcp_core::library::add_root(&conn, std::path::Path::new(path), now)
-                .map_err(fail)?;
+            // One setting: `library add` is `folder set` in read-only mode (see docs/FOLDERS.md).
+            memcp_core::folders::set(
+                &app.brain,
+                &s,
+                Some(std::path::Path::new(path)),
+                memcp_core::folders::Mode::Read,
+                now,
+            )
+            .map_err(fail)?;
+            let canon = std::fs::canonicalize(path).map_err(fail)?;
+            let id = memcp_core::library::roots(&conn)
+                .map_err(fail)?
+                .into_iter()
+                .find(|r| std::path::Path::new(&r.root) == canon)
+                .map(|r| r.id)
+                .ok_or_else(|| err(500, "the folder was not mounted"))?;
             let r = memcp_core::library::rescan(&conn, id, now).map_err(fail)?;
             json!({ "ok": true, "id": id, "scan": r.to_json() })
         }
@@ -488,6 +508,20 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
                 );
             }
             memcp_core::library::remove_root(&conn, id).map_err(fail)?;
+            // The folder of the space on this node was this one: the setting goes with it.
+            if memcp_core::folders::get(&app.brain, &s)
+                .map_err(fail)?
+                .is_some_and(|f| f.path == std::path::Path::new(&root.root))
+            {
+                memcp_core::folders::set(
+                    &app.brain,
+                    &s,
+                    None,
+                    memcp_core::folders::Mode::Read,
+                    now,
+                )
+                .map_err(fail)?;
+            }
             json!({ "ok": true })
         }
         "scan" => {
@@ -502,5 +536,77 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
         "library_edit",
         &format!("{s} {op}"),
     );
+    Ok(result)
+}
+
+/// `POST /space/folder`: the folder of a space on THIS node. `{space, path, mode?}` sets it (`path` null or empty: back
+/// to the default storage folder), `{space, op: "sync"}` makes a pass now. Naming a path of the machine is for
+/// administrators; going back to the default and syncing are for the owner of the space.
+fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value, Response> {
+    let s = owned(ctl, me, text(body, "space")?)?;
+    let op = body.get("op").and_then(Value::as_str).unwrap_or("set");
+    let now = util::now();
+    let result = match op {
+        "sync" => {
+            if memcp_core::folders::get(&app.brain, &s)
+                .map_err(fail)?
+                .is_none()
+            {
+                return Err(err(400, "this space has no folder on this node"));
+            }
+            if dry(body) {
+                return Ok(
+                    json!({ "dry_run": true, "would": format!("the folder of {s} is read and written once now") }),
+                );
+            }
+            let r = memcp_core::folders::sync_space(
+                &app.brain,
+                &s,
+                now,
+                memcp_core::folders::Options::default(),
+            )
+            .map_err(fail)?;
+            json!({ "ok": true, "scan": r.to_json(), "folder": memcp_core::folders::info(&app.brain, &s).map_err(fail)? })
+        }
+        "set" => {
+            let path = body
+                .get("path")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|p| !p.is_empty());
+            if path.is_some() && !me.admin {
+                return Err(err(
+                    403,
+                    "administrators only: choosing a folder names a path on this machine",
+                ));
+            }
+            let mode = memcp_core::folders::Mode::parse(
+                body.get("mode")
+                    .and_then(Value::as_str)
+                    .unwrap_or("readwrite"),
+            )
+            .map_err(fail)?;
+            if dry(body) {
+                let would = match path {
+                    Some(p) if mode == memcp_core::folders::Mode::Read => format!(
+                        "{p} becomes the folder of {s} on this node, only read and indexed for search; nothing is written in it"
+                    ),
+                    Some(p) => format!(
+                        "{p} becomes the folder of {s} on this node: its notes are kept there as Markdown and its files as themselves, and what you change there comes back into the memory. This is not shared with the other nodes"
+                    ),
+                    None => format!(
+                        "{s} goes back to the node's own storage folder; the folder it had is left as it is"
+                    ),
+                };
+                return Ok(json!({ "dry_run": true, "would": would }));
+            }
+            let info =
+                memcp_core::folders::set(&app.brain, &s, path.map(std::path::Path::new), mode, now)
+                    .map_err(fail)?;
+            json!({ "ok": true, "folder": info })
+        }
+        _ => return Err(err(400, "op: set or sync")),
+    };
+    access::auth_event(ctl, Some(&me.id), None, "folder_edit", &format!("{s} {op}"));
     Ok(result)
 }

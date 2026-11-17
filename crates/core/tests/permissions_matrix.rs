@@ -12,13 +12,14 @@ use memcp_core::users::OWNER;
 use memcp_core::{Brain, util};
 use serde_json::{Value, json};
 
-const READ: [&str; 14] = [
+const READ: [&str; 15] = [
     "triage_waiting",
     "tags_suggest",
     "living_get",
     "peers",
     "rules_get",
     "library_search",
+    "folder_get",
     "links",
     "recall",
     "read_fact",
@@ -28,11 +29,12 @@ const READ: [&str; 14] = [
     "file_list",
     "file_get",
 ];
-const WRITE: [&str; 11] = [
+const WRITE: [&str; 12] = [
     "living_set",
     "tags_set",
     "rules_set",
     "library_raise",
+    "folder_set",
     "remember",
     "deposit",
     "supersede",
@@ -229,6 +231,8 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         "library_raise" => {
             json!({"space": space, "path": "/nowhere/a.md", "summary": "A summary."})
         }
+        "folder_get" => json!({"space": space}),
+        "folder_set" => json!({"space": space, "path": null}),
         "links" => json!({"space": space}),
         "file_put" => {
             json!({"space": space, "name": "a.txt", "data_base64": "aGVsbG8=", "tags": ["sources/app"]})
@@ -293,6 +297,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
         "living_get",
         "rules_get",
         "library_search",
+        "folder_get",
         "links",
         "file_list",
         "tags_suggest",

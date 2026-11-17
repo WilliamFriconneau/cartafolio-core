@@ -12,6 +12,35 @@ Every command of `memcp` also runs against a node that is up, with a key ([CLI.m
 - **`GET /admin/api/export`** now sends the tar from a file, block by block, instead of holding it in memory; the answer is the same.
 - **`GET` and `POST /admin/api/space/folder`** are named by the command `memcp folder get|set` and are **pending** (they come with the space folders): the command answers exit 6, "pending", on a 404.
 - Command line only: `memcp status`, `memcp person new`, `memcp note recall`, `memcp note tags`, `memcp connection list|new|regrant|revoke|internal|readonly|person-guide|limit` (the former words still work), `memcp invite code|ticket|pending|approve|deny|allow` and `memcp join LINK|ID|ADDRESS [--ticket T]` (they call `POST /pairing`, `POST /nodes/invite`, `GET /join/pending`, `POST /join/approve|deny|allow-device`, `POST /nodes/add`, `GET /join-memory`), `memcp folder ...`. `--prefix` and `--token-env` are read as options with a value (they were read as switches, so `adopt DIR --prefix P` did not apply the prefix).
+## A folder for each space, on each node (next version)
+
+Everything below is added; nothing is renamed. The rules are in [FOLDERS.md](FOLDERS.md).
+
+**MCP tools** ([TOOLS.md](TOOLS.md)).
+
+- `folder_get {space?}`: read on the space (whole, not by paths). With `space`, the object below; without, `{ "folders": [object...] }` for the readable spaces that have a folder.
+- `folder_set {space?, path, mode?}`: write on the whole space. `path` is the full path on this node, or `null` for the node's own storage folder; `mode` is `readwrite` (default) or `read`. Answers the same object. Errors: `invalid` (relative path, a file, inside the data directory or overlapping another space's folder, unknown mode), `denied`.
+
+```json
+{ "space": "home", "path": "/home/me/Notes/home", "default_path": "/var/lib/memcp/files/home", "custom": true,
+  "mode": "readwrite", "cloud": null, "warning": null, "last_scan": "2026-11-17T10:00:00Z", "files": 12, "errors": [] }
+```
+
+`cloud` is `"google-drive"`, `"icloud"`, `"onedrive"`, `"dropbox"` or `null`; `warning` is a text (advice to keep the folder on the device) or `null`; `mode` is `null` and `custom` is `false` when no folder was chosen (`path` is then `default_path`, and nothing is mirrored). The setting is **per node**: it is in no sync event and does not travel in the swarm. An app shows `warning` next to the folder, in its own words.
+
+**Node page routes** (`/admin/api`, console token).
+
+- `GET /space/folder?space=NAME`: the object above. 403 for a space that is not the person's.
+- `POST /space/folder`: `{"space", "path", "mode"?}` sets the folder (`path` `null` or empty: back to the default; naming a path is for administrators, 403 otherwise), answering `{"ok": true, "folder": {...}}`; `{"space", "op": "sync"}` makes a pass now, answering `{"ok": true, "scan": {"written", "edited", "new_notes", "new_files", "conflicts", "retired", "waiting", "errors"}, "folder": {...}}`. Both take `"dry_run": true` and answer `{"dry_run": true, "would": "…"}`. Audit event: `folder_edit`.
+- `POST /space/library` `{op: "add"}` is kept: it is `POST /space/folder` with `mode: "read"` (it replaces the folder of the space on this node); `{op: "remove", id}` also puts the space back on its default folder when the root removed was its folder. `GET /space/libraries` still lists the index roots.
+
+**Command line.** `memcp folder set SPACE PATH [--read]`, `memcp folder set SPACE --default`, `memcp folder get [SPACE]`, `memcp folder sync [SPACE]`. `memcp library add PATH --space NAME` stays, as an alias of `folder set NAME PATH --read`. Environment: `MEMCP_FOLDER_EVERY` (seconds between two passes while serving, default 10).
+
+**What the node writes into the memory.** Author `folder-sync`. A note edited in the folder is a `supersede` with the reason `edited in the folder on this node`; a deleted file is a `retire` with the reason `its file was deleted from the folder on this node`; a note changed on both sides keeps both, the folder's copy being a new note tagged `conflict`; a new file or `.md` is a file or a note. The Markdown front matter keys are `id`, `space`, `tags`, `created`, `version`.
+
+**Storage.** Control database migration 24: `space_folders` (`space`, `path`, `mode`, `cloud`, `set_at`, `last_scan`, `last_files`, `last_errors`) and `folder_state` (what the node remembers of each file: hash, size, time, the note or file it stands for). Neither is in a space file or in the sync log.
+
+**Rust.** `memcp_core::folders`, `memcp_server::folder_sync`; the embedded node of an app (`NodeIntake::start`) runs the task too.
 
 ## Adding a node by its id or link, from any node (next version)
 

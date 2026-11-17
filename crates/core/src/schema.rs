@@ -32,6 +32,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V21,
     CONTROL_V22,
     CONTROL_V23,
+    CONTROL_V24,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -628,5 +629,32 @@ CREATE TABLE IF NOT EXISTS remote_joins (
   expires_at INTEGER NOT NULL,
   answer     TEXT,
   PRIMARY KEY (node, id)
+) STRICT, WITHOUT ROWID;
+";
+
+/// The folder of a space on THIS node, and what the node remembers of each file in it. Node-local on purpose: nothing
+/// here is ever put in the sync log, and a path of one machine means nothing on another (see docs/FOLDERS.md).
+const CONTROL_V24: &str = r"
+CREATE TABLE space_folders (
+  space TEXT PRIMARY KEY,
+  path TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('readwrite','read')),
+  cloud TEXT,
+  set_at INTEGER NOT NULL,
+  last_scan INTEGER,
+  last_files INTEGER NOT NULL DEFAULT 0,
+  last_errors TEXT NOT NULL DEFAULT '[]'
+) STRICT, WITHOUT ROWID;
+CREATE TABLE folder_state (
+  space TEXT NOT NULL,
+  rel TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('note','file')),
+  obj TEXT,
+  sha TEXT NOT NULL,
+  mtime INTEGER NOT NULL,
+  size INTEGER NOT NULL,
+  state TEXT NOT NULL DEFAULT 'tracked' CHECK (state IN ('tracked','retired','ignored')),
+  err TEXT,
+  PRIMARY KEY (space, rel)
 ) STRICT, WITHOUT ROWID;
 ";

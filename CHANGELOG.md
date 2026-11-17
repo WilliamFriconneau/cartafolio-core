@@ -11,6 +11,8 @@
 
 ## 20261117.0.20
 
+- **The command line speaks to a running node:** `memcp --node URL --key-file F <command>` for every command (docs/CLI.md; exit codes; the table of local and remote forms is tested).
+- **A folder for each space, on each node:** `folder_set`, `folder_get`, `memcp folder set|get|sync`, a block on the page; the node keeps the notes and files of the space there as Markdown, both ways; never shared with the other nodes; cloud folders are flagged (docs/FOLDERS.md). `library add` is an alias.
 - **« À trier » is now called Inbox**, in English, French and Spanish: on the page, in the tool descriptions and the instructions given to assistants, in the janitor's notes, the command line and the docs. The box is stored as before (kind `a-trier`, space `<person>-a-trier`), so a box made by an earlier version is the same box: nothing is renamed or migrated, and the swarm still pairs the boxes of a person by kind, whatever their names. A spaces file whose default space is still labelled « À trier » is read as « Inbox ».
 - **Every node is equal, and the words say so:** the page, the consent page, the command line, `doctor` and the docs no longer call a node « the server », its page « administration » or « the admin page », or a device a « client » of another. The people section of the page is « People of this node ». The `/admin` path, `--console-admin` and `--admins` keep their names.
 - No « vault » left in what a person reads: the consent page, `doctor`, the command line and the janitor's notes say space. `memcp space make KIND` is the new name of `vault add KIND` and `import --folder DIR` of `import --vault DIR`; the old forms still work.

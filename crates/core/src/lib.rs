@@ -50,6 +50,7 @@ mod error;
 pub mod export;
 pub mod facts;
 pub mod files;
+pub mod folders;
 pub mod fsx;
 pub mod guide;
 pub mod import;

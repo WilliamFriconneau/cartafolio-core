@@ -62,6 +62,10 @@ The tree of spaces (folders open in place, drag and drop, labels never technical
 boards**: What's next, Ideas, Targets (with their signs), and its lists (shopping…), each card ticked or moved in one
 tap, each board saying its last pass and how many notes came since. Then its notes, its tags, its keywords (the
 words that file a note there), and its **graph**: spaces, tags and keywords linked, a click filters the notes.
+A space also says **where it lives on this machine**: « Folder on this node », the path (by default the node's own storage
+folder), a mode (notes and files both ways, or read only for search), the last pass and « Sync now ». A folder held by a
+cloud service (iCloud Drive, Google Drive, OneDrive, Dropbox) is allowed and flagged with the node's advice to keep it on the
+device. The setting is this machine's own and never goes to the others ([FOLDERS.md](FOLDERS.md)).
 
 ### Health: a space, inside Spaces
 

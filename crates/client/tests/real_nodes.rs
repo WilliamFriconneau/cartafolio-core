@@ -2421,7 +2421,7 @@ fn a_connection_key_does_the_note_commands_and_nothing_more() {
 }
 
 #[test]
-fn devices_join_through_the_command_line_and_the_folder_command_is_pending() {
+fn devices_join_through_the_command_line_and_a_space_folder_is_read() {
     let root = Root::new("cli-invite");
     let mut node = Node::init(&root, "n", true);
     node.serve();
@@ -2456,10 +2456,14 @@ fn devices_join_through_the_command_line_and_the_folder_command_is_pending() {
     // Without a node these have nothing to read.
     let local = node.cli_out(&["invite", "pending"]);
     assert_eq!(local.status.code(), Some(2));
-    // The folder of a space: defined, the routes come with the space folders.
+    // The folder of a space on a node: none chosen, then one chosen through the node, then back to the default.
     let f = remote(&node, &key, &[], &["folder", "get", "work"]);
-    assert_eq!(f.status.code(), Some(6), "{}", text_of(&f));
-    assert!(text_of(&f).contains("pending"), "{}", text_of(&f));
+    assert!(f.status.success(), "{}", text_of(&f));
+    assert!(
+        text_of(&f).contains("default"),
+        "no folder chosen yet: {}",
+        text_of(&f)
+    );
 }
 
 #[test]
