@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! memcp-core: the memory itself. Dated, sourced facts stored in
 //! isolated spaces (one SQLite file each) plus a control database for
 //! connections and rights. No model inside, no network.
@@ -29,11 +30,12 @@ pub mod tools;
 mod tools_tests;
 pub mod triage;
 pub mod users;
+/// Clock, random bytes and small helpers shared by the other modules.
 pub mod util;
 pub mod vocabulary;
 
 pub use brain::{Brain, default_config};
-pub use error::{Error, Result};
+pub use error::{Error, ErrorKind, Result};
 pub use moves::Moved;
 pub use schema::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 pub use space::Space;

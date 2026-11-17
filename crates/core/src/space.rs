@@ -13,6 +13,11 @@ pub struct Space(String);
 const RESERVED: [&str; 2] = ["control", "all"];
 
 impl Space {
+    /// Validates `name` and builds a space name.
+    ///
+    /// # Errors
+    /// [`Error::Invalid`] unless the name is 1 to 32 lowercase ASCII letters, digits
+    /// or dashes, starts with a letter, and is not `control` or `all`.
     pub fn new(name: &str) -> Result<Space> {
         let ok = (1..=32).contains(&name.len())
             && name.starts_with(|c: char| c.is_ascii_lowercase())
@@ -30,6 +35,7 @@ impl Space {
         }
     }
 
+    /// The name as text, exactly as validated.
     pub fn as_str(&self) -> &str {
         &self.0
     }

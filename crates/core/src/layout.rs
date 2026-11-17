@@ -25,19 +25,26 @@ type Row = (String, Option<String>, Option<String>, i64, String);
 /// A space as its owner sees it in the tree.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Place {
+    /// The space.
     pub space: Space,
     /// What is shown: the label, or the name when none was given.
     pub label: String,
+    /// Its parent in the tree, `None` at the top. A parent the person does not own is not shown: the space is at the top.
     pub parent: Option<Space>,
+    /// Order among its brothers (smaller first; ties by label).
     pub position: i64,
+    /// The kind of vault (a key of the catalogue, or `custom`).
     pub kind: String,
 }
 
 /// What to change. `None` leaves a field as it is; `parent: Some(None)` moves to the top.
 #[derive(Clone, Debug, Default)]
 pub struct Change {
+    /// New display label (`Some("")` is refused; it must not be only spaces).
     pub label: Option<String>,
+    /// `Some(Some(p))` moves under `p`, `Some(None)` moves to the top, `None` leaves it. A move that would make a cycle is refused.
     pub parent: Option<Option<Space>>,
+    /// New position among the brothers.
     pub position: Option<i64>,
 }
 

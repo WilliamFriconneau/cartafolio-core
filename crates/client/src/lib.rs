@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! A program's view of a connection of the memory: its address (`https://<server>/mcp/<name>`) and its
 //! key, over MCP on HTTP. It sends what it is given and keeps nothing but the session the memory opens.
 //!

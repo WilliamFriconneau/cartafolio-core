@@ -14,11 +14,14 @@ use unicode_normalization::{UnicodeNormalization, char::is_combining_mark};
 /// Languages the search understands.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Language {
+    /// English stemming and stopwords (code `en`, the default).
     English,
+    /// French stemming and stopwords (code `fr`).
     French,
 }
 
 impl Language {
+    /// Reads a language code from the configuration: `"en"` or `"fr"`, `None` for anything else.
     pub fn parse(code: &str) -> Option<Language> {
         match code {
             "en" => Some(Language::English),
@@ -27,6 +30,7 @@ impl Language {
         }
     }
 
+    /// The configuration code of the language (`"en"` or `"fr"`); inverse of [`Language::parse`].
     pub fn code(self) -> &'static str {
         match self {
             Language::English => "en",
@@ -57,6 +61,7 @@ pub fn set_language(lang: Language) -> bool {
     *LANGUAGE.get_or_init(|| lang) == lang
 }
 
+/// The process language: the one given to [`set_language`], English if none was.
 pub fn language() -> Language {
     *LANGUAGE.get_or_init(|| Language::English)
 }
@@ -89,6 +94,7 @@ pub fn text_hash(text: &str) -> String {
     hex(&Sha256::digest(normalize(text).as_bytes()))
 }
 
+/// Lowercase hexadecimal text of `bytes` (two characters per byte).
 pub fn hex(bytes: &[u8]) -> String {
     use std::fmt::Write;
     bytes

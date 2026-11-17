@@ -29,7 +29,10 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V18,
 ];
 
+/// Number of migrations a space database goes through; a file recording a higher
+/// version was written by a newer program and is refused.
 pub const SPACE_SCHEMA_VERSION: u32 = SPACE_MIGRATIONS.len() as u32;
+/// Number of migrations of the control database (same rule as [`SPACE_SCHEMA_VERSION`]).
 pub const CONTROL_SCHEMA_VERSION: u32 = CONTROL_MIGRATIONS.len() as u32;
 
 const SPACE_V1: &str = r"

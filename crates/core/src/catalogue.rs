@@ -35,6 +35,7 @@ impl Feature {
         }
     }
 
+    /// The word used in `catalogue.txt` and in the page for this feature (`"money"`).
     pub fn word(self) -> &'static str {
         match self {
             Feature::Money => "money",
@@ -42,13 +43,17 @@ impl Feature {
     }
 }
 
+/// One kind of vault an installation offers when a person adds a vault.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Kind {
     /// Lowercase letters, digits and dashes, starting with a letter: it becomes part of a
     /// vault name.
     pub key: String,
+    /// Name shown to the person.
     pub label: String,
+    /// One sentence saying what the kind is for.
     pub description: String,
+    /// The extra tools the vault gets (the bank statement tools for `money`), if any.
     pub feature: Option<Feature>,
 }
 

@@ -1,3 +1,4 @@
+#![warn(missing_docs)]
 //! The bridge, as the Mac app's Swift sees it. Nothing but a shell: every type and every call is the
 //! bridge's own (`memcp-capture`), renamed for Swift. The logic, the outbox and the network are Rust; the key
 //! is read from the Keychain by Swift and handed over for the length of the run, never stored here.
