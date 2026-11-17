@@ -49,6 +49,8 @@ async function open(browser, n, viewport, opts = {}) {
   await sleep(600);
   return page;
 }
+// The four sections of the page (docs/UI-SPEC.md): "" is Spaces, "#settings" holds the machines, the assistants and the rest.
+const section = async (page, h) => { await page.evaluate(h => { location.hash = h; }, h); await sleep(300); };
 const shot = async (page, name) => { if (SHOTS) await page.screenshot({ path: path.join(SHOTS, name), fullPage: true }); };
 const wide = page => page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
 const location_hash = url => (url.includes("#") ? "#" + url.split("#")[1] : "");
@@ -79,7 +81,7 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   await page.click("#ob-next");
   check("step 4 says it is ready, with the default spaces", /Your memory is ready/.test(await page.locator("#ob-body").innerText()) && /6 spaces/.test(await page.locator("#ob-body").innerText()));
   await page.click("#ob-open");
-  check("then the memory opens on its machines", await page.locator("#machines-section").isVisible() && await page.locator("#home").isVisible());
+  check("then the memory opens on its spaces, under the four sections", await page.locator("#home").isVisible() && (await page.locator("#sections button").count()) === 4 && !(await page.locator("#machines-section").isVisible()));
   const names = await page.locator("#spaces .tile h3").allInnerTexts();
   check("six spaces are made, shown by label", names.length === 6 && !names.some(n => /owner-/.test(n)), names.join("|"));
   check("no technical step left: nothing logged", page.problems.length === 0, page.problems.join(" | "));
@@ -111,11 +113,13 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   page = await open(browser, full, { width: 1280, height: 1000 }, { sync: peers });
   const order = await page.evaluate(() => [...document.querySelectorAll("#home > *")].map(e => e.id || e.className).filter(Boolean));
   check("machines come before the assistants and the spaces", order.indexOf("machines-section") < order.indexOf("actions") && order.indexOf("actions") < order.indexOf("hero") + 99, order.join(","));
+  await section(page, "#settings");
   const rows = await page.locator("#machines .mrow").allInnerTexts();
   check("this machine is first, then each peer with direction and percent", rows.length === 3 && /This machine|MemCP/.test(rows[0]) && /laptop/.test(rows[1]) && /receiving/.test(rows[1]) && /63 %/.test(rows[1]) && /phone/.test(rows[2]) && /in step/.test(rows[2]), rows.join(" | "));
   check("adding a node comes before connecting an assistant", (await page.locator("#add-node").boundingBox()).y < (await page.locator("#open-wizard").boundingBox()).y);
   check("on a node that has spaces the button is Add a node, never Join a memory", (await page.locator("#add-node").innerText()) === "Add a node" && !/Join a memory/.test(await page.locator("#home").innerText()));
   await shot(page, "home-1280.png");
+  await section(page, "");
   check("spaces show their labels, not technical names", !(await page.locator("#spaces").innerText()).match(/owner-/));
   // a folder: put work inside health through the layout
   await page.evaluate(async () => { await api("layout/set", { space: "owner-work", parent: "owner-health" }); });
@@ -313,6 +317,7 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
     await api("connections", { agent: "claude-code", rights: "all" });
   });
   await page.reload(); await page.waitForSelector("#app:not([hidden])"); await sleep(1200);
+  await section(page, "#settings");
   const tiles = await page.locator("#connections .tile h3").allInnerTexts();
   check("Connected assistants lists assistants only, never a peer", tiles.length === 2 && !tiles.some(x => /peer-/.test(x)), tiles.join("|"));
   const prow = page.locator(".mrow[data-peer='peer-laptop-ab12']");
@@ -320,13 +325,15 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   await prow.locator("button:has-text('change access')").click();
   check("change access opens the rights editor on the machine's card", (await prow.locator("button:has-text('save')").count()) === 1);
   await prow.locator("button:has-text('cancel')").click();
-  check("the hero counts the assistants, not the machines", (await page.locator("#hero .facts div").nth(2).locator("b").innerText()) === "2");
   check("an assistant says where it runs when that is known", /cloud/.test(await page.locator("#connections .tile:has-text('claudeai') .badge").innerText()) && /local/.test(await page.locator("#connections .tile:has-text('claude-code') .badge").innerText()));
+  await section(page, "");
+  check("the hero counts the assistants, not the machines", (await page.locator("#hero .facts div").nth(2).locator("b").innerText()) === "2");
   const fp = await open(browser, full, { width: 1280, height: 1000 }, { sync: peers, locale: "fr-FR" });
   const untranslated = await fp.evaluate(() => [...document.querySelectorAll("#home section h2, #home section h2 + p, #home details.fold > summary, #home .tile h3")]
     .filter(e => e.offsetParent !== null).map(e => e.textContent.trim())
     .filter(t => (Object.prototype.hasOwnProperty.call(FR, t) && FR[t] !== t) || /\b(the|your|and|with|this|from|nothing|what)\b/i.test(t)));
   check("French from the first paint: every heading and intro is French", untranslated.length === 0, untranslated.join(" | "));
+  await section(fp, "#settings");
   check("French: the Connected assistants block", /Assistants connectés/.test(await fp.locator("#connections").locator("xpath=ancestor::section").innerText()) && /Révoquez-en un/.test(await fp.locator("#connections").locator("xpath=ancestor::section").innerText()));
   await fp.context().close();
 
@@ -335,7 +342,10 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   await page.click("#app [data-lang=fr]");
   await sleep(500);
   const fr = await page.locator("body").innerText();
-  check("French: the main blocks are translated", /Machines/.test(fr) && /Ajouter un nœud/.test(fr) && /Connecter un assistant/.test(fr) && /Vos espaces/.test(fr), fr.slice(0, 300));
+  await section(page, "#settings");
+  const frSettings = await page.locator("body").innerText();
+  await section(page, "");
+  check("French: the main blocks are translated", /Machines/.test(frSettings) && /Ajouter un nœud/.test(frSettings) && /Connecter un assistant/.test(frSettings) && /Vos espaces/.test(fr) && /administrateur/.test(fr), fr.slice(0, 300));
   const leftovers = await page.evaluate(() => {
     const out = [], w = document.createTreeWalker(document.getElementById("home"), NodeFilter.SHOW_TEXT);
     for (let n = w.nextNode(); n; n = w.nextNode()) {

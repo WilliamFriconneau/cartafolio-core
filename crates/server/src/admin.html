@@ -303,7 +303,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .ginfo{margin:8px 0;min-height:2.4em}
 .gnodes{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 @media (max-width:640px){.note{flex-wrap:wrap}.note .meta{flex-direction:row;flex-wrap:wrap;align-items:center;width:100%}}
-.off{display:none!important}
+.not-here{display:none!important}
 .sections{margin:6px 0 14px}
 </style>
 </head>
@@ -765,6 +765,7 @@ const FR = {
   "À trier": "À trier",
   "What your devices sent and the janitor has not sent on yet.": "Ce que vos appareils ont envoyé et que le rangeur n’a pas encore classé.",
   "Sort them": "Les trier",
+  "What waits for your decision: what your devices sent and the janitor could not place.": "Ce qui attend votre décision : ce que vos appareils ont envoyé et que le rangeur n’a pas su classer.",
   "Your spaces": "Vos espaces",
   "What you keep. A folder holds other spaces; open the space inside it. Connect one to an assistant on its own, or write its instructions.": "Ce que vous gardez. Un dossier contient d’autres espaces : ouvrez l’espace qui est dedans. Connectez-en un seul à un assistant, ou écrivez ses consignes.",
   "Organise your spaces": "Organiser vos espaces",
@@ -1495,7 +1496,7 @@ async function load() {
   S.connections = (S.connections || []).filter(c => !isInternal(c));
   $("#login").hidden = true; $("#app").hidden = false;
   const me = S.me;
-  $("#who").textContent = (me.display || me.name) + " · " + (isAdmin() ? "administrator" : "member");
+  $("#who").replaceChildren((me.display || me.name) + " · ", el("span", {}, isAdmin() ? "administrator" : "member")); // the role on its own, so it is translated
   $("#my-guide").textContent = S.my_guide ? "my instructions ✓" : "my instructions";
   $$("[data-admin]").forEach(n => n.hidden = !isAdmin());
   await renderLayout();
@@ -2151,6 +2152,9 @@ function renderSections(on) {
     "aria-current": id === on ? "page" : null, onclick: () => { location.hash = h; } }, t)));
 }
 
+// A part of Settings with nothing in it stays hidden there too; elsewhere every part of Settings is hidden (route).
+function settingsPart(n, empty) { n.dataset.empty = empty ? "1" : ""; n.hidden = empty || !/^#(settings|admin)$/.test(location.hash); }
+
 function route() {
   // Everyone lands in their own memory. The other people (an administrator only) are on a page of their own.
   const admin = !!(S && S.installation && S.installation.admin);
@@ -2166,7 +2170,7 @@ function route() {
     : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
   renderSections(section);
   document.querySelectorAll('#view-memory [data-part="settings"]').forEach(n => { n.hidden = section !== "settings" || n.dataset.empty === "1"; });
-  document.querySelectorAll("#view-memory > #home > :not([data-part])").forEach(n => { if (n.id !== "machines-section") n.classList.toggle("off", section === "settings"); });
+  document.querySelectorAll("#view-memory > #home > :not([data-part])").forEach(n => { if (n.id !== "machines-section") n.classList.toggle("not-here", section === "settings"); });
   $("#view-space").hidden = page !== "space";
   $("#view-global").hidden = page !== "global";
   // Only one graph and one list of notes at a time in the page (their ids are unique).
@@ -2183,7 +2187,7 @@ function route() {
   $("#back-people").hidden = page !== "admin";
   $("#nav-admin").hidden = !(admin && page === "memory");
   $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
-  document.title = page === "space" ? "MemCP · " + spacePath(inSpace[1]) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
+  document.title = page === "space" ? "MemCP · " + (inSpace ? spacePath(inSpace[1]) : tr("Trace or drop")) : page === "global" ? "MemCP · " + (location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "MemCP · Administration" : page === "triage" ? "MemCP · À trier" : "MemCP";
 }
 $("#back-people").addEventListener("click", () => { location.hash = ""; });
 $("#nav-admin").addEventListener("click", () => { location.hash = "#admin"; });
@@ -2200,7 +2204,7 @@ window.addEventListener("hashchange", route);
 
 function renderSafety() {
   const sf = S.safety;
-  $("#safety").hidden = !sf;
+  settingsPart($("#safety"), !sf);
   if (!sf) return;
   const name = p => p.display || p.name;
   $("#heir-text").textContent = sf.heir
@@ -2407,7 +2411,7 @@ function render() {
       el("td", { class: "small" }, a.ip || ""))) : [el("tr", {}, el("td", { colspan: "4", class: "mute" }, "Nothing yet."))]));
   const proposed = S.app_guides || [];
   const standingWord = { waiting: "waiting for you", approved: "approved", changed: "changed since you approved it: waiting for you" };
-  $("#app-guides-section").hidden = proposed.length === 0;
+  settingsPart($("#app-guides-section"), proposed.length === 0);
   $("#app-guides").replaceChildren(...proposed.map(g => el("div", { class: "space guide-proposal", "data-standing": g.standing },
     el("h3", {}, g.app, el("span", { class: "mute small" }, " · space " + g.space + " · " + (standingWord[g.standing] || g.standing))),
     el("pre", { class: "proposal-text" }, g.text),
@@ -2421,7 +2425,7 @@ function render() {
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "revoke")));
   if (att.idle.length > 1) worth.push(el("p", {},
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke these " + att.idle.length + " connections?", async () => { for (const c of att.idle) await act("connections/revoke", { agent: c.agent }); }) }, "revoke all " + att.idle.length)));
-  $("#attention-section").hidden = worth.length === 0;
+  settingsPart($("#attention-section"), worth.length === 0);
   $("#attention").replaceChildren(...worth);
 
   const size = n => n < 1024 ? n + " B" : n < 1024 * 1024 ? Math.round(n / 1024) + " kB" : (n / 1024 / 1024).toFixed(1) + " MB";
@@ -2464,11 +2468,11 @@ function render() {
   const assistants = live.filter(c => !isPeer(c));
   $("#connections").replaceChildren(...(assistants.length ? assistants.map(connTile) : [el("p", { class: "mute", style: "grid-column:1/-1" }, "Nothing is connected.")]));
   const gone = [...S.connections, ...(S.internal || [])].filter(c => c.revoked);
-  $("#revoked-section").hidden = gone.length === 0;
+  settingsPart($("#revoked-section"), gone.length === 0);
   $("#revoked").replaceChildren(...gone.map(c => el("div", { class: "row", "data-agent": c.agent },
     el("span", {}, c.agent), el("span", { class: "mute small" }, " revoked"),
     el("button", { class: "link danger", title: "Remove it from the list; what the audit says about it stays", onclick: () => previewThen("connections/delete", { agent: c.agent }) }, "remove from the list"))));
-  $("#internal-section").hidden = tools.length === 0;
+  settingsPart($("#internal-section"), tools.length === 0);
   $("#internal").replaceChildren(...tools.map(c => el("div", { class: "tile" },
     el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", {}, c.agent),
       el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),

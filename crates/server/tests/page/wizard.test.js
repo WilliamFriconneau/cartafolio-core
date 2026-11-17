@@ -261,7 +261,9 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const mine = calls.filter(c => String(c[1]).startsWith("guide?scope=")).pop();
   check("my instructions asks for the person's own", mine && mine[1] === "guide?scope=person" && text("#guide-title") === "My instructions" && text("#guide-lead").includes("whatever it reaches"), mine && mine[1]);
 
-  // --- activity and what deserves a look
+  // --- activity and what deserves a look: in Settings, the only section that shows them
+  w.location.hash = "#settings";
+  await sleep(100);
   check("with nothing to show, the page says so and hides the attention section", text("#activity").includes("Nothing yet.") && $("#attention-section").hidden);
   world.activity = [
     { at: "2026-11-01T12:00:00+00:00", who: "claude-code-ab12", ip: "10.0.0.5", event: "revoke", detail: "" },

@@ -94,6 +94,9 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.click("#confirm-dlg button:not(#confirm-hold)");
 
   // ---- a connection: new key, revoke, remove from the list
+  await page.evaluate(() => { location.hash = "#settings"; }); // the connections and the machines are in Settings
+  await sleep(200);
+  await openAll();
   await page.waitForSelector("#connections .tile");
   const tile = () => page.locator("#connections .tile", { hasText: "tool-a" });
   await tile().locator("button:has-text('new key')").click();

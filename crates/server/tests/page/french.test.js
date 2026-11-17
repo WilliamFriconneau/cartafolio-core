@@ -127,9 +127,14 @@ async function leftovers(page, rootSel) {
   const scan = async (name, sel) => { const l = await leftovers(page, sel || "#app"); check("French: no English left in " + name, l.length === 0, "\n    " + l.join("\n    ")); all.push(...l); };
 
   await scan("the home page");
+  await page.evaluate(() => { location.hash = "#settings"; }); await sleep(300);
   await page.locator("#home details.fold > summary").evaluateAll(s => s.forEach(x => x.parentElement.open = true));
   await sleep(200);
-  await scan("the home page with every fold open");
+  await scan("the settings with every fold open");
+  await page.evaluate(() => { location.hash = "#note"; }); await page.waitForSelector("#space-body textarea"); await sleep(400);
+  await scan("trace or drop");
+  await page.evaluate(() => { location.hash = "#journal"; }); await sleep(600);
+  await scan("the journal");
   await page.evaluate(() => { location.hash = "#triage"; }); await sleep(300);
   await scan("the triage view");
   await page.fill("#tr-filter", "zzzz"); await sleep(150);
@@ -145,6 +150,7 @@ async function leftovers(page, rootSel) {
   await page.evaluate(() => { location.hash = ""; }); await sleep(300);
 
   // dialogs
+  await page.evaluate(() => { location.hash = "#settings"; }); await sleep(300);
   await page.click("#open-wizard");
   const platforms = await page.locator("#w-platforms button").allInnerTexts();
   for (const [i, b] of platforms.entries()) {
@@ -163,6 +169,7 @@ async function leftovers(page, rootSel) {
   await page.fill("#w-name", "health"); await sleep(100);
   await scan("the wizard with a name that is a space", "#wizard");
   await page.click("#wizard form button");
+  await page.evaluate(() => { location.hash = ""; }); await sleep(300);
   await page.locator("#spaces .tile[data-space] button", { hasText: "Instructions" }).first().click().catch(() => {});
   await page.locator("#spaces .tile[data-space] button", { hasText: "Consignes" }).first().click(); await sleep(400);
   await scan("the instructions of a space", "#guide-dlg");
@@ -170,6 +177,7 @@ async function leftovers(page, rootSel) {
   await page.click("#my-guide"); await sleep(400);
   await scan("my instructions", "#guide-dlg");
   await page.click("#guide-dlg form button:last-child");
+  await page.evaluate(() => { location.hash = "#settings"; }); await sleep(300);
   await page.click("#add-node"); await page.waitForSelector("#pair-dlg[open]"); await sleep(300);
   await scan("the add-a-node window", "#pair-dlg");
   await page.click("#pair-dlg form button");

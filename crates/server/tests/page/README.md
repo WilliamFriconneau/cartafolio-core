@@ -1,4 +1,30 @@
-# Page tests (optional)
+# Page tests
+
+CI runs every `*.test.js` here (the `page` job of `.github/workflows/ci.yml`), with the program built in
+`target/debug` (`MEMCP_BIN` says otherwise) and the Chrome of the runner (`CHROMIUM`). They are not part of `cargo test`.
+The page has four sections (`#note`, `#journal`, the empty hash for Spaces, `#settings`); a test that reaches a part of
+Settings goes to `#settings` first.
+
+```sh
+cargo build -p memcp-server
+cd crates/server/tests/page && npm install jsdom playwright-core --no-save
+for t in *.test.js; do CHROMIUM=/usr/bin/chromium node "$t" || echo "FAILED $t"; done
+```
+
+## The golden paths, against a real node
+
+`e2e.test.js` inits a node in a temporary folder (two spaces, a console token), serves it on a free port and loads its
+page in jsdom: the page talks to the real API, only the browser is simulated. In French, it signs in and checks the four
+sections and their labels; Spaces shows the tiles and a space opens on its Boards tab; Trace or drop writes a note that
+appears in its list; the Journal lists the notes of every space, each with its space; Settings shows the machines and
+« Connect an assistant », hides the tiles and shows no empty section. On every view: no « null », « undefined », and none
+of the words the interface never uses (bridge, capture app, vault), and nothing logged as an error. jsdom only:
+
+```sh
+cd crates/server/tests/page && npm install jsdom --no-save && node e2e.test.js
+```
+
+## The logic of the page, against a fake server
 
 `wizard.test.js` loads the admin page in a fake browser (jsdom) against a fake server and
 walks through the "Connect an assistant" steps, the triage view and the instructions editors. It is not part of `cargo test`; it needs

@@ -18,6 +18,8 @@ run("vault", "add", "health", "--user", "owner");
 const console_token = run("console-token", "owner").split("\n")[1].trim();
 let server = null;
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+// The four sections of the page (docs/UI-SPEC.md): "" is Spaces, "#settings" holds the machines, the assistants and the rest.
+const section = async (page, h) => { await page.evaluate(h => { location.hash = h; }, h); await sleep(200); };
 let failed = 0;
 const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL ") + name + (cond ? "" : "  " + extra)); if (!cond) failed++; };
 (async () => {
@@ -48,9 +50,10 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const rows = await page.locator("#spaces .tile[data-space]").allInnerTexts();
   check("the page carries the project name", (await page.title()) === "MemCP" && (await page.locator("h1").first().innerText()) === "MemCP");
   check("the spaces are listed with their kind", rows.some(r => /work/i.test(r)) && rows.some(r => /health/i.test(r)), rows.join(" | "));
+  check("each space is a tile with its own connect button", (await page.locator("#spaces .tile[data-space] button:has-text('Connect')").count()) === rows.length, String(rows.length));
+  await section(page, "#settings");
   check("no address for the whole memory is shown: each assistant has its own", (await page.locator("#mcp-url").count()) === 0 && (await page.locator("#open-wizard").isVisible()));
   check("the technical forms are folded away until asked for", !(await page.locator("#advanced").evaluate(d => d.open)) && !(await page.locator("#advanced form").first().isVisible()));
-  check("each space is a tile with its own connect button", (await page.locator("#spaces .tile[data-space] button:has-text('Connect')").count()) === rows.length, String(rows.length));
   check("nothing is connected at the start and the page says so", (await page.locator("#connections").innerText()).includes("Nothing is connected"), await page.locator("#connections").innerText());
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-main.png"), fullPage: true });
 
@@ -124,6 +127,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("once approved, an assistant reaching the whole space is told it, framed with who approved it", told2.includes("GUIDE of the app \"kalios\"") && told2.includes("one JSON object per measure") && told2.includes("Form only"), told2.slice(-300));
 
   // instructions: the person's own are written here; a space's are read-only on the page (its assistants keep them)
+  await section(page, "");
   await page.locator("#spaces .tile[data-space=owner-work]").locator("button:has-text('Instructions')").click();
   check("a space's instructions open read-only", await page.locator("#guide-text").evaluate(t => t.readOnly) && !(await page.locator("#guide-save").isVisible()));
   await page.click("#guide-dlg form button:last-child");
@@ -150,6 +154,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   // activity
   await page.reload();
   await page.waitForSelector("#app:not([hidden])");
+  await section(page, "#settings");
   await sleep(500);
   await page.locator("details.fold summary", { hasText: "Activity" }).click();
   const acts = await page.locator("#activity tr").allInnerTexts();

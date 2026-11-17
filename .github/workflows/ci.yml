@@ -31,6 +31,36 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - run: scripts/e2e.sh
 
+  page:
+    # The node page in a browser, against the real program: crates/server/tests/page (README.md there). e2e.test.js
+    # and wizard.test.js run in jsdom; the others drive the Chrome of the runner through playwright-core.
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo build --locked -p memcp-server
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install jsdom and playwright-core
+        working-directory: crates/server/tests/page
+        run: npm install jsdom playwright-core --no-save
+      - name: Every page test
+        working-directory: crates/server/tests/page
+        env:
+          MEMCP_BIN: ${{ github.workspace }}/target/debug/memcp
+          CHROMIUM: /usr/bin/google-chrome
+        run: |
+          status=0
+          for t in *.test.js; do
+            echo "::group::$t"
+            node "$t" || { echo "::error::$t failed"; status=1; }
+            echo "::endgroup::"
+          done
+          exit $status
+
   supply-chain:
     runs-on: ubuntu-latest
     steps:
