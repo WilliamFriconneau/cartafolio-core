@@ -1,110 +1,129 @@
-# Interface specifications
+# Interface specification
 
-One memory, many machines. Every screen below shows the same memory, in the same words. Words that are
-not used anywhere: *bridge*, *proxy*, *vault* (say *space*). A machine that joins is a **peer** (a node).
+**One app, the same everywhere**: iPhone, iPad, Mac, Windows, Linux and the node page in a browser show the same
+sections, in the same order, with the same words. A platform differs only where its device differs:
 
-## Principles
+| Platform | What is its own, and nothing else |
+|---|---|
+| iPhone, iPad | a window of the memory (the last thirty days and what is pinned); Apple Health read and proposals written to it; the Watch and widgets |
+| Mac, Windows, Linux | the whole memory; recording calls and meetings (everyone told, everyone agreeing) |
+| Node page | the whole memory; the administration of the node (people, connections, peers, updates) |
 
-1. **Machines first.** The first thing on screen is which machines hold this memory, and whether they are in step.
-2. **One memory.** After joining, a device shows one memory. A local copy is a replica, never a second memory.
-3. **Live.** A synchronisation in progress is visible as it happens: which machine, which direction, how far.
-4. **Two choices at the start**, on every app: *Start a memory* or *Join a memory*.
-5. **Order of actions**: join a machine first, connect an assistant second.
-6. **Each machine lists its own connections** (assistants and peers), with last activity.
-7. **Parity.** Every function and option exists on the node page, the desktop apps and, where the screen allows it,
-   the phone. What a small screen cannot show it says so and offers the page.
-8. Nesting: the top level shows top-level spaces only. A folder tile opens (`#folder/NAME`) to show its children under a
-   breadcrumb (`Your spaces > Perso > Health`); a sub-space opens with the same breadcrumb and its keywords under its
-   title. A tile dropped on a folder, a breadcrumb or another tile moves it there (layout only).
-9. One count: every number of notes is the notes the journal lists (the rules and dashboard notes are not notes).
-10. Folders: a space that has children is a **folder** (no count, no "connections reach it"); only leaf spaces are
-   opened. Labels, never technical names.
+Words never used: *bridge*, *proxy*, *vault* (say *space*). Vulgar or slang words are never used in the interface.
 
-## Layout (node page, Mac, Windows, Linux)
+## What matters most to a person (the order of everything below)
+
+1. **Say it now, find it later.** A thought, a measure, a task, said in three seconds, filed by itself.
+2. **What do I have to do, buy, remember?** The boards of each space answer, kept up to date from the notes.
+3. **What happened, day by day?** One journal for everything, with each note's space.
+4. **My health followed as a nurse would** (MemCP Health): targets, their signs counted, a summary to hand to a doctor.
+5. **Everything mine, on my machines**, reachable by the assistant I choose.
+
+## Navigation
+
+Five sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
 
 ```
-┌───────────────┬──────────────────────────────────────────────┐
-│ MACHINES      │  <machine or space selected>                  │
-│ ● This computer│                                              │
-│   ◐ Server  ↓ 63 %│  Tabs: Journal · Dashboard · Notes · Tree │
-│   ● iPhone     │                                              │
-│ + Join a memory│  Right column: connections of this machine   │
-│ ─────────────  │  (assistants, peers) with status dot and     │
-│ SPACES (tree)  │  last activity; "Connect an assistant" here  │
-│ ▸ Perso        │                                              │
-│ ▸ Home         │                                              │
-│ Settings       │                                              │
-└───────────────┴──────────────────────────────────────────────┘
+┌──────────────┬─────────────────────────────────────────────────────────────┐
+│ ● Note       │  the section selected                                       │
+│ ● Journal    │                                                             │
+│ ● Spaces     │                                                             │
+│ ● Health *   │                                                             │
+│ ● Settings   │                                                             │
+│──────────────│                                                             │
+│ ● in step    │  (* with MemCP Health only)                                 │
+└──────────────┴─────────────────────────────────────────────────────────────┘
 ```
 
-- Status dot per machine: green in step, amber catching up (arrow shows direction, percent shown), grey offline,
-  red refused (key cancelled: a button to join again).
-- The footer of the window always shows: memory name, machine count, last sync time.
+At the foot of the sidebar (or at the top of the iPhone's Note screen), one line: the state of the machines (in step,
+syncing with its percent, offline, key refused with « Reconnect »). Proposals waiting (« 2 to confirm ») show as a
+badge on Note.
 
-## Node page (served by every node)
+### 1. Note
 
-- Sidebar: machines (this one first), then the space tree (folders open/close, drag and drop, "+" on a folder).
-- Machine view: name, address, version, peers seen, connections it holds, live sync (see below), a button to
-  forget the machine.
-- Sync block, one line per peer: `name  ↑ sending | ↓ receiving | = in step   42 %   1 380 / 3 290 notes   2 s ago`,
-  with a progress bar; refreshed every 2 s; `GET /sync/status` is its only source. The block lists every peer of the
-  memory, not only the ones that joined this node: a peer known through another node has no bar, and shows
-  `known through <node>`, its version, `older version` when it is behind, how it can be reached (`loopback`, `lan`,
-  `tailnet`, `public`) and, when it can only be reached locally, `syncs when opened with the peers it can reach`.
-  A peer not seen for 90 days is dimmed (`gone`). A revoked peer is not listed.
-- Join banner: when a machine asks to join, a banner shows its name and the three words; one button to allow, one
-  to refuse. The same request appears as a notification on the desktop apps.
-- Journal and Graph of the whole memory (`#journal`, `#graph`): every space the person reads, by day with the space and
-  tags of each note, filtered by space, tag or words; the graph draws spaces, tags and keywords (the name of a space is
-  a tag too), pans, zooms, and a click on a node filters the journal (or the notes of a space).
-- Space view: Journal (by day), Graph, Dashboard (sections from the `dashboard` note), Notes (tags and keywords of the
-  level, filter), Tree (tags). Record a voice note, attach a file, write a note. A correction keeps the old text
-  in history.
-- Settings: language, public address, assistants and their rights (per space, read or write), instructions,
-  the janitor (keywords it keeps, the model it may use, never the default), export, merge two memories.
+The microphone, large, in the middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice
+note starts on a tap or on « Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**.
+Under the buttons, today's captures, newest first, each with the space it went to and its tags (`#home #shopping`),
+or « À trier » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
 
-## Desktop apps (Mac, Windows, Linux)
+### 2. Journal
 
-- Same layout as the node page, native. Menu-bar icon: state (in step / syncing with percent / offline), quick
-  note, record.
-- Start screen when no memory: **Start a memory** / **Join a memory** (address, QR, or "ask to join" with the
-  three words). Nothing else.
-- The main window can be the microphone alone (record, a number under it for the notes taken today).
-- Preferences in the sidebar: Memory, Where captures go, Recording, Spaces, Connections, Activity, General.
-  "Where captures go" never offers a proxy for an assistant when the memory is on this computer.
-- A local node on a desktop is a **replica** of the joined memory: copy complete, kept in step, shown as one memory.
+Every note of every space the person reads, by day, newest first, each with its time, its space and its tags; a
+structured trace (an app's day of measures) reads as values, never as JSON. Filter by space, tag or words. With
+MemCP Health the days also carry the health journal (feelings, measures, Apple Health). « Context for an assistant »
+makes a PDF of one space, with its dates.
 
-## iPhone and iPad
+### 3. Spaces
 
-- Home: the memory (journal of the day, quick record, quick note). Tabs: Memory, Machines, Spaces, Settings.
-- Machines tab = the sidebar above as a list: each machine with dot, direction and percent; tap for its
-  connections.
-- Joining: scan the QR of a node, or type the address; "ask to join" shows the three words and waits.
-- iPad uses the desktop layout (sidebar + content + connections column).
-- Health (Apple Health) is the one paid option, as a module; everything above is free.
+The tree of spaces (folders open in place, drag and drop, labels never technical names). A space opens on **its
+boards**: What's next, Ideas, Targets (with their signs), and its lists (shopping…), each card ticked or moved in one
+tap, each board saying its last pass and how many notes came since. Then its notes, its tags, its keywords (the
+words that file a note there), and its **graph**: spaces, tags and keywords linked, a click filters the notes.
 
-## Watch and widgets
+### 4. Health (MemCP Health)
 
-- Watch: record, state dot (in step or not), today's count. Complication: the state dot and the count.
-- Widgets: quick record; last note; sync state.
+Set up by a nurse: the health space and its sub-space *Kalios* (the history of the original health journal, kept
+apart from dictated notes so one always knows where a measure comes from). Targets first (each a long-term problem
+with the signs and symptoms that show it, counted day by day), then the coach (training, recovery), the tools of each
+condition followed (blood pressure, sleep, asthma, migraine, epilepsy, transit, mood, cycle, a new medicine), and
+« Prepare an appointment » (a PDF laid out as nurses hand over, SBAR: free, always). One month paid sets the space up
+for good; an ended subscription only pauses Apple Health, and says so.
 
-## What each screen reads from the node
+### 5. Settings
+
+Machines (the map: assistants in the cloud and through which node, assistants on the machines, every node with its
+version, last activity and how it is reached; a machine reachable only locally « syncs on opening »), Assistants
+(connect one: address and key, or the line for Claude Code; rights per space), Engines (transcription: the device's
+own or Whisper in the app; reading documents; summaries: Apple Intelligence when the device has it), Privacy (Face ID
+or Touch ID at every opening, the veil in the app switcher), MemCP Health, Advanced (export, start over). On the node
+page: People, Updates, the janitor.
+
+## First opening
+
+Two choices, on every app: **Start a memory** or **Join a memory**. When another device of the same Apple account is
+already joined, a third comes first: « Continue with the memory of <device> » (an invitation in the iCloud Keychain,
+one tap). Joining otherwise: the address, then « Ask for access » and the three words compared on the node's page.
+Then, once, every permission the app will need, each with why. Then the use cases, in three lines.
+
+## Golden paths (each one a test before a release)
+
+**Everyone**
+1. *An idea in the car*: « I have an idea for project Alpha at work » → filed in Work, a card in its Ideas.
+2. *After a meeting*: the actions said are cards of What's next, each with the note it came from.
+3. *« What do I need to buy? »*: Spaces › Home › Shopping, or Siri's « What do I need to buy in MemCP ».
+4. *A second device*: install, « Continue with the memory of <device> », the same memory in a minute.
+5. *An assistant*: Settings › Assistants › Connect, paste the line in Claude, ask « what's next at home? ».
+
+**MemCP Health (the nurse's paths, from Kalios)**
+6. *A symptom noted*: « headache since this morning » → the sign counted under its target, the target's trend on Health.
+7. *A measure said*: « blood pressure 12/8 leaving the doctor's » → « Add to Apple Health? » (accept, always for this
+   kind, always for Apple Health, refuse).
+8. *A condition followed*: a target for migraine → its tool (attacks, triggers, treatment taken), its signs over
+   ten days, red flags checked with the help numbers first.
+9. *An appointment*: Health › Prepare an appointment → the SBAR PDF of the period, shared with the professional.
+10. *The subscription ends*: Health stays, Apple Health pauses, said in one line with how to resume.
+
+**The tinkerer (the node page, Obsidian-like)**
+11. *Explore*: the graph of the whole memory, a tag clicked, the journal filtered, a note opened with its history.
+12. *Organise*: a space created inside a folder, its keywords set, a note refiled by hand and the router learning it.
+13. *Connect*: Claude Code on the same computer through `memcp mcp`; Home Assistant Assist through its MCP integration.
+14. *Own it*: export everything with fingerprints; read it back on another node.
+
+## What each screen reads
 
 | Screen | Source |
 |---|---|
-| Machines, live sync | `GET /sync/status` (`node`, `peers`: name, version, last_seen, learned_from, behind, gone, exposures, only_local, and for direct peers direction, spaces, done, total, percent, last_activity; `connections`: name, kind cloud or local, via, last_used_at) |
-| Space tree | MCP `spaces` (name, label, parent, position, kind, writable, facts) |
-| Tags | MCP `stats` (tags with counts) |
-| Graph (all spaces or one) | `GET /admin/api/links[?space=]`: the `links` tool as the signed-in person, plus the keywords of each space |
-| Journal of every space | `GET /admin/api/journal[?space=&tag=&q=&before=&before_id=]`: notes of every space the person reads, newest first |
-| Library | MCP `library_search`, `library_raise` (planned) |
-| Waiting notes | `triage_claim`, `triage_release` |
-| Keywords of a space | the `rules` note (tag `rules`); MCP `rules_get` / `rules_set` (planned) |
+| Machines map, sync | `GET /sync/status`, MCP `peers` (node, peers with version, last_seen, behind, exposures, only_local; connections with kind and via) |
+| Space tree | MCP `spaces` |
+| Boards and lists | MCP `living_get`, `living_set` |
+| Journal | `GET /admin/api/journal`; on a device, the local copy (`node_recent`) and `living_get` on `index` |
+| Graph | `GET /admin/api/links[?space=]` |
+| Tags, keywords | MCP `stats`, `rules_get`, `rules_set` |
+| Proposals | the new notes of the copy, read on the device (`note_proposals`) |
 
-## Acceptance (what is checked before an app is called done)
+## Acceptance
 
-1. Start a memory on a machine, join it from a second one, write on one, see it on the other.
-2. During a copy, the percentage rises and the direction is right on both machines.
-3. A machine that is switched off shows grey, and catches up when it comes back.
-4. No screen contains the words listed at the top.
-5. The same list of functions and options is reachable on the node page and on each desktop app.
+1. The same five sections, in the same order, on every platform; a function missing on one is a defect.
+2. No screen shows a technical name, JSON, a forbidden word or a vulgar word.
+3. The golden paths above pass on the iPhone, the Mac and the page.
+4. Every text exists in French, English and Spanish.
