@@ -102,23 +102,17 @@ fn join(
                 else {
                     return fail("unreadable answer".into());
                 };
-                let host = address
-                    .split("://")
-                    .nth(1)
-                    .and_then(|r| r.split(['/', ':']).next())
-                    .unwrap_or("peer");
                 // The node's own name keeps two nodes on one host apart; the host is the fallback of an older node.
                 let named = who["name"].as_str().map(slug).filter(|n| !n.is_empty());
-                let peer = format!(
-                    "peer-{}",
-                    named.unwrap_or_else(|| host.split('.').next().unwrap_or("peer").to_string())
-                );
-                let dir = PathBuf::from(data).join("peers");
-                let _ = std::fs::create_dir_all(&dir);
-                let record = serde_json::json!({ "name": peer, "address": url, "key": key });
-                if !save_private(&dir.join(format!("{peer}.json")), &record.to_string()) {
+                let Some(peer) = keep_peer(
+                    &PathBuf::from(data).join("peers"),
+                    address,
+                    url,
+                    key,
+                    named.as_deref(),
+                ) else {
                     return fail("the peer could not be kept".into());
-                }
+                };
                 write(serde_json::json!({ "state": "approved", "name": peer, "node": node }));
                 return ExitCode::SUCCESS;
             }
@@ -162,13 +156,23 @@ fn origin(address: &str) -> String {
 /// The name comes from the first label of the host (`peer-nas`); a node at another address whose name would be the
 /// same (two nodes on one machine, `nas.home` and `nas.office`) gets `peer-nas-2`, and so on, so that no peer ever
 /// replaces another. Joining the same node again replaces its record, under its name.
-fn keep_peer(dir: &std::path::Path, address: &str, url: &str, key: &str) -> Option<String> {
+fn keep_peer(
+    dir: &std::path::Path,
+    address: &str,
+    url: &str,
+    key: &str,
+    named: Option<&str>,
+) -> Option<String> {
     let host = address
         .split("://")
         .nth(1)
         .and_then(|r| r.split(['/', ':']).next())
         .unwrap_or("peer");
-    let base = format!("peer-{}", host.split('.').next().unwrap_or("peer"));
+    // The node's own name when it told one; the first label of the host for an older node.
+    let base = format!(
+        "peer-{}",
+        named.unwrap_or_else(|| host.split('.').next().unwrap_or("peer"))
+    );
     let _ = std::fs::create_dir_all(dir);
     let joined = origin(address);
     let peer = (1..=1000)
@@ -377,24 +381,28 @@ mod tests {
             "http://127.0.0.1:8791",
             "http://127.0.0.1:8791/mcp/peer-a1",
             "hcp_a_1",
+            None,
         );
         let b = keep_peer(
             &dir,
             "http://127.0.0.1:8792",
             "http://127.0.0.1:8792/mcp/peer-b1",
             "hcp_b_1",
+            None,
         );
         let c = keep_peer(
             &dir,
             "https://nas.home.example",
             "https://nas.home.example/mcp/peer-c1",
             "hcp_c_1",
+            None,
         );
         let d = keep_peer(
             &dir,
             "https://nas.office.example",
             "https://nas.office.example/mcp/peer-d1",
             "hcp_d_1",
+            None,
         );
         let names = [a.clone(), b.clone(), c, d];
         assert!(names.iter().all(Option::is_some), "{names:?}");
@@ -413,6 +421,7 @@ mod tests {
             "http://127.0.0.1:8791",
             "http://127.0.0.1:8791/mcp/peer-a2",
             "hcp_a_2",
+            None,
         );
         assert_eq!(again, a);
         let all = kept(&dir);
