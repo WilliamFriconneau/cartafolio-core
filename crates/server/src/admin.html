@@ -222,6 +222,7 @@ details.fold[open]>summary{margin-bottom:8px}
 .mrow .mwhen{font-size:12.5px;color:var(--on-var);white-space:nowrap}
 @media (max-width:640px){.mrow{grid-template-columns:auto 1fr}.mrow .mprog,.mrow .mwhen{grid-column:2}}
 .mfoot{margin-top:10px;font-size:12.5px}
+.mrow .macts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center}
 /* Start: two choices, then at most four steps */
 .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:18px 0}
 .choice{display:flex;flex-direction:column;gap:8px;align-items:flex-start;text-align:left;border-radius:28px;padding:24px;border:1px solid var(--outline-var);background:var(--sc);color:var(--on-surface);font-weight:400}
@@ -638,6 +639,12 @@ try { LANG = localStorage.getItem("memcp-lang") || ((navigator.language || "en")
 const loc = () => (LANG === "fr" ? "fr" : "en");
 const FR = {
   "MemCP": "MemCP",
+  "local": "local",
+  "cloud": "cloud",
+  "Reaches your memory through a service": "Atteint votre mémoire par un service",
+  "Runs on a machine of yours": "Tourne sur une de vos machines",
+  "rename": "renommer",
+  "Add or remove spaces for this machine; its key stays the same": "Ajouter ou retirer des espaces pour cette machine ; sa clé reste la même",
   "Graph": "Graphe",
   "Spaces": "Espaces",
   "Edit": "Modifier",
@@ -1322,7 +1329,7 @@ setInterval(() => { if (!document.hidden && $("#app") && !$("#app").hidden) load
 
 async function load() {
   S = await api("state");
-  S.connections = (S.connections || []).filter(c => c.agent !== "janitor");
+  S.connections = (S.connections || []).filter(c => !/^janitor(-|$)/.test(c.agent));
   $("#login").hidden = true; $("#app").hidden = false;
   const me = S.me;
   $("#who").textContent = (me.display || me.name) + " · " + (isAdmin() ? "administrator" : "member");
@@ -2055,7 +2062,7 @@ function renderHero() {
     el("div", {}, el("h2", {}, hello + ", " + name),
       el("p", { class: "lead" }, el("span", { class: "lock" }), "Your memory. Nobody else on this server reads it.")),
     el("div", { class: "facts" }, stat(spaces.length, spaces.length === 1 ? "space" : "spaces"), stat(facts, facts === 1 ? "note" : "notes"),
-      stat(S.connections.filter(c => !c.revoked).length, "connections"), last ? el("div", {}, el("b", { style: "font-size:15px;padding-top:9px" }, ago(last)), el("span", {}, "last write")) : null));
+      stat(assistantConns().length, "connections"), last ? el("div", {}, el("b", { style: "font-size:15px;padding-top:9px" }, ago(last)), el("span", {}, "last write")) : null));
 }
 
 function render() {
@@ -2162,7 +2169,8 @@ function render() {
               el("button", { class: "link", onclick: () => { renaming = null; render(); } }, "cancel"),
               el("div", { class: "mute small" }, "lowercase letters, digits and dashes"))
           : el("h3", {}, c.agent, " ", el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename")),
-        el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),
+        el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at),
+          connKind(c.agent) ? el("span", { class: "badge", style: "margin-left:8px", "data-kind": connKind(c.agent), title: connKind(c.agent) === "cloud" ? "Reaches your memory through a service" : "Runs on a machine of yours" }, connKind(c.agent)) : null))),
     regranting && regranting.agent === c.agent ? rightsEditor(c) : el("div", {}, reach(c),
       c.expires_at ? el("span", { class: "chip" + (new Date(c.expires_at) - Date.now() < 7 * 86400000 ? " warn" : "") }, "key expires " + fmt(c.expires_at).slice(0, 10)) : null,
       !c.last_used_at ? el("span", { class: "chip warn" }, "never used") : null),
@@ -2170,7 +2178,7 @@ function render() {
       isCapture(c) ? null : el("button", { class: "link", title: "Add or remove spaces for this assistant; its key and address stay the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
       isCapture(c) ? null : el("button", { class: "link", title: "Your own instructions (my instructions) speak of your whole life: an assistant for work need not be told them", onclick: () => act("connections/person-guide", { agent: c.agent, told: c.person_guide === false }) }, c.person_guide === false ? "tell my instructions" : "keep my instructions from it"),
       el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke")));
-  const assistants = live.filter(c => !isCapture(c)), captures = live.filter(isCapture);
+  const assistants = live.filter(c => !isCapture(c) && !isPeer(c)), captures = live.filter(isCapture);
   $("#connections").replaceChildren(...(assistants.length ? assistants.map(connTile) : [el("p", { class: "mute", style: "grid-column:1/-1" }, "Nothing is connected.")]));
   $("#captures-section").hidden = captures.length === 0;
   $("#captures").replaceChildren(...captures.map(connTile));
@@ -2275,21 +2283,21 @@ function secret(title, rows) {
 
 // --- Connect an assistant: pick the assistant, the access, do the steps, wait for it -----
 const PLATFORMS = [
-  { id: "claude-web", name: "Claude on the web or phone", oauth: true,
+  { id: "claude-web", name: "Claude on the web or phone", oauth: true, where: "cloud",
     steps: () => [
       "Open claude.ai, then Settings, then Connectors. Menu names change from time to time: look for Connectors or MCP.",
       "Add a custom connector. Give it any name and this address:",
       { pre: addr() },
       "Connect it. A page of this server opens in your browser: tick the spaces it may reach, then Allow.",
       "Come back here: this page notices the connection."] },
-  { id: "claude-desktop", name: "Claude Desktop or Cowork", oauth: true,
+  { id: "claude-desktop", name: "Claude Desktop or Cowork", oauth: true, where: "local",
     steps: () => [
       "In the Claude app, open Settings, then Connectors (or look for MCP).",
       "Add a custom connector, with this address:",
       { pre: addr() },
       "Connect it, then tick the spaces it may reach on the page that opens, and Allow.",
       "A connector added in the app follows the same rules as on the web. If your address only works on your private network and the app cannot reach it, a local relay would be needed; there is none yet."] },
-  { id: "claude-code", name: "Claude Code", token: true,
+  { id: "claude-code", name: "Claude Code", token: true, where: "local",
     steps: c => [
       "In a terminal, run this command (it contains the key: do not share it):",
       { pre: 'claude mcp add --transport http ' + W.slug + ' ' + addr() + ' --header "Authorization: Bearer ' + c.token + '"' },
@@ -2495,6 +2503,7 @@ async function createConnection() {
   $("#err").textContent = "";
   try {
     const r = await api("connections", { agent, rights });
+    if (p.where) { KINDS[agent] = p.where; try { localStorage.setItem("memcp-conn-kind", JSON.stringify(KINDS)); } catch (_) {} }
     W.created = { agent, rights: r.rights || rights, token: r.token, urlKey: r.mcp_url_with_key };
     await load();
     renderWizard();
@@ -2511,7 +2520,7 @@ function startWaiting() {
   const tick = async () => {
     try {
       const st = await api("state");
-      S.connections = st.connections.filter(c => c.agent !== "janitor");
+      S.connections = st.connections.filter(c => !/^janitor(-|$)/.test(c.agent));
       const live = S.connections.filter(c => !c.revoked);
       let hit = null;
       if (p.token && W.created) hit = live.find(c => c.agent === W.created.agent && c.last_used_at);
@@ -2675,6 +2684,16 @@ function niceLabel(p, kind) {
   const words = p.space.replace(/-/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
+// A machine that joined is a peer: its connection is shown on its card in Machines, never among the assistants.
+const isPeer = c => /^peer-/.test(c.agent);
+const assistantConns = () => (S.connections || []).filter(c => !c.revoked && !isPeer(c));
+const KINDS = (() => { try { return JSON.parse(localStorage.getItem("memcp-conn-kind") || "{}"); } catch (_) { return {}; } })();
+// Where an assistant runs, when known: on a machine of the person (local) or through a service (cloud).
+function connKind(agent) {
+  if (KINDS[agent]) return KINDS[agent];
+  const base = agent.replace(/-\d+$/, "");
+  return { claudeai: "cloud", "claude-web": "cloud", chatgpt: "cloud", "claude-desktop": "local", "claude-code": "local", opencode: "local", kalios: "local" }[base] || "";
+}
 const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : name; };
 const spaceByName = n => (FT.l || []).find(x => x.space === n);
 // The folders above a space, outermost first.
@@ -2746,7 +2765,7 @@ function renderSpaceTiles() {
       el("div", { class: "kind" }, s.kind && s.kind !== "custom" ? kindLabel(s.kind) : "Space"),
       el("div", { class: "big" }, !s.stats ? "—" : num(nFacts)),
       el("div", { class: "reach mute" }, (n => n === 0 ? "No assistant reaches it" : n === 1 ? "1 connection reaches it" : n + " connections reach it")(
-        S.connections.filter(c => !c.revoked && (c.rights === "all" || c.rights.split(",").some(r => r.split(":")[0].split("/")[0] === s.name))).length)),
+        assistantConns().filter(c => (c.rights === "all" || c.rights.split(",").some(r => r.split(":")[0].split("/")[0] === s.name))).length)),
       el("div", { class: "nums mute" }, !s.stats ? "" : (nFacts === 1 ? "note" : "notes") + (nFiles ? " · " + num(nFiles) + (nFiles === 1 ? " file" : " files") : "") + (s.stats.last_write ? " · last write " + ago(s.stats.last_write) : "")),
       el("div", { class: "acts" },
         el("button", { class: "primary", onclick: () => { location.hash = "#space/" + s.name; } }, "Open"),
@@ -2801,6 +2820,21 @@ const since = sec => {
   const d = Math.max(0, Math.round(Date.now() / 1000 - sec));
   return d < 60 ? d + " s ago" : d < 3600 ? Math.floor(d / 60) + " min ago" : d < 86400 ? Math.floor(d / 3600) + " h ago" : Math.floor(d / 86400) + " days ago";
 };
+// Rename, change access and revoke for the connection of a peer: the same controls as an assistant's, on the machine's card.
+function peerActs(p) {
+  const c = (S.connections || []).find(x => x.agent === p.peer && !x.revoked);
+  if (!c) return null;
+  const box = el("div", { class: "macts" });
+  if (renaming === c.agent) box.append(el("input", { id: "rename-input", value: c.agent, size: "22", pattern: "[a-z0-9][a-z0-9\\-]{0,39}" }),
+    el("button", { class: "link", onclick: () => act("connections/rename", { agent: c.agent, name: $("#rename-input").value.trim() }).then(() => { renaming = null; render(); }) }, "save"),
+    el("button", { class: "link", onclick: () => { renaming = null; render(); } }, "cancel"));
+  else if (regranting && regranting.agent === c.agent) box.append(rightsEditor(c));
+  else box.append(
+    el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename"),
+    el("button", { class: "link", title: "Add or remove spaces for this machine; its key stays the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"),
+    el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "Revoke"));
+  return box;
+}
 function machineRow(p) {
   const busy = p.direction === "sending" || p.direction === "receiving";
   const seen = !!p.last_activity;
@@ -2812,10 +2846,13 @@ function machineRow(p) {
     el("div", {}, el("div", { class: "mname" }, p.name), el("div", { class: "msub" }, arrow)),
     el("div", { class: "mprog" }, el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")),
       el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" }))),
-    el("span", { class: "mwhen" }, seen ? since(p.last_activity) : ""));
+    el("span", { class: "mwhen" }, seen ? since(p.last_activity) : ""), peerActs(p));
 }
 function renderMachines() {
   if (!S || !$("#machines")) return;
+  // The page refreshes this block every two seconds: not while a field of it is being typed in.
+  const on = document.activeElement;
+  if (on && /^(INPUT|TEXTAREA|SELECT)$/.test(on.tagName) && $("#machines").contains(on)) return;
   const node = S.node || { name: "MemCP", version: "" };
   const me = el("div", { class: "mrow", "data-peer": "self" },
     el("span", { class: "dot ok", title: "this machine" }),
@@ -3049,7 +3086,10 @@ async function wordsView(body) {
 let PENDING = null; // { space, id }: a note to open as soon as its space has loaded
 const GL = { space: "", tag: "", q: "", more: null, facts: [], busy: false };
 const sv = (tag, attrs = {}, ...kids) => {
-  const n = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  // Parsed as markup inside an <svg>, so it is born in the right namespace (the page names no outside address).
+  const holder = document.createElement("div");
+  holder.innerHTML = tag === "svg" ? "<svg></svg>" : "<svg><" + tag + "></" + tag + "></svg>";
+  const n = tag === "svg" ? holder.firstChild : holder.firstChild.firstChild;
   for (const [k, v] of Object.entries(attrs)) if (v !== null && v !== undefined) n.setAttribute(k, v);
   n.append(...kids.filter(Boolean));
   return n;
@@ -3339,11 +3379,11 @@ function drawGraph(body, scope, g) {
     el("span", { class: "k" }, el("i", { style: "--gc:var(--gn)" }), "shared by several spaces"));
   const list = el("details", {}, el("summary", {}, "All nodes (" + M.nodes.length + ")"),
     el("div", { class: "gnodes" }, ...[...M.nodes].sort((a, b) => b.count - a.count).map(d => el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: () => select(d) }, d.label + " · " + d.count))));
-  body.replaceChildren(
+  body.replaceChildren(...[
     el("div", { class: "fbar" }, find, ...toggles),
     el("div", { class: "gwrap" }, svg, tools), legend, info,
     (M.hiddenTags > 0) ? el("p", { class: "mute small" }, "Showing the most used tags: " + M.hiddenTags + " less used " + (M.hiddenTags === 1 ? "tag is" : "tags are") + " left out.") : null,
-    list);
+    list].filter(Boolean));
   fit(); select(null);
 }
 // What a node leads to: the notes that carry it.
@@ -3381,6 +3421,7 @@ function setLang(l) {
 try { const th = localStorage.getItem("memcp-theme"); if (th === "light" || th === "dark") document.documentElement.dataset.theme = th; } catch (_) {}
 document.documentElement.lang = LANG;
 renderSwitches();
+if (LANG === "fr") xTree(document.body);
 
 load().catch(e => {
   showLogin();

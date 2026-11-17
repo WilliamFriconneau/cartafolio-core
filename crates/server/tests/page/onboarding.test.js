@@ -264,6 +264,7 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   const tagBox = await page.locator(".gnode[data-id='tag:planning'] .shape").boundingBox();
   await page.mouse.click(tagBox.x + tagBox.width / 2, tagBox.y + tagBox.height / 2);
   check("a click on a node says what it is and what it is linked to", /Tag planning · 2 notes/.test(await page.locator("#graph-info").innerText()) && /Linked to/.test(await page.locator("#graph-info").innerText()), await page.locator("#graph-info").innerText());
+  check("no stray text in the graph view", !/\bnull\b|undefined/.test(await page.locator("#global-body").innerText()));
   check("what is not linked to it fades", (await page.locator(".gnode.dim").count()) >= 1);
   await shot(page, "graph-1280.png");
   await page.click("#graph-show");
@@ -304,6 +305,30 @@ const FORBIDDEN = /\b(bridges?|prox(y|ies)|vaults?)\b/i;
   await bp.evaluate(() => { location.hash = "#graph"; }); await sleep(600);
   check("an empty graph says so and offers a way in", /Nothing to (link|draw) yet/.test(await bp.locator("#global-body").innerText()) && (await bp.locator("#global-body button.primary").count()) === 1);
   await bp.context().close(); bare.stop();
+
+  // ---- Peers live in Machines only; assistants say where they run; French from the first paint ----
+  await page.evaluate(async () => {
+    await api("connections", { agent: "peer-laptop-ab12", rights: "all" });
+    await api("connections", { agent: "claudeai", rights: "all" });
+    await api("connections", { agent: "claude-code", rights: "all" });
+  });
+  await page.reload(); await page.waitForSelector("#app:not([hidden])"); await sleep(1200);
+  const tiles = await page.locator("#connections .tile h3").allInnerTexts();
+  check("Connected assistants lists assistants only, never a peer", tiles.length === 2 && !tiles.some(x => /peer-/.test(x)), tiles.join("|"));
+  const prow = page.locator(".mrow[data-peer='peer-laptop-ab12']");
+  check("the peer's card in Machines carries rename, change access and revoke", (await prow.locator("button:has-text('rename')").count()) === 1 && (await prow.locator("button:has-text('change access')").count()) === 1 && (await prow.locator("button:has-text('Revoke')").count()) === 1);
+  await prow.locator("button:has-text('change access')").click();
+  check("change access opens the rights editor on the machine's card", (await prow.locator("button:has-text('save')").count()) === 1);
+  await prow.locator("button:has-text('cancel')").click();
+  check("the hero counts the assistants, not the machines", (await page.locator("#hero .facts div").nth(2).locator("b").innerText()) === "2");
+  check("an assistant says where it runs when that is known", /cloud/.test(await page.locator("#connections .tile:has-text('claudeai') .badge").innerText()) && /local/.test(await page.locator("#connections .tile:has-text('claude-code') .badge").innerText()));
+  const fp = await open(browser, full, { width: 1280, height: 1000 }, { sync: peers, locale: "fr-FR" });
+  const untranslated = await fp.evaluate(() => [...document.querySelectorAll("#home section h2, #home section h2 + p, #home details.fold > summary, #home .tile h3")]
+    .filter(e => e.offsetParent !== null).map(e => e.textContent.trim())
+    .filter(t => (Object.prototype.hasOwnProperty.call(FR, t) && FR[t] !== t) || /\b(the|your|and|with|this|from|nothing|what)\b/i.test(t)));
+  check("French from the first paint: every heading and intro is French", untranslated.length === 0, untranslated.join(" | "));
+  check("French: the Connected assistants block", /Assistants connectés/.test(await fp.locator("#connections").locator("xpath=ancestor::section").innerText()) && /Révoquez-en un/.test(await fp.locator("#connections").locator("xpath=ancestor::section").innerText()));
+  await fp.context().close();
 
   // French
   await page.evaluate(() => { location.hash = ""; });
