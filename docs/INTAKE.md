@@ -41,6 +41,12 @@ How it goes:
   voice note recorded on the page lands in the space it was recorded in, tagged `inbox/audio`, and is read like the others.
 - The text becomes a note of the **same** space (or Inbox), tagged `inbox` and `dictee` (« Dictée du … audio <name> (<id>) : … », cut into
   parts if long, resumed if a pass stops halfway). The janitor files it like any note.
+- **A call recording carries its participants.** A recording sent with a `call` object (`file_put`, see [TOOLS.md](TOOLS.md), `remember`)
+  keeps them as tags on its description (`field/caller/<name>`, `field/callee/<name>`, `field/call_app/<app>`, `personnes/<name>`,
+  `appel`, `appel/<app>`...). When the node transcribes it, **the note of the text inherits the same tags** (so `fields` returns
+  `caller`, `callee`, `call_app`...), next to `inbox` and `dictee`. The janitor keeps them when it files the note, and the person
+  tags lead where it goes: where earlier notes with the same person went (what the person taught through the learn store).
+  `memcp_core::call::people_names(brain, space?)` lists the names with the number of notes, for the hints of a speech model.
 - **A capture already in text is complete**: a recording received with a note that names it is not read again ("a note received
   means it is already done").
 - Silence, and a text that is only what the model makes up on silence, give nothing: that recording no longer waits. A recording
