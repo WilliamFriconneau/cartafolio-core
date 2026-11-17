@@ -500,6 +500,29 @@ pub fn erase(
     )
 }
 
+/// The tag of the note a transcription job leaves when it gave up on a recording: the recording's id, nothing else.
+pub const VOICE_FAILED_TAG: &str = "inbox/audio/failed";
+
+/// The recordings of a space that wait for a text: active, under `inbox/audio`, and named by no text yet (by name or by
+/// id, a failure note not counting). `(id, name, created_at)`, oldest first.
+pub fn recordings_waiting(conn: &rusqlite::Connection) -> Result<Vec<(String, String, i64)>> {
+    let mut st = conn.prepare(
+        "SELECT fl.id, fl.name, fl.created_at FROM files fl
+         JOIN facts f ON f.id = fl.fact_id
+         WHERE fl.status = 'active' AND fl.mime LIKE 'audio/%' AND f.status = 'active'
+           AND EXISTS (SELECT 1 FROM fact_tags t WHERE t.fact_id = f.id AND t.tag = 'inbox/audio')
+           AND NOT EXISTS (
+             SELECT 1 FROM facts d WHERE d.status = 'active' AND d.type IS NOT 'file'
+               AND (instr(d.text, fl.name) > 0 OR instr(d.text, fl.id) > 0)
+               AND NOT EXISTS (SELECT 1 FROM fact_tags x WHERE x.fact_id = d.id AND x.tag = ?1))
+         ORDER BY fl.created_at",
+    )?;
+    let rows = st.query_map([VOICE_FAILED_TAG], |r| {
+        Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+    })?;
+    Ok(rows.collect::<std::result::Result<_, _>>()?)
+}
+
 /// [`erase`] at a given instant. The one exception to « nothing is erased », and a narrow one:
 /// only a recording filed under `inbox/audio` (waiting to be transcribed), only once an active
 /// text fact, named by the caller, has existed for [`ERASE_AFTER`]. The transcription may have

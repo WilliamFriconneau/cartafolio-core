@@ -76,6 +76,7 @@ pub(super) fn spaces(
         };
         let conn = brain.open_space(&s)?;
         let facts = facts::counts(&conn)?["active"].as_u64().unwrap_or(0);
+        let recordings = crate::files::recordings_waiting(&conn).unwrap_or_default();
         out.push(json!({
             "name": s.as_str(),
             "label": label.unwrap_or_else(|| s.as_str().into()),
@@ -84,6 +85,8 @@ pub(super) fn spaces(
             "kind": kind,
             "writable": caller.can_write(&s),
             "facts": facts,
+            "recordings_waiting": recordings.len(),
+            "oldest_recording_at": recordings.first().map(|r| r.2),
         }));
     }
     // A parent this connection cannot read is not shown: that space stands at the top.
