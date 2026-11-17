@@ -189,3 +189,31 @@ fn a_header_value_cannot_carry_a_line_break() {
     assert!(!header_is_safe("Content-Disposition", "inline\nX: y"));
     assert!(!header_is_safe("X\r\nY", "z"));
 }
+
+#[test]
+fn the_check_phrase_uses_every_word_of_its_list() {
+    // It used to draw from about 26 of the 64 words (a base32 letter modulo 64): 14 bits instead of 18.
+    let mut words = std::collections::HashSet::new();
+    for _ in 0..3000 {
+        for w in memcp_server::join::phrase().split('-') {
+            words.insert(w.to_string());
+        }
+    }
+    assert_eq!(words.len(), 64);
+}
+
+#[test]
+fn the_failure_guard_holds_an_ipv6_network_and_cannot_grow_without_bound() -> Res {
+    let e = env()?;
+    let now = memcp_core::util::now();
+    for i in 0..10 {
+        e.app.fail(now, &format!("2001:db8:1:2:{i:x}::1"));
+    }
+    assert!(e.app.blocked(now, "2001:db8:1:2:ffff::9"), "same /64");
+    assert!(!e.app.blocked(now, "2001:db8:1:3::1"), "another /64");
+    for i in 0..20_000 {
+        e.app.fail(now, &format!("10.{}.{}.{}", i / 65536, (i / 256) % 256, i % 256));
+    }
+    assert!(e.app.failures_held() <= 5000);
+    Ok(())
+}
