@@ -38,14 +38,28 @@ pub const LARGE_MAX: u64 = READ_MAX;
 
 /// Requests being read and answered by a thread of their own. A client that sends its body slowly holds only its own
 /// thread, never a worker; past these numbers (in all, and from one address) a new request is turned away at once.
-static IN_FLIGHT: std::sync::Mutex<Option<HashMap<String, usize>>> = std::sync::Mutex::new(None);
+///
+/// Two pools: a request with no key of this installation that still has a body to send (the only kind a stranger can
+/// keep waiting at no cost) takes its place in a pool of its own, so that such requests, however many, never turn
+/// away an assistant or a peer with its key, nor a request without a body.
+static IN_FLIGHT: std::sync::Mutex<[Option<HashMap<String, usize>>; 2]> =
+    std::sync::Mutex::new([None, None]);
 const IN_FLIGHT_MAX: usize = 64;
 const IN_FLIGHT_PER_ADDRESS: usize = 16;
 
+/// Which pool a request takes its place in.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum Pool {
+    /// A request with a key, or with no body to wait for.
+    Main = 0,
+    /// A request with no key that has a body to send.
+    Keyless = 1,
+}
+
 /// Takes a place for a request from `who`; `false` if there is none.
-fn take_place(who: &str) -> bool {
+fn take_place(pool: Pool, who: &str) -> bool {
     let mut g = IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner());
-    let m = g.get_or_insert_with(HashMap::new);
+    let m = g[pool as usize].get_or_insert_with(HashMap::new);
     let total: usize = m.values().sum();
     let mine = m.get(who).copied().unwrap_or(0);
     if total >= IN_FLIGHT_MAX || mine >= IN_FLIGHT_PER_ADDRESS {
@@ -55,9 +69,9 @@ fn take_place(who: &str) -> bool {
     true
 }
 
-fn give_place(who: &str) {
+fn give_place(pool: Pool, who: &str) {
     let mut g = IN_FLIGHT.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some(m) = g.as_mut()
+    if let Some(m) = g[pool as usize].as_mut()
         && let Some(n) = m.get_mut(who)
     {
         *n = n.saturating_sub(1);
@@ -132,7 +146,17 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
     let path = path.to_string();
     let query = query.to_string();
     let who = ip.clone().unwrap_or_else(|| "?".into());
-    if !take_place(&who) {
+    // Only a request with a key of this installation (an MCP call, a peer's sync, a file of the page) may bring a
+    // large body: below that limit, one that still has a body to send goes to the keyless pool (the page's other
+    // actions, small, with it).
+    let has_body =
+        headers.contains_key("transfer-encoding") || rq.body_length().is_some_and(|n| n > 0);
+    let pool = if has_body && limit <= SMALL_MAX {
+        Pool::Keyless
+    } else {
+        Pool::Main
+    };
+    if !take_place(pool, &who) {
         // Busy, not broken: say when to come back, so that a client waits instead of hammering.
         let mut busy = tiny_http::Response::empty(503);
         if let Ok(h) = tiny_http::Header::from_bytes(&b"Retry-After"[..], &b"1"[..]) {
@@ -162,7 +186,7 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
             })
         };
         send(rq, resp);
-        give_place(&who);
+        give_place(pool, &who);
     });
 }
 

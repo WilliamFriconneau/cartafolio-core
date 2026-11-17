@@ -1575,3 +1575,48 @@ fn no_key_is_written_in_the_logs_the_audit_or_the_answers() -> Res {
     assert!(checked >= 5, "the databases were looked at ({checked})");
     Ok(())
 }
+
+#[test]
+fn bodies_that_never_come_without_a_key_do_not_turn_away_a_keyed_assistant() -> Res {
+    let dir = temp("anon-bodies");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let run = |args: &[&str]| -> Result<String, Box<dyn Error>> {
+        let o = std::process::Command::new(bin)
+            .arg("--data")
+            .arg(&dir)
+            .args(args)
+            .output()?;
+        Ok(String::from_utf8_lossy(&o.stdout).into_owned())
+    };
+    run(&["init", "--spaces", "personal"])?;
+    let out = run(&["connect", "keyed", "--grant", "personal:rw"])?;
+    let token = out
+        .lines()
+        .map(str::trim)
+        .find(|l| l.starts_with("hcp_"))
+        .ok_or("token not shown")?
+        .to_string();
+    let (child, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _srv = Child(child, dir.clone());
+    // 64 connections from this address, without a key, each announcing a body (bigger than what the server reads
+    // before handing the request on) and sending none of it.
+    let mut held = vec![];
+    for _ in 0..64 {
+        let mut s = TcpStream::connect(("127.0.0.1", port))?;
+        s.write_all(b"POST /oauth/token HTTP/1.1\r\nHost: x\r\nContent-Length: 200000\r\n\r\nab")?;
+        held.push(s);
+    }
+    std::thread::sleep(Duration::from_millis(500));
+    // The person's assistant, from the same address, with its key: answered, not told to come back.
+    let payload = json!({ "jsonrpc": "2.0", "id": 1, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x" } } }).to_string();
+    let (head, _) = http(
+        port,
+        &format!(
+            "POST /mcp/keyed HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{payload}",
+            payload.len()
+        ),
+    )?;
+    assert!(head.starts_with("HTTP/1.1 200"), "{head}");
+    drop(held);
+    Ok(())
+}
