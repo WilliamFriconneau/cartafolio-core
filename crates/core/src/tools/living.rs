@@ -107,6 +107,13 @@ pub(super) fn living(
                     })
                     .unwrap_or_default();
                 card["signs"] = json!(signs);
+                let tags = facts::read_fact(&conn, &id)
+                    .ok()
+                    .flatten()
+                    .map(|f| f.tags)
+                    .unwrap_or_default();
+                card["fields"] = json!(crate::autotag::fields_of(&tags));
+                card["tags"] = json!(tags);
             }
             board.insert((*col).to_string(), Value::Array(cards));
         }
@@ -136,6 +143,16 @@ pub(super) fn living(
                     .collect();
         if newest {
             delta.reverse();
+        }
+        // Each note of the delta comes with its tags (the tag of its space, its signs and measures) and its fields.
+        for d in &mut delta {
+            let tags = d["id"]
+                .as_str()
+                .and_then(|id| facts::read_fact(&conn, id).ok().flatten())
+                .map(|f| f.tags)
+                .unwrap_or_default();
+            d["fields"] = json!(crate::autotag::fields_of(&tags));
+            d["tags"] = json!(tags);
         }
         let behind: i64 = conn
                     .query_row(

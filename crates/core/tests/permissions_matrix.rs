@@ -12,8 +12,9 @@ use memcp_core::users::OWNER;
 use memcp_core::{Brain, util};
 use serde_json::{Value, json};
 
-const READ: [&str; 13] = [
+const READ: [&str; 14] = [
     "triage_waiting",
+    "tags_suggest",
     "living_get",
     "peers",
     "rules_get",
@@ -27,8 +28,9 @@ const READ: [&str; 13] = [
     "file_list",
     "file_get",
 ];
-const WRITE: [&str; 10] = [
+const WRITE: [&str; 11] = [
     "living_set",
+    "tags_set",
     "rules_set",
     "library_raise",
     "remember",
@@ -202,6 +204,8 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         }
         "supersede" => json!({"id": fact, "text": "Quarterly review moved to the second Monday."}),
         "retire" => json!({"id": fact, "reason": "test"}),
+        "tags_set" => json!({"id": fact, "add": ["checked"]}),
+        "tags_suggest" => json!({"space": space, "text": "douleur 2/10, tension 12/8"}),
         "recall" => json!({"query": "review", "space": space}),
         "read_fact" | "history" => json!({"id": fact}),
         "tidy" | "triage_claim" | "triage_release" | "triage_waiting" | "peers" | "spaces"
@@ -291,6 +295,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
         "library_search",
         "links",
         "file_list",
+        "tags_suggest",
     ];
     for (kind, c) in kinds(&w)? {
         for tool in read_with_space.iter().filter(|t| shown(kind).contains(t)) {
@@ -370,7 +375,7 @@ fn a_fact_of_a_space_the_connection_does_not_reach_is_unknown_to_it() -> Res {
                 "{kind}: {tool}"
             );
         }
-        for tool in ["supersede", "retire"] {
+        for tool in ["supersede", "retire", "tags_set"] {
             if shown(kind).contains(&tool) {
                 let r = run(&w, &c, tool, args_for(&w, tool, "health", &w.health_fact));
                 assert_eq!(r, Out::Refused, "{kind}: {tool} on a fact of health");
