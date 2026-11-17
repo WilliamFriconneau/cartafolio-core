@@ -339,8 +339,10 @@ fn a_hostile_schema_cannot_call_unsafe_functions_when_a_database_is_opened() {
     let path = dir.join("x.sqlite");
     {
         let conn = Connection::open(&path).unwrap();
-        conn.execute_batch("CREATE TABLE t (a); CREATE VIEW v AS SELECT fts3_tokenizer('simple') AS r FROM t;")
-            .unwrap();
+        conn.execute_batch(
+            "CREATE TABLE t (a); CREATE VIEW v AS SELECT fts3_tokenizer('simple') AS r FROM t;",
+        )
+        .unwrap();
         conn.execute("INSERT INTO t VALUES (1)", []).unwrap();
     }
     let conn = crate::brain::open_db(&path).unwrap();

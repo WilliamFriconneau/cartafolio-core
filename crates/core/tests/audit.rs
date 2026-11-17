@@ -47,7 +47,10 @@ fn applied(b: &Brain, ev: Event) -> Result<sync::Applied, Box<dyn std::error::Er
 fn a_peer_cannot_send_a_text_or_a_tag_list_without_limit() -> Res {
     let t = Temp::new("audit-limits");
     let b = node(&t)?;
-    let r = applied(&b, created("big1", |p| p["text"] = json!("x".repeat(2_000_000))))?;
+    let r = applied(
+        &b,
+        created("big1", |p| p["text"] = json!("x".repeat(2_000_000))),
+    )?;
     assert_eq!((r.applied, r.rejected.len()), (0, 1), "{r:?}");
     let many: Vec<String> = (0..200).map(|i| format!("t{i}")).collect();
     let r = applied(&b, created("tags1", |p| p["tags"] = json!(many)))?;
@@ -100,13 +103,23 @@ fn a_peer_cannot_store_a_file_under_a_hostile_name_or_type() -> Res {
     let s = sp("notes");
     let png = [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 1, 2, 3];
     // A name with a line break or a path is cleaned; the type is the one the bytes say, never the one claimed.
-    let ev = file_event("file_1", "../../a\r\nb.png", "text/html\r\nSet-Cookie: x", &png);
+    let ev = file_event(
+        "file_1",
+        "../../a\r\nb.png",
+        "text/html\r\nSet-Cookie: x",
+        &png,
+    );
     assert_eq!(applied(&b, ev)?.applied, 1);
     let f = memcp_core::files::info(&b, &s, "file_1")?.ok_or("no file")?;
     assert_eq!(f.name, "ab.png");
     assert_eq!(f.mime, "image/png");
     // Bytes of a kind that is not kept are refused, as they are when an assistant puts them.
-    let ev = file_event("file_2", "run.exe", "application/x-msdownload", b"MZ\x90\x00 binary");
+    let ev = file_event(
+        "file_2",
+        "run.exe",
+        "application/x-msdownload",
+        b"MZ\x90\x00 binary",
+    );
     assert_eq!(applied(&b, ev)?.rejected.len(), 1);
     Ok(())
 }

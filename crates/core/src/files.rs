@@ -59,11 +59,9 @@ impl FileInfo {
 /// Whether `mime` is one of the types this program keeps (`sniff` can name it).
 pub(crate) fn is_kept_type(mime: &str) -> bool {
     mime == XLSX
-        || [
-            "image/", "audio/", "text/plain", "application/pdf",
-        ]
-        .iter()
-        .any(|p| mime.starts_with(p))
+        || ["image/", "audio/", "text/plain", "application/pdf"]
+            .iter()
+            .any(|p| mime.starts_with(p))
             && mime.len() <= 60
             && mime.bytes().all(|b| b.is_ascii_graphic())
 }

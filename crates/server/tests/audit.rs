@@ -139,14 +139,17 @@ fn a_connection_limited_to_paths_cannot_use_the_sync_routes() -> Res {
 #[test]
 fn a_request_may_not_make_the_server_buffer_a_gigabyte() {
     // The biggest body of any request is what an MCP call may carry (a 24 MB recording in base64), not more.
-    assert!(memcp_server::net::LARGE_MAX <= 40 * 1024 * 1024);
+    const { assert!(memcp_server::net::LARGE_MAX <= 40 * 1024 * 1024) };
 }
 
 fn raw(port: u16, req: &str) -> String {
     use std::io::{Read, Write};
-    let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).expect("connect");
-    s.set_read_timeout(Some(std::time::Duration::from_secs(5))).ok();
-    s.write_all(req.as_bytes()).expect("write");
+    let mut s = std::net::TcpStream::connect(("127.0.0.1", port))
+        .unwrap_or_else(|e| panic!("connect: {e}"));
+    s.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .ok();
+    s.write_all(req.as_bytes())
+        .unwrap_or_else(|e| panic!("write: {e}"));
     let mut out = String::new();
     let _ = s.read_to_string(&mut out);
     out
@@ -167,13 +170,21 @@ fn guessing_a_key_by_the_size_of_a_body_is_counted_like_any_wrong_key() -> Res {
     let mut line = String::new();
     reader.read_line(&mut line)?;
     std::thread::spawn(move || for _ in reader.lines() {});
-    let port: u16 = line.trim().rsplit(':').next().and_then(|p| p.parse().ok()).ok_or("port")?;
+    let port: u16 = line
+        .trim()
+        .rsplit(':')
+        .next()
+        .and_then(|p| p.parse().ok())
+        .ok_or("port")?;
     // A wrong key with a big declared body used to be answered 413 for ever, with no count: an oracle for the key.
     let big = "POST /mcp/x HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer wrong\r\nContent-Length: 5000000\r\nConnection: close\r\n\r\n";
     for _ in 0..10 {
         assert!(raw(port, big).starts_with("HTTP/1.1 413"));
     }
-    let after = raw(port, "POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+    let after = raw(
+        port,
+        "POST /mcp/x HTTP/1.1\r\nHost: x\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+    );
     let _ = child.kill();
     let _ = child.wait();
     assert!(after.starts_with("HTTP/1.1 429"), "{after}");
@@ -184,8 +195,14 @@ fn guessing_a_key_by_the_size_of_a_body_is_counted_like_any_wrong_key() -> Res {
 fn a_header_value_cannot_carry_a_line_break() {
     use memcp_server::net::header_is_safe;
     assert!(header_is_safe("Content-Type", "image/png"));
-    assert!(header_is_safe("Content-Disposition", "inline; filename=\"a b.png\""));
-    assert!(!header_is_safe("Content-Type", "text/plain\r\nSet-Cookie: x=1"));
+    assert!(header_is_safe(
+        "Content-Disposition",
+        "inline; filename=\"a b.png\""
+    ));
+    assert!(!header_is_safe(
+        "Content-Type",
+        "text/plain\r\nSet-Cookie: x=1"
+    ));
     assert!(!header_is_safe("Content-Disposition", "inline\nX: y"));
     assert!(!header_is_safe("X\r\nY", "z"));
 }
@@ -212,7 +229,10 @@ fn the_failure_guard_holds_an_ipv6_network_and_cannot_grow_without_bound() -> Re
     assert!(e.app.blocked(now, "2001:db8:1:2:ffff::9"), "same /64");
     assert!(!e.app.blocked(now, "2001:db8:1:3::1"), "another /64");
     for i in 0..20_000 {
-        e.app.fail(now, &format!("10.{}.{}.{}", i / 65536, (i / 256) % 256, i % 256));
+        e.app.fail(
+            now,
+            &format!("10.{}.{}.{}", i / 65536, (i / 256) % 256, i % 256),
+        );
     }
     assert!(e.app.failures_held() <= 5000);
     Ok(())
@@ -223,7 +243,13 @@ fn guessing_oauth_codes_is_counted_and_held_off() -> Res {
     let e = env()?;
     let mut last = 0;
     for _ in 0..12 {
-        let mut r = rq("POST", "/oauth/token", "", &[], "grant_type=authorization_code&code=x&client_id=nope");
+        let mut r = rq(
+            "POST",
+            "/oauth/token",
+            "",
+            &[],
+            "grant_type=authorization_code&code=x&client_id=nope",
+        );
         r.ip = Some("10.9.9.9".into());
         last = e.app.handle(&r).status;
     }

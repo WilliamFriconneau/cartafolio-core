@@ -949,13 +949,12 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             return Err(Fault::Missing(format!("fact {f} has not arrived")));
         }
     }
-    let mut mime = String::new();
     // The name is cleaned as it is when an assistant puts a file: no path, no control character.
     let clean = crate::files::clean_name(req(p, "name")?);
     if clean.is_empty() {
         return Err(Fault::Bad("a file needs a name".into()));
     }
-    if p.get("erased").and_then(Value::as_bool) != Some(true) {
+    let mime = if p.get("erased").and_then(Value::as_bool) != Some(true) {
         let data = req(p, "data")?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(data)
@@ -964,18 +963,18 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             return Err(Fault::Bad("the bytes do not match their digest".into()));
         }
         // The type is what the bytes say, never what the sender claims; a kind that is not kept is refused.
-        mime = crate::files::sniff(&bytes, &clean)
-            .ok_or_else(|| Fault::Bad("this kind of file is not kept".into()))?
-            .to_string();
+        let sniffed = crate::files::sniff(&bytes, &clean)
+            .ok_or_else(|| Fault::Bad("this kind of file is not kept".into()))?;
         crate::files::store_blob(brain, space, sha, &bytes).map_err(Fault::from)?;
+        sniffed.to_string()
     } else {
         let claimed = req(p, "mime")?;
-        mime = if crate::files::is_kept_type(claimed) {
+        if crate::files::is_kept_type(claimed) {
             claimed.to_string()
         } else {
             "application/octet-stream".into()
-        };
-    }
+        }
+    };
     // The same name with other content: both stay, and the later one by the clock takes the name with its
     // node and time, on every node alike.
     let mut name = clean;
@@ -1239,7 +1238,14 @@ fn check_shape(ev: &Event) -> std::result::Result<(), Fault> {
     for k in ["author", "actor", "source_agent", "source_kind", "type"] {
         small(k, 200)?;
     }
-    for k in ["source_path", "source_hash", "source_range", "source_ref", "reason", "note"] {
+    for k in [
+        "source_path",
+        "source_hash",
+        "source_range",
+        "source_ref",
+        "reason",
+        "note",
+    ] {
         small(k, 4096)?;
     }
     small("fields", 64 * 1024)?;
