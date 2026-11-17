@@ -1,5 +1,12 @@
 # Changelog
 
+## 20261117.0.9
+
+- **Peer directory, as the apps read it:** the node's internal connections are not listed among the assistants; a connection used through Tailscale Funnel is in the cloud; each memory of a multi-person installation goes by the installation's name and says how it can be reached.
+- **Voice:** a transcribed recording is erased as soon as its text exists.
+- **Device invitation:** a peer invites another device of the same person with a one-time ticket (`POST /mcp/<connection>/join/invite`).
+- Hermes connects through the MCP like every assistant; its plugin is removed. Plan for a voice assistant at home (docs/ASSIST.md). 5S pass: words standardised in the capture program, internal notes removed.
+
 ## 20261117.0.8
 
 - **Audit of the core** (docs/reviews/2026-11-17-core-audit.md): a connection limited to tag paths can no longer read or write the log of a space through the sync routes; joining another memory from the page is for administrators; a wrong key with a large declared body counts as a failed attempt; hostile file names and types from a peer are refused; databases opened with trusted_schema off; the failure guard is bounded; OAuth is rate limited; the join check phrase uses all its words.
