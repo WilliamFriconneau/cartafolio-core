@@ -68,8 +68,9 @@ write names which. A path can be read-only (`:r`).
 
 A key has no daily budget and no pace to keep: write as many records as the data holds. It has an anti-flood ceiling of 6000
 calls a minute (100 a second), far above any feed, which the person can change with `memcp limit AGENT rate N`; on a
-refusal (HTTP 429) wait the seconds it says. There is no limit on the size of a text or a file (the person may set one for a
-connection with `memcp limit AGENT max-text N`).
+refusal (HTTP 429) wait the seconds it says. A text is at most 1 MiB, the most a peer takes in a sync (a record merged into an
+earlier one counts whole); the person may set a lower limit for a connection with `memcp limit AGENT max-text N`. A file
+is limited only by the size of a request.
 
 ## Records: ids, updates and the cursor
 

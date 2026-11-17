@@ -405,6 +405,21 @@ pub(crate) fn active_by_hash(conn: &Connection, hash: &str) -> Result<Option<Fac
         .optional()?)
 }
 
+/// The longest text a fact may hold, in bytes: the most a peer takes in one event of a sync. A longer one would be
+/// written here and refused by every other node, so it is refused here first.
+pub const MAX_TEXT_BYTES: usize = 1 << 20;
+
+/// Refuses a text longer than [`MAX_TEXT_BYTES`] (checked on what is written now, not on what a merge brings in).
+pub(crate) fn check_size(text: &str) -> Result<()> {
+    if text.len() > MAX_TEXT_BYTES {
+        return Err(Error::Invalid(format!(
+            "the text is longer than {} KiB",
+            MAX_TEXT_BYTES / 1024
+        )));
+    }
+    Ok(())
+}
+
 pub(crate) fn check_text(text: &str) -> Result<String> {
     let t = text::normalize(text);
     let n = t.chars().count();
@@ -619,6 +634,7 @@ pub fn remember(
     new.tags = normalize_tags(&new.tags)?;
     check_kind(&new.kind)?;
     let t = check_text(&new.text)?;
+    check_size(&t)?;
     if let (Some(from), Some(to)) = (new.valid_from, new.valid_to)
         && to < from
     {
@@ -765,6 +781,7 @@ pub(crate) fn supersede_as(
 ) -> Result<Fact> {
     check_kind(&new.kind)?;
     let t = check_text(&new.text)?;
+    check_size(&t)?;
     let given_tags = normalize_tags(&new.tags)?;
     let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
     let old = read_fact(&tx, old_id)?.ok_or_else(|| Error::UnknownFact(old_id.into()))?;
