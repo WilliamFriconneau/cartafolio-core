@@ -193,3 +193,27 @@ fn heard() -> memcp_bridge_ffi::HeardInput {
         send_summary: true,
     }
 }
+
+#[test]
+fn the_window_of_a_replica_is_read_and_written() {
+    use memcp_bridge_ffi::{prune_replica_window, replica_window, set_replica_window};
+    use memcp_core::{Brain, Space, text::Language};
+
+    let d = dir("window");
+    let space = Space::new("notes").expect("space");
+    Brain::init(&d, &[space], Language::English).expect("init");
+    let path = d.to_str().expect("path").to_string();
+    let w = replica_window(path.clone()).expect("read");
+    assert_eq!((w.days, w.label.as_str()), (None, "window: all"));
+    assert_eq!(
+        prune_replica_window(path.clone(), 1_900_000_000).expect("prune"),
+        0
+    );
+    set_replica_window(path.clone(), Some(21)).expect("set");
+    let w = replica_window(path.clone()).expect("read");
+    assert_eq!((w.days, w.label.as_str()), (Some(21), "window: 21 days"));
+    assert!(set_replica_window(path.clone(), Some(0)).is_err());
+    set_replica_window(path.clone(), None).expect("off");
+    assert_eq!(replica_window(path).expect("read").days, None);
+    let _ = std::fs::remove_dir_all(d);
+}

@@ -4,7 +4,7 @@
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
     SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
-    SPACE_V10, SPACE_V11,
+    SPACE_V10, SPACE_V11, SPACE_V12,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -542,4 +542,25 @@ CREATE TABLE sync_state (
   at     INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (peer, space)
 ) STRICT, WITHOUT ROWID;
+";
+
+/// A replica that holds only a window of days (see `sync::prune_window`): the facts and files it left out or
+/// removed here, so that a later event about them is ignored instead of waiting for them for ever. Pruning
+/// deletes history and log rows on purpose, and only while it holds the `window_pruning` flag in `meta`: the
+/// two append-only guards let a delete through only then.
+const SPACE_V12: &str = r"
+CREATE TABLE window_gone (
+  kind TEXT NOT NULL CHECK (kind IN ('fact','file')),
+  id   TEXT NOT NULL,
+  at   INTEGER NOT NULL,
+  PRIMARY KEY (kind, id)
+) STRICT, WITHOUT ROWID;
+DROP TRIGGER sync_log_no_delete;
+CREATE TRIGGER sync_log_no_delete BEFORE DELETE ON sync_log
+  WHEN NOT EXISTS (SELECT 1 FROM meta WHERE k = 'window_pruning')
+  BEGIN SELECT RAISE(ABORT,'append-only'); END;
+DROP TRIGGER fact_events_no_delete;
+CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
+  WHEN NOT EXISTS (SELECT 1 FROM meta WHERE k = 'window_pruning')
+  BEGIN SELECT RAISE(ABORT,'append-only'); END;
 ";

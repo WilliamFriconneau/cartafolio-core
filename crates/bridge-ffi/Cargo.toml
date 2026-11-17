@@ -19,6 +19,7 @@ path = "src/bin/uniffi-bindgen.rs"
 [dependencies]
 memcp-bridge = { path = "../bridge" }
 memcp-client = { path = "../client" }
+memcp-core = { path = "../core" }
 uniffi = { version = "0.32", features = ["cli"] }
 
 # Whisper inside the app, on the GPU: the Mac only.

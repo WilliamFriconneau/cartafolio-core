@@ -19,6 +19,8 @@ pub struct Pass {
     pub pulled: usize,
     pub pushed: usize,
     pub disputed: usize,
+    /// Notes this replica removed to keep to its window (see `memcp_core::sync::prune_window`).
+    pub pruned: usize,
     pub problems: Vec<String>,
 }
 
@@ -99,10 +101,18 @@ impl Peer {
                 pass.problems.push(format!("{name}: push: {e}"));
             }
         }
+        // A replica that holds a window drops what is outside it and acknowledged: local, nothing is sent.
+        match sync::prune_all(brain, now) {
+            Ok(Some(done)) => pass.pruned = done.iter().map(|p| p.facts).sum(),
+            Ok(None) => {}
+            Err(e) => pass.problems.push(format!("window: {e}")),
+        }
         Ok(pass)
     }
 
     fn pull(&self, brain: &Brain, space: &Space, now: i64, pass: &mut Pass) -> Result<(), String> {
+        // A replica that holds a window leaves out what is older than it (pinned notes excepted).
+        let cutoff = sync::window_cutoff(brain, now).map_err(|e| e.to_string())?;
         loop {
             let (pulled, _) = sync::cursors(brain, &self.name, space).map_err(|e| e.to_string())?;
             let page = self.get(&format!(
@@ -114,7 +124,8 @@ impl Peer {
                 .iter()
                 .filter_map(|v| Event::from_json(v).ok())
                 .collect();
-            let done = sync::apply(brain, space, &events, &self.name).map_err(|e| e.to_string())?;
+            let done = sync::apply_window(brain, space, &events, &self.name, cutoff)
+                .map_err(|e| e.to_string())?;
             pass.pulled += done.applied;
             pass.disputed += done.disputed;
             let next = page["next"].as_i64().unwrap_or(pulled);
