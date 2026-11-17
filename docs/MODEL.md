@@ -1,6 +1,6 @@
 # MemCP model (the 0.9 refactor)
 
-Status: design, decided in conversation, not implemented yet. Tests of 0.8.0 pass under the new name. The "Open an MCP" action (page and `open` command) is the one piece already built.
+Status: design, not implemented yet. Tests of 0.8.0 pass under the new name. The "Open an MCP" action (page and `open` command) is the one piece already built.
 
 ## Decisions that shape everything
 

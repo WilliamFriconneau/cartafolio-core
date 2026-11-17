@@ -32,6 +32,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V21,
     CONTROL_V22,
     CONTROL_V23,
+    CONTROL_V24,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -615,9 +616,25 @@ const CONTROL_V22: &str = r"
 ALTER TABLE bridge_pairings RENAME TO pairings;
 ";
 
+/// The node's identity in the peer directory (a short id each node makes once and tells its peers), and the requests to
+/// join that a peer told this node about (so that the person can answer them from here; the answer travels back with
+/// the next exchange with that peer).
+const CONTROL_V23: &str = r"
+ALTER TABLE peer_directory ADD COLUMN node_id TEXT NOT NULL DEFAULT '';
+CREATE TABLE IF NOT EXISTS remote_joins (
+  node       TEXT NOT NULL,
+  id         TEXT NOT NULL,
+  device     TEXT NOT NULL,
+  words      TEXT NOT NULL,
+  expires_at INTEGER NOT NULL,
+  answer     TEXT,
+  PRIMARY KEY (node, id)
+) STRICT, WITHOUT ROWID;
+";
+
 /// The folder of a space on THIS node, and what the node remembers of each file in it. Node-local on purpose: nothing
 /// here is ever put in the sync log, and a path of one machine means nothing on another (see docs/FOLDERS.md).
-const CONTROL_V23: &str = r"
+const CONTROL_V24: &str = r"
 CREATE TABLE space_folders (
   space TEXT PRIMARY KEY,
   path TEXT NOT NULL,

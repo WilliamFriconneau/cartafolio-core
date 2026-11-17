@@ -15,8 +15,21 @@ use serde_json::{Value, json};
 use crate::app::App;
 use crate::http::{Request, Response};
 
-/// How long a request waits for an answer.
+/// How long a request waits for an answer by default.
 pub const TTL: i64 = 120;
+/// What the tests set (`MEMCP_JOIN_TTL`, seconds, 2 to 3600) to see a request expire without waiting two minutes.
+const TTL_VAR: &str = "MEMCP_JOIN_TTL";
+
+/// How long a request waits for an answer on this node.
+pub fn ttl() -> i64 {
+    static T: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
+    *T.get_or_init(|| {
+        std::env::var(TTL_VAR)
+            .ok()
+            .and_then(|v| v.parse::<i64>().ok())
+            .map_or(TTL, |v| v.clamp(2, 3600))
+    })
+}
 /// Requests waiting at once, from anyone.
 const MAX_PENDING: usize = 8;
 /// Requests a minute from one address.
@@ -40,6 +53,8 @@ pub enum State {
 
 pub struct Join {
     device: String,
+    /// The id of the node that asks, when it says it.
+    node_id: Option<String>,
     check: String,
     secret: String,
     created: i64,
@@ -66,7 +81,7 @@ pub fn phrase() -> String {
 }
 
 fn sweep(joins: &mut HashMap<String, Join>, now: i64) {
-    joins.retain(|_, j| now - j.created <= TTL * 3);
+    joins.retain(|_, j| now - j.created <= ttl() * 3);
 }
 
 /// `POST /join` {device}: a device asks to join. Answers its id, the secret it polls with and the check phrase.
@@ -80,6 +95,10 @@ pub fn request(app: &App, req: &Request) -> Response {
         return refused(400, "JSON expected: {\"device\": \"name\"}");
     };
     let device = clean_device(body.get("device").and_then(Value::as_str).unwrap_or(""));
+    let node_id = body
+        .get("node_id")
+        .and_then(Value::as_str)
+        .and_then(memcp_core::directory::valid_id);
     // A ticket made by a peer of the same person: the device joins at once, once, with a key of its own.
     let ticket_owner = match body.get("ticket").and_then(Value::as_str) {
         Some(t) => {
@@ -101,7 +120,7 @@ pub fn request(app: &App, req: &Request) -> Response {
     sweep(&mut joins, now);
     let waiting = joins
         .values()
-        .filter(|j| matches!(j.state, State::Waiting) && now - j.created <= TTL)
+        .filter(|j| matches!(j.state, State::Waiting) && now - j.created <= ttl())
         .count();
     if waiting >= MAX_PENDING {
         return refused(
@@ -142,6 +161,7 @@ pub fn request(app: &App, req: &Request) -> Response {
         id.clone(),
         Join {
             device,
+            node_id,
             check: check.clone(),
             secret: secret.clone(),
             created: now,
@@ -150,7 +170,7 @@ pub fn request(app: &App, req: &Request) -> Response {
     );
     Response::json(
         200,
-        &json!({ "id": id, "secret": secret, "check": check, "expires_in": TTL }),
+        &json!({ "id": id, "secret": secret, "check": check, "expires_in": ttl() }),
     )
 }
 
@@ -174,7 +194,7 @@ pub fn poll(app: &App, req: &Request, id: &str) -> Response {
         app.fail(now, &who);
         return refused(404, "unknown request");
     }
-    if now - j.created > TTL && matches!(j.state, State::Waiting) {
+    if now - j.created > ttl() && matches!(j.state, State::Waiting) {
         joins.remove(id);
         return Response::json(200, &json!({ "state": "expired" }));
     }
@@ -192,18 +212,27 @@ pub fn poll(app: &App, req: &Request, id: &str) -> Response {
     }
 }
 
-/// What a signed-in person sees: the requests waiting, with their check phrases.
-pub fn pending(app: &App, _me: &User) -> Response {
+/// The requests waiting on THIS node, with their check phrases (what a peer is told, and what the page shows first).
+pub fn pending_here(app: &App) -> Vec<Value> {
     let now = util::now();
     let mut joins = app.joins.lock().unwrap_or_else(|e| e.into_inner());
     sweep(&mut joins, now);
-    let list: Vec<Value> = joins
+    let mut list: Vec<(i64, Value)> = joins
         .iter()
-        .filter(|(_, j)| matches!(j.state, State::Waiting) && now - j.created <= TTL)
+        .filter(|(_, j)| matches!(j.state, State::Waiting) && now - j.created <= ttl())
         .map(|(id, j)| {
-            json!({ "id": id, "device": j.device, "check": j.check, "waited": now - j.created, "expires_in": TTL - (now - j.created) })
+            (j.created, json!({ "id": id, "device": j.device, "check": j.check, "node_id": j.node_id, "waited": now - j.created, "expires_in": ttl() - (now - j.created) }))
         })
         .collect();
+    list.sort_by_key(|(t, _)| *t);
+    list.into_iter().map(|(_, v)| v).collect()
+}
+
+/// What a signed-in person sees: the requests waiting here, and the ones the peers of this node told, each with its
+/// check phrase (`node` names the node that was asked, for the second kind).
+pub fn pending(app: &App, _me: &User) -> Response {
+    let mut list = pending_here(app);
+    list.extend(memcp_core::directory::remote_joins(&app.brain, util::now()).unwrap_or_default());
     Response::json(200, &json!({ "requests": list }))
 }
 
@@ -244,12 +273,26 @@ pub fn decide(
         .and_then(Value::as_str)
         .ok_or_else(|| refused(400, "id is required"))?;
     let mut joins = app.joins.lock().unwrap_or_else(|e| e.into_inner());
+    let local = joins
+        .get(id)
+        .is_some_and(|j| matches!(j.state, State::Waiting) && now - j.created <= ttl());
+    if !local {
+        drop(joins);
+        // A request that another node of the person holds: the answer is kept and goes to that node with the next
+        // exchange; the request leaves this list at once.
+        let result = if path == "/join/deny" {
+            "denied"
+        } else {
+            "approved"
+        };
+        return match memcp_core::directory::answer_remote_join(&app.brain, id, result, now) {
+            Ok(Some(node)) => Ok(json!({ "result": result, "via": node, "queued": true })),
+            _ => Err(refused(404, "this request is gone")),
+        };
+    }
     let Some(j) = joins.get_mut(id) else {
         return Err(refused(404, "this request is gone"));
     };
-    if !matches!(j.state, State::Waiting) || now - j.created > TTL {
-        return Err(refused(404, "this request is gone"));
-    }
     if path == "/join/deny" {
         j.state = State::Denied;
         return Ok(json!({ "result": "denied" }));
@@ -332,23 +375,50 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
         .flatten()
         .map(|u| u.name)
         .unwrap_or_default();
-    let ticket = util::random_base32(24);
-    {
-        let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
-        t.retain(|_, (_, _, until)| *until > now);
-        if t.len() >= MAX_TICKETS {
-            return refused(429, "too many invitations are waiting");
-        }
-        t.insert(
-            ticket_key(&ticket),
-            (caller.user_id.clone(), name, now + TICKET_TTL),
-        );
-    }
+    let ticket = match make_ticket(app, &caller.user_id, &name, now) {
+        Ok(t) => t,
+        Err(r) => return r,
+    };
     memcp_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
+    let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+        .map(|l| l.to_link())
+        .ok();
     Response::json(
         200,
-        &json!({ "ticket": ticket, "expires_in": TICKET_TTL, "single_use": true }),
+        &json!({ "ticket": ticket, "link": link, "expires_in": TICKET_TTL, "single_use": true }),
     )
+}
+
+/// A one-time ticket for `person`: kept as a hash, valid [`TICKET_TTL`] seconds.
+pub fn make_ticket(app: &App, user_id: &str, person: &str, now: i64) -> Result<String, Response> {
+    let ticket = util::random_base32(24);
+    let mut t = app.tickets.lock().unwrap_or_else(|e| e.into_inner());
+    t.retain(|_, (_, _, until)| *until > now);
+    if t.len() >= MAX_TICKETS {
+        return Err(refused(429, "too many invitations are waiting"));
+    }
+    t.insert(
+        ticket_key(&ticket),
+        (user_id.to_string(), person.to_string(), now + TICKET_TTL),
+    );
+    Ok(ticket)
+}
+
+/// The answers a peer of the person gives (in `POST /sync/peers`, `answers: [{id, result}]`) to the requests this node
+/// told it about: the same as the page's click. An answer to a request that is gone (answered elsewhere, expired) is
+/// ignored.
+pub fn apply_answers(app: &App, ctl: &Connection, me: &User, answers: &[Value]) {
+    for a in answers.iter().take(16) {
+        let (Some(id), Some(result)) = (a["id"].as_str(), a["result"].as_str()) else {
+            continue;
+        };
+        let path = match result {
+            "approved" => "/join/approve",
+            "denied" => "/join/deny",
+            _ => continue,
+        };
+        let _ = decide(app, ctl, me, path, &json!({ "id": id }));
+    }
 }
 
 /// `GET /mcp/<connection>/join/pending` and `POST /mcp/<connection>/join/approve|deny` {id}, with the key of a PEER of

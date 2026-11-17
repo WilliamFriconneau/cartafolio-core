@@ -88,7 +88,7 @@ fn asked(e: &Env, ip: &str, name: &str) -> Value {
 fn a_device_asks_the_person_compares_a_phrase_and_allows_and_the_key_comes_once() -> Res {
     let e = env()?;
     let _ = person(&e, "GET", "/state", json!({}));
-    let ask = asked(&e, "192.168.1.30", "William's iPhone");
+    let ask = asked(&e, "192.168.1.30", "Alex's iPhone");
     let (id, secret, check) = (
         ask["id"].as_str().ok_or("id")?.to_string(),
         ask["secret"].as_str().ok_or("secret")?.to_string(),
@@ -108,7 +108,7 @@ fn a_device_asks_the_person_compares_a_phrase_and_allows_and_the_key_comes_once(
     // The person sees the same phrase.
     let list = person(&e, "GET", "/join/pending", json!({})).body_json();
     assert_eq!(list["requests"][0]["check"], check.as_str());
-    assert_eq!(list["requests"][0]["device"], "William's iPhone");
+    assert_eq!(list["requests"][0]["device"], "Alex's iPhone");
     // And allows it.
     let ok = person(&e, "POST", "/join/approve", json!({ "id": id }));
     assert_eq!(ok.status, 200, "{}", ok.body_json());

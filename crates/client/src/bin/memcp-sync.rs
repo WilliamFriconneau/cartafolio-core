@@ -11,27 +11,87 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use memcp_client::peer_sync::Peer;
 use memcp_core::Brain;
 
-const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS --status-file FILE [--name NAME]";
+const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS [--join ADDRESS…] [--expect-id ID] --status-file FILE [--name NAME]";
 
-/// `--join ADDRESS`: asks the node at ADDRESS to let this machine in, writes the three words to the status file for the
-/// person's page, waits for the answer, and on a yes keeps the peer (its address and key, private) in `DIR/peers/` so that
-/// the node syncs with it from then on. The page reads the status file; the key never goes into it.
-fn join(data: &str, address: &str, status_file: &str, name: &str) -> ExitCode {
-    use memcp_client::peer_sync::{join_poll, join_request};
+/// A name that is safe in a file name and a connection: lower case letters, digits and dashes.
+fn slug(text: &str) -> String {
+    let mut out = String::new();
+    for c in text.chars() {
+        let c = c.to_ascii_lowercase();
+        if c.is_ascii_lowercase() || c.is_ascii_digit() {
+            out.push(c);
+        } else if !out.ends_with('-') && !out.is_empty() {
+            out.push('-');
+        }
+        if out.len() >= 30 {
+            break;
+        }
+    }
+    out.trim_matches('-').to_string()
+}
+
+/// `--join ADDRESS [--join ADDRESS…] [--expect-id ID]`: asks the node at ADDRESS (the first that answers) to let this
+/// machine in, writes the three words to the status file for the person's page, waits for the answer, and on a yes
+/// keeps the peer (its address and key, private) in `DIR/peers/` so that the node syncs with it from then on. The page
+/// reads the status file; the key never goes into it. A ticket from a node of the same person comes in the variable
+/// `MEMCP_JOIN_TICKET` (never on the command line): the node lets this machine in at once, with no words.
+/// With `--expect-id`, the node that answers must say that id: another one is refused.
+fn join(
+    data: &str,
+    addresses: &[String],
+    expect: Option<&str>,
+    status_file: &str,
+    name: &str,
+) -> ExitCode {
+    use memcp_client::peer_sync::{join_poll, join_request_with, who_is_there};
     let write = |v: serde_json::Value| {
         let tmp = format!("{status_file}.tmp");
         if std::fs::write(&tmp, v.to_string()).is_ok() {
             let _ = std::fs::rename(&tmp, status_file);
         }
     };
-    let ask = match join_request(address, name) {
-        Ok(a) => a,
-        Err(e) => {
-            write(serde_json::json!({ "state": "failed", "error": e }));
-            return ExitCode::from(1);
-        }
+    let fail = |e: String| {
+        write(serde_json::json!({ "state": "failed", "error": e }));
+        ExitCode::from(1)
     };
-    write(serde_json::json!({ "state": "waiting", "check": ask.check }));
+    let ticket = std::env::var("MEMCP_JOIN_TICKET")
+        .ok()
+        .filter(|t| !t.is_empty());
+    let own_id = Brain::open(&PathBuf::from(data))
+        .ok()
+        .and_then(|b| memcp_core::directory::node_id(&b).ok());
+    let expect = expect.and_then(memcp_core::directory::valid_id);
+    // The first address that answers and is the node meant.
+    let mut last = "no address".to_string();
+    let mut found = None;
+    for a in addresses {
+        if !memcp_client::allowed_url(a) {
+            last = "this address is refused: HTTPS, or in clear only on this machine or the own network".into();
+            continue;
+        }
+        match who_is_there(a) {
+            Ok(w) => {
+                let said = w["id"].as_str().and_then(memcp_core::directory::valid_id);
+                if expect.is_some() && said != expect {
+                    last = "the node at that address is not the one the link names".into();
+                    continue;
+                }
+                found = Some((a.clone(), w));
+                break;
+            }
+            Err(e) => last = e,
+        }
+    }
+    let Some((address, who)) = found else {
+        return fail(last);
+    };
+    let address = address.as_str();
+    let ask = match join_request_with(address, name, ticket.as_deref(), own_id.as_deref()) {
+        Ok(a) => a,
+        Err(e) => return fail(e),
+    };
+    let node = serde_json::json!({ "id": who["id"], "name": who["name"] });
+    write(serde_json::json!({ "state": "waiting", "check": ask.check, "node": node }));
     for _ in 0..70 {
         std::thread::sleep(Duration::from_secs(2));
         match join_poll(address, &ask) {
@@ -40,35 +100,33 @@ fn join(data: &str, address: &str, status_file: &str, name: &str) -> ExitCode {
                 let (Some(key), Some(url)) =
                     (v["join"]["key"].as_str(), v["join"]["mcp_url"].as_str())
                 else {
-                    write(serde_json::json!({ "state": "failed", "error": "unreadable answer" }));
-                    return ExitCode::from(1);
+                    return fail("unreadable answer".into());
                 };
                 let host = address
                     .split("://")
                     .nth(1)
                     .and_then(|r| r.split(['/', ':']).next())
                     .unwrap_or("peer");
-                let peer = format!("peer-{}", host.split('.').next().unwrap_or("peer"));
+                // The node's own name keeps two nodes on one host apart; the host is the fallback of an older node.
+                let named = who["name"].as_str().map(slug).filter(|n| !n.is_empty());
+                let peer = format!(
+                    "peer-{}",
+                    named.unwrap_or_else(|| host.split('.').next().unwrap_or("peer").to_string())
+                );
                 let dir = PathBuf::from(data).join("peers");
                 let _ = std::fs::create_dir_all(&dir);
                 let record = serde_json::json!({ "name": peer, "address": url, "key": key });
                 if !save_private(&dir.join(format!("{peer}.json")), &record.to_string()) {
-                    write(
-                        serde_json::json!({ "state": "failed", "error": "the peer could not be kept" }),
-                    );
-                    return ExitCode::from(1);
+                    return fail("the peer could not be kept".into());
                 }
-                write(serde_json::json!({ "state": "approved", "name": peer }));
+                write(serde_json::json!({ "state": "approved", "name": peer, "node": node }));
                 return ExitCode::SUCCESS;
             }
             Ok(v) => {
                 write(serde_json::json!({ "state": v["state"] }));
                 return ExitCode::from(1);
             }
-            Err(e) => {
-                write(serde_json::json!({ "state": "failed", "error": e }));
-                return ExitCode::from(1);
-            }
+            Err(e) => return fail(e),
         }
     }
     write(serde_json::json!({ "state": "expired" }));
@@ -96,16 +154,18 @@ fn main() -> ExitCode {
             .and_then(|i| args.get(i + 1))
             .cloned()
     };
-    if let (Some(data), Some(address), Some(status)) =
-        (value("--data"), value("--join"), value("--status-file"))
+    if let (Some(data), Some(status)) = (value("--data"), value("--status-file"))
+        && args.iter().any(|a| a == "--join")
     {
-        if !memcp_client::allowed_url(&address) {
-            let refused = serde_json::json!({ "state": "failed", "error": "this address is refused: HTTPS, or in clear only on this machine or the own network" });
-            let _ = std::fs::write(&status, refused.to_string());
-            return ExitCode::from(2);
-        }
+        let addresses: Vec<String> = args
+            .iter()
+            .enumerate()
+            .filter(|(_, a)| *a == "--join")
+            .filter_map(|(i, _)| args.get(i + 1).cloned())
+            .collect();
         let name = value("--name").unwrap_or_else(|| "a machine".into());
-        return join(&data, &address, &status, &name);
+        let expect = value("--expect-id");
+        return join(&data, &addresses, expect.as_deref(), &status, &name);
     }
     let (Some(data), Some(peer)) = (value("--data"), value("--peer")) else {
         eprintln!("{USAGE}");

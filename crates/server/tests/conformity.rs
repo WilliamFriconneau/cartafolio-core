@@ -53,7 +53,12 @@ fn discovery_tells_the_service_the_name_and_the_version_and_nothing_else() -> Re
         .map(String::as_str)
         .collect();
     keys.sort_unstable();
-    assert_eq!(keys, ["join", "name", "service", "version"]);
+    assert_eq!(keys, ["id", "join", "name", "service", "version"]);
+    assert_eq!(
+        v["id"].as_str().map(str::len),
+        Some(14),
+        "the id names the node, nothing more"
+    );
     assert_eq!(v["service"], "memcp");
     assert_eq!(v["name"], "kitchen");
     let _ = fs::remove_dir_all(dir);

@@ -17,7 +17,8 @@ for t in *.test.js; do CHROMIUM=/usr/bin/chromium node "$t" || echo "FAILED $t";
 page in jsdom: the page talks to the real API, only the browser is simulated. In French, it signs in and checks the four
 sections and their labels; Spaces shows the tiles and a space opens on its Boards tab; Trace or drop writes a note that
 appears in its list; the Journal lists the notes of every space, each with its space; Settings shows the machines and
-« Connect an assistant », hides the tiles and shows no empty section. On every view: no « null », « undefined », and none
+« Connect an assistant », hides the tiles and shows no empty section; the Machines block is this node with its id, the
+nodes and one field to add a node (the older codes are folded under Advanced). On every view: no « null », « undefined », and none
 of the words the interface never uses (bridge, capture program, capture app, vault), and nothing logged as an error. jsdom only:
 
 ```sh

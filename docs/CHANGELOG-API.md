@@ -28,9 +28,22 @@ Everything below is added; nothing is renamed. The rules are in [FOLDERS.md](FOL
 
 **What the node writes into the memory.** Author `folder-sync`. A note edited in the folder is a `supersede` with the reason `edited in the folder on this node`; a deleted file is a `retire` with the reason `its file was deleted from the folder on this node`; a note changed on both sides keeps both, the folder's copy being a new note tagged `conflict`; a new file or `.md` is a file or a note. The Markdown front matter keys are `id`, `space`, `tags`, `created`, `version`.
 
-**Storage.** Control database migration 23: `space_folders` (`space`, `path`, `mode`, `cloud`, `set_at`, `last_scan`, `last_files`, `last_errors`) and `folder_state` (what the node remembers of each file: hash, size, time, the note or file it stands for). Neither is in a space file or in the sync log.
+**Storage.** Control database migration 24: `space_folders` (`space`, `path`, `mode`, `cloud`, `set_at`, `last_scan`, `last_files`, `last_errors`) and `folder_state` (what the node remembers of each file: hash, size, time, the note or file it stands for). Neither is in a space file or in the sync log.
 
 **Rust.** `memcp_core::folders`, `memcp_server::folder_sync`; the embedded node of an app (`NodeIntake::start`) runs the task too.
+
+## Adding a node by its id or link, from any node (next version)
+
+Added only; nothing existing changes except one more key in two answers. Details and the rules: [FEDERATION.md](FEDERATION.md), *Adding a node*.
+
+- **Node id**: random, `ABCD-EFGH-IJKL`, made once. It names a node and proves nothing. It is in `GET /.well-known/memcp` (`id`), in `node` of `GET /sync/status` and `GET /sync/peers` (`node.id`), in each directory entry on the wire (`id`) and in each row of `GET /sync/status` `peers` (`id`, `addresses` best first, `via`).
+- **`GET /admin/api/node`**: `{ id, name, version, addresses, exposures, link, qr }`; `link` is `memcp://node?id=…&name=…&addr=…[&addr=…][&t=ticket]`, `qr` an SVG.
+- **`POST /admin/api/nodes/add`** `{ "link": "<link | id | address>" }` (administrator): this node asks THAT node to join, with `POST /join`. Answers `{ "id": "<request>", "state": "asking", "node": { "id", "name" } }`; follow it with `GET /admin/api/join-memory?id=` (`asking`, `waiting` + `check`, `approved`, `denied`, `expired`, `failed` + `error`). Refused (400) with words: not a link, this node, already linked, not known (an id nobody told). The link's `t` is a one-time ticket: the node lets this one in at once, with no words. `POST /admin/api/join-memory` also accepts a `memcp://` link in `address`.
+- **`POST /admin/api/nodes/invite`** `{}` → `{ "link", "qr", "expires_in": 600, "single_use": true }`; `POST /mcp/<peer>/join/invite` answers one more key, `link`.
+- **`POST /admin/api/nodes/via`** `{ "name" | "id" | "peer", "address": "<one it told>" | null }` → `{ "ok": true, "name" }`: the address this node asks that node at first.
+- **Requests on every peer**: `GET /sync/peers` → `node.pending: [{ id, device, check, node_id, waited, expires_in }]` (to a peer of the person only). A peer lists them in its `join/pending` (`GET /admin/api/join/pending`, `GET /mcp/<peer>/join/pending`) with `node` and `remote: true`; every request now carries `node_id` (the id of the asking node, when it says it, in `POST /join` `{ device, node_id?, ticket? }`). Answering a remote one (`POST …/join/approve|deny` `{ id }`) answers `{ "result", "via": "<node>", "queued": true }`; the answer goes to the asked node in `POST /sync/peers` → `answers: [{ id, result: "approved" | "denied" }]`.
+- `memcp-sync --join ADDRESS [--join ADDRESS…] [--expect-id ID]` (ticket in `MEMCP_JOIN_TICKET`); the kept peer is now named after the node that answered (`peer-<node name>`). `MEMCP_JOIN_TTL` (seconds, 2 to 3600) shortens how long a request waits; the default stays 120.
+- Migration 23 of the control database: `peer_directory.node_id`, table `remote_joins`.
 
 ## « À trier » is called Inbox (next version)
 
@@ -172,3 +185,9 @@ to-sort box on Linux).
 - **Fields**: a level or a measure said in the text is a field, stored as a tag `field/<name>/<value>` (`/` in the value is a path level, the decimal point is `_`: `field/level/2/10`, `field/tension/12/8`, `field/poids/72_5`). Every fact returned by the tools now has `"fields": {name: value}` read back from those tags (`recall`, `read_fact`, `living_get` cards and delta, the journal rows).
 - **Learning**: a change of tags (page, `tags_set`, `supersede` with different tags) or a send from À trier teaches the node; two corrections make a word sure. `learn: false` on `tags_set` keeps a correction from teaching.
 - **MCP `living_get`**: `first_pass: true` while no pass was ever recorded (then `behind` counts every note of the space). `living_set`: a pass that does not say `covers` has read up to the moment it writes.
+
+## 20261117.0.18
+
+- **MCP `notes_move`** (write) `{from, to, tag, dry_run?}` -> `{from, to, tag, dry_run, matched, moved, left, failed, sample}`: moves the notes under a tag from one space to another (copy, then the original is retired with the reason « moved to … »), as the page's « move this tag ». `dry_run` defaults to true. Write access on both spaces is needed.
+- **MCP `space_create` / `space_move`**: documented in docs/TOOLS.md (they were already in 0.17).
+- The keyword learning ignores a larger list of empty words (French, English, Spanish).
