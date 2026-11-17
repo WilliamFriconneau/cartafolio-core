@@ -404,14 +404,14 @@ fn rights_with_paths_survive_a_regrant_and_show_in_the_list() -> Res {
 #[test]
 fn one_tag_of_its_own_does_not_carry_the_others_outside_its_path() -> Res {
     let w = world()?;
-    let app = caller(&w, "kalios", "sam-health/sources/kalios:rw")?;
+    let app = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
     let denied = |r: Result<Value, ToolError>| matches!(r, Err(ToolError::Denied(_)));
     // Its own records: fine.
     let ok = call(
         &w,
         &app,
         "remember",
-        json!({"space": "sam-health", "text": "Sommeil 7 h", "origin": {"app": "kalios", "id": "s/1"}}),
+        json!({"space": "sam-health", "text": "Sommeil 7 h", "origin": {"app": "healthapp", "id": "s/1"}}),
     )?;
     assert_eq!(ok["result"], "created", "{ok}");
     // Another app's record, the sorted layer, the inbox, the index: refused, even next to its own tag.
@@ -419,7 +419,7 @@ fn one_tag_of_its_own_does_not_carry_the_others_outside_its_path() -> Res {
         &w,
         &app,
         "remember",
-        json!({"space": "sam-health", "text": "Forged HRV", "tags": ["sources/kalios"], "origin": {"app": "bevel", "id": "hrv/1"}}),
+        json!({"space": "sam-health", "text": "Forged HRV", "tags": ["sources/healthapp"], "origin": {"app": "bevel", "id": "hrv/1"}}),
     )));
     assert!(denied(call(
         &w,
@@ -433,7 +433,7 @@ fn one_tag_of_its_own_does_not_carry_the_others_outside_its_path() -> Res {
                 &w,
                 &app,
                 "remember",
-                json!({"space": "sam-health", "text": format!("Planted {extra}"), "tags": ["sources/kalios", extra]}),
+                json!({"space": "sam-health", "text": format!("Planted {extra}"), "tags": ["sources/healthapp", extra]}),
             )),
             "{extra}"
         );
@@ -443,7 +443,7 @@ fn one_tag_of_its_own_does_not_carry_the_others_outside_its_path() -> Res {
         &app,
         "deposit",
         json!({"space": "sam-health", "records": [
-            {"text": "own", "origin": {"app": "kalios", "id": "s/2"}},
+            {"text": "own", "origin": {"app": "healthapp", "id": "s/2"}},
             {"text": "other", "origin": {"app": "bevel", "id": "x"}},
         ]}),
     )?;
@@ -480,7 +480,7 @@ fn the_handshake_tells_a_path_limited_key_nothing_outside_its_path() -> Res {
             && whole.contains("Private rules")
             && whole.contains("INBOX")
     );
-    let app = caller(&w, "kalios", "sam-health/sources/kalios:rw")?;
+    let app = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
     let told = memcp_core::guide::instructions(&w.brain, &app)?;
     for secret in ["cardiologist", "Private rules", "INBOX", "INDEX"] {
         assert!(!told.contains(secret), "{secret} leaked: {told}");
@@ -536,14 +536,14 @@ fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
     let w = world()?;
     caller(
         &w,
-        "kalios",
-        "sam-health/sources/kalios:rw,sam-health/proposals/kalios:r",
+        "healthapp",
+        "sam-health/sources/healthapp:rw,sam-health/proposals/healthapp:r",
     )?;
     let owner = caller(&w, "claude", "sam-health:rw")?;
     let told = memcp_core::guide::instructions(&w.brain, &owner)?;
     assert!(
         told.contains("PROPOSALS of the vault \"sam-health\"")
-            && told.contains("`kalios` (tag `proposals/kalios`)"),
+            && told.contains("`healthapp` (tag `proposals/healthapp`)"),
         "{told}"
     );
     // Not to a key that only reads, nor to the tool itself.

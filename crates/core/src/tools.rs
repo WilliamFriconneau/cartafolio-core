@@ -28,9 +28,11 @@ pub(crate) static LEASES: std::sync::LazyLock<
 mod living;
 mod overview;
 mod sorting;
+mod tagging;
 
-const WRITE_TOOLS: [&str; 11] = [
+const WRITE_TOOLS: [&str; 12] = [
     "living_set",
+    "tags_set",
     "rules_set",
     "library_raise",
     "remember",
@@ -42,8 +44,9 @@ const WRITE_TOOLS: [&str; 11] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 14] = [
+const READ_TOOLS: [&str; 15] = [
     "triage_waiting",
+    "tags_suggest",
     "vocabulary_terms",
     "living_get",
     "peers",
@@ -308,6 +311,23 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             }),
         });
         out.push(ToolDef {
+            name: "tags_set",
+            description: "Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (`supersede`), the reason is recorded and the history keeps the old tags; nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`. `fields` sets named values kept as said (`{\"level\": \"2/10\", \"tension\": \"12/8\"}`; stored as tags `field/<name>/<value>`; an empty value takes the field off). A note keeps at least one tag. The node learns from the change (the words of the note lead to the tags added, away from the ones removed) unless `learn` is false: pass false when you are an engine proposing tags, not the person correcting them.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "The note to retag." },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "The whole new set of tags." },
+                    "add": { "type": "array", "items": { "type": "string" } },
+                    "remove": { "type": "array", "items": { "type": "string" } },
+                    "fields": { "type": "object", "description": "Named values, as said: {\"level\": \"2/10\"}." },
+                    "reason": { "type": "string" },
+                    "learn": { "type": "boolean", "description": "Default true." }
+                },
+                "required": ["id"]
+            }),
+        });
+        out.push(ToolDef {
             name: "retire",
             description: "Retires a fact (tombstone: the text stays, it leaves searches). A reason is required.".into(),
             schema: json!({
@@ -422,6 +442,18 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
     }
     if !readable.is_empty() {
+        out.push(ToolDef {
+            name: "tags_suggest",
+            description: "What the node's tagger would give a text, with no model and no write, so an app can show the tags before the note is written: the tag of the space first, then the tags proper to it (its keywords, its vocabularies and, in a health space, the signs and measures said: `signe/douleur` with a `level` of `2/10`, `mesure/tension` with a `tension` of `12/8`). Also says, in `route`, the space the person usually sends notes like this one to, when the node learned it.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "text": { "type": "string" },
+                    "space": space_prop(&readable, "The space the note is for; left out, only `route` is given.")
+                },
+                "required": ["text"]
+            }),
+        });
         out.push(ToolDef {
             name: "file_list",
             description: "Photos and documents kept in the memory, newest first, optionally matching words of their name or note.".into(),
@@ -856,6 +888,9 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     .map(crate::origin::Origin::scope_tag)
                     .as_deref(),
             )?;
+            // The node tags what is written: the tag of the space, then what the text says (see `autotag`).
+            let text_to_tag = fact.text.clone();
+            tagging::on_write(brain, caller, &space, &conn, &text_to_tag, &mut fact.tags);
             // A source depositing under its own record ids: no duplicate of its own, and the
             // point to resume from comes back (see the `origin` module).
             if let Some(origin) = origin {
@@ -955,11 +990,17 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         "supersede" => {
             let id = str_arg(args, "id")?;
             let found = locate(brain, &caller.writable(), id)?;
-            let Some((space, conn, _)) = found else {
+            let Some((space, conn, old)) = found else {
                 return Err(ToolError::Invalid("unknown fact".into()));
             };
             let reason = args.get("reason").and_then(Value::as_str);
-            let f = facts::supersede(&conn, &space, author, id, new_fact(caller, args)?, reason)?;
+            let new = new_fact(caller, args)?;
+            let retagged = !new.tags.is_empty();
+            let f = facts::supersede(&conn, &space, author, id, new, reason)?;
+            // The person changed the tags of a note: the node learns it.
+            if retagged {
+                tagging::learn_change(brain, author, &space, &f.text, &old.tags, &f.tags);
+            }
             Ok(json!({ "result": "superseded", "fact": f.to_json() }))
         }
         "retire" => {
@@ -1103,6 +1144,8 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             crate::tools::sorting::transcription_failed(brain, caller, name, args)
         }
         "peers" => crate::tools::overview::peers(brain, caller, name, args),
+        "tags_set" => crate::tools::tagging::tags_set(brain, caller, name, args),
+        "tags_suggest" => crate::tools::tagging::tags_suggest(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
         "rules_get" | "rules_set" => crate::tools::sorting::rules(brain, caller, name, args),
@@ -1366,6 +1409,19 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             let note = args.get("note").and_then(Value::as_str).unwrap_or("");
             let mut tags = tags_arg(args)?;
             scope_tags(caller, &space, &mut tags, None)?;
+            // The description is tagged like a note: its words and the words of the file's name.
+            let described = format!(
+                "{note} {}",
+                str_arg(args, "name")?.replace(['-', '_', '.'], " ")
+            );
+            tagging::on_write(
+                brain,
+                caller,
+                &space,
+                &brain.open_space(&space)?,
+                &described,
+                &mut tags,
+            );
             let f = crate::files::put_tagged(
                 brain,
                 &space,

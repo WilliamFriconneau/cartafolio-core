@@ -1253,7 +1253,7 @@ fn the_owner_approves_what_an_app_proposed_as_it_reads_and_nobody_else_does() ->
         let t = access::connect_for(
             &ctl,
             &u.id,
-            "kalios",
+            "healthapp",
             &Rights::parse("alex-me/guide:rw")?,
             None,
             false,
@@ -1271,9 +1271,9 @@ fn the_owner_approves_what_an_app_proposed_as_it_reads_and_nobody_else_does() ->
     let g = a["app_guides"].as_array().ok_or("list")?;
     assert_eq!(g.len(), 1);
     assert_eq!(g[0]["standing"], "waiting");
-    assert_eq!(g[0]["app"], "kalios");
+    assert_eq!(g[0]["app"], "healthapp");
     let hash = g[0]["hash"].as_str().ok_or("hash")?.to_string();
-    let body = |h: &str| json!({ "space": "alex-me", "app": "kalios", "hash": h });
+    let body = |h: &str| json!({ "space": "alex-me", "app": "healthapp", "hash": h });
     let act = |who, path: &str, b: Value| ha(&e, "POST", &format!("/admin/api/{path}"), who, b);
     // Not the owner's, not an administrator's: refused. And a text not read: refused.
     assert_eq!(act(BOB, "app-guides/approve", body(&hash)).status, 403);

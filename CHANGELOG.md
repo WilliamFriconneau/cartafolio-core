@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.14
+
+- Automatic tags in the core: every write gets the tag of its space and the tags proper to it (signs, levels and measures in a health space); `tags_suggest`, `tags_set`; the node learns from corrections (docs/AUTOTAG.md, docs/CHANGELOG-API.md).
+- A board written by an app is no longer « behind » by every note of the space.
+- No app name in the examples of the core and the docs.
+
 ## 20261117.0.13
 
 - **Every node answers a device asking to join:** a peer of the person lists the requests waiting (`GET /mcp/<connection>/join/pending`) and allows or refuses them (`POST /mcp/<connection>/join/approve|deny` {id}) with its own key, as the page does. The apps show the request where the person is.

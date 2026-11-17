@@ -521,10 +521,12 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     let tags = c.list("--tag");
     match op {
         "add" => {
-            let new = NewFact {
+            let mut new = NewFact {
                 tags,
                 ..NewFact::agent(c.arg(3, "the text")?, &author)
             };
+            let text = new.text.clone();
+            memcp_core::autotag::add_to(&brain, &who.id, &s, &conn, &text, &mut new.tags);
             match facts::remember(&conn, &s, &author, new, &[]).map_err(fail)? {
                 Remembered::Created(f) => println!("note {} created.", f.id),
                 Remembered::Duplicate(f) => println!("already there: {}.", f.id),

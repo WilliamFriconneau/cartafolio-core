@@ -8,8 +8,8 @@ The tools of this page and their fields are checked against `tools::definitions`
 
 | Rights | Tools |
 |---|---|
-| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `spaces`, `stats`, `file_list`, `file_get` |
-| write on a space | `living_set`, `rules_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `spaces`, `stats`, `file_list`, `file_get` |
+| write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a vault | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
 | a money vault (bank statements) | `finances_balances`, `finances_movements`, `finances_monthly`, `finances_rules` (read), `finances_import` (write): see the end |
@@ -769,7 +769,7 @@ Writes a short, dated fact that stands on its own. An exact duplicate is dropped
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it).
 - **Answer:** `{ result: created | duplicate | needs_decision | unchanged | updated | same_text_held, fact, tidy?, candidates?, cursor? }`.
 - **Errors:** `invalid` (empty text, bad kind, tag or date, ambiguous space); `denied` (no write right, or outside the key's paths); `limited` (text longer than the key's limit).
-- **Effects:** Writes a fact and its history event, and an entry in the sync log. A note tagged `inbox` wakes the janitor. Nothing is erased.
+- **Effects:** Writes a fact and its history event, and an entry in the sync log. A note tagged `inbox` wakes the janitor. Nothing is erased. **The node tags what it writes** (`remember`, `deposit`, the description of `file_put`): the tag of the space, then the tags proper to it, and in a health space the signs and measures said, as `field/...` tags (see [AUTOTAG.md](AUTOTAG.md)). The tags the caller gives stay: the node only adds. Nothing is added in « À trier », to a key limited to paths, or to a write that carries a plumbing tag (`rules`, `index`, `guide`, `dashboard`, `living/...`, `janitor/...`). Every fact the tools return carries `tags` and `fields`.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
@@ -897,6 +897,89 @@ Example call and answer:
     "id": "f_ac13",
     "replaces": "f_ab12"
   }
+}
+```
+
+### `tags_suggest`
+
+What the node's tagger would give a text, with no model and no write, so that an app can show the tags before the note is written: the tag of the space first, then the tags proper to it (its keywords, its vocabularies and, in a health space, the signs and measures said). Also says, in `route`, the space the person usually sends notes like this one to, when the node learned it. See [AUTOTAG.md](AUTOTAG.md).
+
+- **Seen with:** read access on at least one space.
+- **Answer:** `{ space, tags, fields, field_tags, all_tags, route }`; with no `space`, only `route` (the other fields empty).
+- **Errors:** `invalid` (no text); `denied` (a space you cannot read); `limited` (text too long).
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `space` | string | no | one of the spaces you can read |
+| `text` | string | yes | - |
+
+Example call and answer:
+
+```json
+{
+  "name": "tags_suggest",
+  "arguments": {
+    "space": "health",
+    "text": "Douleur 2/10 ce matin, tension 12/8"
+  }
+}
+```
+
+```json
+{
+  "space": "health",
+  "tags": ["health", "signe/douleur", "mesure/tension"],
+  "fields": { "level": "2/10", "tension": "12/8" },
+  "field_tags": ["field/level/2/10", "field/tension/12/8"],
+  "all_tags": ["health", "signe/douleur", "mesure/tension", "field/level/2/10", "field/tension/12/8"],
+  "route": []
+}
+```
+
+### `tags_set`
+
+Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (a `supersede` with the same text), the reason is recorded and the history keeps the old tags. Nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`; `fields` sets named values kept as said. The node learns from the change unless `learn` is false.
+
+- **Seen with:** write access on at least one space (not a key limited to paths).
+- **Answer:** `{ result: "superseded", fact, added, removed, reason, learned }`, or `{ result: "unchanged", fact }` when the set is the same.
+- **Errors:** `invalid` (`unknown fact`, fact not active, a note that describes a file, no tag left, bad tag).
+- **Effects:** The old fact becomes `replaced`, a new one with the same text and the new tags is written. With `learn` not false, the words of the note are taught to the router: toward the tags added, away from the tags removed (and toward the space, never the other way). What the janitor does is never learned.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `add` | array of string | no | - |
+| `fields` | object | no | `{name: value}`; an empty value takes the field off |
+| `id` | string | yes | - |
+| `learn` | boolean | no | default true |
+| `reason` | string | no | default `tags set by <connection>` |
+| `remove` | array of string | no | - |
+| `tags` | array of string | no | the whole new set |
+
+Example call and answer:
+
+```json
+{
+  "name": "tags_set",
+  "arguments": {
+    "id": "f_ab12",
+    "add": ["suivi/genou"],
+    "remove": ["signe/douleur"],
+    "fields": { "level": "4/10" },
+    "reason": "read again by the on-device engine",
+    "learn": false
+  }
+}
+```
+
+```json
+{
+  "result": "superseded",
+  "fact": { "id": "f_ac13", "replaces": "f_ab12", "tags": ["field/level/4/10", "health", "suivi/genou"], "fields": { "level": "4/10" } },
+  "added": ["field/level/4/10", "suivi/genou"],
+  "removed": ["field/level/2/10", "signe/douleur"],
+  "reason": "read again by the on-device engine",
+  "learned": false
 }
 ```
 
@@ -1305,6 +1388,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `rules_get` / `rules_set` | read and write the filing rules (tags, keywords) of a space as versions of its `rules` note | built (20261116.0.4) |
 | `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |
 | `vocabulary_terms` | the terms of the vocabularies imported into a space, and the vocabularies with their source | built |
+| `tags_suggest` / `tags_set` | what the node's tagger gives a text (preview, no write), and the correction of the tags of a note (a `supersede` with the new set, reason recorded, history kept); see AUTOTAG.md | built |
 | `library_search` | search the libraries mounted read-only on the spaces you can read: hits with path, title, snippet, type, dates | new |
 | `library_raise` | raise an original into a normal fact with a short summary you give, your tags and the path of the original | new |
 | `links` | the graph of spaces, tags and library folders, for an Obsidian-like view | new |

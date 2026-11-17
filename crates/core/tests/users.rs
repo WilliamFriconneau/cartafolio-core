@@ -417,7 +417,7 @@ fn a_fact_that_concerns_another_vault_is_found_from_it_and_grants_nothing() -> R
         &json!({ "space": "home", "text": "the boiler was serviced in march", "tags": ["house/boiler", "@sam"] }),
     )?;
     assert_eq!(r["result"], "created", "{r}");
-    assert_eq!(r["fact"]["tags"], json!(["@sam", "house/boiler"]));
+    assert_eq!(r["fact"]["tags"], json!(["@sam", "home", "house/boiler"]));
     let hits = |c: &access::Caller, space: Option<&str>| -> Result<Vec<String>, Box<dyn Error>> {
         let mut args = json!({ "query": "boiler" });
         if let Some(s) = space {

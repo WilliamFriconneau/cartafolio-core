@@ -172,6 +172,12 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         };
         let new = files::put_tagged(brain, to, author, &f.name, &f.note, &bytes, &tags)?;
         files::retire(brain, from, author, id, &reason(&new.id))?;
+        learn_route(
+            brain,
+            author,
+            &format!("{} {}", f.note, f.name.replace(['-', '_', '.'], " ")),
+            to,
+        );
         return Ok(new.id);
     }
     let src = brain.open_space(from)?;
@@ -202,5 +208,14 @@ pub fn send(brain: &Brain, from: &Space, id: &str, to: &Space, author: &str) -> 
         }
     };
     facts::retire(&src, author, id, &reason(&new_id))?;
+    learn_route(brain, author, &fact.text, to);
     Ok(new_id)
+}
+
+/// The person chose where a note of « À trier » goes: the node learns it (the words of the note lead to that space).
+/// What the janitor sends is its own choice, never learned from.
+fn learn_route(brain: &Brain, author: &str, text: &str, to: &Space) {
+    if !author.to_lowercase().contains("janitor") {
+        crate::autotag::Store::open(brain.dir()).learn_route(text, to.as_str());
+    }
 }
