@@ -60,7 +60,9 @@ fn many_writers_on_one_space_lose_nothing_and_a_reader_sees_it_only_grow() -> Re
         std::thread::spawn(move || -> Result<Vec<i64>, String> {
             start.wait();
             let mut seen = vec![];
-            let conn = b.open_space(&sp("work")).map_err(|e| format!("reader open: {e}"))?;
+            let conn = b
+                .open_space(&sp("work"))
+                .map_err(|e| format!("reader open: {e}"))?;
             while !done.load(Ordering::SeqCst) {
                 let n: i64 = conn
                     .query_row(
@@ -146,7 +148,10 @@ fn many_writers_on_one_space_lose_nothing_and_a_reader_sees_it_only_grow() -> Re
         },
         NOW,
     )?;
-    assert_eq!(found.len(), writers * each);
+    // A search returns at most 200 hits; the index itself holds one row per fact.
+    assert_eq!(found.len(), 200);
+    let indexed: i64 = conn.query_row("SELECT count(*) FROM facts_fts", [], |r| r.get(0))?;
+    assert_eq!(indexed, (writers * each) as i64);
     let check: String = conn.query_row("PRAGMA integrity_check", [], |r| r.get(0))?;
     assert_eq!(check, "ok");
     Ok(())

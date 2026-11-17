@@ -338,8 +338,14 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
     if meta_get(conn, "sync_backfilled")?.is_some() {
         return Ok(());
     }
-    conn.execute_batch("SAVEPOINT sync_backfill")?;
+    // The write lock is taken at once (a deferred transaction that reads first and writes after cannot wait for the
+    // writers already at work: « database is locked »), and the flag is read again once it is held, so that several
+    // workers opening the space together backfill it once.
+    conn.execute_batch("BEGIN IMMEDIATE")?;
     let done = (|| -> Result<()> {
+        if meta_get(conn, "sync_backfilled")?.is_some() {
+            return Ok(());
+        }
         let ids: Vec<String> = conn
             .prepare("SELECT id FROM facts ORDER BY created_at, rowid")?
             .query_map([], |r| r.get(0))?
@@ -399,11 +405,11 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
     })();
     match done {
         Ok(()) => {
-            conn.execute_batch("RELEASE sync_backfill")?;
+            conn.execute_batch("COMMIT")?;
             Ok(())
         }
         Err(e) => {
-            let _ = conn.execute_batch("ROLLBACK TO sync_backfill; RELEASE sync_backfill");
+            let _ = conn.execute_batch("ROLLBACK");
             Err(e)
         }
     }
