@@ -464,7 +464,7 @@ pub fn retire(
 /// assistant, and counted apart from what waits for the person. Taking it off is the retry.
 pub const FAILED_TRANSCRIPTION: &str = "failed/transcription";
 
-/// Puts the tag [`FAILED_TRANSCRIPTION`] on a recording's description, or takes it off (`failed` false: the bridge tries
+/// Puts the tag [`FAILED_TRANSCRIPTION`] on a recording's description, or takes it off (`failed` false: the node tries
 /// the recording again). Only a recording that is still active; the tag is the only thing that changes.
 pub fn mark_transcription_failed(
     brain: &Brain,

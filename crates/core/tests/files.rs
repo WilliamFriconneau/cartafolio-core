@@ -226,7 +226,7 @@ fn memo_and_transcript(
     let memo = files::put_tagged(
         b,
         space,
-        "bridge",
+        "device",
         "Mémo vocal.m4a",
         "dictée du matin",
         &m4a(200),
@@ -359,7 +359,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
     let photo = files::put_tagged(
         &b,
         &personal,
-        "bridge",
+        "device",
         "meter.png",
         "",
         PNG,
@@ -376,7 +376,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
     let kept = files::put_tagged(
         &b,
         &personal,
-        "bridge",
+        "device",
         "Discours.m4a",
         "à garder",
         &m4a(300),
@@ -416,8 +416,8 @@ fn bytes_that_another_record_or_space_still_holds_stay() -> Res {
     let now = memcp_core::util::now();
     let tag = ["inbox/audio".to_string()];
     // The same recording under another name in the same vault, and in another vault.
-    let twin = files::put_tagged(&b, &personal, "bridge", "Copie.m4a", "", &m4a(200), &tag)?;
-    let other = files::put_tagged(&b, &work, "bridge", "Mémo vocal.m4a", "", &m4a(200), &tag)?;
+    let twin = files::put_tagged(&b, &personal, "device", "Copie.m4a", "", &m4a(200), &tag)?;
+    let other = files::put_tagged(&b, &work, "device", "Mémo vocal.m4a", "", &m4a(200), &tag)?;
     transcribed_at(&b, &personal, &transcript, 1_700_000_000)?;
     assert_eq!(twin.sha256, memo.sha256);
     assert_ne!(twin.id, memo.id);
@@ -462,7 +462,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
         access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or_else(|| "refused".into())
     };
     let worker = mk("worker", "personal:rw", false)?;
-    let scoped = mk("bridge", "personal/inbox:rw", false)?;
+    let scoped = mk("device", "personal/inbox:rw", false)?;
     let reader = mk("reader", "personal:r", false)?;
     let home = mk("home-agent", "home:rw", false)?;
     let args = json!({ "id": memo.id, "transcript": transcript });

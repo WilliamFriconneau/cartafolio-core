@@ -1032,7 +1032,7 @@ fn a_person_downloads_their_own_memory_and_nobody_elses() -> Res {
     let names: Vec<&str> = entries.iter().map(|(n, _)| n.as_str()).collect();
     assert!(
         names.iter().any(|n| n.ends_with("/manifest.json"))
-            && names.iter().any(|n| n.ends_with("/vaults/alex-me.sqlite")),
+            && names.iter().any(|n| n.ends_with("/spaces/alex-me.sqlite")),
         "{names:?}"
     );
     let manifest: Value = serde_json::from_slice(
@@ -1337,9 +1337,9 @@ fn the_timeline_counts_what_each_vault_received_per_slice() -> Res {
     };
     let t = get("");
     assert_eq!(t["hours"], 24);
-    let work = t["vaults"]
+    let work = t["spaces"]
         .as_array()
-        .ok_or("vaults")?
+        .ok_or("spaces")?
         .iter()
         .find(|v| v["name"] == "work")
         .ok_or("work vault")?;

@@ -145,7 +145,7 @@ fn the_number_of_records_and_the_rights_are_bounded() -> Res {
         call(&w, &reader, json!({ "records": [record(0, "x")] })),
         Err(ToolError::Unknown)
     ));
-    let inbox = caller(&w, "bridge", "sam-health/inbox:rw")?;
+    let inbox = caller(&w, "device", "sam-health/inbox:rw")?;
     let r = call(
         &w,
         &inbox,

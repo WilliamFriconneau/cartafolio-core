@@ -244,7 +244,10 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
     let dir = export::export_person(&brain, &who, to, now()).map_err(fail)?;
     let manifest = export::verify_export(&dir).map_err(fail)?;
     println!("exported the memory of {} to {}", who.name, dir.display());
-    for v in manifest["vaults"].as_array().into_iter().flatten() {
+    for v in memcp_core::export::manifest_spaces(&manifest)
+        .into_iter()
+        .flatten()
+    {
         println!(
             "  {:<24} {:<10} facts {}  files {}",
             v["name"].as_str().unwrap_or(""),
@@ -261,10 +264,10 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
 pub fn verify_export(dir: &Path) -> Result<(), Failure> {
     let manifest = export::verify_export(dir).map_err(fail)?;
     println!(
-        "ok: export of {} made on {}, {} vault(s), every file matches its fingerprint.",
+        "ok: export of {} made on {}, {} space(s), every file matches its fingerprint.",
         manifest["person"]["name"].as_str().unwrap_or("?"),
         manifest["created_at"].as_str().unwrap_or("?"),
-        manifest["vaults"].as_array().map_or(0, Vec::len)
+        memcp_core::export::manifest_spaces(&manifest).map_or(0, Vec::len)
     );
     Ok(())
 }

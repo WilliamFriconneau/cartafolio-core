@@ -173,7 +173,7 @@ pub fn pair(server: String, code: String, device: String) -> Result<Pairing, Pai
             agent: p.agent,
             url: p.url,
             key: p.key,
-            vaults: p.vaults,
+            vaults: p.spaces,
         }),
         Err(E::Tool(m)) => Err(PairError::Refused { message: m }),
         Err(E::RateLimited(_)) => Err(PairError::Wait {

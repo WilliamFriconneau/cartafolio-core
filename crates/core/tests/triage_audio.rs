@@ -25,7 +25,7 @@ fn a_recording_with_its_text_does_not_wait_for_the_person_but_one_without_does()
     files::put_tagged(
         &b,
         &space,
-        "bridge",
+        "device",
         "dictation-1.m4a",
         "kept",
         &m4a(),
@@ -36,7 +36,7 @@ fn a_recording_with_its_text_does_not_wait_for_the_person_but_one_without_does()
     files::put_tagged(
         &b,
         &space,
-        "bridge",
+        "device",
         "dictation-2.m4a",
         "kept",
         &bytes,
@@ -46,11 +46,11 @@ fn a_recording_with_its_text_does_not_wait_for_the_person_but_one_without_does()
     let conn = b.open_space(&space)?;
     let mut n = NewFact::agent(
         "Dictation, audio dictation-1.m4a : call the plumber on Friday.",
-        "agent:bridge",
+        "agent:device",
     );
     n.tags = vec!["inbox".into()];
     assert!(matches!(
-        facts::remember(&conn, &space, "bridge", n, &[])?,
+        facts::remember(&conn, &space, "device", n, &[])?,
         Remembered::Created(_)
     ));
     let w = triage::waiting(&b, &space, 50)?;
@@ -75,7 +75,7 @@ fn a_recording_given_up_on_is_tagged_and_counted_apart_and_retried_when_the_tag_
     let b = brain(&t)?;
     let space = triage::ensure(&b, OWNER, "owner")?;
     let tags = vec!["inbox/audio".to_string()];
-    let rec = files::put_tagged(&b, &space, "bridge", "memo.m4a", "kept", &m4a(), &tags)?;
+    let rec = files::put_tagged(&b, &space, "device", "memo.m4a", "kept", &m4a(), &tags)?;
     files::put_tagged(
         &b,
         &space,

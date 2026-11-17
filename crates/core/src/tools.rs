@@ -227,7 +227,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "transcription_failed",
-            description: "Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the bridge tries the recording again.".into(),
+            description: "Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the node tries the recording again.".into(),
             schema: json!({ "type": "object", "properties": { "id": { "type": "string", "description": "The recording's id." }, "failed": { "type": "boolean", "description": "Default true." } }, "required": ["id"] }),
         });
         out.push(ToolDef {
@@ -1091,7 +1091,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             Ok(json!({
                 "janitor_woken": woken,
-                "vaults": vaults,
+                "spaces": vaults,
                 "message": "The janitor, if it is on, files the inboxes now. Expired facts are yours to retire or renew.",
             }))
         }

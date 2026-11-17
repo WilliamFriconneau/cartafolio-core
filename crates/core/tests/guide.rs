@@ -318,7 +318,7 @@ fn a_database_from_before_guides_gets_the_table_and_keeps_its_people() -> Res {
     let data = w._t.path().join("data");
     {
         let c = Connection::open(data.join("control.sqlite"))?;
-        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE bridge_pairings; DROP TABLE sync_state; DROP TABLE peer_meta; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
+        c.execute_batch("ALTER TABLE users DROP COLUMN heir; ALTER TABLE users DROP COLUMN recovery_hash; ALTER TABLE users DROP COLUMN last_seen; DROP TABLE grant_paths; DROP TABLE guides; DROP TABLE guide_approvals; ALTER TABLE oauth_codes DROP COLUMN agent; DROP TABLE pairings; DROP TABLE sync_state; DROP TABLE peer_meta; DROP TABLE peer_directory; ALTER TABLE connections DROP COLUMN internal; ALTER TABLE connections DROP COLUMN no_person_guide; ALTER TABLE connections DROP COLUMN all_inboxes; ALTER TABLE spaces DROP COLUMN label; ALTER TABLE spaces DROP COLUMN parent; ALTER TABLE spaces DROP COLUMN position; PRAGMA user_version = 7;")?;
     }
     let ctl = Brain::open(&data)?.open_control()?;
     assert!(users::user(&ctl, &w.sam)?.is_some(), "people are untouched");
@@ -435,7 +435,7 @@ fn a_recording_waiting_more_than_half_an_hour_is_warned_about_and_counted() -> R
     wav.extend_from_slice(&[0; 32]);
     let tags = vec!["inbox/audio".to_string()];
     let space = sp("sam-work");
-    memcp_core::files::put_tagged(&w.brain, &space, "bridge", "memo.wav", "kept", &wav, &tags)?;
+    memcp_core::files::put_tagged(&w.brain, &space, "device", "memo.wav", "kept", &wav, &tags)?;
     let seen = |w: &World| -> Result<serde_json::Value, Box<dyn Error>> {
         let s = tools::call(&w.brain, &c, "spaces", &json!({}))?;
         Ok(s["spaces"]

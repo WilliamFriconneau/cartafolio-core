@@ -213,7 +213,7 @@ impl Brain {
         }
         self.add_space_for(&space, user_id)?;
         self.set_space_kind(&space, kind)?;
-        // A bridge paired before « À trier » existed, for « all my vaults », writes to the inbox of this one too.
+        // A device paired before « À trier » existed, for « all my vaults », writes to the inbox of this one too.
         let ctl = self.open_control()?;
         let ids: Vec<String> = ctl
             .prepare(

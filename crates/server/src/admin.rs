@@ -493,7 +493,7 @@ fn action(
             Ok(json!({ "space": space.as_str(), "owner": me.id }))
         }
         "/pairing" => {
-            // A code a bridge exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
+            // A code a device exchanges once, within ten minutes, for a key to the person's « À trier » only: a device
             // never chooses a vault, the janitor or the person sorts what it sends.
             let (code, triage) =
                 memcp_core::pairing::create_for_peer(&app.brain, &me.id, &me.name, util::now())
@@ -568,7 +568,7 @@ fn action(
             )
         }
         "/triage/retry-transcription" => {
-            // A recording the bridge gave up on: the tag comes off, the bridge tries again at its next pass.
+            // A recording the node gave up on: the tag comes off, the node tries again at its next pass.
             let from = memcp_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no « À trier » yet".into())))?;
@@ -1047,7 +1047,7 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
             vaults.push(json!({ "name": s.as_str(), "counts": counts }));
         }
         Ok(json!({ "hours": hours, "from": iso(from), "to": iso(now),
-            "bucket_secs": width, "vaults": vaults }))
+            "bucket_secs": width, "spaces": vaults }))
     };
     match build() {
         Ok(v) => Response::json(200, &v),

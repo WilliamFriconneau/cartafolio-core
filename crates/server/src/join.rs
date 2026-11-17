@@ -23,7 +23,7 @@ const MAX_PENDING: usize = 8;
 const PER_MIN: i64 = 5;
 
 const WORDS: [&str; 64] = [
-    "amber", "anchor", "apple", "arrow", "badge", "basil", "beach", "birch", "bridge", "candle",
+    "amber", "anchor", "apple", "arrow", "badge", "basil", "beach", "birch", "bronze", "candle",
     "cedar", "cliff", "cloud", "comet", "coral", "daisy", "delta", "ember", "falcon", "fern",
     "flint", "forest", "garnet", "glade", "harbor", "hazel", "indigo", "island", "jasper",
     "juniper", "lantern", "lemon", "lotus", "maple", "meadow", "mint", "moss", "nectar", "oasis",
@@ -135,7 +135,7 @@ pub fn request(app: &App, req: &Request) -> Response {
             "agent": paired.agent,
             "key": paired.token,
             "mcp_url": format!("{}/mcp/{}", app.public_url, paired.agent),
-            "vaults": paired.vaults,
+            "spaces": paired.spaces,
         }));
     }
     joins.insert(
@@ -263,7 +263,7 @@ pub fn decide(
         "agent": paired.agent,
         "key": paired.token,
         "mcp_url": format!("{}/mcp/{}", app.public_url, paired.agent),
-        "vaults": paired.vaults,
+        "spaces": paired.spaces,
     }));
     Ok(json!({ "result": "approved", "connection": paired.agent }))
 }

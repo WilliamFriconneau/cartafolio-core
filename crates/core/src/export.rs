@@ -36,6 +36,26 @@ const FORMER_FORMAT: &str = "humanmemcp-export";
 /// Version of the export format this program writes; a newer manifest is refused.
 pub const VERSION: u32 = 1;
 
+/// The folder of an export that holds one database per space (an export made before the rename calls it `vaults`).
+const SPACES_DIR: &str = "spaces";
+
+/// The spaces an export lists: the manifest's `spaces`, or `vaults` in an export made by an older program.
+pub fn manifest_spaces(manifest: &Value) -> Option<&Vec<Value>> {
+    manifest["spaces"]
+        .as_array()
+        .or_else(|| manifest["vaults"].as_array())
+}
+
+/// Where an export keeps the database of `name`: `spaces/`, or `vaults/` in an export made by an older program.
+pub fn space_file(dir: &Path, name: &str) -> PathBuf {
+    let new = dir.join(format!("{SPACES_DIR}/{name}.sqlite"));
+    if new.is_file() {
+        new
+    } else {
+        dir.join(format!("vaults/{name}.sqlite"))
+    }
+}
+
 fn private_dir(path: &Path) -> Result<()> {
     fs::DirBuilder::new()
         .recursive(true)
@@ -338,9 +358,9 @@ fn export_vaults(
     let mut entries = vec![];
     for (space, kind) in vaults {
         let conn = brain.open_space(space)?;
-        let rel = format!("vaults/{space}.sqlite");
+        let rel = format!("{SPACES_DIR}/{space}.sqlite");
         let target = root.join(&rel);
-        private_dir(&root.join("vaults"))?;
+        private_dir(&root.join(SPACES_DIR))?;
         conn.execute("VACUUM INTO ?1", [target.to_string_lossy()])?;
         crate::fsx::set_private_file(&target)?;
         {
@@ -402,7 +422,7 @@ fn export_vaults(
 
     let readme = "This is the memory of one person, taken out of MemCP.\n\n\
         readable/   each vault as a Markdown document: the facts in force, then the history.\n\
-        vaults/     each vault as an SQLite database, complete, to be adopted by another MemCP.\n\
+        spaces/     each space as an SQLite database, complete, to be adopted by another MemCP.\n\
         files/      the photos and documents of each vault, named by their fingerprint.\n\
         guides.json the person's standing instructions, every version.\n\
         manifest.json the fingerprint of every file here, and what each vault holds.\n\n\
@@ -415,7 +435,7 @@ fn export_vaults(
         "format": FORMAT, "version": VERSION, "program": env!("CARGO_PKG_VERSION"),
         "created_at": util::iso(at),
         "person": { "name": who.name, "display": who.display },
-        "vaults": entries, "hashes": hashes,
+        "spaces": entries, "hashes": hashes,
     });
     write_private(
         &root.join("manifest.json"),
@@ -521,9 +541,8 @@ pub fn adopt(
     if owner.disabled {
         return Err(Error::Invalid(format!("{} is disabled", owner.name)));
     }
-    let vaults = manifest["vaults"]
-        .as_array()
-        .ok_or_else(|| Error::Invalid("the manifest lists no vault".into()))?;
+    let vaults = manifest_spaces(&manifest)
+        .ok_or_else(|| Error::Invalid("the manifest lists no space".into()))?;
     let ctl = brain.open_control()?;
     let catalogue = brain.catalogue()?;
 
@@ -577,7 +596,7 @@ pub fn adopt(
     let run = (|| -> Result<()> {
         for p in &plan {
             let tmp = brain.dir().join(format!(".adopt-{}.sqlite", p.target));
-            fs::copy(dir.join(format!("vaults/{}.sqlite", p.orig)), &tmp)?;
+            fs::copy(space_file(dir, &p.orig), &tmp)?;
             crate::fsx::set_private_file(&tmp)?;
             made.push(tmp.clone());
             let (facts, files) = {

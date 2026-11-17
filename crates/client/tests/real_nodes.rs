@@ -1131,7 +1131,7 @@ fn backup_export_adopt_and_merge_make_the_same_memory_again() {
     let broken = root.path("exports-broken");
     a.cli(&["export", "--to", broken.to_str().unwrap()]);
     let altered = only_entry(&broken);
-    let vault = std::fs::read_dir(altered.join("vaults"))
+    let vault = std::fs::read_dir(altered.join("spaces"))
         .unwrap()
         .flatten()
         .next()

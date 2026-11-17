@@ -80,10 +80,10 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
     let work = brain.add_vault(users::OWNER, "owner", "work")?;
-    let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "bridge-phone");
+    let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "device-phone");
     n.tags = vec!["inbox".into()];
     let Remembered::Created(note) =
-        facts::remember(&brain.open_space(&box_)?, &box_, "bridge-phone", n, &[])?
+        facts::remember(&brain.open_space(&box_)?, &box_, "device-phone", n, &[])?
     else {
         return Err("not created".into());
     };

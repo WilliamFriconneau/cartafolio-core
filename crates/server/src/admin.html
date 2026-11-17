@@ -1469,7 +1469,7 @@ async function loadTimeline() {
   try { localStorage.setItem("memcp-tl-scale", hours); } catch (_) {}
   let t;
   try { t = await api("timeline?hours=" + encodeURIComponent(hours)); } catch (_) { return; }
-  const rows = t.vaults.map(v => {
+  const rows = t.spaces.map(v => {
     const max = Math.max(1, ...v.counts), total = v.counts.reduce((a, b) => a + b, 0);
     return el("div", { class: "tl-row" },
       el("span", { class: "nm", title: spacePath(v.name) }, spacePath(v.name)),
@@ -2376,7 +2376,7 @@ function render() {
   const meId = S.installation ? S.installation.me : S.me.id;
   const TONES = ["t1", "t2", "t3", ""];
   $("#people").replaceChildren(...people().map((u, i) => {
-    const names = (u.vault_names || []).filter(n => !n.endsWith("-a-trier")), mine = u.id === meId;
+    const names = (u.space_names || u.vault_names || []).filter(n => !n.endsWith("-a-trier")), mine = u.id === meId;
     return el("div", { class: "tile " + TONES[i % 4] + (names.length > 3 ? " wide" : "") },
       el("div", { class: "tilehead" },
         el("div", { class: "avatar" }, (u.display || u.name).slice(0, 1).toUpperCase()),
@@ -2384,7 +2384,7 @@ function render() {
           el("div", { class: "kind" }, u.name + " · " + (u.home_assistant ? "linked to Home Assistant" : "not linked")))),
       el("div", {}, el("span", { class: "badge" + (u.admin ? " admin" : "") }, u.admin ? "administrator" : "member"),
         u.disabled ? el("span", { class: "badge off", style: "margin-left:4px" }, "disabled") : null),
-      el("div", { class: "nums mute" }, (u.vaults === undefined ? "—" : u.vaults) + " spaces · " + (u.connections === undefined ? "—" : u.connections) + " connections"),
+      el("div", { class: "nums mute" }, (u.spaces === undefined ? "—" : u.spaces) + " spaces · " + (u.connections === undefined ? "—" : u.connections) + " connections"),
       names.length ? el("div", { class: "minis" }, ...names.map(n => el("span", { class: "mini" }, n))) : null,
       el("div", { class: "acts" },
         mine ? el("button", { class: "primary", onclick: () => { location.hash = ""; } }, "Open my memory") : null,
@@ -2421,7 +2421,7 @@ function render() {
   const att = S.attention || { idle: [], refused_24h: 0 };
   const worth = [];
   if (att.refused_24h > 0) worth.push(el("p", {}, att.refused_24h + (att.refused_24h === 1 ? " key was" : " keys were") + " refused in the last 24 hours. A wrong or revoked key trying the server; if it is not one of yours, nothing to do."));
-  for (const c of att.idle) worth.push(el("p", {}, el("b", {}, c.agent), " is " + c.why + (c.last_used_at ? " (last used " + fmt(c.last_used_at) + ")" : " (made " + fmt(c.created_at) + ")") + ". ",
+  for (const c of att.idle) worth.push(el("p", {}, el("b", { title: c.agent }, shownName(c.agent)), " is " + c.why + (c.last_used_at ? " (last used " + fmt(c.last_used_at) + ")" : " (made " + fmt(c.created_at) + ")") + ". ",
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "revoke")));
   if (att.idle.length > 1) worth.push(el("p", {},
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke these " + att.idle.length + " connections?", async () => { for (const c of att.idle) await act("connections/revoke", { agent: c.agent }); }) }, "revoke all " + att.idle.length)));
@@ -2453,7 +2453,7 @@ function render() {
               el("button", { class: "link", onclick: () => act("connections/rename", { agent: c.agent, name: $("#rename-input").value.trim() }).then(() => { renaming = null; render(); }) }, "save"),
               el("button", { class: "link", onclick: () => { renaming = null; render(); } }, "cancel"),
               el("div", { class: "mute small" }, "lowercase letters, digits and dashes"))
-          : el("h3", {}, c.agent, " ", el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename")),
+          : el("h3", { title: c.agent }, shownName(c.agent), " ", el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename")),
         el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at),
           connKind(c.agent) ? el("span", { class: "badge", style: "margin-left:8px", "data-kind": connKind(c.agent), title: connKind(c.agent) === "cloud" ? "Reaches your memory through a service" : "Runs on a machine of yours" }, connKind(c.agent)) : null))),
     regranting && regranting.agent === c.agent ? rightsEditor(c) : el("div", {}, reach(c),
@@ -2470,11 +2470,11 @@ function render() {
   const gone = [...S.connections, ...(S.internal || [])].filter(c => c.revoked);
   settingsPart($("#revoked-section"), gone.length === 0);
   $("#revoked").replaceChildren(...gone.map(c => el("div", { class: "row", "data-agent": c.agent },
-    el("span", {}, c.agent), el("span", { class: "mute small" }, " revoked"),
+    el("span", { title: c.agent }, shownName(c.agent)), el("span", { class: "mute small" }, " revoked"),
     el("button", { class: "link danger", title: "Remove it from the list; what the audit says about it stays", onclick: () => previewThen("connections/delete", { agent: c.agent }) }, "remove from the list"))));
   settingsPart($("#internal-section"), tools.length === 0);
   $("#internal").replaceChildren(...tools.map(c => el("div", { class: "tile" },
-    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", {}, c.agent),
+    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", { title: c.agent }, shownName(c.agent)),
       el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),
     el("div", {}, reach(c)),
     el("div", { class: "acts" },
@@ -3087,6 +3087,10 @@ const isPeer = c => /^peer-/.test(c.agent);
 const assistantConns = () => (S.connections || []).filter(c => !c.revoked && !isPeer(c));
 const KINDS = (() => { try { return JSON.parse(localStorage.getItem("memcp-conn-kind") || "{}"); } catch (_) { return {}; } })();
 // Where an assistant runs, when known: on a machine of the person (local) or through a service (cloud).
+// A connection made when the program that paired it went by another name keeps that name (its address is that name);
+// the page shows it without the old prefix.
+function shownName(a) { return a.replace(/^bridge-(?=.)/, ""); }
+
 function connKind(agent) {
   if (KINDS[agent]) return KINDS[agent];
   const base = agent.replace(/-\d+$/, "");

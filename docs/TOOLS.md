@@ -699,7 +699,7 @@ Example call and answer:
 
 ### `transcription_failed`
 
-Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the bridge tries the recording again.
+Marks a recording whose transcription failed (tag `failed/transcription` on its description, so that it is visible and counted apart from what waits for a decision), or, with `failed` false, takes the tag off: the node tries the recording again.
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
 - **Answer:** `{ result: "marked" | "cleared", file }`.
@@ -1326,7 +1326,7 @@ Fewer, broader tools with an `op` where the verbs belong together, so that an as
 - A connection holds **grants**: a space (or a path inside it) and a level: *read*, *write*, *propose* (it may write proposals, never apply them) or *apply* (it may apply dashboard and rule changes in a non-sensitive space). *Write* includes *read*.
 - A grant on a space may be marked **with its sub-spaces**. It then covers the non-sensitive descendants only: a sensitive space is reached only by a grant that names it.
 - A key may expire, and the page shows the last use of each connection and what it did.
-- A new connection is made from a **template** (a chat assistant on the web, a coding agent, a work assistant, a capture app), which proposes the rights and shows them; the person changes them before the key exists.
+- A new connection is made from a **template** (a chat assistant on the web, a coding agent, a work assistant, a phone or computer app), which proposes the rights and shows them; the person changes them before the key exists.
 - The address of a connection stays its name, so assistants already connected keep working.
 
 ## The refactor, in order

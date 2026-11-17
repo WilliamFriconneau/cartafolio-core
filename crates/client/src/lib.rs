@@ -43,7 +43,7 @@ fn redact(message: &str, url: &str) -> String {
     out
 }
 
-/// What a device gets when it pairs: its connection's address and key, and the vaults whose inbox it writes to.
+/// What a device gets when it pairs: its connection's address and key, and the spaces whose inbox it writes to.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Paired {
     /// Name of the new connection (`peer-<device>-<4 characters>`).
@@ -53,7 +53,7 @@ pub struct Paired {
     /// The key, shown once: the caller must keep it; the memory stores only its hash.
     pub key: String,
     /// The one box the key writes to (the person's inbox).
-    pub vaults: Vec<String>,
+    pub spaces: Vec<String>,
 }
 
 /// Pairs a device with a memory: `server` is the address the person's page shows, `code` the one-time code it
@@ -114,8 +114,10 @@ pub fn pair_allowing(
         agent: field("agent")?,
         url: field("mcp_url")?,
         key: field("key")?,
-        vaults: v["vaults"]
+        // `spaces`; a node older than the rename says `vaults`.
+        spaces: v["spaces"]
             .as_array()
+            .or_else(|| v["vaults"].as_array())
             .into_iter()
             .flatten()
             .filter_map(Value::as_str)

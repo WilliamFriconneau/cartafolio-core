@@ -1,4 +1,4 @@
-//! `POST /pair`: a bridge exchanges the code the person's page showed for a connection of its own.
+//! `POST /pair`: a device exchanges the code the person's page showed for a connection of its own.
 //!
 //! No key is needed (the device has none yet), so the route is guarded like the key routes: a few
 //! tries a minute per address, and an address that keeps failing is held off for a while.
@@ -58,7 +58,7 @@ pub fn exchange(app: &App, req: &Request) -> Response {
                     "agent": p.agent,
                     "key": p.token,
                     "mcp_url": format!("{}/mcp/{}", app.public_url, p.agent),
-                    "vaults": p.vaults,
+                    "spaces": p.spaces,
                 }),
             )
         }

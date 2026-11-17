@@ -463,9 +463,9 @@ impl Manager {
                                 let mut x = x.clone();
                                 let name = x["name"].as_str().unwrap_or_default().to_string();
                                 if let Some(app) = self.person_app(&name) {
-                                    x["vaults"] = json!(app.brain.spaces().map_or(0, |s| s.len()));
+                                    x["spaces"] = json!(app.brain.spaces().map_or(0, |s| s.len()));
                                     // Their names only, to draw the tiles: never what a vault holds.
-                                    x["vault_names"] = json!(
+                                    x["space_names"] = json!(
                                         app.brain
                                             .spaces()
                                             .map(|s| s

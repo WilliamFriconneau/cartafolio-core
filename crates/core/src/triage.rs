@@ -72,7 +72,7 @@ fn reasons(conn: &rusqlite::Connection) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
-/// What waits in an « À trier » **for a decision**: its notes (a recording's own description apart: the bridge reads the
+/// What waits in an « À trier » **for a decision**: its notes (a recording's own description apart: the node reads the
 /// recording and puts its text here) and its files, newest first, each with its `age_seconds` and the `reason` the janitor
 /// left (why it could not place it). Not counted as waiting: a recording whose text is already here (`transcribed`), and one
 /// whose transcription failed three times and carries the tag [`files::FAILED_TRANSCRIPTION`] (`failed_transcription`, a
@@ -102,8 +102,8 @@ pub fn waiting(brain: &Brain, space: &Space, limit: usize) -> Result<Value> {
         })
         .collect();
     notes.sort_by(|a, b| b["created_at"].as_str().cmp(&a["created_at"].as_str()));
-    // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the bridge
-    // erases it. A recording the bridge gave up on carries a tag and is counted apart. Only what nothing has read yet, and
+    // A recording whose text is already here is not waiting for anybody: it stays until its week is over and the node
+    // erases it. A recording the node gave up on carries a tag and is counted apart. Only what nothing has read yet, and
     // is for the person to decide, is waiting.
     let mut transcribed = 0usize;
     let mut kept: Vec<Value> = vec![];

@@ -212,7 +212,7 @@ fn a_write_into_an_inbox_marks_it_and_tidy_asks_for_order_now() -> Res {
     )?;
     assert!(mark.exists() && std::fs::read(&mark)?.is_empty());
     let r = tools::call(&b, &c, "tidy", &serde_json::json!({}))?;
-    assert_eq!(r["vaults"]["health"]["inbox"], 1, "{r}");
+    assert_eq!(r["spaces"]["health"]["inbox"], 1, "{r}");
     assert_eq!(std::fs::read(&mark)?, b"now");
     Ok(())
 }
