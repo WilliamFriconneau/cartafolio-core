@@ -1,4 +1,5 @@
 //! The command line for create, read, update, delete: spaces, rules, nodes, connections, people, notes.
+#![allow(clippy::expect_used)]
 
 use std::process::Command;
 

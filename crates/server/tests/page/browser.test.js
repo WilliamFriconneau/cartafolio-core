@@ -167,6 +167,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   // Revoking opens a confirmation with a button to hold: a click does nothing, holding does it.
   const row = page.locator("#connections .tile", { hasText: "work-laptop" });
   await row.locator("button:has-text('Revoke')").click();
+  await page.waitForSelector("#confirm-dlg[open]", { timeout: 3000 });
   check("revoking opens a confirmation", await page.locator("#confirm-dlg").isVisible());
   check("the confirmation names what is revoked", (await page.locator("#confirm-q").innerText()).includes("work-laptop"));
   const hold = page.locator("#confirm-hold");

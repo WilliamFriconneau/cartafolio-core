@@ -517,7 +517,23 @@ pub fn list(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
         .clamp(1, PAGE_MAX);
     let tag = req.query.get("tag").map(String::as_str).unwrap_or("");
     let q = req.query.get("q").map(|s| s.trim()).unwrap_or("");
-    let rows: Vec<facts::Fact> = if q.is_empty() {
+    // `status=retired`: the notes that were removed, newest first, for bringing one back.
+    let rows: Vec<facts::Fact> = if req.query.get("status").map(String::as_str) == Some("retired") {
+        let Ok(mut st) = conn.prepare(
+            "SELECT id FROM facts WHERE status = 'retired'
+             AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
+             ORDER BY status_at DESC, rowid DESC LIMIT ?1",
+        ) else {
+            return err(500, "storage failed");
+        };
+        let ids: Vec<String> = st
+            .query_map([limit as i64], |r| r.get(0))
+            .map(|r| r.flatten().collect())
+            .unwrap_or_default();
+        ids.iter()
+            .filter_map(|id| facts::read_fact(&conn, id).ok().flatten())
+            .collect()
+    } else if q.is_empty() {
         let like = format!("{tag}/%");
         let sql = if tag.is_empty() {
             "SELECT id FROM facts WHERE status = 'active'

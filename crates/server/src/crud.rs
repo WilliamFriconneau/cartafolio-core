@@ -191,9 +191,17 @@ pub fn post(
         }
         "/connections/rotate" | "/connections/delete" => connections(app, ctl, me, path, body),
         "/users/delete" => users_delete(app, me, body),
-        "/recovery/clear" => users::clear_recovery_key(ctl, &me.id)
-            .map(|()| json!({ "ok": true }))
-            .map_err(fail),
+        "/recovery/clear" => {
+            if dry(body) {
+                Ok(
+                    json!({ "dry_run": true, "would": "your recovery key is removed: no new account can take your memory over with it any more" }),
+                )
+            } else {
+                users::clear_recovery_key(ctl, &me.id)
+                    .map(|()| json!({ "ok": true }))
+                    .map_err(fail)
+            }
+        }
         "/space/vocabulary" => vocabulary(app, ctl, me, body),
         "/space/library" => library(app, ctl, me, body),
         _ => return None,

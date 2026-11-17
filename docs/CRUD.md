@@ -25,7 +25,7 @@ Legend: **core** = `memcp_core` function, **CLI** = `memcp` command, **HTTP** = 
 
 | Op | core | CLI | HTTP | page | MCP |
 |---|---|---|---|---|---|
-| Create (kind, label, parent, keywords) | `Brain::create_space` | `space new LABEL [--kind K] [--parent S] [--keywords a,b]` | `POST /spaces/create` (and `/layout/add`) | "New space" form, "+" on a folder | - |
+| Create (kind, label, parent, keywords) | `Brain::create_space_with` | `space new LABEL [--kind K] [--parent S] [--keywords a,b]` | `POST /spaces/create` (and `/layout/add`) | "New space" form, "+" on a folder | - |
 | Read | `Brain::layout`, `Brain::space_info` | `space tree`, `space show NAME` | `GET /layout`, `GET /space`, `GET /spaces/one` | the tree, the space view | `spaces` |
 | Update: label, parent, position | `Brain::set_layout` | `space set NAME --label L --parent S --position N` | `POST /layout/set` | rename, drag and drop | - |
 | Update: kind, keywords, tags | `Brain::update_space` | `space set NAME --kind K`, `rules ...` | `POST /spaces/update`, `POST /space/rules` | kind selector, the keywords block | `rules_get`, `rules_set` |
@@ -64,13 +64,22 @@ The list of what each node exposes comes with the peer-directory work and is not
 
 | Op | core | CLI | HTTP | page | MCP |
 |---|---|---|---|---|---|
-| Create | `access::connect_for` | `connect AGENT ...`, `open VAULT` | `POST /connections`, `POST /spaces/open` | "Connect an assistant" | - |
+| Create | `access::connect_for` | `connect AGENT ... [--internal]`, `open VAULT` | `POST /connections`, `POST /spaces/open` | "Connect an assistant" | - |
 | Read | `access::list`, `access::get` | `connections`, `connection show AGENT` | `GET /state`, `GET /connections/one` | the connections list | - |
 | Update: rename | `access::rename` | `connection rename AGENT NAME` | `POST /connections/rename` | rename | - |
+| Update: kind (assistant or internal tool) | `access::set_internal` | `internal AGENT on|off`, `connect --internal` | `POST /connections/internal` | "mark as internal tool" | - |
+| Update: kind (assistant or internal tool) | `access::set_internal` | `internal AGENT on\|off`, `connect --internal` | `POST /connections/internal` | "mark as internal tool", "treat as an assistant" | - |
 | Update: rights | `access::regrant` | `regrant AGENT ...` | `POST /connections/regrant` | rights editor | - |
 | Rotate key | `access::rotate` | `connection rotate AGENT` | `POST /connections/rotate` | "New key" | - |
 | Revoke | `access::revoke` | `revoke AGENT` | `POST /connections/revoke` | "Revoke" | - |
 | Delete (a revoked one) | `access::delete` | `connection delete AGENT` | `POST /connections/delete` | "Remove from the list" | - |
+
+A connection is an **assistant**, a **peer** (a machine, `peer-...`) or an **internal tool** (the program's own: the
+janitor, voice transcription, the weekly report, the device rangers). Internal tools carry the `internal` flag (control
+migration 19), set by `memcp connect NAME --internal`, by the janitor's key creation in the add-on, or from the page.
+They never appear in the list of connected assistants nor in the apps' connection lists: the page keeps them in a
+collapsed section, *Internal tools*, with their own controls (revoke, treat as an assistant). Revoked connections sit
+in their own collapsed list until removed.
 
 Rotating gives a new key at the same address, same rights and expiry; the old key stops at once. Deleting is only for a
 revoked connection and removes it from the list; the audit lines about it stay.

@@ -28,6 +28,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `recall` | search or list: by words, by path, newest first; `space` may be a path of the tree | kept, one query shape |
 | `read` | one note with its history | merges `read_fact` and `history` |
 | `remember`, `supersede`, `retire` | write, correct, retire (reason required) | kept: these three words are the model |
+| `restore` | bring a retired fact back as a new version (same text and tags, pointing at the retired one, which stays retired in the history) | built (see CRUD.md) |
 | `files` | `put`, `get`, `list`, `retire` in one tool with an `op` | merges `file_put`, `file_get`, `file_list`, `file_retire`, `file_erase` |
 | `dashboard` | `get` the JSON of a space's dashboard; `propose` or `set` a change, checked against the widget catalogue | new |
 | `rules` | `get` the keywords and tags of a space; `propose` or `apply` a change | new |
