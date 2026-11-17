@@ -261,32 +261,29 @@ impl Drop for Serving {
 }
 
 fn serve_over_http(url: &str, key: &str, outbox: &str) -> (Serving, u16) {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .expect("bind")
-        .local_addr()
-        .expect("addr")
-        .port();
-    let child = Command::new(env!("CARGO_BIN_EXE_memcp-bridge"))
-        .args([
-            "--url",
-            url,
-            "--outbox",
-            outbox,
-            "--listen",
-            &format!("127.0.0.1:{port}"),
-        ])
+    use std::io::{BufRead, BufReader};
+    // Port 0: the system picks one, and the bridge says which on its standard error. No port is chosen here and
+    // left free for another program to take.
+    let mut child = Command::new(env!("CARGO_BIN_EXE_memcp-bridge"))
+        .args(["--url", url, "--outbox", outbox, "--listen", "127.0.0.1:0"])
         .env("MEMCP_TOKEN", key)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
-        .stderr(Stdio::null())
+        .stderr(Stdio::piped())
         .spawn()
         .expect("spawn");
-    for _ in 0..50 {
-        if std::net::TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(100));
-    }
+    let stderr = child.stderr.take().expect("stderr");
+    let mut reader = BufReader::new(stderr);
+    let mut line = String::new();
+    reader.read_line(&mut line).expect("banner");
+    // Keep reading: a closed pipe would make the bridge's next message fail.
+    std::thread::spawn(move || for _ in reader.lines() {});
+    let port: u16 = line
+        .rsplit(':')
+        .next()
+        .and_then(|rest| rest.split(',').next())
+        .and_then(|p| p.trim().parse().ok())
+        .unwrap_or_else(|| panic!("no port in {line:?}"));
     (Serving(child), port)
 }
 

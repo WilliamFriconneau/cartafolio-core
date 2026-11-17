@@ -59,6 +59,11 @@ fn reply(request: tiny_http::Request, status: u16, body: &str) {
 /// Serves `gateway` on `addr` until the process stops. One request at a time.
 pub fn serve_http(gateway: &mut Gateway, addr: &str) -> Result<(), Error> {
     let server = bind(addr)?;
+    // The address really bound (the port is the system's when `addr` asks for port 0).
+    eprintln!(
+        "memcp-bridge: serving POST /mcp on {}, this machine only",
+        server.server_addr()
+    );
     serve_on(&server, gateway);
     Ok(())
 }
