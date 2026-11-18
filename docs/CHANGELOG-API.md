@@ -60,7 +60,7 @@ both ways, as before.
 - **`POST /sync/peers`** may carry `policy: {space: word, "*": word}`: the sender's side, kept for the page only.
 - **Command line**: `memcp node policy PEER [SPACE POLICY | --later POLICY]`.
 
-## Disputes (20261117.0.27)
+## Disputes (20261117.0.26)
 
 A fact changed differently on two nodes is shown and resolved by the person. Everything below is added; nothing is renamed.
 The rules are in [FEDERATION.md](FEDERATION.md#conflicts) and [TOOLS.md](TOOLS.md#disputes).
