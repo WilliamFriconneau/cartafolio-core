@@ -20,6 +20,10 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
+      # The sync between real nodes (two and three nodes over HTTP, disputes, the policy per space) is behind the
+      # `sync` feature, which `--workspace` leaves out: its own run, with its own lint.
+      - run: cargo clippy -p memcp-client --features sync --all-targets -- -D warnings
+      - run: cargo test -p memcp-client --features sync
       # The health referential (docs/HEALTH.md) is a library of its own, used by the node and the janitor: its own run
       # names it in the log, with the data files it embeds.
       - run: cargo test -p memcp-health

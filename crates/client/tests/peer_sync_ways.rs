@@ -235,7 +235,7 @@ fn a_dispute_resolved_on_one_node_is_resolved_on_the_other_after_an_exchange() {
     for brain in [&s.brain, &b] {
         let conn = brain.open_space(&space()).unwrap();
         assert!(sync::disputes(&conn).unwrap().is_empty());
-        assert_eq!(active(brain), [kept.clone()]);
+        assert_eq!(active(brain), std::slice::from_ref(&kept));
     }
     assert_eq!(all_texts(&s.brain), all_texts(&b));
     clean(&[&s.dir, &db]);
