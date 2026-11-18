@@ -887,6 +887,7 @@ pub(crate) fn supersede_as(
         action,
         json!({ "by": fact.id, "reason": reason }),
     )?;
+    crate::sync::settle_disputes(&tx)?;
     tx.commit()?;
     read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
 }
@@ -931,6 +932,8 @@ pub(crate) fn retire_as(
     )?;
     event(&tx, id, author, action, json!({ "reason": reason }))?;
     crate::sync::record_fact_retired(&tx, id, author, reason)?;
+    // A retired alternative may end a dispute: by the rule every node applies when it receives this retirement.
+    crate::sync::settle_disputes(&tx)?;
     tx.commit()?;
     read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))
 }

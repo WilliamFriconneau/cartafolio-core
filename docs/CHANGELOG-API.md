@@ -2,6 +2,27 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Disputes (Unreleased)
+
+A fact changed differently on two nodes is shown and resolved by the person. Everything below is added; nothing is renamed.
+The rules are in [FEDERATION.md](FEDERATION.md#conflicts) and [TOOLS.md](TOOLS.md#disputes).
+
+- **MCP `disputes`** (read) `{space?}`: `{notice, message, count, disputes: [{space, fact, since, alternatives: [{id, kind:
+  "replacement"|"retired", current, text, author, at, reason}]}]}`. Not shown to a key limited to paths.
+- **MCP `dispute_resolve`** (write) `{id, keep, space?, confirmed_by_person?}`: `keep` is an alternative's id (or its newest
+  version) or `retired`; `id` the fact in dispute or one of its alternatives. Answers `{result: "resolved", space, fact, kept,
+  retired: [id], message}`. An assistant must pass `confirmed_by_person: true` (else `denied`); a peer connection never sees the
+  tool. A `keep` that is not an alternative, or a fact not in dispute: `invalid`, nothing changed.
+- **`recall` and `read_fact`**: a fact that takes part in a dispute carries `disputed: true`, `dispute_of` (the fact in dispute)
+  and `alternatives` (ids). Facts outside a dispute carry none of these fields.
+- **`GET /admin/api/disputes`**: the `disputes` answer for the signed-in person's own spaces (`{count: 0, disputes: []}` when
+  they own none). **`POST /admin/api/disputes/resolve`** `{id, keep, space?}`: the person's choice, as `dispute_resolve` from
+  their page (no confirmation field needed); 400 with the reason when refused.
+- **`GET /sync/status`** and **`GET /admin/api/sync/status`** carry `disputes`: how many disputes hold in the person's spaces.
+- **A new event kind between peers, `dispute_resolved`** (eid `d:<fact>:<hlc>`, payload `{fact, kept, actor, at}`), logged after
+  the `fact_retired` events of the versions that lost. A node of an earlier version refuses it as an unknown kind and keeps it out;
+  the retirements still reach it. Update every node, or a resolution that keeps a replacement over a retirement is not seen there.
+
 ## Guided transcription (next version)
 
 The node tells the speech model what to expect. Everything below is added; nothing is renamed. The rules are in

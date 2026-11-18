@@ -328,5 +328,20 @@ pub(crate) fn status_body(
         // The assistants of this person on this node, and how each reaches it.
         "connections": directory::connections(brain, user).map_err(fail)?,
         "window": sync::window_status(brain).map_or(Value::Null, |w| w.to_json()),
+        // The facts in dispute in this person's spaces, waiting for the person to pick a version.
+        "disputes": dispute_count(brain, user),
     }))
+}
+
+/// How many disputes hold in the spaces a person owns. A space that cannot be opened counts none.
+fn dispute_count(brain: &memcp_core::Brain, user: &str) -> usize {
+    let Ok(ctl) = brain.open_control() else {
+        return 0;
+    };
+    let spaces = memcp_core::users::access_of(&ctl, user).unwrap_or_default();
+    spaces
+        .keys()
+        .filter_map(|s| brain.open_space(s).ok())
+        .filter_map(|c| sync::dispute_count(&c).ok())
+        .sum()
 }

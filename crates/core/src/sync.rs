@@ -607,20 +607,345 @@ fn attach_bytes(brain: &Brain, space: &Space, conn: &Connection, ev: &mut Event)
     Ok(())
 }
 
-/// Facts in dispute: the fact and what was done to it differently (the ids of its replacements, `retired`).
+/// Facts in dispute: the fact and what was done to it differently (the ids of its replacements, `retired`). Only the
+/// disputes that still hold: at least two alternatives still stand.
 pub fn disputes(conn: &Connection) -> Result<Vec<(String, Vec<String>)>> {
-    let mut st = conn.prepare("SELECT fact_id, alt FROM sync_disputes ORDER BY fact_id, alt")?;
-    let rows: Vec<(String, String)> = st
-        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+    Ok(open_disputes(conn)?
+        .into_iter()
+        .map(|d| (d.fact, d.alternatives.into_iter().map(|a| a.id).collect()))
+        .collect())
+}
+
+/// The reason written on an alternative that lost when a person resolved a dispute, before the alternative kept.
+pub const RESOLVED_REASON: &str = "dispute resolved: kept";
+
+/// One way a fact in dispute was changed on some node: a replacement, or its retirement.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Alternative {
+    /// The id of the replacement, or `retired`.
+    pub id: String,
+    /// The newest version of that replacement when it was corrected since; `None` when it is the replacement itself or
+    /// for `retired`.
+    pub current: Option<String>,
+    /// The text of the newest version (`None` for `retired`, or a replacement this replica does not hold).
+    pub text: Option<String>,
+    /// Who wrote the replacement, or who retired the fact.
+    pub author: Option<String>,
+    /// When (seconds since the epoch).
+    pub at: Option<i64>,
+    /// The reason given for the retirement.
+    pub reason: Option<String>,
+}
+
+impl Alternative {
+    /// `{id, kind: "replacement" | "retired", current, text, author, at, reason}`, dates in ISO 8601.
+    pub fn to_json(&self) -> Value {
+        json!({
+            "id": self.id,
+            "kind": if self.id == "retired" { "retired" } else { "replacement" },
+            "current": self.current,
+            "text": self.text,
+            "author": self.author,
+            "at": self.at.map(util::iso),
+            "reason": self.reason,
+        })
+    }
+}
+
+/// A fact two nodes changed differently, and the alternatives that still stand.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Dispute {
+    /// The fact both nodes changed.
+    pub fact: String,
+    /// When this node first saw the dispute.
+    pub since: i64,
+    /// At least two; ordered by id, `retired` among them.
+    pub alternatives: Vec<Alternative>,
+}
+
+/// The newest version of a fact along its replacements, and its status. `None` when this replica does not hold it.
+fn chain_head(conn: &Connection, id: &str) -> rusqlite::Result<Option<(String, String)>> {
+    let mut cur = id.to_string();
+    for _ in 0..1000 {
+        let Some((status, by)) = fact_status(conn, &cur)? else {
+            return Ok(None);
+        };
+        match by {
+            Some(next) if status == "replaced" && exists(conn, "facts", &next)? => cur = next,
+            _ => return Ok(Some((cur, status))),
+        }
+    }
+    Ok(None)
+}
+
+/// Whether an alternative still stands: the retirement always does (only a resolution sets it aside); a replacement
+/// while the newest version of it is active or proposed. A replacement this replica does not hold is counted as
+/// standing: a dispute is never hidden for want of a note.
+fn stands(conn: &Connection, alt: &str) -> rusqlite::Result<bool> {
+    if alt == "retired" {
+        return Ok(true);
+    }
+    Ok(match chain_head(conn, alt)? {
+        None => true,
+        Some((_, status)) => status == "active" || status == "proposed",
+    })
+}
+
+/// The marks of each fact in dispute: the alternatives and when each was first seen here.
+type DisputeRows = Vec<(String, Vec<(String, i64)>)>;
+
+fn dispute_rows(conn: &Connection) -> rusqlite::Result<DisputeRows> {
+    let mut st =
+        conn.prepare("SELECT fact_id, alt, at FROM sync_disputes ORDER BY fact_id, alt")?;
+    let rows: Vec<(String, String, i64)> = st
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<rusqlite::Result<_>>()?;
-    let mut out: Vec<(String, Vec<String>)> = Vec::new();
-    for (f, a) in rows {
+    let mut out: DisputeRows = Vec::new();
+    for (f, a, at) in rows {
         match out.last_mut() {
-            Some((id, alts)) if *id == f => alts.push(a),
-            _ => out.push((f, vec![a])),
+            Some((id, alts)) if *id == f => alts.push((a, at)),
+            _ => out.push((f, vec![(a, at)])),
         }
     }
     Ok(out)
+}
+
+/// The disputes that hold here, each with what its alternatives say. Read-only.
+pub fn open_disputes(conn: &Connection) -> Result<Vec<Dispute>> {
+    let mut out = Vec::new();
+    for (fact, rows) in dispute_rows(conn)? {
+        let mut alternatives = Vec::new();
+        for (alt, _) in &rows {
+            if stands(conn, alt)? {
+                alternatives.push(describe(conn, &fact, alt)?);
+            }
+        }
+        if alternatives.len() >= 2 {
+            let since = rows.iter().map(|(_, at)| *at).min().unwrap_or(0);
+            out.push(Dispute {
+                fact,
+                since,
+                alternatives,
+            });
+        }
+    }
+    Ok(out)
+}
+
+fn describe(conn: &Connection, fact: &str, alt: &str) -> Result<Alternative> {
+    if alt == "retired" {
+        // Who retired it and why: the retirement as the log keeps it.
+        let p: Option<String> = conn
+            .query_row(
+                "SELECT payload FROM sync_log WHERE eid = ?1",
+                [format!("r:{fact}")],
+                |r| r.get(0),
+            )
+            .optional()?;
+        let p: Value = p
+            .and_then(|t| serde_json::from_str(&t).ok())
+            .unwrap_or(Value::Null);
+        return Ok(Alternative {
+            id: alt.into(),
+            current: None,
+            text: None,
+            author: p["actor"].as_str().map(str::to_string),
+            at: p["at"].as_i64(),
+            reason: p["reason"].as_str().map(str::to_string),
+        });
+    }
+    let head = chain_head(conn, alt)?.map(|(h, _)| h);
+    let shown = head.clone().unwrap_or_else(|| alt.to_string());
+    let row: Option<(String, String, i64)> = conn
+        .query_row(
+            "SELECT text, author, created_at FROM facts WHERE id = ?1",
+            [&shown],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    Ok(Alternative {
+        id: alt.into(),
+        current: head.filter(|h| h != alt),
+        text: row.as_ref().map(|r| r.0.clone()),
+        author: row.as_ref().map(|r| r.1.clone()),
+        at: row.map(|r| r.2),
+        reason: None,
+    })
+}
+
+/// The rule that ends a dispute, the same on every node because it reads only what the events left: an alternative
+/// that no longer stands is set aside, and a fact with at most one alternative left is no longer in dispute. A fact
+/// replaced several ways shows the smallest id among the replacements that stand. Applied after each change to a fact
+/// that came from a peer or was made here, and after a resolution. Nothing is erased but these marks.
+pub(crate) fn settle_disputes(conn: &Connection) -> rusqlite::Result<()> {
+    for (fact, rows) in dispute_rows(conn)? {
+        let mut standing: Vec<String> = Vec::new();
+        for (alt, _) in &rows {
+            if stands(conn, alt)? {
+                standing.push(alt.clone());
+            } else {
+                conn.execute(
+                    "DELETE FROM sync_disputes WHERE fact_id = ?1 AND alt = ?2",
+                    params![fact, alt],
+                )?;
+            }
+        }
+        if standing.len() <= 1 {
+            conn.execute("DELETE FROM sync_disputes WHERE fact_id = ?1", [&fact])?;
+        }
+        let mut held: Vec<&String> = Vec::new();
+        for a in standing.iter().filter(|a| *a != "retired") {
+            if exists(conn, "facts", a)? {
+                held.push(a);
+            }
+        }
+        if let (Some((status, shown)), Some(first)) = (fact_status(conn, &fact)?, held.first())
+            && status == "replaced"
+            && !shown.as_ref().is_some_and(|s| held.contains(&s))
+        {
+            conn.execute(
+                "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
+                params![fact, first],
+            )?;
+        }
+    }
+    Ok(())
+}
+
+/// What a resolution did.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Resolved {
+    /// The fact that was in dispute.
+    pub fact: String,
+    /// The alternative kept: a replacement's id, or `retired`.
+    pub kept: String,
+    /// The versions retired because they lost.
+    pub retired: Vec<String>,
+}
+
+/// Resolves the dispute on `fact` by keeping one alternative (`keep`: the id of a replacement or of its newest
+/// version, or `retired`). Each other replacement that stands is retired, with the reason « dispute resolved: kept
+/// … », and a `dispute_resolved` event is logged: ordinary events, so every node reaches the same state through the
+/// log. Nothing is erased. Who may do it is the caller's business (an act of the person).
+///
+/// # Errors
+/// [`Error::Invalid`] if `fact` is not in dispute here, or `keep` is not one of its alternatives that stand.
+pub fn resolve(conn: &Connection, fact: &str, keep: &str, actor: &str) -> Result<Resolved> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let Some(d) = open_disputes(&tx)?.into_iter().find(|d| d.fact == fact) else {
+        return Err(Error::Invalid(format!("fact {fact} is not in dispute")));
+    };
+    let Some(kept) = d
+        .alternatives
+        .iter()
+        .find(|a| a.id == keep || a.current.as_deref() == Some(keep))
+        .map(|a| a.id.clone())
+    else {
+        let ids: Vec<&str> = d.alternatives.iter().map(|a| a.id.as_str()).collect();
+        return Err(Error::Invalid(format!(
+            "{keep} is not an alternative of this dispute: keep one of {}",
+            ids.join(", ")
+        )));
+    };
+    let reason = format!("{RESOLVED_REASON} {kept}");
+    let at = util::now();
+    let mut retired = Vec::new();
+    for a in d
+        .alternatives
+        .iter()
+        .filter(|a| a.id != kept && a.id != "retired")
+    {
+        let Some((head, status)) = chain_head(&tx, &a.id)? else {
+            continue;
+        };
+        if status != "active" && status != "proposed" {
+            continue;
+        }
+        tx.execute(
+            "UPDATE facts SET status = 'retired', status_at = ?2, status_by = ?3, status_reason = ?4 WHERE id = ?1",
+            params![head, at, actor, reason],
+        )?;
+        facts::event(&tx, &head, actor, "retire", json!({ "reason": reason }))?;
+        record_fact_retired(&tx, &head, actor, &reason)?;
+        retired.push(head);
+    }
+    let hlc = stamp(&tx)?;
+    let origin = replica(&tx)?;
+    let p = json!({ "fact": fact, "kept": kept, "actor": actor, "at": at });
+    record_raw(
+        &tx,
+        &format!("d:{fact}:{hlc}"),
+        &hlc,
+        &origin,
+        None,
+        "dispute_resolved",
+        at,
+        &p,
+    )?;
+    resolution(&tx, fact, &kept, actor, None)?;
+    tx.commit()?;
+    Ok(Resolved {
+        fact: fact.into(),
+        kept,
+        retired,
+    })
+}
+
+/// What a resolution changes beyond the retirements it comes with, here or on a node that receives it: keeping a
+/// replacement sets the retirement aside; the history of the fact says it; then the rule of [`settle_disputes`].
+fn resolution(
+    conn: &Connection,
+    fact: &str,
+    kept: &str,
+    actor: &str,
+    via: Option<&str>,
+) -> Result<()> {
+    if kept != "retired" {
+        conn.execute(
+            "DELETE FROM sync_disputes WHERE fact_id = ?1 AND alt = 'retired'",
+            [fact],
+        )?;
+    }
+    // The history of the fact says it, as a repointing: the fact now leads to the alternative kept.
+    facts::event(
+        conn,
+        fact,
+        actor,
+        "repoint",
+        json!({ "dispute_resolved": { "kept": kept }, "synced_from": via }),
+    )?;
+    settle_disputes(conn)?;
+    Ok(())
+}
+
+/// Each fact that takes part in a dispute here (the fact in dispute, one of its replacements that stand, or their newest
+/// version), with the fact in dispute and the ids of its alternatives.
+pub fn dispute_marks(
+    conn: &Connection,
+) -> Result<std::collections::HashMap<String, (String, Vec<String>)>> {
+    let mut out = std::collections::HashMap::new();
+    for d in open_disputes(conn)? {
+        let alts: Vec<String> = d.alternatives.iter().map(|a| a.id.clone()).collect();
+        out.insert(d.fact.clone(), (d.fact.clone(), alts.clone()));
+        for a in &d.alternatives {
+            if a.id != "retired" {
+                out.insert(a.id.clone(), (d.fact.clone(), alts.clone()));
+            }
+            if let Some(c) = &a.current {
+                out.insert(c.clone(), (d.fact.clone(), alts.clone()));
+            }
+        }
+    }
+    Ok(out)
+}
+
+/// How many disputes hold in a space.
+pub fn dispute_count(conn: &Connection) -> Result<usize> {
+    let any: bool = conn
+        .query_row("SELECT 1 FROM sync_disputes LIMIT 1", [], |_| Ok(()))
+        .optional()?
+        .is_some();
+    Ok(if any { open_disputes(conn)?.len() } else { 0 })
 }
 
 // --- applying events -----------------------------------------------------------------------------
@@ -729,6 +1054,7 @@ fn expected_eid(ev: &Event) -> std::result::Result<String, Fault> {
         "file_put" => format!("f:{}", id_of(p, "id")?),
         "file_retired" => format!("fr:{}", id_of(p, "id")?),
         "layout_changed" => format!("l:{}:{}", req(p, "field")?, ev.hlc),
+        "dispute_resolved" => format!("d:{}:{}", id_of(p, "fact")?, ev.hlc),
         other => return Err(Fault::Bad(format!("unknown event kind {other:?}"))),
     })
 }
@@ -1400,14 +1726,38 @@ fn apply_one(
         return Ok(step);
     }
     let p = &ev.payload;
-    match ev.kind.as_str() {
+    let step = match ev.kind.as_str() {
         "fact_created" => apply_created(conn, space, p, via),
         "fact_superseded" => apply_superseded(conn, p, ev.at, via),
         "fact_retired" => apply_retired(conn, p, ev.at, via),
+        "dispute_resolved" => apply_resolved(conn, p, via),
         "file_put" => apply_file_put(brain, space, conn, ev),
         "file_retired" => apply_file_retired(conn, p),
         _ => apply_layout(brain, space, conn, ev),
+    }?;
+    // A dispute ends by the same rule on every node, as soon as the events that end it are here.
+    if matches!(ev.kind.as_str(), "fact_superseded" | "fact_retired")
+        && matches!(step, Step::Applied | Step::Disputed)
+    {
+        settle_disputes(conn)?;
     }
+    Ok(step)
+}
+
+/// A person resolved a dispute on another node: the retirements came before it; here the retirement it set aside
+/// and the rule that ends the dispute.
+fn apply_resolved(conn: &Connection, p: &Value, via: &str) -> Outcome {
+    let fact = id_of(p, "fact")?;
+    let kept = id_of(p, "kept")?;
+    let actor = opt(p, "actor").unwrap_or("peer");
+    if !exists(conn, "facts", fact)? {
+        if gone(conn, "fact", fact)? {
+            return Ok(Step::Dropped);
+        }
+        return Err(missing("fact", fact));
+    }
+    resolution(conn, fact, kept, actor, Some(via))?;
+    Ok(Step::Applied)
 }
 
 /// Applies events received from the peer `via`, in order. An event already known changes nothing; a
@@ -2054,6 +2404,7 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         let mut rows = created.clone();
         rows.extend(log_rows(&conn, &format!("r:{id}"), false)?);
         rows.extend(log_rows(&conn, &format!("s:{id}:"), true)?);
+        rows.extend(log_rows(&conn, &format!("d:{id}:"), true)?);
         for fid in strings(&conn, "SELECT id FROM files WHERE fact_id = ?1", id)? {
             rows.extend(file_rows(&fid)?);
         }
@@ -2134,6 +2485,10 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
             [format!("s:{id}:")],
         )?;
         tx.execute("UPDATE facts SET replaces = NULL WHERE replaces = ?1", [id])?;
+        tx.execute(
+            "DELETE FROM sync_log WHERE substr(eid, 1, length(?1)) = ?1",
+            [format!("d:{id}:")],
+        )?;
         tx.execute("DELETE FROM sync_disputes WHERE fact_id = ?1", [id])?;
         tx.execute("DELETE FROM fact_events WHERE fact_id = ?1", [id])?;
         tx.execute("DELETE FROM embeddings WHERE fact_id = ?1", [id])?;

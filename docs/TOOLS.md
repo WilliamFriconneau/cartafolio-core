@@ -8,9 +8,9 @@ The tools of this page and their fields are checked against `tools::definitions`
 
 | Rights | Tools |
 |---|---|
-| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `transcription_hints`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
-| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `health_referential`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
-| write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `folder_set`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `disputes`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `transcription_hints`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `disputes`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `health_referential`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
+| write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `folder_set`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase`, `dispute_resolve` (never a machine of the person; an assistant only on the person's word) |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a space | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
 | a money space (bank statements) | `finances_balances`, `finances_movements`, `finances_monthly`, `finances_rules` (read), `finances_import` (write): see the end |
@@ -22,7 +22,7 @@ The tools of this page and their fields are checked against `tools::definitions`
 Searches the memory (exact words; accents and plurals ignored). Returns facts with their source, date and status, never a summary. With no words and a tag, it lists what is filed under that tag, newest first: that is how `inbox` is read. The raw layers are left out unless asked for by their tag: `inbox` (quick notes to sort) and `sources` or `sources/<app>` (what apps deposited); the sorted memory of a space is under `dossier`.
 
 - **Seen with:** read access on at least one space.
-- **Answer:** `{ "results": [fact...], "notice": string }`, best first; each result is a fact object plus `score`.
+- **Answer:** `{ "results": [fact...], "notice": string }`, best first; each result is a fact object plus `score`. A fact that takes part in a dispute (see `disputes`) also carries `disputed: true`, `dispute_of` (the fact in dispute) and `alternatives` (their ids, `retired` among them): show the person every alternative, never pick one.
 - **Errors:** `invalid` for a bad tag or date; `denied` when `space` is not readable.
 - **Effects:** None (an audit row is written in each space read).
 
@@ -73,7 +73,7 @@ Example call and answer:
 Reads a fact by its id, whatever its status.
 
 - **Seen with:** read access on at least one space.
-- **Answer:** `{ "notice", "fact": fact }`, whatever the status.
+- **Answer:** `{ "notice", "fact": fact }`, whatever the status; a fact in dispute carries `disputed`, `dispute_of` and `alternatives`, as in `recall`.
 - **Errors:** `invalid` with `unknown fact` (also for a fact of a space you cannot read).
 - **Effects:** None.
 
@@ -100,6 +100,85 @@ Example call and answer:
     "status": "active",
     "text": "..."
   }
+}
+```
+
+### `disputes`
+
+The facts in dispute: a fact changed differently on two nodes that did not know of each other (replaced two ways, or retired on one and replaced on another). Both changes are kept; the fact waits for the person to pick one. An assistant shows every alternative and never picks.
+
+- **Seen with:** read access on at least one space; not offered to a key limited to paths.
+- **Answer:** `{ notice, message, count, disputes: [ { space, fact, since, alternatives: [ { id, kind, current, text, author, at, reason } ] } ] }`. `fact` is the fact in dispute (status `replaced`, or `retired`); `kind` is `replacement` (`id` the replacement, `current` its newest version when it was corrected since, `text`, `author`, `at`) or `retired` (`id` is `retired`, `author` who retired it, `reason`). Only the alternatives that still stand are listed (a replacement retired since is not), and a dispute is listed while at least two stand.
+- **Errors:** `denied` when `space` is not readable.
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `space` | string | no | one of the spaces you can read |
+
+Example call and answer:
+
+```json
+{
+  "name": "disputes",
+  "arguments": {}
+}
+```
+
+```json
+{
+  "count": 1,
+  "disputes": [
+    {
+      "space": "home",
+      "fact": { "id": "f_ab12", "status": "replaced", "text": "The meeting is on Monday." },
+      "since": "2026-11-18T09:00:00+00:00",
+      "alternatives": [
+        { "id": "f_cd34", "kind": "replacement", "current": null, "text": "The meeting is on Tuesday.", "author": "laptop", "at": "2026-11-18T08:10:00+00:00", "reason": null },
+        { "id": "retired", "kind": "retired", "current": null, "text": null, "author": "phone", "at": "2026-11-18T08:20:00+00:00", "reason": "cancelled" }
+      ]
+    }
+  ],
+  "message": "Each fact here was changed differently on two nodes. Show the person every alternative; never pick one yourself. Resolving is the person's choice.",
+  "notice": "..."
+}
+```
+
+### `dispute_resolve`
+
+Resolves a dispute with the alternative the person chose. Each other replacement that still stands (its newest version) is retired with the reason `dispute resolved: kept <alternative>`, and a `dispute_resolved` event is logged. Both are ordinary events of the log: every node gets them at its next exchange and ends in the same state (the rule that ends a dispute is applied on each node as the events arrive; see FEDERATION.md, "Conflicts"). Keeping a replacement sets the retirement aside; keeping `retired` retires every replacement. Nothing is erased. To write a third version, keep one and correct it with `supersede`.
+
+Resolving is an act of the person. The person's page (its own connection) may always do it. An assistant may only on the person's word: it shows the alternatives (`disputes`), the person picks, and it calls with `confirmed_by_person: true`; without it the call is `denied`. A machine of the person (a peer connection) never sees this tool. A key that only reads, or that is limited to paths, does not see it either.
+
+- **Seen with:** write access on at least one space, a key not limited to paths, not a peer.
+- **Answer:** `{ result: "resolved", space, fact, kept, retired: [id...], message }`.
+- **Errors:** `denied` without `confirmed_by_person: true` (an assistant), for a peer, or without write access on the fact's space; `invalid` for an unknown fact, a fact not in dispute, or a `keep` that is not one of its alternatives that stand (nothing is changed).
+- **Effects:** the losing versions retired (history and log), a `dispute_resolved` event in the log and a `repoint` row in the fact's history with `dispute_resolved: {kept}`; the dispute leaves `disputes` on this node at once and on the others at their next exchange.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `confirmed_by_person` | boolean | no | required `true` from an assistant |
+| `id` | string | yes | the fact in dispute, or one of its alternatives |
+| `keep` | string | yes | an alternative's id (or its newest version), or `retired` |
+| `space` | string | no | a space you write |
+
+Example call and answer:
+
+```json
+{
+  "name": "dispute_resolve",
+  "arguments": { "id": "f_ab12", "keep": "f_cd34", "confirmed_by_person": true }
+}
+```
+
+```json
+{
+  "result": "resolved",
+  "space": "home",
+  "fact": "f_ab12",
+  "kept": "f_cd34",
+  "retired": ["f_ef56"],
+  "message": "Resolved here; every node gets the same at its next exchange. Nothing was erased: what lost is retired, in the history."
 }
 ```
 
@@ -1594,6 +1673,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `spaces` | the tree of reachable spaces: name, label, parent, kind, counts, what the connection may do in each | built (0.25.x) |
 | `tree` | the tree of tags of a space, with counts | planned; for now `stats` lists the tags of each space |
 | `triage_waiting` / `triage_send` / `transcription_failed` | what waits in the person's Inbox for a decision with the reason it waits, sending a note or a file on, and the tag of a recording whose transcription failed | built |
+| `disputes` / `dispute_resolve` | the facts changed differently on two nodes, with every alternative, and the person's choice (an assistant only with `confirmed_by_person`, never a peer); `recall` and `read_fact` flag a fact in dispute | built (Unreleased) |
 | `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of Inbox for some minutes, and gives them back | built (20261116.0.3) |
 | `rules_get` / `rules_set` | read and write the filing rules (tags, keywords) of a space as versions of its `rules` note | built (20261116.0.4) |
 | `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |

@@ -25,6 +25,7 @@ pub(crate) static LEASES: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashMap<String, (String, i64)>>,
 > = std::sync::LazyLock::new(Default::default);
 
+mod disputes;
 mod folder;
 mod health;
 mod living;
@@ -33,7 +34,8 @@ mod sorting;
 mod tagging;
 mod transcription;
 
-const WRITE_TOOLS: [&str; 16] = [
+const WRITE_TOOLS: [&str; 17] = [
+    "dispute_resolve",
     "notes_move",
     "space_create",
     "space_move",
@@ -51,7 +53,8 @@ const WRITE_TOOLS: [&str; 16] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 18] = [
+const READ_TOOLS: [&str; 19] = [
+    "disputes",
     "triage_waiting",
     "tags_suggest",
     "transcription_hints",
@@ -167,6 +170,14 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             name: "triage_waiting",
             description: "What waits in the Inbox for a decision, with why: the notes and the files the janitor could not place (`no keyword matched`, `two spaces tie`…), each with its age in seconds. A recording whose text is already filed is not counted; one whose transcription failed three times (tag `failed/transcription`) is listed apart, in `failed_transcription`.".into(),
             schema: json!({ "type": "object", "properties": { "limit": { "type": "integer", "minimum": 1 } } }),
+        });
+        out.push(ToolDef {
+            name: "disputes",
+            description: "The facts in dispute: a fact changed differently on two nodes (replaced two ways, or retired on one and replaced on another). For each, the fact and its alternatives (`kind` replacement with its text, author and date, or `retired` with its reason). A fact of `recall` or `read_fact` that takes part in one carries `disputed: true`, `dispute_of` and `alternatives`. Show the person every alternative and never pick one yourself: resolving is the person's choice (`dispute_resolve`).".into(),
+            schema: json!({
+                "type": "object",
+                "properties": { "space": space_prop(&readable, "One space only; by default every space you can read.") }
+            }),
         });
         out.push(ToolDef {
             name: "read_fact",
@@ -294,6 +305,22 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             name: "tidy",
             description: "Puts the spaces in order now (« range ma mémoire »): wakes the janitor, if it is on, which files what waits in the inboxes at once. Returns what waits in each space you write: notes in the inbox, expired facts.".into(),
             schema: json!({ "type": "object", "properties": {} }),
+        });
+    }
+    if visible(caller, "dispute_resolve") {
+        out.push(ToolDef {
+            name: "dispute_resolve",
+            description: "Resolves a dispute with the alternative the person chose: the other replacements are retired with the reason « dispute resolved: kept … » and every node gets the same at its next exchange. Nothing is erased. Only on the person's word: show them the alternatives first (`disputes`), never choose for them, and pass `confirmed_by_person: true` once they picked.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "The fact in dispute (or one of its alternatives)." },
+                    "keep": { "type": "string", "description": "The alternative the person keeps: a replacement's id (or its newest version), or `retired`." },
+                    "space": { "type": "string" },
+                    "confirmed_by_person": { "type": "boolean", "description": "The person chose this alternative. Required from an assistant." }
+                },
+                "required": ["id", "keep"]
+            }),
         });
     }
     if caller.can_write_anywhere() {
@@ -609,6 +636,15 @@ fn vault_guide_spaces(caller: &Caller) -> Vec<Space> {
 }
 
 fn visible(caller: &Caller, name: &str) -> bool {
+    // A dispute is read and resolved on a space whole; a machine of the person never resolves one.
+    if name == "disputes" {
+        return !caller.is_scoped() && !caller.readable().is_empty();
+    }
+    if name == "dispute_resolve" {
+        return !caller.is_scoped()
+            && caller.can_write_anywhere()
+            && caller.kind != crate::access::Kind::Peer;
+    }
     if name == "folder_set" && !caller.may_set_folders() {
         return false;
     }
@@ -1183,22 +1219,29 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             let limit = if opts.limit == 0 { 10 } else { opts.limit };
             let hits = merge_hits(query, per_space, limit);
-            Ok(json!({
-                "notice": NOTICE,
-                "results": hits.iter().map(|(h, matched)| {
+            let mut results: Vec<Value> = hits
+                .iter()
+                .map(|(h, matched)| {
                     let mut j = h.fact.to_json();
                     // The score only compares hits of the same space; `match` is the share of
                     // the query's words the fact contains, and compares across spaces.
                     j["score"] = json!((h.score * 1000.0).round() / 1000.0);
                     j["match"] = json!((matched * 100.0).round() / 100.0);
                     j
-                }).collect::<Vec<_>>(),
-            }))
+                })
+                .collect();
+            crate::tools::disputes::flag(brain, &mut results)?;
+            Ok(json!({ "notice": NOTICE, "results": results }))
         }
         "read_fact" => {
             let id = str_arg(args, "id")?;
             match locate(brain, &caller.readable(), id)? {
-                Some((_, _, f)) => Ok(json!({ "notice": NOTICE, "fact": f.to_json() })),
+                Some((_, _, f)) => {
+                    let mut one = [f.to_json()];
+                    crate::tools::disputes::flag(brain, &mut one)?;
+                    let [fact] = one;
+                    Ok(json!({ "notice": NOTICE, "fact": fact }))
+                }
                 None => Err(ToolError::Invalid("unknown fact".into())),
             }
         }
@@ -1246,6 +1289,8 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             crate::tools::sorting::transcription_failed(brain, caller, name, args)
         }
         "peers" => crate::tools::overview::peers(brain, caller, name, args),
+        "disputes" => crate::tools::disputes::disputes(brain, caller, name, args),
+        "dispute_resolve" => crate::tools::disputes::dispute_resolve(brain, caller, name, args),
         "tags_set" => crate::tools::tagging::tags_set(brain, caller, name, args),
         "tags_suggest" => crate::tools::tagging::tags_suggest(brain, caller, name, args),
         "transcription_hints" => {

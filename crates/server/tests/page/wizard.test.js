@@ -7,7 +7,10 @@ const spaces = [
   { name: "work", members: [], mine: "rw", can_guide: true, guide: false, stats: { facts: 1, files: 0, last_write: null } },
   { name: "shared", members: [], mine: "r", can_guide: false, guide: false, stats: null },
 ];
-const world = { connections: [], activity: [], attention: { idle: [], refused_24h: 0 }, app_guides: [],
+const world = { disputes: [{ space: "work", fact: { id: "f0", text: "The meeting is on Monday" }, since: "2026-11-03T08:00:00Z", alternatives: [
+  { id: "f1", kind: "replacement", text: "<i>The meeting is on Tuesday</i>", author: "page", at: "2026-11-03T09:00:00Z" },
+  { id: "retired", kind: "retired", author: "laptop", at: "2026-11-03T09:30:00Z", reason: "not needed" }] }],
+  connections: [], activity: [], attention: { idle: [], refused_24h: 0 }, app_guides: [],
   triage: { space: "sam-a-trier", notes: [{ id: "n1", text: "<b>rappeler</b> le plombier", tags: ["inbox"], created_at: "2026-11-03T08:00:00Z" }], files: [] } };
 const guides = { "space:health": "Compare with my usual range." };
 const state = () => ({
@@ -57,6 +60,9 @@ const mockFetch = async (url, opts = {}) => {
     world.triage.notes = world.triage.notes.filter(n => !b.ids.includes(n.id));
     return ok({ moved: b.ids.length, failed: [] });
   }
+  if (path === "sync/status") return ok({ peers: [], disputes: world.disputes.length });
+  if (path === "disputes") return ok({ count: world.disputes.length, disputes: world.disputes });
+  if (path === "disputes/resolve") { world.resolved = JSON.parse(opts.body); world.disputes = []; return ok({ result: "resolved" }); }
   if (path === "guides/clear") { delete guides[JSON.parse(opts.body).scope]; return ok({ cleared: true }); }
   if (path === "connections") {
     const b = JSON.parse(opts.body);
@@ -360,6 +366,18 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const parsed = cfg && JSON.parse(cfg);
   check("it gives a configuration to paste: one server, its address, its key", parsed && Object.keys(parsed.mcpServers).join() === "kalios" && parsed.mcpServers.kalios.url === "https://memory.example.net/mcp/kalios" && parsed.mcpServers.kalios.headers.Authorization === "Bearer hcp_secret_token", cfg);
   click($("#wizard form button"));
+
+  // --- a note in dispute: counted and listed in Machines, every version shown as text; the person picks one
+  await w.pollSync(true);
+  await sleep(100);
+  check("the disputes are counted", !$("#disputes-box").hidden && text("#disputes-count") === "1", text("#disputes-count"));
+  check("both versions are shown, as text", $$("#disputes-list [data-alt]").length === 2 && $("#disputes-list i") === null && text("#disputes-list").includes("<i>The meeting is on Tuesday</i>") && text("#disputes-list").includes("not needed"), text("#disputes-list"));
+  const keepBtn = $$("#disputes-list [data-alt='f1'] button")[0];
+  check("each version has its button", keepBtn && keepBtn.textContent === "Keep this one" && $$("#disputes-list [data-alt='retired'] button")[0].textContent === "Keep it retired");
+  click(keepBtn);
+  await sleep(200);
+  check("the choice is sent with the fact and the version kept", world.resolved && world.resolved.id === "f0" && world.resolved.keep === "f1" && world.resolved.space === "work", JSON.stringify(world.resolved));
+  check("resolved: the block is gone", $("#disputes-box").hidden);
 
   // --- a voice note shows where it stands, and a failed one offers a retry
   const badge = v => w.voiceBadge(v);

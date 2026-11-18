@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Disputes are shown and resolved.** A note changed differently on two machines is counted and listed in Machines, with every version; you pick the one to keep, the others are retired (never erased) and every machine follows. An assistant sees the note flagged in dispute and resolves it only on your word (`disputes`, `dispute_resolve`).
+
 ## 20261117.0.25
 
 - **The Inbox warning counts what waits.** An assistant that connects is told how many notes and files wait for a decision in the Inbox, counted as `triage_waiting` counts them, not every fact the Inbox space holds (keywords, a reader's dossier, recordings already transcribed).

@@ -141,7 +141,10 @@ Rights: A connection named `peer-...` (the node checks); pruning is local and on
 | `stamp` | A new stamp, after every one this copy has issued or seen | `Error::Sqlite`/`Io` on storage failure |
 | `head` | The last position of the space's log | `Error::Sqlite`/`Io` on storage failure |
 | `events_after` | The events after position `after`, at most `limit` and about `max_bytes`, without the ones `exclude_via` delivered | none (pure) |
-| `disputes` | Facts in dispute: the fact and what was done to it differently (the ids of its replacements, `retired`) | `Error::Sqlite`/`Io` on storage failure |
+| `disputes` | Facts in dispute that hold (at least two alternatives stand): the fact and what was done to it differently (the ids of its replacements, `retired`) | `Error::Sqlite`/`Io` on storage failure |
+| `open_disputes` | The same, each alternative with its text, author, date or reason (`Dispute`, `Alternative`) | `Error::Sqlite`/`Io` |
+| `resolve` | Keeps one alternative of a dispute: the others are retired with `dispute resolved: kept …` and a `dispute_resolved` event is logged | `Error::Invalid` when the fact is not in dispute or `keep` is not one of its alternatives |
+| `dispute_marks`, `dispute_count` | The facts of each dispute (to flag them), and how many disputes hold | `Error::Sqlite`/`Io` |
 | `apply` | Applies events received from the peer `via`, in order | `Error::Sqlite`/`Io` on storage failure |
 | `apply_window` | `apply` for a replica that holds a window: with `cutoff` (Unix seconds, see `window_cutoff`) a note created before it is left out unless it is pinned, and so are its files and what is said about it later | none (pure) |
 | `cursors` | How far this node has read `peer`'s log of `space`, and how far `peer` has read this one's | `Error::Sqlite`/`Io` on storage failure |

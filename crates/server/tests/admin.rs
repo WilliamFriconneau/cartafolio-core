@@ -1549,3 +1549,89 @@ fn the_page_route_gives_the_words_to_expect_for_the_spaces_of_the_person_only() 
     assert!(!mine["text"].as_str().unwrap_or("").contains("Wilhelmine"));
     Ok(())
 }
+
+/// Everything `from` holds of a space that `to` lacks.
+fn catch_up(from: &Brain, to: &Brain, from_name: &str, space: &Space) -> Res {
+    use memcp_core::sync;
+    loop {
+        let (pulled, _) = sync::cursors(to, from_name, space)?;
+        let page = sync::events_after(from, space, pulled, 50, 1 << 20, None)?;
+        let r = sync::apply(to, space, &page.events, from_name)?;
+        assert!(r.stopped.is_none() && r.rejected.is_empty(), "{r:?}");
+        sync::set_cursor(to, from_name, space, sync::Cursor::Pulled, page.next)?;
+        if !page.more {
+            return Ok(());
+        }
+    }
+}
+
+#[test]
+fn the_page_counts_the_disputes_lists_them_and_the_person_picks_a_version() -> Res {
+    use memcp_core::facts::{self, NewFact, Remembered};
+    let e = env()?;
+    own(&e, SAM, "sam-notes")?;
+    let s = sp("sam-notes");
+    let other_dir = e.dir.with_extension("other");
+    let other = Brain::init(&other_dir, std::slice::from_ref(&s), Language::English)?;
+    let here = &e.app.brain;
+    let conn = here.open_space(&s)?;
+    let Remembered::Created(base) = facts::remember(
+        &conn,
+        &s,
+        "me",
+        NewFact::agent("The bins go out on Monday", "agent:t"),
+        &[],
+    )?
+    else {
+        return Err("not created".into());
+    };
+    catch_up(here, &other, "here", &s)?;
+    let mine = facts::supersede(
+        &conn,
+        &s,
+        "me",
+        &base.id,
+        NewFact::agent("The bins go out on Tuesday", "agent:t"),
+        None,
+    )?;
+    let theirs = facts::supersede(
+        &other.open_space(&s)?,
+        &s,
+        "me",
+        &base.id,
+        NewFact::agent("The bins go out on Thursday", "agent:t"),
+        None,
+    )?;
+    catch_up(&other, here, "other", &s)?;
+    let status = ha(&e, "GET", "/admin/api/sync/status", SAM, json!({})).body_json();
+    assert_eq!(status["disputes"], json!(1), "{status}");
+    let list = ha(&e, "GET", "/admin/api/disputes", SAM, json!({})).body_json();
+    assert_eq!(list["count"], json!(1), "{list}");
+    assert_eq!(list["disputes"][0]["fact"]["id"], json!(base.id));
+    // Someone else sees none of it and cannot pick.
+    join(&e, ALEX)?;
+    assert_eq!(
+        ha(&e, "GET", "/admin/api/disputes", ALEX, json!({})).body_json()["count"],
+        json!(0)
+    );
+    let r = ha(
+        &e,
+        "POST",
+        "/admin/api/disputes/resolve",
+        ALEX,
+        json!({ "id": base.id, "keep": theirs.id }),
+    );
+    assert_ne!(r.status, 200);
+    let done = post(
+        &e,
+        SAM,
+        "disputes/resolve",
+        json!({ "id": base.id, "keep": theirs.id }),
+    )?;
+    assert_eq!(done["kept"], json!(theirs.id));
+    assert_eq!(done["retired"], json!([mine.id]));
+    let status = ha(&e, "GET", "/admin/api/sync/status", SAM, json!({})).body_json();
+    assert_eq!(status["disputes"], json!(0));
+    let _ = fs::remove_dir_all(&other_dir);
+    Ok(())
+}

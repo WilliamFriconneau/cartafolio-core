@@ -224,7 +224,7 @@ The page of any node shows, for each node: its name, its role, what it holds (sp
 
 ## Conflicts
 
-**Built**: what is kept (both corrections, both files, the newest layout per field, a refused cycle). **Target**: the page and the apps that show a dispute and let the person resolve it, the dispute count, rules and keywords as versioned data, and guides signed by an administrator.
+**Built**: what is kept (both corrections, both files, the newest layout per field, a refused cycle); the page that shows each dispute with its versions and lets the person keep one, the dispute count (on the page and in the sync status), the tools `disputes` and `dispute_resolve`, the flag on a fact in dispute in `recall` and `read_fact`, and the resolution as events that every node applies alike. **Target**: the apps' screens for disputes, *write a third* in one step (today: keep one, then correct it), rules and keywords as versioned data, and guides signed by an administrator.
 
 Most differences are not conflicts: events are added, and the union of two histories is their sum. What remains are cases where two nodes changed the same thing without knowing of the other:
 
@@ -240,6 +240,14 @@ Most differences are not conflicts: events are added, and the union of two histo
 
 Rules that hold everywhere: **nothing is overwritten and nothing is erased by a merge**; a dispute never blocks reading or writing; an assistant sees a note in dispute with both versions flagged and never picks one; resolving a dispute is an act of the person and is itself an event in the history. A **dispute count** appears on the page and in the apps.
 
+**Showing and resolving, as built.**
+- A dispute is the fact two nodes changed differently, and its *alternatives*: each replacement, and `retired` when a node retired it. An alternative **stands** while the newest version of the replacement is active (a retirement stands until a resolution sets it aside). A dispute **holds** while at least two alternatives stand. The tool `disputes`, the page (Machines, *In dispute*) and the count in `GET /sync/status` (`disputes`) show only the disputes that hold.
+- An assistant reading a fact of a dispute in `recall` or `read_fact` sees `disputed: true`, `dispute_of` and `alternatives`, and is told to show every alternative and never pick.
+- **Who resolves.** The person, on the page of any of their nodes (the page's own connection), with *keep this one* or *keep it retired*. An assistant only on the person's word: `dispute_resolve` refuses it without `confirmed_by_person: true`, which it may pass only once the person picked. A machine of the person (a peer connection) never resolves: it does not even see the tool. A key that reads only, or is limited to paths, does not see it either.
+- **What resolving writes.** Ordinary events: each other replacement that stands is retired (`fact_retired`, reason `dispute resolved: kept <alternative>`), then a `dispute_resolved` event `{fact, kept, actor, at}` (eid `d:<fact>:<hlc>`). Nothing is erased. The fact's history gets a `repoint` row with `dispute_resolved: {kept}`.
+- **The rule that ends a dispute** is applied on every node when a change to a fact is applied, received or made there (a replacement, a retirement, a resolution), so every node reaches the same state from the same events: an alternative that no longer stands is set aside; a fact with at most one alternative standing is no longer in dispute; a fact replaced several ways points at the smallest id among the replacements that stand. A `dispute_resolved` that keeps a replacement also sets the retirement aside. Only these marks are removed, never a fact or an event.
+- A dispute that arrives after a resolution (a node that was off had replaced the fact too) is shown again, with the version kept and the new one.
+
 ## Tests that decide when this is done
 
 **Built in part**: three nodes with writes on all and passes in several orders, real processes killed in the middle of a sync, hostile events (bad size, wrong id, clock in the future, replay), joining and revoking (`crates/client/tests`, `crates/core/tests/sync.rs`). **Target**: signatures and quarantine.
@@ -247,16 +255,16 @@ Rules that hold everywhere: **nothing is overwritten and nothing is erased by a 
 - Three nodes, one switched off, writes on all, every order of reconnection: the same memory on all three.
 - A hostile node (bad signature, bad size, wrong space, clock in the future, replay) changes nothing but its own quarantine.
 - Joining with a wrong check code fails; a revoked node is refused at its next contact; a join code works once and expires.
-- Every conflict in the table above ends in a state the page can show and the person can resolve, and resolving it on one node is seen on the others.
+- Every conflict in the table above ends in a state the page can show and the person can resolve, and resolving it on one node is seen on the others. **Built** for notes (`crates/core/tests/disputes.rs`, `peer_sync_ways.rs::a_dispute_resolved_on_one_node_is_resolved_on_the_other_after_an_exchange`).
 
 ## Order and cost
 
-**Built**: steps 1 and 2, adding and revoking a node. **Target**: the policy per space and per node, files in chunks, resolving disputes.
+**Built**: steps 1 and 2, adding and revoking a node, and step 5 (showing and resolving disputes of notes). **Target**: the policy per space and per node, files in chunks.
 
 1. Event log with stable ids, hybrid logical clock and a "changed since" read on each space (most of it exists in the history already).
 2. The node: a store, a key, a list of peers, an outbox, a catch-up exchange over one transport, tested with three nodes and one switched off.
 3. Policy per space and per node, the page, adding and revoking a node.
 4. Files by hash and chunks.
-5. Disputes: showing and resolving them.
+5. Disputes: showing and resolving them. **Built.**
 
 Honest cost: this is the largest piece of the plan, and the one where a mistake loses data. It is built last, with a test that switches nodes off and on in every order, and it must not delay the spaces, the mounts and the app.

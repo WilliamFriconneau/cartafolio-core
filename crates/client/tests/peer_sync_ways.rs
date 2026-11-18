@@ -208,6 +208,40 @@ fn the_same_note_changed_on_both_sides_is_kept_both_ways_and_listed_as_a_dispute
 }
 
 #[test]
+fn a_dispute_resolved_on_one_node_is_resolved_on_the_other_after_an_exchange() {
+    let s = server("resolve-s");
+    let (b, db) = local("resolve-b");
+    let peer = Peer::new(&s.address, &s.key, "peer-server");
+    let id = say(&s.brain, "The bins go out on Monday.");
+    peer.sync_once(&b, NOW).unwrap();
+    replace(&s.brain, &id, "The bins go out on Tuesday.");
+    replace(&b, &id, "The bins go out on Thursday.");
+    for i in 1..=3 {
+        peer.sync_once(&b, NOW + i * 10).unwrap();
+    }
+    let conn = b.open_space(&space()).unwrap();
+    let (_, alts) = sync::disputes(&conn)
+        .unwrap()
+        .into_iter()
+        .find(|(f, _)| *f == id)
+        .unwrap();
+    let kept = facts::read_fact(&conn, &alts[1]).unwrap().unwrap().text;
+    // The person picks on this node; the server learns it from the log, as any change.
+    sync::resolve(&conn, &id, &alts[1], "page").unwrap();
+    for i in 4..=6 {
+        let pass = peer.sync_once(&b, NOW + i * 10).unwrap();
+        assert!(pass.problems.is_empty(), "{:?}", pass.problems);
+    }
+    for brain in [&s.brain, &b] {
+        let conn = brain.open_space(&space()).unwrap();
+        assert!(sync::disputes(&conn).unwrap().is_empty());
+        assert_eq!(active(brain), [kept.clone()]);
+    }
+    assert_eq!(all_texts(&s.brain), all_texts(&b));
+    clean(&[&s.dir, &db]);
+}
+
+#[test]
 fn a_note_retired_on_one_side_and_corrected_on_the_other_is_in_dispute_not_lost() {
     let s = server("retire-s");
     let (b, db) = local("retire-b");

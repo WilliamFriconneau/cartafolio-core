@@ -270,6 +270,18 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                     Err(r) => r,
                 }
             }
+            // The facts in dispute in the person's spaces, with their alternatives (`disputes`).
+            // A person who owns no space has none.
+            "/disputes" => {
+                let owns = memcp_core::users::access_of(&ctl, &me.id).is_ok_and(|g| !g.is_empty());
+                if !owns {
+                    return Response::json(200, &serde_json::json!({ "count": 0, "disputes": [] }));
+                }
+                match living(app, &ctl, &me, "disputes", &serde_json::json!({})) {
+                    Ok(v) => Response::json(200, &v),
+                    Err(r) => r,
+                }
+            }
             "/journal" => crate::explore::journal(app, &ctl, &me, req, now),
             "/links" => crate::explore::graph(app, &ctl, &me, req),
             "/fact" => crate::explore::one(app, &ctl, &me, req),
@@ -326,6 +338,9 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         crate::explore::layout_write(app, &me, path, &body)
     } else if path == "/living" {
         living(app, &ctl, &me, "living_set", &body)
+    } else if path == "/disputes/resolve" {
+        // The person picks a version on their page: an act of the person, as the connection `page`.
+        living(app, &ctl, &me, "dispute_resolve", &body)
     } else {
         action(app, &ctl, &me, path, &body)
     };

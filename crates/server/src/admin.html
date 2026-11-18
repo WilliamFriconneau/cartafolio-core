@@ -371,6 +371,11 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <p class="mute small">The machines that hold this memory, and whether they are in step. Refreshed every two seconds.</p>
       <div id="machines"></div>
       <p class="mute mfoot" id="mfoot"></p>
+      <div id="disputes-box" hidden>
+        <h3>In dispute <span class="badge" id="disputes-count"></span></h3>
+        <p class="mute small">A note was changed differently on two machines. Every version is kept. Pick the one to keep: the others are retired, never erased, and every machine follows.</p>
+        <div id="disputes-list"></div>
+      </div>
       <form id="add-form" style="margin:10px 0 0;display:flex;flex-wrap:wrap;gap:8px;align-items:center">
         <input id="add-link" placeholder="Link, id or address of the other node" size="34" autocomplete="off" spellcheck="false" aria-label="Link, id or address of the other node" style="flex:1;min-width:14em">
         <button class="primary" id="add-node">Add a node</button>
@@ -1321,7 +1326,14 @@ const FR = {
   "Use a code": "Utiliser le code",
   "Paired": "Associé",
   "A code is eight characters, such as ABCD-EFGH.": "Un code fait huit caractères, par exemple ABCD-EFGH.",
-  "This code was not accepted here: it must come from this node's own page.": "Ce code n’a pas été accepté ici : il doit venir de la page de ce nœud."
+  "This code was not accepted here: it must come from this node's own page.": "Ce code n’a pas été accepté ici : il doit venir de la page de ce nœud.",
+  "In dispute": "En litige",
+  "A note was changed differently on two machines. Every version is kept. Pick the one to keep: the others are retired, never erased, and every machine follows.": "Une note a été modifiée autrement sur deux machines. Chaque version est gardée. Choisissez celle à garder : les autres sont retirées, jamais effacées, et toutes les machines suivent.",
+  "Keep this one": "Garder celle-ci",
+  "Keep it retired": "La garder retirée",
+  "Retired": "Retirée",
+  "The note was": "La note était",
+  "Kept. Every machine follows at its next exchange.": "Gardée. Chaque machine suit à son prochain échange."
 };
 const FRX = [
   [/^Last scan (.+) · (\d+) notes and files$/, (d, n) => "Dernier passage " + d + " · " + n + " notes et fichiers"],
@@ -3327,10 +3339,13 @@ function renderSpaceTiles() {
 }
 
 // ---- Machines: this one first, then the peers, live from the node (GET /sync/status) ----
-const SYNC = { peers: [], ok: false, nodes: {}, tick: 0 };
+const SYNC = { peers: [], ok: false, nodes: {}, tick: 0, disputes: 0 };
 async function pollSync(force) {
   if (!S) return;
-  try { SYNC.peers = (await api("sync/status")).peers || []; SYNC.ok = true; } catch (_) { SYNC.ok = false; }
+  const seen = SYNC.disputes;
+  try { const st = await api("sync/status"); SYNC.peers = st.peers || []; SYNC.disputes = Number(st.disputes) || 0; SYNC.ok = true; } catch (_) { SYNC.ok = false; }
+  // The list of disputes is read when their count changes, and now and then while there are some.
+  if (force || SYNC.disputes !== seen || (SYNC.disputes && SYNC.tick % 5 === 0)) loadDisputes();
   // What the person said about each machine (name, note, paused, revoked): read now and then, and after an action.
   if (force || SYNC.tick++ % 5 === 0) {
     try { SYNC.nodes = Object.fromEntries(((await api("nodes?all=1")).nodes || []).map(n => [n.peer, n])); } catch (_) {}
@@ -3417,6 +3432,35 @@ function renderMachines() {
   const last = SYNC.peers.map(p => p.last_activity || 0).reduce((a, b) => Math.max(a, b), 0);
   const name = S.me.display || S.me.name;
   $("#mfoot").textContent = "Memory of " + name + " · " + (1 + SYNC.peers.length) + (SYNC.peers.length ? " machines" : " machine") + " · last sync " + (last ? since(last) : "never");
+}
+
+// ---- Disputes: a note changed differently on two machines; the person picks the version to keep ----
+const DISPUTES = { list: [] };
+async function loadDisputes() {
+  try { DISPUTES.list = (await api("disputes")).disputes || []; } catch (_) { DISPUTES.list = []; }
+  renderDisputes();
+}
+function keepVersion(d, alt) {
+  api("disputes/resolve", { id: d.fact.id, keep: alt.id, space: d.space })
+    .then(() => { toast("Kept. Every machine follows at its next exchange."); loadDisputes(); pollSync(true); })
+    .catch(fail);
+}
+function renderDisputes() {
+  const box = $("#disputes-box");
+  if (!box) return;
+  const list = DISPUTES.list;
+  box.hidden = !list.length;
+  $("#disputes-count").textContent = list.length ? String(list.length) : "";
+  $("#disputes-list").replaceChildren(...list.map(d => el("div", { class: "dispute", "data-fact": d.fact ? d.fact.id : "" },
+    d.fact ? el("p", { class: "msub" }, el("span", {}, "The note was"), " « ", d.fact.text, " »") : null,
+    ...(d.alternatives || []).map(a => {
+      const retired = a.kind === "retired";
+      const who = [a.author, a.at ? new Date(a.at).toLocaleString(loc()) : ""].filter(Boolean).join(" · ");
+      return el("div", { class: "mrow", "data-alt": a.id },
+        el("div", {}, el("div", { class: "mname" }, retired ? el("span", {}, "Retired") : a.text || a.id),
+          el("div", { class: "msub" }, retired && a.reason ? a.reason + (who ? " · " : "") : "", who)),
+        el("span", { class: "mwhen" }, el("button", { type: "button", class: "link", onclick: () => keepVersion(d, a) }, retired ? "Keep it retired" : "Keep this one")));
+    }))));
 }
 
 // ---- Adding a node: paste or scan its link or id, then the three words (none with a ticket) ----
