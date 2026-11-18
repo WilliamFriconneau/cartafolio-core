@@ -253,23 +253,25 @@ fn the_keywords_of_the_rules_and_the_vocabulary_terms_are_ordered_by_use_then_le
 }
 
 #[test]
-fn health_terms_come_from_the_built_in_patterns_in_the_language_asked() -> Res {
+fn health_terms_come_from_the_health_referential_in_the_language_asked() -> Res {
     let t = Temp::new("hints-health");
     let b = brain(&t)?;
     let c = caller(&b, "app", "all")?;
     note(&b, &c, "health", "Migraine forte ce matin.")?;
     note(&b, &c, "health", "Encore une migraine, et de la toux.")?;
+    // The labels are the referential's, as written there; compared without case.
+    let low = |v: Vec<String>| v.into_iter().map(|w| w.to_lowercase()).collect::<Vec<_>>();
     let fr = hints(&b, &c, &json!({"lang": "fr"}))?;
-    let health = group(&fr, "health");
-    assert!(health.contains(&"céphalée".to_string()), "{health:?}");
+    let health = low(group(&fr, "health"));
+    assert!(health.contains(&"mal de tête".to_string()), "{health:?}");
     assert!(health.contains(&"glycémie".to_string()), "{health:?}");
     assert!(!health.contains(&"headache".to_string()));
     // Used signs first.
-    assert!(at(&health, "céphalée") < at(&health, "constipation"));
+    assert!(at(&health, "mal de tête") < at(&health, "constipation"));
     let en = hints(&b, &c, &json!({"lang": "en"}))?;
-    let health = group(&en, "health");
+    let health = low(group(&en, "health"));
     assert!(health.contains(&"headache".to_string()), "{health:?}");
-    assert!(!health.contains(&"céphalée".to_string()));
+    assert!(!health.contains(&"mal de tête".to_string()));
     // Nobody who cannot read a health space is given health terms.
     let w = caller(&b, "work-only", "work:r")?;
     assert!(group(&hints(&b, &w, &json!({}))?, "health").is_empty());
