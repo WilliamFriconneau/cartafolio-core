@@ -763,6 +763,7 @@ version = "20261117.0.22"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.4.3",
+ "memcp-health",
  "rusqlite",
  "rust-stemmers",
  "serde_json",
@@ -782,11 +783,21 @@ dependencies = [
 ]
 
 [[package]]
+name = "memcp-health"
+version = "20261117.0.22"
+dependencies = [
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+]
+
+[[package]]
 name = "memcp-janitor"
 version = "20261117.0.22"
 dependencies = [
  "memcp-client",
  "memcp-core",
+ "memcp-health",
  "memcp-server",
  "serde_json",
  "tiny_http",

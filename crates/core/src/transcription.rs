@@ -823,47 +823,16 @@ fn names_in(texts: &[(String, f64)]) -> Vec<Scored> {
 
 // ---- health ---------------------------------------------------------------------------------------------------------------
 
-/// A sign or a measure of the built-in patterns as a person says it: `(slug, French, English)`.
-const LABELS: [(&str, &str, &str); 27] = [
-    ("douleur-thoracique", "douleur thoracique", "chest pain"),
-    ("douleur-abdominale", "douleur abdominale", "abdominal pain"),
-    ("douleur-dos", "mal de dos", "back pain"),
-    ("douleur-gorge", "mal de gorge", "sore throat"),
-    ("cephalee", "céphalée", "headache"),
-    ("nausee", "nausée", "nausea"),
-    ("vomissement", "vomissement", "vomiting"),
-    ("vertige", "vertige", "dizziness"),
-    ("toux", "toux", "cough"),
-    ("essoufflement", "essoufflement", "shortness of breath"),
-    ("palpitations", "palpitations", "palpitations"),
-    ("diarrhee", "diarrhée", "diarrhea"),
-    ("constipation", "constipation", "constipation"),
-    ("insomnie", "insomnie", "insomnia"),
-    ("anxiete", "anxiété", "anxiety"),
-    ("frissons", "frissons", "chills"),
-    ("demangeaison", "démangeaison", "itching"),
-    ("eruption", "éruption", "rash"),
-    ("fievre", "fièvre", "fever"),
-    ("fatigue", "fatigue", "fatigue"),
-    ("douleur", "douleur", "pain"),
-    ("tension", "tension", "blood pressure"),
-    ("poids", "poids", "weight"),
-    ("pouls", "pouls", "pulse"),
-    ("glycemie", "glycémie", "blood sugar"),
-    ("temperature", "température", "temperature"),
-    ("saturation", "saturation", "oxygen saturation"),
-];
-
 /// The labels of a sign or a measure in the language asked (both when none).
 fn labels(slug: &str, lang: Option<&str>) -> Vec<String> {
-    let Some((_, fr, en)) = LABELS.iter().find(|(s, _, _)| *s == slug) else {
+    let Some((fr, en)) = autotag::health_labels(slug) else {
         return vec![slug.replace('-', " ")];
     };
     match lang {
-        Some("fr") => vec![fr.to_string()],
-        Some("en") => vec![en.to_string()],
-        _ if fr == en => vec![fr.to_string()],
-        _ => vec![fr.to_string(), en.to_string()],
+        Some("fr") => vec![fr],
+        Some("en") => vec![en],
+        _ if fr == en => vec![fr],
+        _ => vec![fr, en],
     }
 }
 
@@ -1056,18 +1025,11 @@ mod tests {
     }
 
     #[test]
-    fn every_sign_and_measure_of_the_patterns_has_its_labels() {
+    fn every_sign_and_measure_of_the_referential_has_its_labels() {
         let (signs, measures) = autotag::health_slugs();
         for s in signs.into_iter().chain(measures) {
-            assert!(
-                LABELS.iter().any(|(slug, _, _)| *slug == s),
-                "no label for {s}"
-            );
+            assert!(autotag::health_labels(s).is_some(), "no label for {s}");
         }
-        assert_eq!(
-            LABELS.len(),
-            autotag::health_slugs().0.len() + autotag::health_slugs().1.len()
-        );
     }
 
     #[test]

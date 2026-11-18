@@ -17,6 +17,29 @@ pub const TAG: &str = "sante";
 /// When the hour of waking is not known: a note written before this hour counts for the day before.
 pub const WAKE_UNKNOWN_HOUR: u32 = 5;
 
+/// The most tags the rule adds from what the note says.
+const MAX_DETECTED: usize = 12;
+
+/// The tags the health referential finds in the note, as the node's own tagger names them: `alerte/<id>` for a red flag
+/// (first, so the cap never drops one), `signe/<name>` for a sign, `mesure/<name>` for a measure. The note's words stay
+/// untouched; the node adds the fields (the level, the value) when it writes the note.
+pub fn detected_tags(text: &str) -> Vec<String> {
+    let found = memcp_health::detect(text, memcp_health::Lang::Auto);
+    let mut tags: Vec<String> = Vec::new();
+    let all = found
+        .red_flags
+        .iter()
+        .map(|f| format!("alerte/{}", f.id))
+        .chain(found.signs.iter().map(|s| format!("signe/{}", s.tag)))
+        .chain(found.measures.iter().map(|m| format!("mesure/{}", m.tag)));
+    for t in all {
+        if tags.len() < MAX_DETECTED && !tags.contains(&t) {
+            tags.push(t);
+        }
+    }
+    tags
+}
+
 /// Whether the note asks for the health rule: `#santé` or `#sante`, as a word of its own.
 pub fn applies(text: &str) -> bool {
     let lower = text.to_lowercase();
@@ -191,6 +214,24 @@ pub fn with_origin(text: &str, origin: &str) -> String {
 mod tests {
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn the_referential_names_the_signs_the_measures_and_the_alerts() {
+        assert_eq!(
+            detected_tags("Douleur thoracique 6/10, tension 12/8 #santé"),
+            [
+                "alerte/chest_pain",
+                "signe/douleur-thoracique",
+                "mesure/tension"
+            ]
+        );
+        assert_eq!(
+            detected_tags("mal au crâne, pas de fièvre, dormi 6h30"),
+            ["signe/cephalee", "mesure/sommeil"]
+        );
+        assert!(detected_tags("rendez-vous le 12/8 à 12h30").is_empty());
+        assert!(detected_tags("").is_empty());
+    }
 
     #[test]
     fn the_hashtag_is_a_word_of_its_own() {

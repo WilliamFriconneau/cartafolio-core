@@ -1,0 +1,134 @@
+{
+ "schema": "memcp.health.vitals/1",
+ "version": 1,
+ "provenance": "Identifiers, units and usual limits (above 100 resting pulse, above 20 breaths, below 94 % saturation) come from the vitals file of the same private project (AGPL-3.0-or-later, no licence line of its own). Labels in fr, en and es and the plausible ranges (physiological bounds above which a reading is an error) were written for this project. The explanatory texts of the source are not copied.",
+ "license": "AGPL-3.0-or-later",
+ "vitals": [
+  {
+   "id": "resting_heart_rate",
+   "unit": "bpm",
+   "plausible": {
+    "min": 20,
+    "max": 220
+   },
+   "labels": {
+    "fr": "Pouls au repos",
+    "en": "Resting heart rate",
+    "es": "Pulso en reposo"
+   },
+   "usual_limit": {
+    "above": 100
+   }
+  },
+  {
+   "id": "hrv_sdnn",
+   "unit": "ms",
+   "plausible": {
+    "min": 1,
+    "max": 300
+   },
+   "labels": {
+    "fr": "Variabilité cardiaque (SDNN)",
+    "en": "Heart rate variability (SDNN)",
+    "es": "Variabilidad cardíaca (SDNN)"
+   }
+  },
+  {
+   "id": "respiratory_rate",
+   "unit": "/min",
+   "plausible": {
+    "min": 4,
+    "max": 60
+   },
+   "labels": {
+    "fr": "Fréquence respiratoire",
+    "en": "Respiratory rate",
+    "es": "Frecuencia respiratoria"
+   },
+   "usual_limit": {
+    "above": 20
+   }
+  },
+  {
+   "id": "oxygen_saturation",
+   "unit": "%",
+   "plausible": {
+    "min": 50,
+    "max": 100
+   },
+   "labels": {
+    "fr": "Saturation en oxygène",
+    "en": "Oxygen saturation",
+    "es": "Saturación de oxígeno"
+   },
+   "usual_limit": {
+    "below": 94
+   }
+  },
+  {
+   "id": "wrist_temperature",
+   "unit": "°C",
+   "plausible": {
+    "min": 30,
+    "max": 45
+   },
+   "labels": {
+    "fr": "Température au poignet",
+    "en": "Wrist temperature",
+    "es": "Temperatura de la muñeca"
+   }
+  },
+  {
+   "id": "steps",
+   "unit": "count",
+   "plausible": {
+    "min": 0,
+    "max": 100000
+   },
+   "labels": {
+    "fr": "Pas",
+    "en": "Steps",
+    "es": "Pasos"
+   }
+  },
+  {
+   "id": "active_energy",
+   "unit": "kcal",
+   "plausible": {
+    "min": 0,
+    "max": 10000
+   },
+   "labels": {
+    "fr": "Énergie active",
+    "en": "Active energy",
+    "es": "Energía activa"
+   }
+  },
+  {
+   "id": "exercise_minutes",
+   "unit": "min",
+   "plausible": {
+    "min": 0,
+    "max": 1440
+   },
+   "labels": {
+    "fr": "Minutes d'exercice",
+    "en": "Exercise minutes",
+    "es": "Minutos de ejercicio"
+   }
+  },
+  {
+   "id": "heart_rate_day",
+   "unit": "bpm",
+   "plausible": {
+    "min": 20,
+    "max": 250
+   },
+   "labels": {
+    "fr": "Pouls dans la journée",
+    "en": "Heart rate during the day",
+    "es": "Pulso durante el día"
+   }
+  }
+ ]
+}

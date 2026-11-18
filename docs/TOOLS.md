@@ -9,6 +9,7 @@ The tools of this page and their fields are checked against `tools::definitions`
 | Rights | Tools |
 |---|---|
 | read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `transcription_hints`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `health_referential`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
 | write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `folder_set`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a space | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
@@ -1036,7 +1037,7 @@ Example call and answer:
 
 ### `tags_suggest`
 
-What the node's tagger would give a text, with no model and no write, so that an app can show the tags before the note is written: the tag of the space first, then the tags proper to it (its keywords, its vocabularies and, in a health space, the signs and measures said). Also says, in `route`, the space the person usually sends notes like this one to, when the node learned it. See [AUTOTAG.md](AUTOTAG.md).
+What the node's tagger would give a text, with no model and no write, so that an app can show the tags before the note is written: the tag of the space first, then the tags proper to it (its keywords, its vocabularies and, in a health space, the red flags, signs and measures said). Also says, in `route`, the space the person usually sends notes like this one to, when the node learned it. See [AUTOTAG.md](AUTOTAG.md).
 
 - **Seen with:** read access on at least one space.
 - **Answer:** `{ space, tags, fields, field_tags, all_tags, route }`; with no `space`, only `route` (the other fields empty).
@@ -1086,6 +1087,20 @@ A short ordered list of the words a speech model should expect when it reads thi
 | `lang` | string | no | `fr` or `en`: the language of the health terms; another or none: both |
 | `limit` | integer | no | 1 to 500, default 120 |
 | `space` | string | no | one of the spaces you can read |
+### `health_referential`
+
+The health referential the node tags with, compact, so that an app and the node agree on the same signs, measures, vital constants and red flags: ids, labels and keywords, with the version of each part. It reads no space and writes nothing. French is complete, English partial, and there is no Spanish vocabulary; there is no English or Spanish red flag. A result is a suggestion for the person to confirm, never a diagnosis. See [HEALTH.md](HEALTH.md).
+
+- **Seen with:** read access on at least one space (not a key limited to paths).
+- **Answer:** `{ notice, lang, versions, manifestations?, pairs?, measures?, vitals?, red_flags? }`; only the asked `kind` is present (all four when `kind` is left out); `pairs` only without `query`.
+- **Errors:** `invalid` (an unknown `kind` or `lang`).
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `kind` | string | no | `manifestations`, `measures`, `vitals` or `red_flags` |
+| `query` | string | no | keeps the entries whose id, label or a keyword holds these words (accents and case ignored) |
+| `lang` | string | no | `auto` (default), `fr`, `en` or `es`: the language of the keywords and labels |
 
 Example call and answer:
 
@@ -1097,6 +1112,8 @@ Example call and answer:
     "limit": 8,
     "lang": "fr"
   }
+  "name": "health_referential",
+  "arguments": { "kind": "manifestations", "query": "migraine", "lang": "fr" }
 }
 ```
 
@@ -1116,6 +1133,18 @@ Example call and answer:
   "lang": "fr"
 }
 ```
+
+  "notice": "A suggestion for the person to confirm, never a diagnosis. …",
+  "lang": "fr",
+  "versions": { "manifestations": 1, "manifestations.fr": 1, "manifestations.en": 1, "measures": 1, "vitals": 1, "red_flags": 1 },
+  "manifestations": [
+    { "id": "headache", "label": "Mal de tête", "scale": "pain", "category": "pain", "dimension": "physical",
+      "keywords": { "fr": ["mal au crâne", "mal à la tête", "maux de tête", "migraine", "céphalée", "tête qui cogne"] } }
+  ]
+}
+```
+
+A measure is `{ id, unit, labels, keywords, units: [{ id, label }], vital }`; a vital `{ id, unit, plausible: { min, max }, labels, usual_limit? }`; a red flag `{ id, first, message, keywords }` (`first`: the number to put first, `15` or `3114`).
 
 ### `tags_set`
 
@@ -1571,6 +1600,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `vocabulary_terms` | the terms of the vocabularies imported into a space, and the vocabularies with their source | built |
 | `tags_suggest` / `tags_set` | what the node's tagger gives a text (preview, no write), and the correction of the tags of a note (a `supersede` with the new set, reason recorded, history kept); see AUTOTAG.md | built |
 | `transcription_hints` | the short ordered list of words a speech model should expect (names that recur, rules keywords, vocabulary terms, health terms), for an initial prompt or `contextualStrings`; see INTAKE.md | built |
+| `health_referential` | the health referential (signs, measures, vital constants, red flags) compact, for apps; see HEALTH.md | built |
 | `library_search` | search the libraries mounted read-only on the spaces you can read: hits with path, title, snippet, type, dates | new |
 | `library_raise` | raise an original into a normal fact with a short summary you give, your tags and the path of the original | new |
 | `links` | the graph of spaces, tags and library folders, for an Obsidian-like view | new |

@@ -42,6 +42,39 @@ less, none twice whatever the case; `text` is the first of them that fit in abou
 - **Rust**: `memcp_core::transcription::{hints, Hints, Groups, builds}`; `intake::whisper::VoiceSettings.hints: bool`,
   `Whisper::transcribe_with(audio, work, hints)`, `join_prompt`; `intake::local::transcribe_samples_with(..., hints)`.
 
+## The health referential, in the node (next version)
+
+The node's tagger no longer has its own hardcoded health patterns: it reads the health referential ([HEALTH.md](HEALTH.md)), a library of its own (`crates/health`) with embedded data files, versioned. Everything below is added; nothing is renamed, and every tag the first tagger gave is still given.
+
+**MCP tool** ([TOOLS.md](TOOLS.md)).
+
+- `health_referential {kind?, query?, lang?}`: read on at least one space. The signs (85), the measures (7), the vital constants (9) and the red flags (15), compact, with the version of each part. `kind` is `manifestations`, `measures`, `vitals` or `red_flags`; `query` keeps the entries whose id, label or a keyword holds those words; `lang` is `auto`, `fr`, `en` or `es`.
+
+```json
+{ "notice": "…", "lang": "auto", "versions": { "manifestations": 1, "measures": 1, "vitals": 1, "red_flags": 1 },
+  "measures": [{ "id": "blood_pressure", "unit": "mmHg", "labels": { "fr": "Tension artérielle", "en": "Blood pressure", "es": "Presión arterial" },
+                 "keywords": { "fr": ["tension", "pression arterielle", "ta"], "en": ["blood pressure", "bp"] },
+                 "units": [{ "id": "mmhg", "label": "mmHg" }, { "id": "cmhg", "label": "cmHg" }], "vital": null }] }
+```
+
+**Tags and fields of `tags_suggest` and of every write in a health space** ([AUTOTAG.md](AUTOTAG.md)).
+
+- `alerte/<id>` for a red flag (`alerte/chest_pain`), given first, and the field `red_flag` with the first one (`field/red_flag/chest_pain`). The 15 comes before the 3114. A red flag exists in French only; an app must not take the absence of an alert in another language for safety.
+- `signe/<id>` for the 64 signs the first tagger did not have (`signe/loneliness`, `signe/shame`...); the 21 it had keep their French name (`signe/cephalee`, `signe/douleur`...). A sign denied (`pas de fièvre`) is no longer tagged.
+- `mesure/sommeil` with the field `sommeil` (hours, `6.5`) and `sommeil_unit` = `h`, for `dormi 6h30`, `j'ai dormi 2 h`.
+- The field `level` is also read when it is said after a comma (`anxieux, 2 sur 10`).
+
+```json
+{
+  "space": "health",
+  "tags": ["health", "alerte/chest_pain", "signe/douleur-thoracique", "mesure/tension"],
+  "fields": { "red_flag": "chest_pain", "level": "6/10", "tension": "12/8" },
+  "field_tags": ["field/red_flag/chest_pain", "field/level/6/10", "field/tension/12/8"]
+}
+```
+
+The janitor's `#santé` rule adds the same `alerte/`, `signe/` and `mesure/` tags to the note it files in `health`.
+
 ## The exchange between nodes keeps what it cannot place (next version)
 
 Everything is added; the protocol stays 1, and a node of an earlier version reads what it knows. See [FEDERATION.md](FEDERATION.md).

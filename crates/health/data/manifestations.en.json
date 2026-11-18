@@ -1,0 +1,304 @@
+{
+ "schema": "memcp.health.manifestations.text/1",
+ "version": 1,
+ "language": "en",
+ "provenance": "Written for this project (the source referential has no English vocabulary). Partial: only the signs listed here.",
+ "negators": [
+  "no",
+  "not",
+  "without",
+  "never",
+  "no more",
+  "denies"
+ ],
+ "level_words": [
+  "mild",
+  "moderate",
+  "slight",
+  "strong",
+  "severe",
+  "intense",
+  "important",
+  "light"
+ ],
+ "manifestations": [
+  {
+   "id": "pain",
+   "label": "Pain",
+   "keywords": [
+    "pain",
+    "pains",
+    "ache",
+    "aches",
+    "aching",
+    "it hurts",
+    "sore"
+   ]
+  },
+  {
+   "id": "chest_pain",
+   "label": "Chest pain",
+   "keywords": [
+    "chest pain",
+    "chest tightness"
+   ]
+  },
+  {
+   "id": "abdominal_cramps",
+   "label": "Abdominal cramps",
+   "keywords": [
+    "abdominal pain",
+    "stomach ache",
+    "stomachache",
+    "belly ache",
+    "stomach cramps",
+    "cramps"
+   ]
+  },
+  {
+   "id": "lower_back_pain",
+   "label": "Lower back pain",
+   "keywords": [
+    "back pain",
+    "backache",
+    "lower back pain"
+   ]
+  },
+  {
+   "id": "sore_throat",
+   "label": "Sore throat",
+   "keywords": [
+    "sore throat"
+   ]
+  },
+  {
+   "id": "headache",
+   "label": "Headache",
+   "keywords": [
+    "headache",
+    "headaches",
+    "migraine",
+    "migraines"
+   ]
+  },
+  {
+   "id": "nausea",
+   "label": "Nausea",
+   "keywords": [
+    "nausea",
+    "nauseous",
+    "feel sick"
+   ]
+  },
+  {
+   "id": "vomiting",
+   "label": "Vomiting",
+   "keywords": [
+    "vomiting",
+    "vomited",
+    "threw up"
+   ]
+  },
+  {
+   "id": "dizziness",
+   "label": "Dizziness",
+   "keywords": [
+    "dizzy",
+    "dizziness",
+    "vertigo",
+    "lightheaded"
+   ]
+  },
+  {
+   "id": "coughing",
+   "label": "Cough",
+   "keywords": [
+    "cough",
+    "coughing",
+    "coughed"
+   ]
+  },
+  {
+   "id": "shortness_of_breath",
+   "label": "Shortness of breath",
+   "keywords": [
+    "shortness of breath",
+    "short of breath",
+    "breathless",
+    "out of breath"
+   ]
+  },
+  {
+   "id": "palpitations",
+   "label": "Palpitations",
+   "keywords": [
+    "palpitations",
+    "heart racing",
+    "pounding heart"
+   ]
+  },
+  {
+   "id": "diarrhea",
+   "label": "Diarrhea",
+   "keywords": [
+    "diarrhea",
+    "diarrhoea"
+   ]
+  },
+  {
+   "id": "constipation",
+   "label": "Constipation",
+   "keywords": [
+    "constipation",
+    "constipated"
+   ]
+  },
+  {
+   "id": "sleep_changes",
+   "label": "Sleep changes",
+   "keywords": [
+    "insomnia",
+    "could not sleep",
+    "couldn't sleep",
+    "slept badly",
+    "sleepless night"
+   ]
+  },
+  {
+   "id": "anxiety",
+   "label": "Anxiety",
+   "keywords": [
+    "anxiety",
+    "anxious",
+    "panic attack",
+    "worried sick"
+   ]
+  },
+  {
+   "id": "chills",
+   "label": "Chills",
+   "keywords": [
+    "chills",
+    "shivering"
+   ]
+  },
+  {
+   "id": "itching",
+   "label": "Itching",
+   "keywords": [
+    "itching",
+    "itchy",
+    "itch"
+   ]
+  },
+  {
+   "id": "rash",
+   "label": "Rash",
+   "keywords": [
+    "rash",
+    "hives"
+   ]
+  },
+  {
+   "id": "fever",
+   "label": "Fever",
+   "keywords": [
+    "fever",
+    "feverish",
+    "high temperature"
+   ]
+  },
+  {
+   "id": "fatigue",
+   "label": "Fatigue",
+   "keywords": [
+    "fatigue",
+    "tired",
+    "exhausted",
+    "exhaustion",
+    "worn out",
+    "drained"
+   ]
+  },
+  {
+   "id": "sadness",
+   "label": "Sadness",
+   "keywords": [
+    "sad",
+    "sadness",
+    "depressed",
+    "feeling low"
+   ]
+  },
+  {
+   "id": "night_sweats",
+   "label": "Night sweats",
+   "keywords": [
+    "night sweats"
+   ]
+  },
+  {
+   "id": "heartburn",
+   "label": "Heartburn",
+   "keywords": [
+    "heartburn",
+    "acid reflux"
+   ]
+  },
+  {
+   "id": "bloating",
+   "label": "Bloating",
+   "keywords": [
+    "bloated",
+    "bloating"
+   ]
+  },
+  {
+   "id": "runny_nose",
+   "label": "Runny nose",
+   "keywords": [
+    "runny nose"
+   ]
+  },
+  {
+   "id": "loss_of_smell",
+   "label": "Loss of smell",
+   "keywords": [
+    "loss of smell",
+    "cannot smell"
+   ]
+  },
+  {
+   "id": "loss_of_taste",
+   "label": "Loss of taste",
+   "keywords": [
+    "loss of taste",
+    "cannot taste"
+   ]
+  },
+  {
+   "id": "fainting",
+   "label": "Fainting",
+   "keywords": [
+    "fainted",
+    "fainting",
+    "passed out"
+   ]
+  },
+  {
+   "id": "wheezing",
+   "label": "Wheezing",
+   "keywords": [
+    "wheezing",
+    "wheeze"
+   ]
+  },
+  {
+   "id": "dark_thoughts",
+   "label": "Dark thoughts",
+   "keywords": [
+    "dark thoughts"
+   ]
+  }
+ ]
+}

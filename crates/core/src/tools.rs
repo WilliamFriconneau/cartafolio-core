@@ -26,6 +26,7 @@ pub(crate) static LEASES: std::sync::LazyLock<
 > = std::sync::LazyLock::new(Default::default);
 
 mod folder;
+mod health;
 mod living;
 mod overview;
 mod sorting;
@@ -50,10 +51,11 @@ const WRITE_TOOLS: [&str; 16] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 17] = [
+const READ_TOOLS: [&str; 18] = [
     "triage_waiting",
     "tags_suggest",
     "transcription_hints",
+    "health_referential",
     "vocabulary_terms",
     "living_get",
     "peers",
@@ -534,6 +536,18 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "space": space_prop(&readable, "The space the note is for; left out, only `route` is given.")
                 },
                 "required": ["text"]
+            }),
+        });
+        out.push(ToolDef {
+            name: "health_referential",
+            description: "The health referential the node tags with, compact, for apps: the signs and symptoms (id, label, scale, keywords), the measures (id, unit, keywords), the vital constants (id, unit, plausible range, usual limit) and the red flags (id, number to call first, message, keywords), with the version of each part. `kind` keeps one of them; `query` keeps the entries whose id, label or a keyword holds those words (accents and case ignored); `lang` keeps the keywords of one language (`fr`, `en`; there is no Spanish vocabulary). It reads no space.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "kind": { "type": "string", "enum": ["manifestations", "measures", "vitals", "red_flags"] },
+                    "query": { "type": "string" },
+                    "lang": { "type": "string", "enum": ["auto", "fr", "en", "es"] }
+                }
             }),
         });
         out.push(ToolDef {
@@ -1237,6 +1251,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         "transcription_hints" => {
             crate::tools::transcription::transcription_hints(brain, caller, name, args)
         }
+        "health_referential" => crate::tools::health::health_referential(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
         "notes_move" => crate::tools::sorting::notes_move(brain, caller, name, args),

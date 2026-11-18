@@ -312,10 +312,15 @@ pub fn suggest(space: &SpaceInfo, rules: &Rules, vocab: &[String], text: &str) -
     out
 }
 
-/// The slugs of the signs (`signe/<slug>`) and of the measures the built-in health patterns know, in the order of the
-/// table: the signs first, then the measures.
+/// The tags of the signs (`signe/<tag>`) and of the measures the health referential knows, in its order: the signs
+/// first, then the measures.
 pub fn health_slugs() -> (Vec<&'static str>, Vec<&'static str>) {
     (patterns::sign_slugs(), patterns::measure_slugs())
+}
+
+/// The French and English labels of a sign or a measure of the health referential, by its tag.
+pub fn health_labels(tag: &str) -> Option<(String, String)> {
+    patterns::labels(tag)
 }
 
 /// The candidate terms of a text for a vocabulary lookup: every run of one to three words, lowercase, as written and

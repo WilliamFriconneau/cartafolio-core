@@ -61,7 +61,8 @@ unused-allowed-license = "allow"
 # Two versions of one crate is a warning to look at, not a failure.
 multiple-versions = "warn"
 wildcards = "deny"
-# The crates of this workspace refer to each other by path.
+# The crates of this workspace refer to each other by path (memcp-health, the health referential, adds only serde,
+# serde_json and unicode-normalization, all already in the graph).
 allow-wildcard-paths = true
 # Crates this project does not want, with the reason.
 deny = [

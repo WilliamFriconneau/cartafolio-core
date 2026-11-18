@@ -925,9 +925,12 @@ impl Janitor {
             };
             health_rule::day_of(local, wake)
         });
+        // The day and the rule's tag, then what the health referential finds in the words (alerts, signs, measures).
+        let mut tags = vec![format!("journal/{date}"), health_rule::TAG.into()];
+        tags.extend(health_rule::detected_tags(text));
         let choice = Choice {
             vault: health_rule::HEALTH.into(),
-            tags: vec![format!("journal/{date}"), health_rule::TAG.into()],
+            tags,
             title: String::new(),
         };
         let body = health_rule::with_origin(text, &health_rule::origin(note));

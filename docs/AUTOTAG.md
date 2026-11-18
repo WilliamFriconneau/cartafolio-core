@@ -60,6 +60,8 @@ field: `field/caller/<name>` and `field/callee/<name>` (one per participant), `f
 
 ## The health patterns
 
+Read from the health referential ([HEALTH.md](HEALTH.md)): the 85 signs and their everyday words (French; English for 31 of them), the 7 measures, and the 15 red flags (French only). The tables below list the first tagger's signs and measures, which keep their tag names; the referential has more (`signe/loneliness`, `signe/shame`, `mesure/sommeil`...) and a sign that is denied (`pas de fièvre`) is not tagged. A **red flag** gives the tag `alerte/<id>` (`alerte/chest_pain`), first, and the field `red_flag` with the first one found (the 15 before the 3114). The rest of this section describes the same rules.
+
 French and English, folded (case and accents are ignored). A number counts only **next to its word**, with up to five filler
 words between (`est`, `de`, `à`, `of`, `is`, `at`, `:` …). Decimals with a comma or a dot (`72,5`, `72.5`). A date
 (`2026-11-17`, `17/11/2026`) and a time (`12h30`, `12:30`) are never a value.

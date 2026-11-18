@@ -12,9 +12,10 @@ use memcp_core::users::OWNER;
 use memcp_core::{Brain, util};
 use serde_json::{Value, json};
 
-const READ: [&str; 15] = [
+const READ: [&str; 16] = [
     "triage_waiting",
     "tags_suggest",
+    "health_referential",
     "living_get",
     "peers",
     "rules_get",
@@ -233,6 +234,7 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         "retire" => json!({"id": fact, "reason": "test"}),
         "tags_set" => json!({"id": fact, "add": ["checked"]}),
         "tags_suggest" => json!({"space": space, "text": "douleur 2/10, tension 12/8"}),
+        "health_referential" => json!({"kind": "vitals"}),
         "recall" => json!({"query": "review", "space": space}),
         "read_fact" | "history" => json!({"id": fact}),
         "tidy" | "triage_claim" | "triage_release" | "triage_waiting" | "peers" | "spaces"

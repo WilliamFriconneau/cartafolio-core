@@ -1,0 +1,105 @@
+{
+ "schema": "memcp.health.measures/1",
+ "version": 1,
+ "license": "AGPL-3.0-or-later",
+ "provenance": "Written for this project. The keywords, the units and the plausible ranges follow what the first tagger of this project and the note reader of the health referential of a private project of the same owner (AGPL-3.0-or-later) already accepted; where a range differs the wider one is kept. The source has no measures file of this kind (its measures file lists questionnaires): unknown for the ranges, which are physiological bounds, not clinical limits.",
+ "measures": [
+  {
+   "id": "blood_pressure",
+   "tag": "tension",
+   "kind": "pair",
+   "unit": "mmHg",
+   "labels": { "fr": "Tension artérielle", "en": "Blood pressure", "es": "Presión arterial" },
+   "keywords": { "fr": ["tension", "pression arterielle", "ta"], "en": ["blood pressure", "bp"] },
+   "units": [
+    { "id": "mmhg", "label": "mmHg", "words": ["mmhg"], "systolic": [60, 260], "diastolic": [30, 160] },
+    { "id": "cmhg", "label": "cmHg", "words": ["cmhg"], "systolic": [5, 30], "diastolic": [3, 20], "factor": 10 }
+   ],
+   "default_unit": "mmhg",
+   "anchor_units": ["mmhg", "cmhg"]
+  },
+  {
+   "id": "weight",
+   "tag": "poids",
+   "kind": "number",
+   "unit": "kg",
+   "labels": { "fr": "Poids", "en": "Weight", "es": "Peso" },
+   "keywords": { "fr": ["poids", "pese"], "en": ["weight", "weigh", "weighs", "weighed"] },
+   "units": [
+    { "id": "kg", "label": "kg", "words": ["kg", "kgs", "kilo", "kilos", "kilogramme", "kilogrammes"], "range": [20, 400] },
+    { "id": "lb", "label": "lb", "words": ["lb", "lbs", "pound", "pounds", "livres"], "range": [40, 900] }
+   ],
+   "default_unit": "kg",
+   "anchor_units": ["kg"]
+  },
+  {
+   "id": "heart_rate",
+   "tag": "pouls",
+   "kind": "number",
+   "integer": true,
+   "unit": "bpm",
+   "labels": { "fr": "Pouls", "en": "Heart rate", "es": "Pulso" },
+   "keywords": { "fr": ["pouls", "frequence cardiaque", "fc"], "en": ["pulse", "heart rate"] },
+   "units": [
+    { "id": "bpm", "label": "bpm", "words": ["bpm", "battements"], "range": [20, 250] }
+   ],
+   "default_unit": "bpm",
+   "anchor_units": ["bpm"]
+  },
+  {
+   "id": "glucose",
+   "tag": "glycemie",
+   "kind": "number",
+   "unit": "g/L",
+   "labels": { "fr": "Glycémie", "en": "Blood glucose", "es": "Glucemia" },
+   "keywords": { "fr": ["glycemie", "dextro"], "en": ["glucose", "blood sugar", "blood glucose", "glycaemia"] },
+   "units": [
+    { "id": "gl", "label": "g/L", "words": ["g/l", "gl"], "range": [0.2, 40] },
+    { "id": "mmoll", "label": "mmol/L", "words": ["mmol/l", "mmol"], "range": [0.2, 40] },
+    { "id": "mgdl", "label": "mg/dL", "words": ["mg/dl", "mgdl"], "range": [20, 800] }
+   ],
+   "default_unit": "gl",
+   "unitless_mgdl": [20, 600]
+  },
+  {
+   "id": "temperature",
+   "tag": "temperature",
+   "kind": "number",
+   "unit": "°C",
+   "labels": { "fr": "Température", "en": "Temperature", "es": "Temperatura" },
+   "keywords": { "fr": ["temperature", "temp", "fievre"], "en": ["fever"] },
+   "value_before": ["fievre", "fever"],
+   "units": [
+    { "id": "c", "label": "°C", "words": ["c"], "degree": true, "range": [30, 45] },
+    { "id": "f", "label": "°F", "words": ["f"], "degree": true, "range": [90, 110] }
+   ],
+   "default_unit": "c",
+   "anchor_units": ["c", "f"]
+  },
+  {
+   "id": "saturation",
+   "tag": "saturation",
+   "kind": "number",
+   "unit": "%",
+   "vital": "oxygen_saturation",
+   "labels": { "fr": "Saturation en oxygène", "en": "Oxygen saturation", "es": "Saturación de oxígeno" },
+   "keywords": { "fr": ["saturation", "spo2"], "en": [] },
+   "units": [
+    { "id": "pct", "label": "%", "words": [], "range": [50, 100] }
+   ],
+   "default_unit": "pct"
+  },
+  {
+   "id": "sleep",
+   "tag": "sommeil",
+   "kind": "duration",
+   "unit": "h",
+   "labels": { "fr": "Sommeil", "en": "Sleep", "es": "Sueño" },
+   "keywords": { "fr": ["dormi"], "en": ["slept"] },
+   "units": [
+    { "id": "h", "label": "h", "words": ["h", "heure", "heures", "hour", "hours", "hr", "hrs"], "range": [0, 16] }
+   ],
+   "default_unit": "h"
+  }
+ ]
+}
