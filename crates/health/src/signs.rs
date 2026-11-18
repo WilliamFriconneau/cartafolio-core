@@ -190,17 +190,30 @@ impl Referential {
             let said = levels_on_ten(&toks[a..b]);
             match (signs.len(), said.len()) {
                 (k, m) if k > 0 && k == m => {
-                    for (s, n) in signs.iter().zip(&said) {
+                    for (s, (_, n)) in signs.iter().zip(&said) {
                         out[*s] = Some(format!("{n}/10"));
                     }
                     waiting = None;
                 }
                 (0, 1) => {
                     if let Some(w) = waiting.take() {
-                        out[w] = Some(format!("{}/10", said[0]));
+                        out[w] = Some(format!("{}/10", said[0].1));
                     }
                 }
                 (1, 0) => waiting = Some(signs[0]),
+                (k, _) if k > 1 => {
+                    // Several signs, fewer levels: a level that a later sign of the phrase closes belongs to the sign
+                    // just before it (`douleur 4 sur 10 et fatigue`); one that ends the phrase could be any of them.
+                    for (at, n) in &said {
+                        let at = a + at;
+                        let before = signs.iter().rfind(|s| found[**s].start < at);
+                        let closed = signs.iter().any(|s| found[*s].start > at);
+                        if let (Some(s), true) = (before, closed) {
+                            out[*s].get_or_insert_with(|| format!("{n}/10"));
+                        }
+                    }
+                    waiting = None;
+                }
                 _ => waiting = None,
             }
             a = b + 1;
@@ -272,9 +285,9 @@ fn ends_with(before: &[&str], neg: &[String]) -> bool {
             .all(|(a, b)| a == b)
 }
 
-/// The numbers given on ten in a run of tokens: `2/10`, `2 sur 10`, `2 / 10`, `2 out of 10`; a number over ten is no
+/// The numbers given on ten in a run of tokens, with where they are: `2/10`, `2 sur 10`, `2 / 10`, `2 out of 10`; a number over ten is no
 /// level.
-fn levels_on_ten(toks: &[Tok]) -> Vec<u32> {
+fn levels_on_ten(toks: &[Tok]) -> Vec<(usize, u32)> {
     let mut out = Vec::new();
     for (k, t) in toks.iter().enumerate() {
         let Tok::Num {
@@ -304,7 +317,7 @@ fn levels_on_ten(toks: &[Tok]) -> Vec<u32> {
             }
         };
         if let Some(n) = n.filter(|n| *n <= 10) {
-            out.push(n);
+            out.push((k, n));
         }
     }
     out

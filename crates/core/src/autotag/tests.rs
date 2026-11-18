@@ -297,3 +297,75 @@ fn it_learns_from_the_person_and_stays_bounded() {
     assert!(data["routes"].as_object().expect("routes").len() <= learn::MAX_WORDS);
     std::fs::remove_dir_all(&dir).ok();
 }
+
+#[test]
+fn a_red_flag_is_tagged_first_with_its_field() {
+    let s = tag(&health(), "douleur thoracique depuis ce matin");
+    assert_eq!(s.tags[1], "alerte/chest_pain", "{:?}", s.tags);
+    assert!(s.tags.contains(&"signe/douleur-thoracique".to_string()));
+    assert_eq!(field(&s, "red_flag").as_deref(), Some("chest_pain"));
+    assert!(
+        s.field_tags()
+            .contains(&"field/red_flag/chest_pain".to_string())
+    );
+    // The 15 comes before the 3114: the first alert is the field.
+    let s = tag(&health(), "idées noires, et j'ai pris tous mes cachets");
+    assert!(s.tags.contains(&"alerte/suicidal_ideation".to_string()));
+    assert!(s.tags.contains(&"alerte/overdose".to_string()));
+    assert_eq!(field(&s, "red_flag").as_deref(), Some("overdose"));
+    // A denied sign is no alert; and no alert outside a health space.
+    assert!(
+        !tag(&health(), "pas de douleur thoracique")
+            .tags
+            .iter()
+            .any(|t| t.starts_with("alerte/"))
+    );
+    assert_eq!(tag(&home(), "douleur thoracique").tags, vec!["home"]);
+}
+
+#[test]
+fn a_denied_sign_is_not_tagged_and_the_richer_referential_finds_more() {
+    let s = tag(&health(), "pas de fièvre aujourd'hui");
+    assert_eq!(s.tags, vec!["health"], "{:?}", s.tags);
+    let s = tag(
+        &health(),
+        "j'ai mal au crâne, je suis crevé, j'ai dormi 6h30",
+    );
+    for t in ["signe/cephalee", "signe/fatigue", "mesure/sommeil"] {
+        assert!(s.tags.contains(&t.to_string()), "{t}: {:?}", s.tags);
+    }
+    assert_eq!(field(&s, "sommeil").as_deref(), Some("6.5"));
+    assert_eq!(field(&s, "sommeil_unit").as_deref(), Some("h"));
+    // Signs of the referential the first tagger did not have are tagged by their id.
+    let s = tag(&health(), "je me sens seul et j'ai honte");
+    assert!(s.tags.contains(&"signe/loneliness".to_string()));
+    assert!(s.tags.contains(&"signe/shame".to_string()));
+    // A level said after a comma goes to the sign of the phrase before.
+    let s = tag(&health(), "je suis anxieux, 2 sur 10");
+    assert_eq!(field(&s, "level").as_deref(), Some("2/10"));
+}
+
+#[test]
+fn every_tag_of_the_referential_is_a_valid_tag() {
+    for m in memcp_health::builtin().manifestations() {
+        assert!(
+            crate::facts::normalize_tag(&format!("signe/{}", m.tag)).is_ok(),
+            "{}",
+            m.tag
+        );
+    }
+    for d in memcp_health::builtin().measure_defs() {
+        assert!(
+            crate::facts::normalize_tag(&format!("mesure/{}", d.tag)).is_ok(),
+            "{}",
+            d.tag
+        );
+    }
+    for r in memcp_health::builtin().red_flag_rules().rules() {
+        assert!(
+            crate::facts::normalize_tag(&format!("alerte/{}", r.id)).is_ok(),
+            "{}",
+            r.id
+        );
+    }
+}

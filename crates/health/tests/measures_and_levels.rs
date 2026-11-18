@@ -408,3 +408,10 @@ fn every_measure_is_in_its_range_edges() {
         assert_eq!(!one(text).is_empty(), ok, "{text}");
     }
 }
+
+/// A level a later sign of the phrase closes belongs to the sign just before it; one that ends the phrase could be any.
+#[test]
+fn a_level_between_two_signs_goes_to_the_first() {
+    assert_eq!(levels("Douleur à 4 sur 10 et fatigue"), vec![lv("pain", 4)]);
+    assert!(levels("fatigue et douleur à 4 sur 10").is_empty());
+}
