@@ -29,7 +29,7 @@ const ENGLISH = [
   "Once the assistant is connected", "You are connected to my memory", "Waiting for the assistant", "Nothing is connected",
   "Nothing waits here", "Nothing yet", "No other machine yet", "Looking for nodes", "Each person has a memory", "Waiting to be let in",
   "Tick what goes together", "Hold the red button", "Shown once", "Pick the assistant", "Give it a name", "Create the connection",
-  "Pick an assistant first", "Nothing is ticked beforehand", "On the consent page", "Open claude.ai", "Add a custom connector",
+  "Pick an assistant first", "Nothing is ticked beforehand", "On the consent page", "Open claude.ai", "Add a custom connector", "In ChatGPT", "In Le Chat", "You choose on the consent page", "Then, if you like", "Paste this address", "It reaches only what you tick",
   "In a terminal, run this command", "Told to every assistant", "no instructions yet", "Your heir is", "A recovery key exists",
   "You have no recovery key", "have not opened", "Attach a waiting account", "was refused in the last", "keys were refused",
   "The latest events", "Photos and documents", "What each space received", "Not a decision to make",

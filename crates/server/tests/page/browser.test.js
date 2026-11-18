@@ -68,6 +68,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const cmd = await page.locator("#w-steps pre").first().innerText();
   const key = (cmd.match(/Bearer (hcp_[a-z0-9_]+)/) || [])[1];
   check("the command carries the name, the key and the address of the connection", !!key && cmd.includes("http my-laptop https://memory.example.net/mcp/my-laptop"), cmd);
+  await page.click("#wizard details summary");
   check("the last step gives the prompt that sets the memory up", (await page.locator("#w-prompt pre").innerText()).includes("You are connected to my memory") && (await page.locator("#w-prompt button:has-text('copy')").isVisible()));
   check("it waits for the first request", (await page.locator("#w-wait").innerText()).includes("Waiting"));
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-wizard-key.png") });
@@ -87,7 +88,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const copied = await page.evaluate(() => navigator.clipboard.readText()).catch(() => "");
   check("copy puts the command on the clipboard", copied.includes("claude mcp add"), copied.slice(0, 60));
   // web assistant: its name is the end of its address
-  await page.click("#w-platforms button:has-text('Claude on the web')");
+  await page.click('#w-platforms button >> text="Claude"');
   check("the name is suggested first", (await page.inputValue("#w-name")) === "claudeai");
   const web = await page.locator("#w-steps pre").first().innerText();
   check("a web connector gets an address named after it", web === "https://memory.example.net/mcp/claudeai", web);

@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.24
+
+- **Connecting an assistant is three short steps.** ChatGPT and Le Chat (Mistral) have their own steps, with the menus they use; Claude is one choice for the web, the app and the phone. Each step says only what to do, and the text that sets your memory up is folded away until you want it.
+
 ## 20261117.0.23
 
 - **The health referential is in the node.** The tagger reads one referential of signs, measures, vital constants and red flags (`health_referential`, docs/HEALTH.md) instead of its own patterns. Every tag it gave before is still given.

@@ -590,19 +590,15 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 
 <dialog id="wizard">
   <h2>Connect an assistant</h2>
-  <p class="mute small">Pick the assistant, say what it may reach, do the few steps in it, and this page waits for it to show up.</p>
-  <h3 class="wh">Which assistant?</h3>
+  <h3 class="wh">1. Which assistant?</h3>
   <div id="w-platforms"></div>
-  <h3 class="wh">Its name</h3>
-  <div id="w-namebox"></div>
-  <h3 class="wh">What may it reach?</h3>
+  <div id="w-namebox" style="margin-top:8px"></div>
+  <h3 class="wh">2. What may it reach?</h3>
   <div id="w-access"></div>
-  <h3 class="wh">In the assistant</h3>
+  <h3 class="wh">3. In the assistant</h3>
   <div id="w-steps"></div>
-  <h3 class="wh">The connection</h3>
-  <div id="w-wait"></div>
-  <h3 class="wh">Then, set up your memory</h3>
-  <div id="w-prompt"></div>
+  <div id="w-wait" style="margin-top:8px"></div>
+  <details style="margin-top:12px"><summary class="small">Then, if you like: help it set up your memory</summary><div id="w-prompt"></div></details>
   <form method="dialog" style="justify-content:flex-end"><button class="primary">Close</button></form>
 </dialog>
 
@@ -694,6 +690,35 @@ let LANG = "en";
 try { LANG = localStorage.getItem("memcp-lang") || ((navigator.language || "en").toLowerCase().startsWith("fr") ? "fr" : "en"); } catch (_) {}
 const loc = () => (LANG === "fr" ? "fr" : "en");
 const FR = {
+  "1. Which assistant?": "1. Quel assistant ?",
+  "2. What may it reach?": "2. Que peut-il atteindre ?",
+  "3. In the assistant": "3. Dans l’assistant",
+  "Then, if you like: help it set up your memory": "Ensuite, si vous voulez : l’aider à organiser votre mémoire",
+  "In Claude (web, app or phone): Settings, then Connectors, then Add custom connector.": "Dans Claude (web, application ou téléphone) : Réglages, puis Connecteurs, puis Ajouter un connecteur personnalisé.",
+  "Paste this address:": "Collez cette adresse :",
+  "Click Connect. On the page that opens, tick the spaces, then Allow.": "Cliquez sur Connecter. Sur la page qui s’ouvre, cochez les espaces, puis Autoriser.",
+  "In ChatGPT: Plugins, then Add, then Custom MCP server.": "Dans ChatGPT : Plugins, puis Ajouter, puis Serveur MCP personnalisé.",
+  "Name: MemCP. Server URL:": "Nom : MemCP. URL du serveur :",
+  "Authentication: OAuth. Tick “I understand”, then Create.": "Authentification : OAuth. Cochez « Je comprends », puis Créer.",
+  "On the page that opens, tick the spaces, then Allow.": "Sur la page qui s’ouvre, cochez les espaces, puis Autoriser.",
+  "In Le Chat: Intelligence, then Connectors, then Add connector, then Custom MCP connector.": "Dans Le Chat : Intelligence, puis Connecteurs, puis Ajouter un connecteur, puis Connecteur MCP personnalisé.",
+  "Server URL:": "URL du serveur :",
+  "Authentication: OAuth, then Connect.": "Authentification : OAuth, puis Connecter.",
+  "In a terminal (the command holds the key: keep it private):": "Dans un terminal (la commande contient la clé : gardez-la privée) :",
+  "In Claude Code, /mcp shows it connected.": "Dans Claude Code, /mcp le montre connecté.",
+  "In Kalios, memory settings: paste this configuration (it holds the key: keep it private).": "Dans Kalios, réglages de la mémoire : collez cette configuration (elle contient la clé : gardez-la privée).",
+  "It reaches only its own paths in your health space, and may propose its instructions, which you approve here.": "Elle n’atteint que ses propres chemins dans votre espace santé, et peut proposer ses consignes, que vous approuvez ici.",
+  "In its settings, add a remote MCP server (Streamable HTTP) with this address. It holds the key: keep it private.": "Dans ses réglages, ajoutez un serveur MCP distant (Streamable HTTP) avec cette adresse. Elle contient la clé : gardez-la privée.",
+  "If it asks for the address and the key apart, give the address alone and this header:": "S’il demande l’adresse et la clé séparément, donnez l’adresse seule et cet en-tête :",
+  "If it only offers OAuth, give the address alone: the consent page of this node opens.": "S’il ne propose qu’OAuth, donnez l’adresse seule : la page de consentement de ce nœud s’ouvre.",
+  "Name, the end of its address": "Nom, la fin de son adresse",
+  "You choose on the consent page that opens: all your spaces, or only some. You can change it later.": "Vous choisissez sur la page de consentement qui s’ouvre : tous vos espaces, ou seulement certains. Vous pourrez le changer plus tard.",
+  "It reaches only what you tick.": "Il n’atteint que ce que vous cochez.",
+  "This node's address is not HTTPS: most assistants refuse it.": "L’adresse de ce nœud n’est pas en HTTPS : la plupart des assistants la refusent.",
+  "This assistant calls your node from the internet: the address must open from outside your network.": "Cet assistant appelle votre nœud depuis internet : l’adresse doit s’ouvrir hors de votre réseau.",
+  "Once it is connected, paste this to it: it proposes how to organise your memory and writes nothing without your OK.": "Une fois connecté, collez-lui ceci : il propose comment organiser votre mémoire et n’écrit rien sans votre accord.",
+  "Le Chat (Mistral)": "Le Chat (Mistral)",
+
   "MemCP": "MemCP",
   "local": "local",
   "cloud": "cloud",
@@ -2696,46 +2721,48 @@ function secret(title, rows) {
 
 // --- Connect an assistant: pick the assistant, the access, do the steps, wait for it -----
 const PLATFORMS = [
-  { id: "claude-web", name: "Claude on the web or phone", oauth: true, where: "cloud",
+  // Assistants that sign in (OAuth): no key to copy, the consent page of this node asks which spaces.
+  { id: "claude-web", name: "Claude", oauth: true, where: "cloud", suggest: "claudeai",
     steps: () => [
-      "Open claude.ai, then Settings, then Connectors. Menu names change from time to time: look for Connectors or MCP.",
-      "Add a custom connector. Give it any name and this address:",
+      "In Claude (web, app or phone): Settings, then Connectors, then Add custom connector.",
+      "Paste this address:",
       { pre: addr() },
-      "Connect it. A page of this node opens in your browser: tick the spaces it may reach, then Allow.",
-      "Come back here: this page notices the connection."] },
-  { id: "claude-desktop", name: "Claude Desktop or Cowork", oauth: true, where: "local",
+      "Click Connect. On the page that opens, tick the spaces, then Allow."] },
+  { id: "chatgpt", name: "ChatGPT", oauth: true, where: "cloud", suggest: "chatgpt",
     steps: () => [
-      "In the Claude app, open Settings, then Connectors (or look for MCP).",
-      "Add a custom connector, with this address:",
+      "In ChatGPT: Plugins, then Add, then Custom MCP server.",
+      "Name: MemCP. Server URL:",
       { pre: addr() },
-      "Connect it, then tick the spaces it may reach on the page that opens, and Allow.",
-      "A connector added in the app follows the same rules as on the web. If your address only works on your private network and the app cannot reach it, a local relay would be needed; there is none yet."] },
+      "Authentication: OAuth. Tick “I understand”, then Create.",
+      "On the page that opens, tick the spaces, then Allow."] },
+  { id: "lechat", name: "Le Chat (Mistral)", oauth: true, where: "cloud", suggest: "lechat",
+    steps: () => [
+      "In Le Chat: Intelligence, then Connectors, then Add connector, then Custom MCP connector.",
+      "Server URL:",
+      { pre: addr() },
+      "Authentication: OAuth, then Connect.",
+      "On the page that opens, tick the spaces, then Allow."] },
+  // Assistants given a key: the spaces are ticked here.
   { id: "claude-code", name: "Claude Code", token: true, where: "local",
     steps: c => [
-      "In a terminal, run this command (it contains the key: do not share it):",
+      "In a terminal (the command holds the key: keep it private):",
       { pre: 'claude mcp add --transport http ' + W.slug + ' ' + addr() + ' --header "Authorization: Bearer ' + c.token + '"' },
-      "Start Claude Code and type /mcp: " + W.slug + " should be listed as connected.",
-      "Ask it something from your memory: this page notices its first request."] },
+      "In Claude Code, /mcp shows it connected."] },
   // An app with its own paths: the rights are preselected (nothing to tick) and it takes a pasted MCP
   // configuration. Its paths are those of docs/HEALTH-SOURCES.md; `guide` lets it propose its own guide.
   { id: "kalios", name: "Kalios (health journal app)", token: true, suggest: "kalios",
     rights: () => { const h = healthSpace(); return h ? ["sources/kalios", "dossier/kalios", "proposals/kalios", "guide"].map(p => h.name + "/" + p + ":rw").join(",") : ""; },
     steps: c => [
-      "In Kalios, open the memory settings and choose to paste an MCP configuration.",
-      "Paste this configuration (it contains the key: do not share it):",
+      "In Kalios, memory settings: paste this configuration (it holds the key: keep it private).",
       { pre: JSON.stringify({ mcpServers: { [W.slug]: { url: addr(), headers: { Authorization: "Bearer " + c.token } } } }, null, 2) },
-      "Kalios files its journal under sources/kalios in your " + (healthSpace() ? healthSpace().name : "health") + " space, writes its sorted summary under dossier/kalios and reads only the proposals tagged proposals/kalios. This key reaches nothing else, and can propose its own guide, which you approve on this page.",
-      "Once Kalios has sent something, this page notices it."] },
+      "It reaches only its own paths in your health space, and may propose its instructions, which you approve here."] },
   { id: "other", name: "Another assistant", token: true,
     steps: c => [
-      "Look for MCP servers, connectors or tools in the assistant's settings, and add a remote server (Streamable HTTP) with this address. It carries the key: keep it private.",
+      "In its settings, add a remote MCP server (Streamable HTTP) with this address. It holds the key: keep it private.",
       { pre: c.urlKey || addr() },
-      "If it asks for the address and the key apart, use this address:",
-      { pre: addr() },
-      "and this header:",
+      "If it asks for the address and the key apart, give the address alone and this header:",
       { pre: "Authorization: Bearer " + c.token },
-      "If it only offers a sign-in (OAuth) with no header, leave the key empty: it will open the consent page of this node.",
-      "Ask it something from your memory: this page notices its first request."] },
+      "If it only offers OAuth, give the address alone: the consent page of this node opens."] },
 ];
 // The address of a connection is its name: /mcp/<name>. The key (or the consent) says what it reaches;
 // cutting spaces later changes the rights, never the address.
@@ -2819,7 +2846,7 @@ const organisePrompt = () => (LANG === "fr" ? ORGANISE_PROMPT_FR : ORGANISE_PROM
 // The last step: what to say to the assistant once it is connected, to set the memory up.
 function renderPrompt() {
   $("#w-prompt").replaceChildren(!W.platform ? el("span", { class: "mute small" }, "…") : el("div", {},
-    el("p", { class: "small" }, "Once the assistant is connected, paste this to it. It will look at your memory, propose how to organise it, and ask you a few questions, one at a time. It writes nothing you did not approve."),
+    el("p", { class: "small" }, "Once it is connected, paste this to it: it proposes how to organise your memory and writes nothing without your OK."),
     el("pre", { style: "max-height:12em;overflow:auto" }, organisePrompt()), copyButton(organisePrompt())));
 }
 
@@ -2842,11 +2869,9 @@ function openWizard(pre = {}) {
 }
 
 function addressWarnings(oauth) {
-  const w = [];
-  if (!/^https:/.test(S.public_url)) w.push("This node's address is not HTTPS. Claude on the web and most apps need an HTTPS address.");
-  if (oauth) w.push("Claude on the web calls your node from the internet: an address that only works on your private network will not do (a public HTTPS address, such as Tailscale Funnel, is needed).");
-  if (/\.ts\.net/.test(S.public_url)) w.push("This looks like a Tailscale name: it is reachable from the internet only if Funnel is turned on for it.");
-  return w;
+  if (!/^https:/.test(S.public_url)) return ["This node's address is not HTTPS: most assistants refuse it."];
+  if (oauth) return ["This assistant calls your node from the internet: the address must open from outside your network."];
+  return [];
 }
 
 function renderWizard() {
@@ -2864,13 +2889,13 @@ function renderWizard() {
     const input = el("input", { id: "w-name", value: W.slug, size: "30", spellcheck: "false", autocomplete: "off",
       oninput: e => { W.slug = slugOf(e.target.value); renderWizard(); if (p.oauth && !nameProblem()) startWaiting(); } });
     nb.replaceChildren(
-      el("div", { class: "small mute" }, "It is how you will recognise this assistant in the list, and the end of its address: " + S.public_url + "/mcp/<name>. Lowercase letters, digits and dashes."),
-      input, el("div", { id: "w-name-note", class: "small", style: "margin-top:4px" }));
+      el("label", { class: "small mute", for: "w-name" }, "Name, the end of its address"), " ",
+      input, el("div", { id: "w-name-note", class: "small mute", style: "margin-top:4px" }));
   }
   if (p) {
     const problem = nameProblem();
     const note = $("#w-name-note");
-    if (note) { note.textContent = problem || "Its address: " + addr(); note.className = "small" + (problem ? " warn" : ""); }
+    if (note) { note.textContent = problem || addr(); note.className = "small" + (problem ? " warn" : " mute"); }
     if ($("#w-name")) $("#w-name").disabled = !!W.created;
   }
 
@@ -2878,7 +2903,7 @@ function renderWizard() {
   const acc = $("#w-access");
   if (!p) { acc.replaceChildren(el("span", { class: "mute small" }, "Pick an assistant first.")); }
   else if (p.oauth) {
-    acc.replaceChildren(el("div", { class: "small" }, "On the consent page that opens, tick “All my spaces” (the ones you make later too) or only some. With nothing ticked it gets nothing. You can cut spaces later from the list: its address and its sign-in stay the same."));
+    acc.replaceChildren(el("div", { class: "small" }, "You choose on the consent page that opens: all your spaces, or only some. You can change it later."));
   } else if (p.rights && !W.created) {
     const r = p.rights();
     acc.replaceChildren(
@@ -2895,7 +2920,7 @@ function renderWizard() {
       el("input", { type: "checkbox", checked: W.spaces.has(v.name) ? "" : null, onchange: e => { e.target.checked ? W.spaces.add(v.name) : W.spaces.delete(v.name); refreshCreate(); } }),
       " " + spaceLabel(v.name)));
     acc.replaceChildren(
-      el("div", { class: "small mute" }, "Nothing is ticked beforehand. It reaches only what you tick."),
+      el("div", { class: "small mute" }, "It reaches only what you tick."),
       el("label", { class: "inline", style: "margin-top:6px" }, el("input", { type: "checkbox", id: "w-all", checked: W.all ? "" : null, onchange: e => { W.all = e.target.checked; refreshCreate(); } }), " ", el("b", {}, "All my spaces"), ", and the ones I make later"),
       el("div", { style: "display:flex;flex-direction:column;gap:4px;margin:6px 0" }, ...boxes),
       el("label", { class: "inline" }, el("input", { type: "checkbox", id: "w-ro", checked: W.readOnly ? "" : null, onchange: e => { W.readOnly = e.target.checked; } }), " read only"),
@@ -2910,7 +2935,7 @@ function renderWizard() {
   else if (nameProblem() && !W.created) st.replaceChildren(el("span", { class: "mute small" }, "Give it a name above: the steps appear with its address."));
   else if (p.token && !W.created) st.replaceChildren(el("span", { class: "mute small" }, "Create the connection above: the steps appear with its key."));
   else {
-    const warn = addressWarnings(!!p.oauth).map(t => el("p", { class: "warn" }, t));
+    const warn = addressWarnings(!!p.oauth).map(t => el("p", { class: "small mute" }, t));
     const items = p.steps(W.created || {});
     const list = el("ol", { class: "steps" });
     for (const it of items) {
@@ -2933,7 +2958,7 @@ function nameProblem() {
   return "";
 }
 function suggestName(p) {
-  const base = p.suggest || { "claude-web": "claudeai", "claude-desktop": "claude-desktop", "claude-code": "claude-code", other: "assistant" }[p.id] || p.id;
+  const base = p.suggest || { "claude-code": "claude-code", other: "assistant" }[p.id] || p.id;
   let n = base, i = 2;
   while (S.spaces.some(v => v.name === n) || S.connections.some(c => c.agent === n && !c.revoked)) n = base + "-" + i++;
   return n;

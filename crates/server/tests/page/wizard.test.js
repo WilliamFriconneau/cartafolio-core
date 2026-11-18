@@ -149,12 +149,12 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   click($("#open-wizard"));
   click($$("#w-platforms button").find(b => b.textContent === "Claude Code"));
   check("opened from the button, nothing is ticked at all", $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").every(b => !b.checked), $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").map(b => b.checked).join());
-  click($$("#w-platforms button").find(b => b.textContent === "Claude on the web or phone"));
+  click($$("#w-platforms button").find(b => b.textContent === "Claude"));
   click($("#wizard form button"));
   click($("#open-wizard"));
   check("the wizard opens", $("#wizard").hasAttribute("open"));
   check("nothing chosen yet", text("#w-steps").includes("…") && text("#w-wait").includes("…"));
-  click($$("#w-platforms button").find(b => b.textContent.startsWith("Claude on the web")));
+  click($$("#w-platforms button").find(b => b.textContent === "Claude"));
   check("the name is asked first, with a suggestion", $("#w-name") && $("#w-name").value === "claudeai" && text("#w-namebox").includes("end of its address"), $("#w-name") && $("#w-name").value);
   check("the address is the name's, in the steps", text("#w-steps").includes("https://memory.example.net/mcp/claudeai") && text("#w-namebox").includes("/mcp/claudeai"), text("#w-steps"));
   check("the access step says the consent page asks", text("#w-access").includes("consent page"));
@@ -335,7 +335,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
 
   // --- the name is the address; a name in use is refused, a revoked one is free again
   click($$("#spaces button").find(b => b.textContent === "Connect"));
-  click($$("#w-platforms button").find(b => b.textContent.startsWith("Claude on the web")));
+  click($$("#w-platforms button").find(b => b.textContent === "Claude"));
   check("an OAuth connector has no vault to pick: the consent page asks", $("#w-access select") === null && text("#w-access").includes("consent page"));
   const rn = v => { $("#w-name").value = v; $("#w-name").dispatchEvent(new w.Event("input")); };
   rn("my-laptop");
