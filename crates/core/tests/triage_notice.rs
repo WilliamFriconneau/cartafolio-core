@@ -21,7 +21,10 @@ fn put(b: &memcp_core::Brain, space: &memcp_core::Space, text: &str, tags: &[&st
     Ok(())
 }
 
-fn told(b: &memcp_core::Brain, space: &memcp_core::Space) -> Result<String, Box<dyn std::error::Error>> {
+fn told(
+    b: &memcp_core::Brain,
+    space: &memcp_core::Space,
+) -> Result<String, Box<dyn std::error::Error>> {
     let ctl = b.open_control()?;
     let rights = Rights::parse(&format!("{}:rw", space.as_str()))?;
     let tok = access::connect_for(&ctl, OWNER, "assistant", &rights, None, false, false)?;
@@ -34,8 +37,18 @@ fn facts_of_the_inbox_space_that_are_not_waiting_are_not_announced() -> Res {
     let t = Temp::new("triage-notice-none");
     let b = brain(&t)?;
     let space = triage::ensure(&b, OWNER, "owner")?;
-    put(&b, &space, "The janitor's keywords for this space.", &["rules"])?;
-    put(&b, &space, "What the reader made of a recording.", &["dossier/bridge"])?;
+    put(
+        &b,
+        &space,
+        "The janitor's keywords for this space.",
+        &["rules"],
+    )?;
+    put(
+        &b,
+        &space,
+        "What the reader made of a recording.",
+        &["dossier/bridge"],
+    )?;
     let text = told(&b, &space)?;
     assert!(!text.contains("ATTENTION"), "{text}");
     Ok(())
@@ -46,8 +59,18 @@ fn only_the_notes_waiting_for_a_decision_are_counted() -> Res {
     let t = Temp::new("triage-notice-one");
     let b = brain(&t)?;
     let space = triage::ensure(&b, OWNER, "owner")?;
-    put(&b, &space, "The janitor's keywords for this space.", &["rules"])?;
-    put(&b, &space, "What the reader made of a recording.", &["dossier/bridge"])?;
+    put(
+        &b,
+        &space,
+        "The janitor's keywords for this space.",
+        &["rules"],
+    )?;
+    put(
+        &b,
+        &space,
+        "What the reader made of a recording.",
+        &["dossier/bridge"],
+    )?;
     put(&b, &space, "Call the plumber on Friday.", &["inbox"])?;
     let text = told(&b, &space)?;
     assert!(text.contains("ATTENTION: 1 "), "{text}");
