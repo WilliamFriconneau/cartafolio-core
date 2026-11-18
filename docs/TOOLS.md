@@ -1461,8 +1461,8 @@ Keeps a photo, a document or a recording (JPEG, PNG, GIF, WebP, HEIC, PDF, text,
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it).
 - **Answer:** `{ result: "kept", file }`.
-- **Errors:** `invalid` (empty, unknown type, bad base64); `denied`; `limited`.
-- **Effects:** Stores the bytes under their digest and writes a describing fact; the same file under the same name is one file.
+- **Errors:** `invalid` (empty, unknown type, bad base64, over 24 MiB); `denied`; `limited`.
+- **Effects:** Stores the bytes under their digest and writes a describing fact; the same file under the same name is one file. A file comes here in one piece, so at most 24 MiB; a bigger one, up to 2 GiB, comes from a watched folder or `memcp intake send` (see [INTAKE.md](INTAKE.md)).
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
@@ -1612,7 +1612,7 @@ Returns a kept photo (as an image) or document by its id.
 
 - **Seen with:** read access on at least one space.
 - **Answer:** `{ file, mcp_content: [block] }`: an `image` block, a `text` block or a `resource` with the bytes.
-- **Errors:** `invalid` (`unknown file`).
+- **Errors:** `invalid` (`unknown file`; a file over 24 MiB is too big to read in one piece: the page serves it).
 - **Effects:** None.
 
 | Field | Type | Required | Limits |

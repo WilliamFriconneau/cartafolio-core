@@ -907,35 +907,62 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
     if !readable {
         return err(404, "unknown file");
     }
-    match files::get(&app.brain, &space, id) {
-        Ok(Some((f, bytes))) => Response {
-            status: 200,
-            headers: vec![
-                ("Content-Type".into(), f.mime.clone()),
-                (
-                    "Content-Disposition".into(),
-                    format!(
-                        "{}; filename=\"{}\"",
-                        if f.mime == files::XLSX {
-                            "attachment"
-                        } else {
-                            "inline"
-                        },
-                        f.name
-                            .replace(['"', '\\'], "_")
-                            .replace(|c: char| c.is_control(), "_")
+    // A file too big to read whole is sent from a link to its bytes, block by block (the link goes once it is sent).
+    let big = files::info(&app.brain, &space, id)
+        .ok()
+        .flatten()
+        .is_some_and(|f| f.size > files::MAX_INLINE as i64);
+    let found = if big {
+        files::path_of(&app.brain, &space, id).and_then(|found| {
+            let Some((f, path)) = found else {
+                return Ok(None);
+            };
+            let out = app.brain.dir().join("outgoing");
+            std::fs::create_dir_all(&out)?;
+            let link = out.join(memcp_core::text::hex(&util::random_bytes::<8>()));
+            if std::fs::hard_link(&path, &link).is_err() {
+                std::fs::copy(&path, &link)?;
+            }
+            Ok(Some((f, Err(link))))
+        })
+    } else {
+        files::get(&app.brain, &space, id).map(|o| o.map(|(f, b)| (f, Ok(b))))
+    };
+    match found {
+        Ok(Some((f, bytes))) => {
+            let (body, file) = match bytes {
+                Ok(b) => (b, None),
+                Err(link) => (vec![], Some(link)),
+            };
+            Response {
+                status: 200,
+                headers: vec![
+                    ("Content-Type".into(), f.mime.clone()),
+                    (
+                        "Content-Disposition".into(),
+                        format!(
+                            "{}; filename=\"{}\"",
+                            if f.mime == files::XLSX {
+                                "attachment"
+                            } else {
+                                "inline"
+                            },
+                            f.name
+                                .replace(['"', '\\'], "_")
+                                .replace(|c: char| c.is_control(), "_")
+                        ),
                     ),
-                ),
-                (
-                    "Content-Security-Policy".into(),
-                    "sandbox; default-src 'none'; img-src 'self'".into(),
-                ),
-                ("X-Content-Type-Options".into(), "nosniff".into()),
-                ("Cache-Control".into(), "no-store".into()),
-            ],
-            body: bytes,
-            file: None,
-        },
+                    (
+                        "Content-Security-Policy".into(),
+                        "sandbox; default-src 'none'; img-src 'self'".into(),
+                    ),
+                    ("X-Content-Type-Options".into(), "nosniff".into()),
+                    ("Cache-Control".into(), "no-store".into()),
+                ],
+                body,
+                file,
+            }
+        }
         Ok(None) => err(404, "unknown file"),
         Err(e) => fail(e),
     }

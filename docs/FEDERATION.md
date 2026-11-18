@@ -39,7 +39,7 @@ A fact is never overwritten. It has an id, it is added, and it is later replaced
 | A note's *processed* mark | A replicated event: see *Processed notes* below. |
 | Guides | One writer at a time: the person, on a node they sign in to. Others receive them. |
 | Mounted folders | A mount is a logical folder; each node holds it at a path of its own. Per mount and per pair of nodes the person chooses: files and passages, passages only, or nothing (see SPACES.md, *One synchroniser per folder*). |
-| Files (photos, recordings, documents) | Built: content-addressed by hash, each file whole inside its `file_put` event (base64), so a space keeps no file over 24 MiB (`files::MAX_BYTES`, every way in). A recording erased after its transcription is erased on every node, and its bytes never travel again. Target: chunks fetched from any node that has them, like a torrent. |
+| Files (photos, recordings, documents) | Built: content-addressed by hash. A file up to 24 MiB (`files::MAX_INLINE`) travels whole inside its `file_put` event (base64); a bigger one, up to 2 GiB (`files::MAX_BYTES`), travels in chunks of 4 MiB fetched from the peer that has them and checked one by one, and counts as held only once whole and matching its digest (« Files in chunks, as built » below). A recording erased after its transcription is erased on every node, with its chunks, and its bytes never travel again. Target: chunks fetched from any node of the swarm at once, not only the peer of the pass. |
 
 ## Shape
 
@@ -65,6 +65,19 @@ A fact is never overwritten. It has an id, it is added, and it is later replaced
 - **A renamed machine keeps its policy** (`access::rename` moves it).
 - **Where it is set.** The page (Machines, « spaces and ways » on a machine: a choice per space, and one for the spaces made later), `GET|POST /admin/api/sync/policy`, and `memcp node policy PEER [SPACE POLICY | --later POLICY]`. Only the person, for their own spaces and machines; the changes are audited (`sync_policy`).
 - **Machines of an older version** ignore the fields. They keep exchanging what their key reaches, and the newer node keeps its side: it does not send what it does not give and refuses what it does not take, so its choice holds. What an older machine sees is a problem line at each pass (`offer refused` for a space declined, `403` for a space the other side does not send or take); nothing is lost.
+
+### Files in chunks, as built
+
+**Built** (`memcp_core::chunks`; the event in `memcp_core::sync`, the routes in `memcp_server::sync_http`, the pass in `memcp_client::peer_sync`).
+
+- **Sizes.** A space keeps a file of up to **2 GiB** (`files::MAX_BYTES`). A file up to **24 MiB** (`files::MAX_INLINE`) travels as before, whole inside its `file_put` event in base64; a bigger one travels in **chunks of 4 MiB** (`chunks::CHUNK_BYTES`, the last one shorter): small enough for one request of any node and for a phone's memory, big enough that a file of 2 GiB is 512 chunks and its list about 34 kB.
+- **The event.** The `file_put` of a big file carries its digest (`sha256`), its `size`, `chunk_size` (4194304) and `chunks`, the digests of its chunks in order, and no `data`. The list is computed once, when the file is put, and goes on with the event from node to node. A node refuses a list that does not fit the size, chunks of another size, or a file over 2 GiB.
+- **How chunks travel.** Applying such an event, a node that lacks the bytes stops there (`wants`: the file and the positions of the chunks it lacks) and the events after it wait. Pulling, the node running the pass fetches each missing chunk from the peer (`GET /sync/chunk?space=S&file=SHA&n=N&hash=H`) and applies the rest again. Pushing, the peer answers `wants` and the pass sends what it lacks (`POST /sync/chunk?space=S&file=SHA&hash=H`, raw bytes), then sends the rest. A node gives a chunk from the whole file it holds, read at its offset, or from the chunks it keeps aside of a file it does not hold whole yet; it gives only a chunk of a file the space holds or waits for.
+- **Checked, resumable.** A chunk is kept only when its bytes match its digest; otherwise it is refused, the pass says so (`chunk N of file SHA refused: ...`) and nothing of it is written. The chunks received wait aside, by file and digest (`sync-chunks/<space>/<sha256>/`), so a pass cut halfway keeps them, and the next pass, with this peer or another, asks only for the rest. Once all are here the file is put together beside the space's files and kept only if the whole matches its digest and size; then the chunks aside go. Until then the file is not held: its event is not dealt with, and the sender counts it as not held. A node takes chunks only for a file an event of the space asked for.
+- **Never whole in memory.** A big file comes in from disk a block at a time (`files::put_path`: a watched folder, `memcp intake send`), is hashed and put together from chunks on disk, and is served by the page from its file. Nothing reads it whole: `file_get` and the other readers in one piece refuse a file over 24 MiB.
+- **The policy.** The chunk routes follow the sync policy like the events: `GET /sync/chunk` answers 403 for a space this node does not give the machine, `POST /sync/chunk` 403 for one it does not take.
+- **Nodes of an earlier version.** A node says it takes chunks with `chunks: 4194304` in `GET /sync/spaces`, and asks for them with `chunks=1` on `GET /sync/events`. To a node that does neither, files up to 24 MiB go whole as before, and a bigger one is not sent: the pass says `N file(s) over 24 MB not sent: the peer runs an earlier version, which takes no chunks`, the event is never counted as held by that peer (so a window never prunes it), and the retirement of that file is held back with it. A node of an earlier version that pulls gets the same. Once that peer takes chunks, the exchange goes back to the first event left out for it, and they arrive (what the peer already holds is skipped). A recording erased at its origin goes to every node as its record without its bytes, big or not.
+- **Erased and pruned.** A recording erased after its transcription is erased on every node, with any chunks of it kept aside; a window replica that prunes a file removes its chunks aside too.
 
 ## Spaces in the swarm: what exists on one node exists on all
 
@@ -273,12 +286,12 @@ Rules that hold everywhere: **nothing is overwritten and nothing is erased by a 
 
 ## Order and cost
 
-**Built**: steps 1, 2 and 3 (the policy per space and per node, the page, adding and revoking a node), and step 5 (showing and resolving disputes of notes). **Target**: files in chunks.
+**Built**: steps 1 to 5: the policy per space and per node, the page, adding and revoking a node, files by hash and in chunks, and showing and resolving disputes of notes. **Target**: chunks from several nodes at once, the key pair identity and the iroh transport.
 
 1. Event log with stable ids, hybrid logical clock and a "changed since" read on each space (most of it exists in the history already).
 2. The node: a store, a key, a list of peers, an outbox, a catch-up exchange over one transport, tested with three nodes and one switched off.
 3. Policy per space and per node, the page, adding and revoking a node. **Built.**
-4. Files by hash and chunks.
+4. Files by hash and chunks. **Built** (« Files in chunks, as built »).
 5. Disputes: showing and resolving them. **Built.**
 
 Honest cost: this is the largest piece of the plan, and the one where a mistake loses data. It is built last, with a test that switches nodes off and on in every order, and it must not delay the spaces, the mounts and the app.

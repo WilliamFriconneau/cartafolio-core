@@ -244,8 +244,10 @@ pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) 
     Ok(())
 }
 
-/// Removes the bytes of a stored file from this space's folder (a window replica pruning, see `sync`).
+/// Removes the bytes of a stored file from this space's folder, and the chunks of it kept aside (a window replica
+/// pruning, a recording erased at its origin: see `sync`).
 pub(crate) fn remove_blob(brain: &Brain, space: &Space, sha: &str) -> Result<()> {
+    crate::chunks::drop_staged(brain, space, sha);
     match fs::remove_file(blob_dir(brain, space).join(sha)) {
         Ok(()) => Ok(()),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
@@ -273,10 +275,37 @@ pub(crate) fn clean_name(name: &str) -> String {
         .to_string()
 }
 
-/// The biggest file a space keeps: 24 MiB. A file travels to the other nodes inside one event, in base64 (a third
-/// bigger), and a node reads at most 34 MiB in one request: every way in (an assistant, an app, a watched folder, a
-/// space's folder) takes this limit, so that every file kept can reach every node.
-pub const MAX_BYTES: usize = 24 * 1024 * 1024;
+/// The biggest file a space keeps: 2 GiB. A file up to [`MAX_INLINE`] travels to the other nodes inside its event; a
+/// bigger one travels in chunks (see `crate::chunks`), read and written a chunk at a time, never whole in memory. It
+/// comes in from a file on disk ([`put_path`]: a watched folder, `memcp intake send`, a file the remote command line
+/// uploads) or from a peer.
+pub const MAX_BYTES: usize = 2 * 1024 * 1024 * 1024;
+
+/// The biggest file read whole in memory: 24 MiB. It is the most a file may be when it comes inside one request (an
+/// assistant's `file_put`, a file put on the page: base64, a third bigger, in a body of at most 34 MiB), when a space's
+/// folder brings it, when it is read back whole (`file_get`, [`get`]), and when it travels inside its event to a node of
+/// an earlier version, which takes no chunks.
+pub const MAX_INLINE: usize = 24 * 1024 * 1024;
+
+/// Where the bytes of the file of digest `sha` of `space` are, whether they are there or not.
+pub fn blob_path(brain: &Brain, space: &Space, sha: &str) -> PathBuf {
+    blob_dir(brain, space).join(sha)
+}
+
+/// Whether this node holds the bytes of `sha` in `space`: already there, or a hard link made to the same bytes held in
+/// another space of this node (nothing travels then).
+pub(crate) fn hold_or_link(brain: &Brain, space: &Space, sha: &str) -> Result<bool> {
+    let path = blob_path(brain, space, sha);
+    if path.exists() {
+        return Ok(true);
+    }
+    let dir = blob_dir(brain, space);
+    DirBuilder::new()
+        .recursive(true)
+        .private_dir()
+        .create(&dir)?;
+    Ok(link_from_another_space(brain, space, sha, &path))
+}
 
 /// Stores a file in a space and describes it with a fact. Returns its record.
 pub fn put(
@@ -304,9 +333,10 @@ pub fn put_tagged(
     if bytes.is_empty() {
         return Err(Error::Invalid("the file is empty".into()));
     }
-    if bytes.len() > MAX_BYTES {
+    if bytes.len() > MAX_INLINE {
         return Err(Error::Invalid(format!(
-            "the file is over {} MB, the most a file may be to reach the other nodes",
+            "the file is over {} MB, the most a file may be when it comes in one piece; a bigger one (up to {} MB) comes from a watched folder or `memcp intake send`",
+            MAX_INLINE / 1024 / 1024,
             MAX_BYTES / 1024 / 1024
         )));
     }
@@ -314,12 +344,172 @@ pub fn put_tagged(
     if name.is_empty() {
         return Err(Error::Invalid("a file needs a name".into()));
     }
-    let mime = sniff(bytes, &name).ok_or_else(|| {
-        Error::Invalid(
-            "only images (JPEG, PNG, GIF, WebP, HEIC), PDF, text, .xlsx workbooks and recordings (m4a, mp3, wav, ogg, webm, flac, caf, amr) are kept"
-                .into(),
+    let mime = sniff(bytes, &name).ok_or_else(not_kept)?;
+    let sha = hex(&Sha256::digest(bytes));
+    if let Some(same) = same_file(brain, space, &sha, &name)? {
+        return Ok(same);
+    }
+    // The bytes: written once per content, private.
+    store_blob(brain, space, &sha, bytes)?;
+    keep(
+        brain,
+        space,
+        author,
+        &name,
+        note,
+        mime,
+        &sha,
+        bytes.len() as u64,
+        tags,
+    )
+}
+
+fn not_kept() -> Error {
+    Error::Invalid(
+        "only images (JPEG, PNG, GIF, WebP, HEIC), PDF, text, .xlsx workbooks and recordings (m4a, mp3, wav, ogg, webm, flac, caf, amr) are kept"
+            .into(),
+    )
+}
+
+/// The same file under the same name is one file: its record, when it is already here.
+fn same_file(brain: &Brain, space: &Space, sha: &str, name: &str) -> Result<Option<FileInfo>> {
+    let conn = brain.open_space(space)?;
+    let same: Option<String> = conn
+        .query_row(
+            "SELECT id FROM files WHERE sha256 = ?1 AND name = ?2 AND status = 'active' LIMIT 1",
+            params![sha, name],
+            |r| r.get(0),
         )
-    })?;
+        .optional()?;
+    match same {
+        Some(id) => {
+            Ok(Some(info(brain, space, &id)?.ok_or_else(|| {
+                Error::Schema("file not found after reading".into())
+            })?))
+        }
+        None => Ok(None),
+    }
+}
+
+/// The type of a big file from its first bytes: as [`sniff`], a text cut in the middle of a character included.
+pub(crate) fn sniff_head(head: &[u8], name: &str) -> Option<&'static str> {
+    let head = match std::str::from_utf8(head) {
+        Err(e) if e.error_len().is_none() => &head[..e.valid_up_to()],
+        _ => head,
+    };
+    sniff(head, name)
+}
+
+/// How much of a big file is read to know its type.
+const HEAD_BYTES: usize = 64 * 1024;
+
+/// [`put_tagged`] for a file on disk, up to [`MAX_BYTES`]: one of [`MAX_INLINE`] or less is read as before; a bigger one
+/// is copied a block at a time beside the space's files while its digest is computed, never held whole in memory, and
+/// its type is read from its first bytes.
+pub fn put_path(
+    brain: &Brain,
+    space: &Space,
+    author: &str,
+    name: &str,
+    note: &str,
+    path: &Path,
+    tags: &[String],
+) -> Result<FileInfo> {
+    let len = fs::metadata(path)?.len();
+    if len <= MAX_INLINE as u64 {
+        let bytes = fs::read(path)?;
+        return put_tagged(brain, space, author, name, note, &bytes, tags);
+    }
+    if len > MAX_BYTES as u64 {
+        return Err(Error::Invalid(format!(
+            "the file is over {} MB, the most a space keeps",
+            MAX_BYTES / 1024 / 1024
+        )));
+    }
+    let name = clean_name(name);
+    if name.is_empty() {
+        return Err(Error::Invalid("a file needs a name".into()));
+    }
+    let mut src = fs::File::open(path)?;
+    let mut head = vec![0u8; HEAD_BYTES];
+    let mut got = 0;
+    while got < head.len() {
+        match std::io::Read::read(&mut src, &mut head[got..])? {
+            0 => break,
+            n => got += n,
+        }
+    }
+    head.truncate(got);
+    let mime = sniff_head(&head, &name).ok_or_else(not_kept)?;
+    // Copied beside the files of the space, the digest computed on the way.
+    let dir = blob_dir(brain, space);
+    DirBuilder::new()
+        .recursive(true)
+        .private_dir()
+        .create(&dir)?;
+    let tmp = dir.join(format!(".in-{}.tmp", util::random_base32(10)));
+    let copied = (|| -> Result<(String, u64)> {
+        let mut out = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .private_file()
+            .open(&tmp)?;
+        let mut hasher = Sha256::new();
+        hasher.update(&head);
+        out.write_all(&head)?;
+        let mut total = head.len() as u64;
+        let mut buf = vec![0u8; 1 << 20];
+        loop {
+            let n = std::io::Read::read(&mut src, &mut buf)?;
+            if n == 0 {
+                break;
+            }
+            total += n as u64;
+            if total > MAX_BYTES as u64 {
+                return Err(Error::Invalid(
+                    "the file grew past the most a space keeps".into(),
+                ));
+            }
+            hasher.update(&buf[..n]);
+            out.write_all(&buf[..n])?;
+        }
+        out.sync_all()?;
+        Ok((hex(&hasher.finalize()), total))
+    })();
+    let (sha, size) = match copied {
+        Ok(v) => v,
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            return Err(e);
+        }
+    };
+    if let Some(same) = same_file(brain, space, &sha, &name)? {
+        let _ = fs::remove_file(&tmp);
+        return Ok(same);
+    }
+    let target = dir.join(&sha);
+    if target.exists() || link_from_another_space(brain, space, &sha, &target) {
+        let _ = fs::remove_file(&tmp);
+    } else {
+        fs::rename(&tmp, &target)?;
+    }
+    keep(brain, space, author, &name, note, mime, &sha, size, tags)
+}
+
+/// The record of a file whose bytes are kept: its describing fact, its row and its event.
+#[allow(clippy::too_many_arguments)]
+fn keep(
+    brain: &Brain,
+    space: &Space,
+    author: &str,
+    name: &str,
+    note: &str,
+    mime: &str,
+    sha: &str,
+    size: u64,
+    tags: &[String],
+) -> Result<FileInfo> {
     let note = text::normalize(
         &note
             .chars()
@@ -328,23 +518,6 @@ pub fn put_tagged(
             .collect::<String>(),
     );
     let conn = brain.open_space(space)?;
-    let sha = hex(&Sha256::digest(bytes));
-
-    // The same file under the same name is one file.
-    let same: Option<String> = conn
-        .query_row(
-            "SELECT id FROM files WHERE sha256 = ?1 AND name = ?2 AND status = 'active' LIMIT 1",
-            params![sha, name],
-            |r| r.get(0),
-        )
-        .optional()?;
-    if let Some(id) = same {
-        return info(brain, space, &id)?
-            .ok_or_else(|| Error::Schema("file not found after reading".into()));
-    }
-
-    // The bytes: written once per content, private.
-    store_blob(brain, space, &sha, bytes)?;
 
     // A fact that makes it findable; it stands alone, distinct from close notes.
     let text = if note.is_empty() {
@@ -366,7 +539,7 @@ pub fn put_tagged(
             Remembered::Duplicate(_) if !fingerprinted => {
                 fingerprinted = true;
                 // The same mark a merge gives a file whose note is taken.
-                fact.text = format!("{text} [{}]", sha.get(..8).unwrap_or(&sha));
+                fact.text = format!("{text} [{}]", sha.get(..8).unwrap_or(sha));
             }
             Remembered::Duplicate(_) => break None,
             Remembered::NeedsDecision(c) if decided.is_empty() => {
@@ -383,7 +556,7 @@ pub fn put_tagged(
             id,
             name,
             mime,
-            i64::try_from(bytes.len()).unwrap_or(i64::MAX),
+            i64::try_from(size).unwrap_or(i64::MAX),
             sha,
             note,
             fact_id,
@@ -397,7 +570,13 @@ pub fn put_tagged(
             params![f, json!({ "file_id": id }).to_string()],
         )?;
     }
-    crate::sync::record_file_put(&conn, &id)?;
+    // A file too big to travel whole travels in chunks: their digests are in its event from the start.
+    let list = if size > MAX_INLINE as u64 {
+        Some(crate::chunks::hashes_of(&blob_path(brain, space, sha))?)
+    } else {
+        None
+    };
+    crate::sync::record_file_put_with(&conn, &id, list.as_deref())?;
     info(brain, space, &id)?.ok_or_else(|| Error::Schema("file not found after writing".into()))
 }
 
@@ -413,13 +592,34 @@ pub fn info(brain: &Brain, space: &Space, id: &str) -> Result<Option<FileInfo>> 
         .optional()?)
 }
 
-/// The record and the bytes of a file.
+/// The record of a file and where its bytes are, for a file of any size read a block at a time (the page serves it
+/// so). `None` when the record is not in this space, or its bytes were erased or are not here.
+pub fn path_of(brain: &Brain, space: &Space, id: &str) -> Result<Option<(FileInfo, PathBuf)>> {
+    let Some(f) = info(brain, space, id)? else {
+        return Ok(None);
+    };
+    if erased(brain, space, id)? {
+        return Ok(None);
+    }
+    let path = blob_path(brain, space, &f.sha256);
+    Ok(path.exists().then_some((f, path)))
+}
+
+/// The record and the bytes of a file, up to [`MAX_INLINE`] (a bigger one is an error: see [`path_of`]).
 pub fn get(brain: &Brain, space: &Space, id: &str) -> Result<Option<(FileInfo, Vec<u8>)>> {
     let Some(f) = info(brain, space, id)? else {
         return Ok(None);
     };
     if erased(brain, space, id)? {
         return Ok(None);
+    }
+    if f.size > MAX_INLINE as i64 {
+        return Err(Error::Invalid(format!(
+            "{} is {} MB, too big to read in one piece (at most {} MB): open it on the page",
+            f.name,
+            f.size / 1024 / 1024,
+            MAX_INLINE / 1024 / 1024
+        )));
     }
     let bytes = fs::read(blob_dir(brain, space).join(&f.sha256))?;
     if hex(&Sha256::digest(&bytes)) != f.sha256 {
@@ -671,6 +871,7 @@ pub fn erase_at(
         |r| r.get(0),
     )?;
     if others == 0 {
+        crate::chunks::drop_staged(brain, space, &f.sha256);
         match fs::remove_file(blob_dir(brain, space).join(&f.sha256)) {
             Ok(()) => {}
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}

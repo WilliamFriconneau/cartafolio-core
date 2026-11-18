@@ -26,8 +26,10 @@ use super::{Error, Memory};
 pub const SETTLE_SECS: i64 = 3;
 /// The most a note of this kind holds (the memory takes 4000 characters).
 const NOTE_MAX: usize = 3500;
-/// The biggest file taken: the biggest a space keeps (see `memcp_core::files::MAX_BYTES`).
+/// The biggest file taken: the biggest a space keeps (see `memcp_core::files::MAX_BYTES`). A file over
+/// `memcp_core::files::MAX_INLINE` is kept from its path, a block at a time; a text that big is not made into notes.
 const FILE_MAX: u64 = memcp_core::files::MAX_BYTES as u64;
+const INLINE_MAX: u64 = memcp_core::files::MAX_INLINE as u64;
 /// Tries before a file the memory refuses is left alone.
 const MAX_FAILS: u64 = 3;
 /// How deep the folder is read.
@@ -311,6 +313,34 @@ fn take(
     report: &mut Report,
 ) -> Result<(), String> {
     let ext = extension(path);
+    let len = std::fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if len > INLINE_MAX {
+        if TEXT.contains(&ext.as_str()) {
+            return Err(format!(
+                "a text over {} MB is not made into notes",
+                INLINE_MAX / 1024 / 1024
+            ));
+        }
+        // A big recording or file: kept from its path, never read whole in memory.
+        let (name, note, tags) = if AUDIO.contains(&ext.as_str()) {
+            (
+                recording_name(rel, mtime, offset),
+                format!("Enregistrement déposé dans un dossier surveillé ({rel})"),
+                "inbox/audio",
+            )
+        } else {
+            (
+                rel.rsplit('/').next().unwrap_or(rel).to_string(),
+                format!("Fichier déposé dans un dossier surveillé ({rel})"),
+                "inbox",
+            )
+        };
+        memory
+            .file_put_path(space, &name, &note, &[tags], path)
+            .map_err(|e| e.to_string())?;
+        report.files += 1;
+        return Ok(());
+    }
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;
     let (y, mo, d, _, _) = super::time::civil(mtime, offset);
     if TEXT.contains(&ext.as_str()) {

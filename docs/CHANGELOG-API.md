@@ -2,6 +2,35 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Files in chunks, up to 2 GiB (Unreleased)
+
+A file over 24 MiB travels between nodes in chunks of 4 MiB. Everything below is added; the protocol stays 1, and a node of
+an earlier version keeps exchanging files up to 24 MiB whole. The rules are in
+[FEDERATION.md](FEDERATION.md#files-in-chunks-as-built).
+
+- **Limits.** A space keeps a file of up to 2 GiB (`files::MAX_BYTES`, was 24 MiB). A file that comes in one request (`file_put`,
+  a file put on the page) or from a space's folder stays at most 24 MiB (`files::MAX_INLINE`): above, `invalid` (`the file is
+  over 24 MB, the most a file may be when it comes in one piece; ...`). A watched folder and `memcp intake send` take up to
+  2 GiB, read a block at a time. `file_get` refuses a file over 24 MiB (`invalid`, `... too big to read in one piece`); the
+  page serves it whole (`GET /admin/api/file`).
+- **`GET /sync/spaces`** carries `chunks: 4194304` (the size of a chunk): this node takes and gives big files in chunks.
+- **`GET /sync/events`** takes `chunks=1`: the `file_put` of a file over 24 MiB comes as `{..., sha256, size, chunk_size:
+  4194304, chunks: [digest, ...]}`, without `data`. Without it, such a file and its retirement are left out (an erased one
+  still goes, as its record). Once the same machine asks with `chunks=1`, the node goes back to the first event it left out.
+- **`POST /sync/events`** takes the same form, and answers `wants: {file, missing: [{n, hash}]}` when it stopped on a file
+  whose chunks it lacks (`stopped` says it too): the sender gives them, then sends the rest again.
+- **`GET /sync/chunk?space=S&file=SHA&n=N[&hash=H]`**: chunk `n` of a file of the space, raw bytes
+  (`application/octet-stream`), 404 when this node has neither the file nor that chunk. 403 for a space this node does not
+  give the machine.
+- **`POST /sync/chunk?space=S&file=SHA&hash=H`** (raw bytes, at most 4 MiB): a chunk of a file this node waits for; `{stored:
+  true}`, 400 when the bytes do not match `hash` or no event asked for that file, 403 for a space this node does not take.
+- **The pass** counts `chunks_in` and `chunks_out`, and says `SPACE: push: N file(s) over 24 MB not sent: the peer runs an
+  earlier version, which takes no chunks` and `SPACE: pull: chunk N of file SHA refused: ...`.
+- **On disk**: the chunks received of a file not yet whole wait in `sync-chunks/<space>/<sha256>/<chunk sha256>`.
+- **Core**: `files::put_path`, `files::path_of`, `files::blob_path`, `files::MAX_INLINE`, the module `chunks`,
+  `sync::events_after_with`, `Page::withheld`, `Applied::wants`, `sync::note_held`, `note_withheld`, `take_withheld`;
+  `tools::file_put_path`.
+
 ## Sync policy per space and per machine (Unreleased)
 
 What a node does with each space of the person and each of their machines. Everything below is added; nothing is

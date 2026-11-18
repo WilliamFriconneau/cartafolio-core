@@ -105,6 +105,8 @@ watch_every = 10                                                          # seco
 - The first look takes what is already in the folder: it is a drop box, not a library. For a folder of notes to keep up to date, use
   `absorb`; for a folder that **is** a space on this node (notes and files kept as Markdown, both ways), see [FOLDERS.md](FOLDERS.md).
 - A file the memory refuses is tried three times, then left alone, said once.
+- A recording or a file may be up to 2 GB: one over 24 MB is read a block at a time, never whole in memory, and reaches the other
+  nodes in chunks. A text over 24 MB is not made into notes.
 
 ## Folders absorbed, proposals put down as files
 

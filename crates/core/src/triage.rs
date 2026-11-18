@@ -171,8 +171,9 @@ pub fn send(
     }
     let reason = |new: &str| format!("sent from the Inbox to {to} ({new}) by {author}");
     if let Some(f) = files::info(brain, from, id)?.filter(|f| f.status == "active") {
-        let (_, bytes) =
-            files::get(brain, from, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))?;
+        // Read from where it is kept, a block at a time: a big recording is never held whole.
+        let (_, path) = files::path_of(brain, from, id)?
+            .ok_or_else(|| Error::Invalid("unknown file".into()))?;
         let mut tags = match &f.fact_id {
             Some(fid) => facts::read_fact(&brain.open_space(from)?, fid)?
                 .map(|x| x.tags)
@@ -187,7 +188,7 @@ pub fn send(
             &f.note,
             &mut tags,
         );
-        let new = files::put_tagged(brain, to, author, &f.name, &f.note, &bytes, &tags)?;
+        let new = files::put_path(brain, to, author, &f.name, &f.note, &path, &tags)?;
         files::retire(brain, from, author, id, &reason(&new.id))?;
         learn_route(
             brain,

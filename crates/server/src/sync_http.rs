@@ -9,10 +9,16 @@
 //!   offers.
 //! - `POST /mcp/<connection>/sync/spaces` `{space, kind, label, parent, position, since}`: a space of the person that the
 //!   peer has and this node lacks (see `memcp_core::swarm`); or `{space, archived_at}`: the peer archived it.
-//! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L]`: the events of a space after the asker's cursor, never
-//!   the ones it sent itself.
+//! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L][&chunks=1]`: the events of a space after the asker's
+//!   cursor, never the ones it sent itself. With `chunks=1` (an asker that takes chunks) a file bigger than travels whole
+//!   comes as the list of its chunks; without it, such a file is left out.
 //! - `POST /mcp/<connection>/sync/events?space=S` `{events: [...]}`: events from the peer, applied here idempotently; the
-//!   answer says which were dealt with (`consumed`) and which of those this node did not keep (`not_kept`, with why).
+//!   answer says which were dealt with (`consumed`), which of those this node did not keep (`not_kept`, with why), and
+//!   the chunks of a big file it waits for (`wants: {file, missing: [{n, hash}]}`).
+//! - `GET  /mcp/<connection>/sync/chunk?space=S&file=SHA&n=N[&hash=H]`: chunk `n` of a file of the space, raw bytes,
+//!   from the whole file or from the chunks this node keeps aside (404 when it has neither).
+//! - `POST /mcp/<connection>/sync/chunk?space=S&file=SHA&hash=H` (raw bytes): a chunk of a file this node waits for,
+//!   kept only when the bytes match `hash`.
 //!
 //! Only the connection's own key is let in, and only the key of a machine of the person (a connection made by a pairing
 //! code or a join request, `access::Kind::Peer`): an assistant's key, whatever its name, is refused everywhere here.
@@ -63,7 +69,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     let full_peer = caller.is_peer();
     let log_only = matches!(
         (req.method.as_str(), op),
-        ("GET", "spaces" | "events") | ("POST", "events")
+        ("GET", "spaces" | "events" | "chunk") | ("POST", "events" | "chunk")
     );
     if caller.kind != access::Kind::Peer || !(full_peer || log_only) {
         return refused(403, "only a machine of the person syncs");
@@ -174,6 +180,8 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 &json!({
                     "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out,
                     "offers": full_peer, "archived": archived,
+                    // Big files go in chunks of this size, both ways; a node of an earlier version says nothing here.
+                    "chunks": app.file_chunks.then_some(memcp_core::chunks::CHUNK_BYTES),
                     "later": policy::later(&ctl, &caller.agent).unwrap_or(Policy::Both).as_str(),
                 }),
             )
@@ -222,20 +230,38 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             if !side(&ctl, &caller, &space).gives() {
                 return refused(403, APART);
             }
-            let after = req
+            let mut after = req
                 .query
                 .get("after")
                 .and_then(|v| v.parse::<i64>().ok())
                 .unwrap_or(0)
                 .max(0);
+            let chunks =
+                app.file_chunks && req.query.get("chunks").map(String::as_str) == Some("1");
+            // A machine that took no chunks before and takes them now gets back what was left out for it.
+            let served = format!("served:{}", caller.agent);
+            if chunks && let Ok(Some(seq)) = sync::take_withheld(brain, &space, &served) {
+                after = after.min(seq - 1).max(0);
+            }
             let limit = req
                 .query
                 .get("limit")
                 .and_then(|v| v.parse::<usize>().ok())
                 .unwrap_or(PAGE_EVENTS)
                 .clamp(1, PAGE_EVENTS);
-            match sync::events_after(brain, &space, after, limit, PAGE_BYTES, Some(&caller.agent)) {
+            match sync::events_after_with(
+                brain,
+                &space,
+                after,
+                limit,
+                PAGE_BYTES,
+                Some(&caller.agent),
+                chunks,
+            ) {
                 Ok(page) => {
+                    if let Some((seq, _)) = page.withheld.first() {
+                        let _ = sync::note_withheld(brain, &space, &served, *seq);
+                    }
                     let _ = sync::note_transfer(
                         brain,
                         &caller.agent,
@@ -315,14 +341,81 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                             // count them as held by this node (its window keeps what they are about).
                             "not_kept": not_kept(&done),
                             "gave_up": done.gave_up,
+                            // The chunks of a big file this node waits for: the sender gives them, then the rest.
+                            "wants": done.wants.as_ref().map(sync::Wanted::to_json),
                         }),
                     )
                 }
                 Err(e) => refused(400, &e.to_string()),
             }
         }
+        ("GET", "chunk") if app.file_chunks => {
+            let space = match space() {
+                Ok(s) => s,
+                Err(r) => return r,
+            };
+            if !caller.can_read(&space) || !whole(&space) {
+                return refused(403, "this key does not read this space");
+            }
+            if !side(&ctl, &caller, &space).gives() {
+                return refused(403, APART);
+            }
+            let file = req.query.get("file").map_or("", String::as_str);
+            let Some(n) = req.query.get("n").and_then(|v| v.parse::<usize>().ok()) else {
+                return refused(400, "n: the position of the chunk");
+            };
+            let hash = req.query.get("hash").map(String::as_str);
+            // Only a file the space holds or waits for: a digest alone reaches no other space's bytes.
+            if !held_here(brain, &space, file) {
+                return refused(404, "no such chunk here");
+            }
+            match memcp_core::chunks::read(brain, &space, file, n, hash) {
+                Ok(Some(bytes)) => Response {
+                    status: 200,
+                    headers: vec![("Content-Type".into(), "application/octet-stream".into())],
+                    body: bytes,
+                    file: None,
+                },
+                Ok(None) => refused(404, "no such chunk here"),
+                Err(e) => refused(500, &e.to_string()),
+            }
+        }
+        ("POST", "chunk") if app.file_chunks => {
+            let space = match space() {
+                Ok(s) => s,
+                Err(r) => return r,
+            };
+            if !caller.can_write(&space) || !whole(&space) {
+                return refused(403, "this key does not write this space");
+            }
+            if !side(&ctl, &caller, &space).takes() {
+                return refused(403, APART);
+            }
+            let file = req.query.get("file").map_or("", String::as_str);
+            let hash = req.query.get("hash").map_or("", String::as_str);
+            match memcp_core::chunks::store(brain, &space, file, hash, &req.body) {
+                Ok(()) => Response::json(200, &json!({ "stored": true })),
+                Err(e) => refused(400, &e.to_string()),
+            }
+        }
         _ => refused(404, "not found"),
     }
+}
+
+/// Whether a file of this digest is the space's: a record of it, or chunks of it waited for here.
+fn held_here(brain: &memcp_core::Brain, space: &Space, file: &str) -> bool {
+    if !memcp_core::chunks::is_digest(file) {
+        return false;
+    }
+    let known = brain.open_space(space).is_ok_and(|c| {
+        c.query_row(
+            "SELECT count(*) > 0 FROM files WHERE sha256 = ?1",
+            [file],
+            |r| r.get::<_, bool>(0),
+        )
+        .unwrap_or(false)
+    });
+    known || memcp_core::chunks::staged(brain, space, file) > 0
 }
 
 /// Why a request about a space is refused by the policy of this node.

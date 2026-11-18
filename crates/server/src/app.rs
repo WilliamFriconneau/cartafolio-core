@@ -61,6 +61,9 @@ pub struct App {
     pub(crate) children: Mutex<Vec<std::process::Child>>,
     /// The peers whose sync was started (by name).
     pub(crate) synced: Mutex<std::collections::HashSet<String>>,
+    /// This node takes and gives big files in chunks, and says so to its peers (`chunks` in `GET /sync/spaces`). Off only
+    /// to stand for a node of an earlier version, which takes every file whole inside its event (the tests).
+    pub file_chunks: bool,
     /// This node's id, read once (`GET /.well-known/memcp` is answered often and must not open the control database).
     node_id: std::sync::OnceLock<String>,
 }
@@ -116,6 +119,7 @@ impl App {
             tickets: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
             synced: Mutex::new(std::collections::HashSet::new()),
+            file_chunks: true,
             node_id: std::sync::OnceLock::new(),
         }
     }
