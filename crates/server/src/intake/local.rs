@@ -7,7 +7,7 @@ use std::path::Path;
 use whisper_rs::{FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters};
 
 use super::Error;
-use super::whisper::{Lexicon, clean, parasite};
+use super::whisper::{Lexicon, clean, join_prompt, parasite};
 
 /// Below this peak (-50 dB) there is no sound at all: the microphone was off.
 const SILENCE: f32 = 0.003_16;
@@ -37,6 +37,19 @@ pub fn transcribe_samples(
     threads: u32,
     lexicon: Option<&Path>,
 ) -> Result<Option<String>, Error> {
+    transcribe_samples_with(model, samples, lang, threads, lexicon, "")
+}
+
+/// [`transcribe_samples`] with the speech model told to expect `hints` (comma separated words: guided transcription)
+/// besides the terms of the lexicon.
+pub fn transcribe_samples_with(
+    model: &Path,
+    samples: &[f32],
+    lang: &str,
+    threads: u32,
+    lexicon: Option<&Path>,
+    hints: &str,
+) -> Result<Option<String>, Error> {
     if samples.iter().fold(0f32, |m, s| m.max(s.abs())) < SILENCE {
         return Ok(None);
     }
@@ -49,7 +62,7 @@ pub fn transcribe_samples(
         .create_state()
         .map_err(|e| Error::Invalid(format!("whisper: {e}")))?;
     let lexicon = Lexicon::load(lexicon);
-    let vocab = lexicon.prompt();
+    let vocab = join_prompt(&lexicon.prompt(), hints);
     let mut params = FullParams::new(SamplingStrategy::BeamSearch {
         beam_size: 5,
         patience: -1.0,

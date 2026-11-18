@@ -169,6 +169,12 @@
 # model and to correct what it wrote.
 # transcribe_lexicon = ""
 
+# Guided transcription: tell the speech model the words this memory says you
+# use (names that recur in your notes, the keywords and vocabularies of your
+# spaces, health terms) as its initial prompt. With a speech service, those
+# words go to it with the recording.
+# transcribe_hints = true
+
 # --- Folders -----------------------------------------------------
 
 # The person whose memory the voice notes, the watched folders and the

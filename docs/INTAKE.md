@@ -31,6 +31,7 @@ transcribe_api_key_file = "/etc/memcp/speech.key"      # mode 0600, never a line
 # or, on this machine:
 transcribe_model = "/usr/share/whisper/ggml-small.bin"
 transcribe_language = "fr"
+transcribe_hints = true                               # tell the speech model the names and terms of this memory
 transcribe_spaces = "all"                             # a list, or `all` (the default when empty)
 transcribe_every = 60                                 # seconds between two passes
 ```
@@ -50,6 +51,33 @@ How it goes:
 - `memcp intake status` lists the recordings waiting per space and the age of the oldest (`LATE` after 30 minutes). The
   instructions the memory gives an assistant add a WARNING line for a space where a recording has waited more than 30 minutes: the
   node is not reading. The `spaces` tool carries `recordings_waiting` and `oldest_recording_at` for the same purpose.
+
+### Guided transcription
+
+A speech model reads a person's words better when it knows which names and terms to expect. The node works that list out from the
+person's own memory, with no external model, and gives it to the speech model as its **initial prompt**:
+
+- **names** that recur in the notes (a run of capitalised words said at least twice: « Quentin Martin »; never a capital that only
+  starts a sentence, a day, a month, a title or a common word) and the tags `personnes/…`, `lieux/…`, `produits/…`,
+  `organisations/…` with their counts;
+- the **keywords** of the `rules` note of each space, the most used first;
+- the **terms of the vocabularies**, the most used first, then the shortest first;
+- for a health space the person reads, the **health terms** (the signs and measures of the built-in patterns, `lang` decides French
+  or English).
+
+Most useful first (recent and frequent, specific before generic), no duplicate whatever the case, each item 40 characters or less,
+about 220 tokens in all. The list is made **per space** (a recording of a space gets the words of that space; a recording still in
+Inbox gets those of every space the person reads), kept, and worked out again for a space when its notes, rules or vocabularies
+changed. It is the MCP tool `transcription_hints` (an assistant, or an app that gives `words` to Apple's speech recogniser as
+`contextualStrings`) and the page's route `GET /admin/api/transcription/hints?space=&limit=&lang=`
+([TOOLS.md](TOOLS.md#transcription_hints), [CHANGELOG-API.md](CHANGELOG-API.md)); it shows only what the caller reads.
+
+The node's own transcription uses it: the text goes to `whisper-cli` as `--prompt` (after the terms of `transcribe_lexicon`, which
+come first), to the speech model inside the program as its initial prompt, and to a speech service of the OpenAI kind as the
+`prompt` field of the request. `transcribe_hints = false` turns it off (the lexicon still goes as before).
+
+**With a speech service, those words leave this machine with the recording**: names from the person's notes among them. Say so to the person
+who turns a service on; set `transcribe_hints = false` to send the recording alone.
 
 ## Folders watched
 
@@ -110,6 +138,7 @@ All in `memcp.toml` ([PARITY.md](PARITY.md) for the Home Assistant app, where `t
 | `transcribe_api_url`, `transcribe_api_model`, `transcribe_api_key_file` | a speech service | `whisper-1` |
 | `transcribe_model`, `transcribe_cmd`, `transcribe_ffmpeg`, `transcribe_threads`, `transcribe_lexicon` | a speech model on this machine | `whisper-cli`, `ffmpeg`, 8 |
 | `transcribe_language` | `fr`, `en`...; empty lets the model find it | |
+| `transcribe_hints` | guided transcription: the words the memory says the person uses are the speech model's initial prompt (with a speech service they go with the recording) | `true` |
 | `transcribe_every` | seconds between two passes over the recordings | 60 |
 | `watch`, `watch_every` | folders watched (`FOLDER -> SPACE`), seconds between two looks | 10 |
 | `absorb`, `absorb_exclude`, `absorb_protect`, `absorb_roles`, `absorb_every`, `deliver` | folders absorbed and proposals put down | 15 min |

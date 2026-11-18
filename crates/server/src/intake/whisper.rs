@@ -39,6 +39,10 @@ pub struct VoiceSettings {
     pub lexicon: Option<PathBuf>,
     /// The host's way to decode a recording: when set, the speech model (`whisper_model`) runs inside the program.
     pub decoder: Option<Decoder>,
+    /// Guided transcription (`transcribe_hints`): the words the memory says the person uses (names, keywords, vocabulary,
+    /// health terms) are given to the speech model as its initial prompt. On by default; the words never leave the node
+    /// except toward the speech service the person chose.
+    pub hints: bool,
 }
 
 impl Default for VoiceSettings {
@@ -54,8 +58,34 @@ impl Default for VoiceSettings {
             api_model: "whisper-1".into(),
             lexicon: None,
             decoder: None,
+            hints: true,
         }
     }
+}
+
+/// The most characters of the initial prompt: a speech model keeps about 224 tokens of it.
+pub const PROMPT_CHARS: usize = 900;
+
+/// The initial prompt: the terms of the lexicon (what the person wrote down by hand comes first), then the `hints` of the
+/// memory, a word once, cut at a word at [`PROMPT_CHARS`] characters.
+pub fn join_prompt(lexicon: &str, hints: &str) -> String {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = String::new();
+    for item in lexicon.split(',').chain(hints.split(',')) {
+        let item = item.trim();
+        if item.is_empty() || !seen.insert(item.to_lowercase()) {
+            continue;
+        }
+        let add = item.chars().count() + if out.is_empty() { 0 } else { 2 };
+        if out.chars().count() + add > PROMPT_CHARS {
+            break;
+        }
+        if !out.is_empty() {
+            out.push_str(", ");
+        }
+        out.push_str(item);
+    }
+    out
 }
 
 /// What a recording said.
@@ -274,6 +304,7 @@ pub struct Whisper {
     lexicon: Lexicon,
     lexicon_file: Option<PathBuf>,
     decoder: Option<Decoder>,
+    hints: bool,
 }
 
 impl Whisper {
@@ -290,16 +321,34 @@ impl Whisper {
             lexicon: Lexicon::load(c.lexicon.as_deref()),
             lexicon_file: c.lexicon.clone(),
             decoder: c.decoder.clone(),
+            hints: c.hints,
         }
+    }
+
+    /// Whether the words of the memory are given to the speech model (see [`VoiceSettings::hints`]).
+    pub fn uses_hints(&self) -> bool {
+        self.hints
+    }
+
+    /// The initial prompt: the lexicon, then `hints` when guided transcription is on.
+    fn prompt(&self, hints: &str) -> String {
+        join_prompt(&self.lexicon.prompt(), if self.hints { hints } else { "" })
     }
 
     /// What `audio` says. `work` is a folder for the temporary files.
     pub fn transcribe(&self, audio: &Path, work: &Path) -> Result<Heard, String> {
+        self.transcribe_with(audio, work, "")
+    }
+
+    /// What `audio` says, the speech model told to expect `hints` (comma separated words: see
+    /// `memcp_core::transcription`) besides the lexicon, when guided transcription is on.
+    pub fn transcribe_with(&self, audio: &Path, work: &Path, hints: &str) -> Result<Heard, String> {
+        let prompt = self.prompt(hints);
         if let Some(url) = &self.api_url {
-            return self.via_api(url, audio);
+            return self.via_api(url, audio, &prompt);
         }
         if let Some(decoder) = &self.decoder {
-            return self.in_process(decoder, audio);
+            return self.in_process(decoder, audio, &prompt);
         }
         let wav = work.join("audio.wav");
         let (made, why) = run(
@@ -329,9 +378,8 @@ impl Whisper {
             .arg(&wav)
             .args(["-l", &self.lang, "-nt", "-np", "-t"])
             .arg(self.threads.to_string());
-        let vocab = self.lexicon.prompt();
-        if !vocab.is_empty() {
-            cmd.args(["--prompt", &vocab]);
+        if !prompt.is_empty() {
+            cmd.args(["--prompt", &prompt]);
         }
         cmd.args(["-otxt", "-of"]).arg(&base);
         // A recording is an hour at most; whisper reads it many times faster than real time.
@@ -357,15 +405,16 @@ impl Whisper {
 
     /// What `audio` says, by the speech model inside the program, from the samples the host decoded.
     #[cfg(feature = "local-whisper")]
-    fn in_process(&self, decoder: &Decoder, audio: &Path) -> Result<Heard, String> {
+    fn in_process(&self, decoder: &Decoder, audio: &Path, prompt: &str) -> Result<Heard, String> {
         let samples = (decoder.0)(audio)?;
         let seconds = u32::try_from(samples.len() / 16_000).unwrap_or(u32::MAX);
-        let heard = super::local::transcribe_samples(
+        let heard = super::local::transcribe_samples_with(
             &self.model,
             &samples,
             &self.lang,
             self.threads,
             self.lexicon_file.as_deref(),
+            prompt,
         )
         .map_err(|e| e.to_string())?;
         Ok(match heard {
@@ -376,13 +425,13 @@ impl Whisper {
 
     /// Without `local-whisper` the program has no speech model of its own.
     #[cfg(not(feature = "local-whisper"))]
-    fn in_process(&self, decoder: &Decoder, audio: &Path) -> Result<Heard, String> {
-        let _ = (decoder, audio, &self.lexicon_file);
+    fn in_process(&self, decoder: &Decoder, audio: &Path, prompt: &str) -> Result<Heard, String> {
+        let _ = (decoder, audio, prompt, &self.lexicon_file);
         Err("this build has no built-in speech model (local-whisper)".into())
     }
 
     /// What `audio` says, by a speech service of the OpenAI kind: one multipart request, a JSON answer with `text`.
-    fn via_api(&self, url: &str, audio: &Path) -> Result<Heard, String> {
+    fn via_api(&self, url: &str, audio: &Path, prompt: &str) -> Result<Heard, String> {
         use std::time::Duration;
         const MAX: usize = 24 * 1024 * 1024;
         let bytes = std::fs::read(audio).map_err(|e| format!("{}: {e}", audio.display()))?;
@@ -416,6 +465,10 @@ impl Whisper {
         };
         field("model", &self.api_model);
         field("response_format", "json");
+        if !prompt.is_empty() {
+            // The initial prompt of the OpenAI speech API: the words to expect.
+            field("prompt", &prompt.replace(['\r', '\n'], " "));
+        }
         if !self.lang.is_empty() {
             field("language", &self.lang);
         }
@@ -489,7 +542,25 @@ impl Whisper {
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use super::{Lexicon, clean, parasite, replace_word};
+    use super::{Lexicon, PROMPT_CHARS, clean, join_prompt, parasite, replace_word};
+
+    #[test]
+    fn the_prompt_is_the_lexicon_then_the_hints_once_each_and_cut_at_a_word() {
+        assert_eq!(
+            join_prompt("Zendure, Tydom", "tydom, Quentin Martin, Zendure, Lisbonne"),
+            "Zendure, Tydom, Quentin Martin, Lisbonne"
+        );
+        assert_eq!(join_prompt("", ""), "");
+        assert_eq!(join_prompt("", "a b, c d"), "a b, c d");
+        let many: String = (0..400)
+            .map(|i| format!("mot{i}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let p = join_prompt("", &many);
+        assert!(p.chars().count() <= PROMPT_CHARS && p.starts_with("mot0, mot1"));
+        assert!(!p.ends_with(','), "{p}");
+        assert!(p.ends_with(|c: char| c.is_ascii_digit()), "a whole word");
+    }
 
     #[test]
     fn what_whisper_makes_up_inside_a_long_text_goes_and_a_loop_is_kept_once() {
@@ -628,6 +699,41 @@ mod api_tests {
         assert!(request.contains("name=\"language\"\r\n\r\nfr"), "{request}");
         assert!(request.contains("filename=\"memcp-voice-api-"), "{request}");
         let _ = std::fs::remove_file(audio);
+    }
+
+    #[test]
+    fn the_words_to_expect_go_to_the_speech_service_as_its_prompt() {
+        let (url, seen) = service(200, r#"{"text":"Rendez-vous chez Quentin Martin."}"#);
+        let audio = recording();
+        Whisper::new(&settings(&url))
+            .transcribe_with(
+                &audio,
+                &std::env::temp_dir(),
+                "Quentin Martin, Lisbonne, Zendure",
+            )
+            .expect("transcribed");
+        let (_, request) = seen.join().expect("service");
+        assert!(
+            request.contains("name=\"prompt\"\r\n\r\nQuentin Martin, Lisbonne, Zendure\r\n"),
+            "{request}"
+        );
+        let _ = std::fs::remove_file(audio);
+    }
+
+    #[test]
+    fn with_guided_transcription_off_or_no_words_the_service_gets_no_prompt() {
+        for (on, words) in [(false, "Quentin Martin"), (true, "")] {
+            let (url, seen) = service(200, r#"{"text":"Bonjour à tous."}"#);
+            let audio = recording();
+            let mut s = settings(&url);
+            s.hints = on;
+            Whisper::new(&s)
+                .transcribe_with(&audio, &std::env::temp_dir(), words)
+                .expect("transcribed");
+            let (_, request) = seen.join().expect("service");
+            assert!(!request.contains("name=\"prompt\""), "{request}");
+            let _ = std::fs::remove_file(audio);
+        }
     }
 
     #[test]

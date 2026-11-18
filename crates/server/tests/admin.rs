@@ -1473,3 +1473,79 @@ fn a_member_cannot_make_the_node_join_another_memory() -> Res {
     assert_eq!(r.status, 400);
     Ok(())
 }
+
+#[test]
+fn the_page_route_gives_the_words_to_expect_for_the_spaces_of_the_person_only() -> Res {
+    let e = env()?;
+    join(&e, ALEX)?;
+    state(&e, SAM);
+    own(&e, SAM, "work")?;
+    own(&e, ALEX, "diary")?;
+    for (space, text) in [
+        (
+            "work",
+            "Visite de Wilhelmine Stark, Wilhelmine Stark est passée.",
+        ),
+        (
+            "diary",
+            "Dîner chez Bertrand Oulipo, Bertrand Oulipo cuisine.",
+        ),
+    ] {
+        let conn = e.app.brain.open_space(&sp(space))?;
+        memcp_core::facts::remember(
+            &conn,
+            &sp(space),
+            "test",
+            memcp_core::facts::NewFact::agent(text, "test"),
+            &[],
+        )?;
+    }
+    let get = |who: (&str, &str), query: &[(&str, &str)]| {
+        e.app.handle(&Request {
+            method: "GET".into(),
+            path: "/admin/api/transcription/hints".into(),
+            query: query
+                .iter()
+                .map(|(k, v)| (k.to_string(), v.to_string()))
+                .collect(),
+            headers: [
+                ("x-remote-user-id".to_string(), who.0.to_string()),
+                ("x-remote-user-name".to_string(), who.1.to_string()),
+                ("x-remote-user-display-name".to_string(), who.1.to_string()),
+            ]
+            .into_iter()
+            .collect(),
+            body: vec![],
+            ip: Some("172.30.32.2".into()),
+            via_ingress: true,
+            tailnet_login: None,
+        })
+    };
+    let r = get(SAM, &[("limit", "10")]);
+    assert_eq!(r.status, 200, "{}", r.body_json());
+    let body = r.body_json();
+    let words: Vec<&str> = body["words"]
+        .as_array()
+        .ok_or("words")?
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    assert!(words.contains(&"Wilhelmine Stark"), "{words:?}");
+    assert!(!words.iter().any(|w| w.contains("Oulipo")), "{words:?}");
+    assert!(
+        body["text"]
+            .as_str()
+            .is_some_and(|t| t.contains("Wilhelmine Stark"))
+    );
+    assert!(body["version"].is_u64() && body["built_at"].is_string());
+    // A space the person does not read is refused, and the other person's list is theirs.
+    assert_eq!(get(SAM, &[("space", "diary")]).status, 400);
+    let mine = get(ALEX, &[]).body_json();
+    assert!(
+        mine["text"]
+            .as_str()
+            .is_some_and(|t| t.contains("Bertrand Oulipo"))
+    );
+    assert!(!mine["text"].as_str().unwrap_or("").contains("Wilhelmine"));
+    Ok(())
+}

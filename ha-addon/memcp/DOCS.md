@@ -71,6 +71,7 @@ A voice note waits as a recording under `inbox/audio` until something reads it. 
 | `transcribe_spaces` | the spaces whose recordings are read, separated by commas (empty: every space of the person, those made later included, `all` says the same) |
 | `transcribe_api_url`, `transcribe_api_model`, `transcribe_api_key` | the speech service |
 | `transcribe_language` | `fr`, `en`… or empty to let the service detect it |
+| `transcribe_hints` | on by default: the node tells the speech service the words your memory says you use (names that recur in your notes, the keywords and vocabularies of your spaces, health terms), as the `prompt` of the request. **Those words leave this machine with the recording**; turn it off to send the recording alone |
 
 ## Watched folders
 

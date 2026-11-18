@@ -2,6 +2,46 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Guided transcription (next version)
+
+The node tells the speech model what to expect. Everything below is added; nothing is renamed. The rules are in
+[INTAKE.md](INTAKE.md#guided-transcription).
+
+- **MCP `transcription_hints`** (read, [TOOLS.md](TOOLS.md#transcription_hints)) `{space?, limit?, lang?}`: `limit` 1 to 500 (default
+  120), `lang` `fr` or `en` (the language of the health terms; another or none: both). Not shown to a key limited to paths. A space
+  the caller does not read: `denied`. Without `space`, the spaces the caller reads, and only those.
+- **`GET /admin/api/transcription/hints?space=&limit=&lang=`**: the same answer for the signed-in person (the spaces they read); a
+  space they do not read answers 400.
+
+```json
+{
+  "words": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "céphalée"],
+  "text": "Quentin Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, céphalée",
+  "groups": {
+    "names": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure"],
+    "keywords": ["chaudière", "devis"],
+    "vocabulary": ["plombier"],
+    "health": ["céphalée"]
+  },
+  "built_at": "2026-11-17T10:00:00Z",
+  "version": 4821907345211,
+  "space": null,
+  "lang": "fr"
+}
+```
+
+`words` is the four groups one after the other (names, keywords, vocabulary, health), at most `limit` items of 40 characters or
+less, none twice whatever the case; `text` is the first of them that fit in about 220 tokens, comma separated, for an initial prompt
+(Whisper) or `contextualStrings` (Apple speech: give `words`); `built_at` is when the oldest list it is made of was worked out;
+`version` is a whole number (under 2^53) that changes when the notes, rules or vocabularies it comes from changed.
+
+- **Setting `transcribe_hints`** (`memcp.toml` and the Home Assistant app's options, default `true`): the node's own transcription
+  passes `text` to `whisper-cli` (`--prompt`, after the terms of `transcribe_lexicon`), to the speech model inside the program (its
+  initial prompt) and to a speech service of the OpenAI kind (the `prompt` field of the request). With a service, those words leave
+  the machine with the recording; `false` sends the recording alone (the lexicon still goes as before).
+- **Rust**: `memcp_core::transcription::{hints, Hints, Groups, builds}`; `intake::whisper::VoiceSettings.hints: bool`,
+  `Whisper::transcribe_with(audio, work, hints)`, `join_prompt`; `intake::local::transcribe_samples_with(..., hints)`.
+
 ## The command line reaches a running node (next version)
 
 Every command of `memcp` also runs against a node that is up, with a key ([CLI.md](CLI.md)). All routes are under `/admin/api`, authorised by a console key (`Authorization: Bearer hcpc_...`), with `X-Requested-With: memcp` on a POST, and audited.

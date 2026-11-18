@@ -146,6 +146,12 @@ INTAKE_CONF=/data/memcp.toml
         if bashio::config.has_value 'transcribe_language'; then
           echo "transcribe_language = \"$(bashio::config 'transcribe_language')\""
         fi
+        # Guided transcription: on unless the option is turned off.
+        if bashio::config.false 'transcribe_hints'; then
+          echo "transcribe_hints = false"
+        else
+          echo "transcribe_hints = true"
+        fi
       } >> "$INTAKE_CONF"
       bashio::log.info "transcribe: the node reads the voice notes by the speech service"
     fi

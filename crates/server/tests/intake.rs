@@ -532,3 +532,100 @@ fn a_node_with_nothing_to_do_runs_nothing() {
     let running = intake::start(&w.brain, settings_from("", &w.dir.join("intake"))).expect("start");
     assert!(running.is_none());
 }
+
+/// A `whisper-cli` that keeps the words it was told to expect (`--prompt`) and reads the audio as the others do.
+const WHISPER_PROMPT: &str = r#"#!/bin/sh
+wav=""; base=""; prev=""
+for a in "$@"; do
+  [ "$prev" = "-f" ] && wav="$a"
+  [ "$prev" = "-of" ] && base="$a"
+  [ "$prev" = "--prompt" ] && printf '%s' "$a" > "$(dirname "$0")/prompt.txt"
+  prev="$a"
+done
+printf '%s\n' "$@" > "$(dirname "$0")/args.txt"
+tail -c +13 "$wav" > "$base.txt"
+"#;
+
+/// One pass over `sam-me` with a recording, the notes of the person naming `Wilhelmine Stark` and a `lexicon` when given:
+/// the prompt the fake `whisper-cli` was given (`None` when it got no `--prompt`).
+fn prompt_given(tag: &str, hints: bool, lexicon: Option<&str>) -> Option<String> {
+    let w = world(tag, false);
+    let dir = w.dir.join("tools");
+    std::fs::create_dir_all(&dir).expect("dir");
+    let mut settings = speech(&dir);
+    settings.whisper_cmd = script(&dir, "whisper-cli", WHISPER_PROMPT)
+        .display()
+        .to_string();
+    settings.hints = hints;
+    if let Some(table) = lexicon {
+        let f = dir.join("lexicon.md");
+        std::fs::write(&f, table).expect("lexicon");
+        settings.lexicon = Some(f);
+    }
+    let mut mem = w.memory();
+    mem.call(
+        "remember",
+        json!({"space": "sam-me", "text": "Visite de Wilhelmine Stark, puis Wilhelmine Stark est repartie."}),
+    )
+    .expect("note");
+    mem.file_put(
+        "sam-me",
+        "2026-11-02-13h34-visite.wav",
+        "dictée",
+        &["inbox/audio"],
+        &audio("réunion avec Wilhelmine"),
+    )
+    .expect("recording");
+    let spaces = vec!["sam-me".to_string()];
+    let r = voice::transcribe(&mut mem, &spaces, &settings, &dir.join("state"), 60).expect("pass");
+    assert_eq!(r.transcribed, 1, "{r:?}");
+    assert!(
+        std::fs::read_to_string(dir.join("args.txt")).is_ok_and(|a| a.contains("-nt")),
+        "the fake whisper ran"
+    );
+    std::fs::read_to_string(dir.join("prompt.txt")).ok()
+}
+
+#[test]
+fn the_words_of_the_memory_reach_the_whisper_command_line_as_its_prompt() {
+    let p = prompt_given("hints-on", true, None).expect("a --prompt");
+    assert!(p.contains("Wilhelmine Stark"), "{p}");
+    // The terms the person wrote by hand come first, the words of the memory after, each once.
+    let p = prompt_given(
+        "hints-lexicon",
+        true,
+        Some("| Terme | Variantes | Note |\n|---|---|---|\n| Zendure | zen dur, zendur | batterie |\n| Wilhelmine Stark | wilmine | voisine |\n"),
+    )
+    .expect("a --prompt");
+    assert!(p.starts_with("Zendure, Wilhelmine Stark"), "{p}");
+    assert_eq!(p.matches("Wilhelmine Stark").count(), 1, "{p}");
+}
+
+#[test]
+fn with_guided_transcription_off_the_command_line_gets_no_words_of_the_memory() {
+    assert_eq!(prompt_given("hints-off", false, None), None);
+    // The lexicon alone still goes as before.
+    let p = prompt_given(
+        "hints-off-lexicon",
+        false,
+        Some("| Terme | Variantes | Note |\n|---|---|---|\n| Zendure | zen dur | batterie |\n"),
+    );
+    assert_eq!(p.as_deref(), Some("Zendure"));
+}
+
+#[test]
+fn transcribe_hints_is_on_unless_it_is_turned_off() {
+    let state = Path::new("/tmp/none");
+    assert!(settings_from("", state).voice.hints);
+    assert!(
+        settings_from("transcribe_hints = true\n", state)
+            .voice
+            .hints
+    );
+    assert!(
+        !settings_from("transcribe_hints = false\n", state)
+            .voice
+            .hints
+    );
+    assert!(VoiceSettings::default().hints);
+}

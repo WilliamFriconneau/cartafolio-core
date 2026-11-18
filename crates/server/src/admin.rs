@@ -254,6 +254,22 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                     Err(r) => r,
                 }
             }
+            // The words a speech model should expect (`transcription_hints`), from the spaces the person reads.
+            "/transcription/hints" => {
+                let mut args = serde_json::json!({});
+                for k in ["space", "lang"] {
+                    if let Some(v) = req.query.get(k).filter(|v| !v.is_empty()) {
+                        args[k] = serde_json::json!(v);
+                    }
+                }
+                if let Some(n) = req.query.get("limit").and_then(|v| v.parse::<u64>().ok()) {
+                    args["limit"] = serde_json::json!(n);
+                }
+                match living(app, &ctl, &me, "transcription_hints", &args) {
+                    Ok(v) => Response::json(200, &v),
+                    Err(r) => r,
+                }
+            }
             "/journal" => crate::explore::journal(app, &ctl, &me, req, now),
             "/links" => crate::explore::graph(app, &ctl, &me, req),
             "/fact" => crate::explore::one(app, &ctl, &me, req),

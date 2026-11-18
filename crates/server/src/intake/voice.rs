@@ -244,6 +244,8 @@ pub fn transcribe(
                 continue;
             }
         };
+        // What the memory says the person uses, asked once for the space and only when a recording has to be read.
+        let mut hints: Option<String> = None;
         for desc in listed["results"].as_array().into_iter().flatten() {
             let Some(desc_id) = desc["id"].as_str() else {
                 continue;
@@ -307,9 +309,19 @@ pub fn transcribe(
                     }
                 }
             }
+            let words = hints
+                .get_or_insert_with(|| {
+                    if whisper.uses_hints() {
+                        hints_for(memory, space, &settings.whisper_lang)
+                    } else {
+                        String::new()
+                    }
+                })
+                .clone();
             one(
                 memory,
                 &whisper,
+                &words,
                 &mut state,
                 space,
                 f,
@@ -324,6 +336,24 @@ pub fn transcribe(
     erase_old(memory, &mut state, &mut report);
     state.save()?;
     Ok(report)
+}
+
+/// The words to expect in a recording of `space`, comma separated, as the memory gives them (`transcription_hints`): the
+/// space's own, or, for the person's Inbox (a recording not yet filed), those of every space they read. Empty when the
+/// memory has none or cannot say: a recording is read without them.
+fn hints_for(memory: &mut Memory, space: &str, lang: &str) -> String {
+    let mut args = json!({ "limit": 120 });
+    if memory.triage_space().ok().as_deref() != Some(space) {
+        args["space"] = json!(space);
+    }
+    if !lang.is_empty() {
+        args["lang"] = json!(lang);
+    }
+    memory
+        .call("transcription_hints", args)
+        .ok()
+        .and_then(|v| v["text"].as_str().map(String::from))
+        .unwrap_or_default()
 }
 
 /// A note other than the recording's own description that names it: the id of the first.
@@ -357,6 +387,7 @@ fn named_by_a_note(memory: &mut Memory, name: &str, own: &str) -> Result<Option<
 fn one(
     memory: &mut Memory,
     whisper: &Whisper,
+    hints: &str,
     state: &mut State,
     space: &str,
     f: &Value,
@@ -392,7 +423,7 @@ fn one(
             .unwrap_or("m4a");
         let audio = work.join(format!("recording.{ext}"));
         std::fs::write(&audio, &bytes).map_err(|e| e.to_string())?;
-        whisper.transcribe(&audio, &work)
+        whisper.transcribe_with(&audio, &work, hints)
     })();
     let _ = std::fs::remove_dir_all(&work);
     match heard {

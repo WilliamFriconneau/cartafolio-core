@@ -58,6 +58,7 @@ options:
   transcribe_api_model: "whisper-1"
   transcribe_api_key: ""
   transcribe_language: ""
+  transcribe_hints: true
   intake_person: ""
   watch: []
 schema:
@@ -91,6 +92,7 @@ schema:
   transcribe_api_model: str?
   transcribe_api_key: password?
   transcribe_language: str?
+  transcribe_hints: bool?
   intake_person: str?
   watch:
     - str

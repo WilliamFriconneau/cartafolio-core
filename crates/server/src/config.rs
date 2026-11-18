@@ -305,7 +305,7 @@ static JANITOR: [Opt; 11] = [
     ),
 ];
 
-static VOICE: [Opt; 13] = [
+static VOICE: [Opt; 14] = [
     o(
         "transcribe",
         Kind::Bool,
@@ -409,6 +409,14 @@ static VOICE: [Opt; 13] = [
         None,
         None,
         "A Markdown table of terms and their wrong spellings, to help the speech model and to correct what it wrote.",
+    ),
+    o(
+        "transcribe_hints",
+        Kind::Bool,
+        "true",
+        Some("transcribe_hints"),
+        None,
+        "Guided transcription: tell the speech model the words this memory says you use (names that recur in your notes, the keywords and vocabularies of your spaces, health terms) as its initial prompt. With a speech service, those words go to it with the recording.",
     ),
 ];
 

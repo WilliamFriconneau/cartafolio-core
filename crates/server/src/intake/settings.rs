@@ -106,6 +106,7 @@ impl Settings {
         if let Some(l) = text("transcribe_language") {
             voice.whisper_lang = l;
         }
+        voice.hints = file.flag("transcribe_hints");
         voice.api_url = text("transcribe_api_url");
         voice.api_model = file.text_or_default("transcribe_api_model");
         if let Some(k) = text("transcribe_api_key_file") {

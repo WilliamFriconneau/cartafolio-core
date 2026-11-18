@@ -32,6 +32,7 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 | `intake_person` | `intake_person` | `intake --user`, `transcribe --user`, `watch --user` | The person the voice notes and the watched folders work for. Empty: `transcribe_person`, then `janitor_person`, then the first administrator. |
 | `watch` | `watch` | `watch` | A list of `FOLDER -> SPACE`. In the app the folders are under `/share` or `/media`. |
 | `transcribe_language` | `transcribe_language` | | |
+| `transcribe_hints` | `transcribe_hints` | | Guided transcription, on by default ([INTAKE.md](INTAKE.md#guided-transcription)). |
 
 ## What only Linux has
 
