@@ -11,15 +11,19 @@ use serde_json::{Value, json};
 
 fn caller(b: &Brain, name: &str, rights: &str) -> Result<Caller, Box<dyn std::error::Error>> {
     let ctl = b.open_control()?;
-    let tok = access::connect_for(
-        &ctl,
-        OWNER,
-        name,
-        &Rights::parse(rights)?,
-        None,
-        false,
-        false,
-    )?;
+    let tok = (if name.starts_with("peer-") {
+        access::connect_peer(&ctl, OWNER, name, &Rights::parse(rights)?, false)
+    } else {
+        access::connect_for(
+            &ctl,
+            OWNER,
+            name,
+            &Rights::parse(rights)?,
+            None,
+            false,
+            false,
+        )
+    })?;
     Ok(access::authenticate(&ctl, &tok, util::now())?.ok_or("refused")?)
 }
 
