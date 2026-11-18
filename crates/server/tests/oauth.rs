@@ -330,7 +330,7 @@ fn an_approval_needs_the_page_it_came_from() -> Res {
         400,
         "a nonce works once"
     );
-    // The form may post to the page and be redirected to Claude.
+    // The form may post to the page and be redirected to Claude, ChatGPT or Le Chat.
     let page = e
         .app
         .handle(&rq("GET", &q, &[], "", Some("owner@example.org")));
@@ -341,7 +341,9 @@ fn an_approval_needs_the_page_it_came_from() -> Res {
         .map(|(_, v)| v.clone())
         .unwrap_or_default();
     assert!(
-        csp.contains("form-action 'self' https://claude.ai https://claude.com;"),
+        csp.contains(
+            "form-action 'self' https://callback.mistral.ai https://chatgpt.com https://claude.ai https://claude.com;"
+        ),
         "{csp}"
     );
     Ok(())
@@ -1024,5 +1026,102 @@ fn a_consent_never_takes_over_a_connection_it_did_not_make() -> Res {
     )?;
     assert_eq!(alive(&again), Some(format!("{default}-2")));
     assert_eq!(alive(&got), None, "renewed: the former key stops");
+    Ok(())
+}
+
+fn registers(e: &Env, uri: &str) -> u16 {
+    e.app
+        .handle(&rq(
+            "POST",
+            "/oauth/register",
+            &[],
+            &json!({ "client_name": "assistant", "redirect_uris": [uri] }).to_string(),
+            None,
+        ))
+        .status
+}
+
+#[test]
+fn chatgpt_and_le_chat_register_with_their_own_callbacks() -> Res {
+    let e = env()?;
+    // ChatGPT's stable address, its address per connector, and Le Chat's.
+    for ok in [
+        "https://chatgpt.com/connector_platform_oauth_redirect",
+        "https://chatgpt.com/connector/oauth/AbC_12-x9",
+        "https://callback.mistral.ai/v1/integrations_auth/oauth2_callback",
+    ] {
+        assert_eq!(registers(&e, ok), 201, "{ok}");
+    }
+    // Nothing that only looks like them.
+    for bad in [
+        "https://chatgpt.com/connector/oauth/",
+        "https://chatgpt.com/connector/oauth/a/b",
+        "https://chatgpt.com/connector/oauth/a?next=https://evil.example",
+        "https://chatgpt.com/connector/oauth/..",
+        "https://chatgpt.com/connector/oauth/a%2F..",
+        "https://chatgpt.com.evil.example/connector/oauth/a",
+        "http://chatgpt.com/connector/oauth/a",
+        "https://chatgpt.com/connector_platform_oauth_redirect/x",
+    ] {
+        assert_eq!(registers(&e, bad), 400, "{bad}");
+    }
+    Ok(())
+}
+
+#[test]
+fn every_authorization_response_names_its_issuer() -> Res {
+    let e = env()?;
+    let asm = e
+        .app
+        .handle(&rq(
+            "GET",
+            "/.well-known/oauth-authorization-server",
+            &[],
+            "",
+            None,
+        ))
+        .body_json();
+    assert_eq!(asm["authorization_response_iss_parameter_supported"], true);
+    assert_eq!(asm["issuer"], "https://memory.example.net");
+    let iss = "iss=https%3A%2F%2Fmemory.example.net";
+    let client = register(&e)?;
+    // A code.
+    let q = authorize_query(&client);
+    let n = nonce(&e, &q)?;
+    let ok = decide(
+        &e,
+        &q,
+        &n,
+        "allow",
+        &[("origin", "https://memory.example.net:8792")],
+    );
+    assert!(location(&ok).contains(iss), "{}", location(&ok));
+    // A refusal.
+    let n = nonce(&e, &q)?;
+    let no = decide(
+        &e,
+        &q,
+        &n,
+        "deny",
+        &[("origin", "https://memory.example.net:8792")],
+    );
+    let loc = location(&no);
+    assert!(
+        loc.contains("error=access_denied") && loc.contains(iss),
+        "{loc}"
+    );
+    // A bad request.
+    let bad = e.app.handle(&rq(
+        "GET",
+        &q.replace("code_challenge_method=S256", "code_challenge_method=plain"),
+        &[],
+        "",
+        Some("owner@example.org"),
+    ));
+    let loc = location(&bad);
+    assert!(
+        loc.contains("error=invalid_request") && loc.contains(iss),
+        "{loc}"
+    );
     Ok(())
 }

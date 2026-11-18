@@ -32,11 +32,29 @@ use sha2::{Digest, Sha256};
 use crate::app::App;
 use crate::http::{Request, Response};
 
-/// Redirect addresses accepted by default (Claude's OAuth callback).
-pub const DEFAULT_REDIRECTS: [&str; 2] = [
+/// Redirect addresses accepted by default: Claude's OAuth callback, ChatGPT's stable one (used when
+/// the authorization server names its issuer in every response, RFC 9207, as this one does) and Le Chat's.
+pub const DEFAULT_REDIRECTS: [&str; 4] = [
     "https://claude.ai/api/mcp/auth_callback",
     "https://claude.com/api/mcp/auth_callback",
+    "https://chatgpt.com/connector_platform_oauth_redirect",
+    "https://callback.mistral.ai/v1/integrations_auth/oauth2_callback",
 ];
+
+/// ChatGPT's callback of one connector, `https://chatgpt.com/connector/oauth/<id>`: accepted for any id
+/// of letters, digits, `-` and `_`, and nothing else after it.
+const CHATGPT_CALLBACK_PREFIX: &str = "https://chatgpt.com/connector/oauth/";
+
+/// A redirect address this node accepts: one of its list, or the callback of one ChatGPT connector.
+fn redirect_allowed(app: &App, uri: &str) -> bool {
+    app.oauth_redirects.iter().any(|a| a == uri)
+        || uri.strip_prefix(CHATGPT_CALLBACK_PREFIX).is_some_and(|id| {
+            (1..=128).contains(&id.len())
+                && id
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
+        })
+}
 const CODE_TTL: i64 = 300;
 /// A consent page stays valid ten minutes.
 const CONSENT_TTL: i64 = 600;
@@ -124,6 +142,8 @@ pub fn authorization_server(app: &App) -> Response {
         200,
         &json!({
             "issuer": app.public_url,
+            // Every authorization response, an error included, carries `iss` (RFC 9207).
+            "authorization_response_iss_parameter_supported": true,
             "authorization_endpoint": format!("{login}/oauth/authorize"),
             "token_endpoint": format!("{}/oauth/token", app.public_url),
             "registration_endpoint": format!("{}/oauth/register", app.public_url),
@@ -182,12 +202,7 @@ pub fn register(app: &App, req: &Request) -> Response {
                 .collect()
         })
         .unwrap_or_default();
-    if uris.is_empty()
-        || uris.len() > 5
-        || uris
-            .iter()
-            .any(|u| !app.oauth_redirects.iter().any(|a| a == u))
-    {
+    if uris.is_empty() || uris.len() > 5 || uris.iter().any(|u| !redirect_allowed(app, u)) {
         return err(
             400,
             "invalid_redirect_uri",
@@ -358,7 +373,11 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         let sep = if redirect.contains('?') { '&' } else { '?' };
         Response::empty(302).with(
             "Location",
-            &format!("{redirect}{sep}{extra}&state={}", enc(state)),
+            &format!(
+                "{redirect}{sep}{extra}&state={}&iss={}",
+                enc(state),
+                enc(&app.public_url)
+            ),
         )
     };
     if get("response_type") != "code"
