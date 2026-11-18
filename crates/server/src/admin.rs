@@ -292,6 +292,16 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
                 Ok(body) => Response::json(200, &body),
                 Err(e) => err(500, &e),
             },
+            // The sync policy of one machine of the person: per space, and for the spaces made later.
+            "/sync/policy" => {
+                let peer = req.query.get("peer").map(String::as_str).unwrap_or("");
+                match sync_policy_peer(app, &me, peer)
+                    .and_then(|()| memcp_core::policy::view(&app.brain, &me, peer).map_err(fail))
+                {
+                    Ok(v) => Response::json(200, &v),
+                    Err(r) => r,
+                }
+            }
             "/discover" => Response::json(200, &crate::replica::discover(app)),
             "/join-memory" => match crate::replica::join_state(
                 app,
@@ -338,6 +348,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         crate::explore::layout_write(app, &me, path, &body)
     } else if path == "/living" {
         living(app, &ctl, &me, "living_set", &body)
+    } else if path == "/sync/policy" {
+        sync_policy_set(app, &ctl, &me, &body)
     } else if path == "/disputes/resolve" {
         // The person picks a version on their page: an act of the person, as the connection `page`.
         living(app, &ctl, &me, "dispute_resolve", &body)
@@ -348,6 +360,42 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         Ok(v) => Response::json(200, &v),
         Err(r) => r,
     }
+}
+
+/// The machine must be one of the person's: anyone else's is 403, whatever it is.
+fn sync_policy_peer(app: &App, me: &User, peer: &str) -> Result<(), Response> {
+    if peer.is_empty() {
+        return Err(err(400, "peer is required"));
+    }
+    memcp_core::peers::get(&app.brain, me, peer, memcp_core::util::now())
+        .map(|_| ())
+        .map_err(|_| err(403, "not a machine of yours"))
+}
+
+/// `POST /sync/policy` `{peer, space, policy}` or `{peer, later}`: what this node does with one of the person's spaces,
+/// or with the spaces made later, and one of their machines (`both`, `send`, `receive`, `off`). Answers the machine's
+/// view, as `GET /sync/policy?peer=` does.
+fn sync_policy_set(
+    app: &App,
+    ctl: &Connection,
+    me: &User,
+    body: &Value,
+) -> Result<Value, Response> {
+    use memcp_core::policy::{self, Policy};
+    let peer = arg(body, "peer")?;
+    sync_policy_peer(app, me, peer)?;
+    if let Some(word) = body.get("later").and_then(Value::as_str) {
+        let p = Policy::parse(word).map_err(fail)?;
+        policy::set_later(&app.brain, me, peer, p).map_err(fail)?;
+    } else {
+        let space = memcp_core::Space::new(arg(body, "space")?).map_err(fail)?;
+        if !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
+            return Err(err(403, "not your space"));
+        }
+        let p = Policy::parse(arg(body, "policy")?).map_err(fail)?;
+        policy::set(&app.brain, me, peer, &space, p).map_err(fail)?;
+    }
+    policy::view(&app.brain, me, peer).map_err(fail)
 }
 
 /// The person a console token is made for: anyone, for an administrator of the registry;

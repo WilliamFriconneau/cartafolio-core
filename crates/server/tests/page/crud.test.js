@@ -1,5 +1,6 @@
 // The new create / read / update / delete buttons of the page, in a real Chromium against the real program: delete a
-// space with a choice, archive and restore, new key, revoke and remove a connection, pause and revoke a machine,
+// space with a choice, archive and restore, new key, revoke and remove a connection, the sync policy of a machine,
+// pause and revoke a machine,
 // bring a removed note back, remove a vocabulary, internal tools kept apart. Every destructive button shows its
 // preview first and is held to confirm (no browser dialog).
 const { chromium } = require("playwright-core");
@@ -125,6 +126,22 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.waitForSelector("#machines [data-peer='peer-laptop-ab12']", { timeout: 8000 });
   const mrow = () => page.locator("#machines [data-peer='peer-laptop-ab12']");
   check("the machine is listed with its controls", (await mrow().innerText()).includes("laptop") && await mrow().locator("button:has-text('pause')").count() === 1);
+  // ---- its sync policy: per space, with a mark on health and money, and for the spaces made later
+  await mrow().locator("button:has-text('spaces and ways')").click();
+  await page.waitForSelector("#machines [data-policy-of='peer-laptop-ab12'] [data-space='*']", { timeout: 8000 });
+  const prow = s => page.locator(`#machines [data-policy-of='peer-laptop-ab12'] [data-space='${s}']`);
+  check("every space is listed both ways by default", await prow("owner-health").locator("select").inputValue() === "both" && await prow("owner-work").locator("select").inputValue() === "both");
+  check("health is marked, work is not", (await prow("owner-health").innerText()).includes("health or money") && !(await prow("owner-work").innerText()).includes("health or money"));
+  await prow("owner-health").locator("select").selectOption("off");
+  await page.waitForFunction(() => document.querySelector("#machines [data-policy-of='peer-laptop-ab12'] [data-space='owner-health'] select")?.value === "off", null, { timeout: 8000 });
+  await prow("*").locator("select").selectOption("receive");
+  await sleep(2500); // the list refreshes every two seconds: the block stays open with what was chosen
+  const pol = await api("sync/policy?peer=peer-laptop-ab12");
+  const polOf = s => (pol.spaces || []).find(r => r.space === s) || {};
+  check("the choices are kept by the node", polOf("owner-health").policy === "off" && polOf("owner-work").policy === "both" && pol.later === "receive", JSON.stringify(pol));
+  check("the block stays open through the refresh", await prow("owner-health").locator("select").inputValue() === "off");
+  await mrow().locator("button:has-text('spaces and ways')").click();
+  await page.waitForFunction(() => !document.querySelector("#machines [data-policy-of]"), null, { timeout: 8000 });
   await mrow().locator("button:has-text('pause')").click();
   check("pausing shows its preview", /stops exchanging/.test(await confirmText()));
   await hold();

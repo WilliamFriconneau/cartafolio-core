@@ -122,7 +122,7 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `library scan` | reads the mounted folders again | yes | yes, runs on the node | administrator |
 | `library list` | lists the mounted folders | yes | yes, runs on the node | administrator |
 | `library remove` | unmounts a folder | yes | yes, runs on the node | administrator |
-| `node` | the other nodes: list, rename, note, pause, resume, revoke, forget | yes | yes, runs on the node | any person |
+| `node` | the other nodes: list, rename, note, pause, resume, revoke, forget, and the sync policy per space | yes | yes, runs on the node | any person |
 | `connection` | show, rename, rotate, delete a connection; also list, new, regrant, revoke, internal | yes | yes, runs on the node | any person |
 | `connections` | lists the connections | yes | yes, runs on the node | administrator |
 | `connect` | creates a connection and shows its key once | yes | yes, runs on the node | any person |
@@ -194,6 +194,8 @@ memcp merge --apply plan.txt
 memcp invite code                                          # a code and a link for a phone
 memcp invite ticket                                        # a link with a one-time ticket, for another node
 memcp invite pending                                       # devices waiting for a yes
+memcp node policy peer-laptop-ab12 health off             # this node keeps health apart from that machine (both, send, receive, off)
+memcp node policy peer-laptop-ab12 --later receive         # spaces made later: taken from it, not sent
 memcp invite approve REQUEST_ID
 memcp join 'memcp://node?id=...&t=...'                      # this node asks another to let it in (or ID, or ADDRESS)
 memcp --json status                                        # {"code":0,"stdout":"...","stderr":""}

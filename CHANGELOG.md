@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- **Choose which spaces go to each machine, and which way.** On a machine, « spaces and ways » sets each space both ways, send only, receive only or no sync, and the choice for spaces made later; health and money are marked. Nothing changes until you choose: every space still goes both ways (`memcp node policy`).
 - **Disputes are shown and resolved.** A note changed differently on two machines is counted and listed in Machines, with every version; you pick the one to keep, the others are retired (never erased) and every machine follows. An assistant sees the note flagged in dispute and resolves it only on your word (`disputes`, `dispute_resolve`).
 
 ## 20261117.0.25

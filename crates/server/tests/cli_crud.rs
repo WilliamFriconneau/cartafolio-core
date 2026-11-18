@@ -156,3 +156,38 @@ fn notes_connections_and_people_have_their_commands() {
     assert!(!h.ok(&["node", "list"]).contains("laptop"));
     assert!(h.ok(&["node", "list", "--all"]).contains("revoked"));
 }
+
+#[test]
+fn the_sync_policy_of_a_machine_is_shown_and_set_from_the_command_line() {
+    let h = Home::new("policy");
+    h.ok(&["connect", "peer-laptop-ab12", "--all"]);
+    let out = h.ok(&["node", "policy", "peer-laptop-ab12"]);
+    assert!(out.contains("spaces made later: both"), "{out}");
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("work") && l.contains("both")),
+        "{out}"
+    );
+    h.ok(&["node", "policy", "peer-laptop-ab12", "work", "send"]);
+    h.ok(&["node", "policy", "peer-laptop-ab12", "--later", "off"]);
+    let out = h.ok(&["node", "policy", "peer-laptop-ab12"]);
+    assert!(out.contains("spaces made later: off"), "{out}");
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("work") && l.contains("send")),
+        "{out}"
+    );
+    assert!(
+        out.lines()
+            .any(|l| l.starts_with("home") && l.contains("both")),
+        "{out}"
+    );
+    assert!(
+        !h.run(&["node", "policy", "peer-laptop-ab12", "work", "sometimes"])
+            .0
+    );
+    assert!(
+        !h.run(&["node", "policy", "peer-nobody-0000", "work", "off"])
+            .0
+    );
+}

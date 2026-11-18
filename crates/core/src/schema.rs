@@ -34,6 +34,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V23,
     CONTROL_V24,
     CONTROL_V25,
+    CONTROL_V26,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -734,4 +735,20 @@ UPDATE connections SET kind = 'peer'
   WHERE kind = 'assistant' AND console = 0 AND all_spaces = 1 AND read_only_forced = 0
     AND agent IN (SELECT agent FROM synced)
     AND NOT EXISTS (SELECT 1 FROM grant_paths g WHERE g.connection_id = connections.id);
+";
+
+/// The sync policy per space and per machine (`memcp_core::policy`): what THIS node does with each machine of the
+/// person, space by space (`both`, `send`, `receive`, `off`), and for the spaces made later (`space = '*'`). No row is
+/// `both`, so this migration changes nothing that runs: every machine keeps every space both ways until the person
+/// says otherwise. `theirs` is what the machine told of its own side, for the page only; it decides nothing here.
+const CONTROL_V26: &str = r"
+CREATE TABLE sync_policy (
+  peer      TEXT NOT NULL,
+  space     TEXT NOT NULL,
+  policy    TEXT CHECK (policy IS NULL OR policy IN ('both','send','receive','off')),
+  set_at    INTEGER,
+  theirs    TEXT CHECK (theirs IS NULL OR theirs IN ('both','send','receive','off')),
+  theirs_at INTEGER,
+  PRIMARY KEY (peer, space)
+) STRICT, WITHOUT ROWID;
 ";

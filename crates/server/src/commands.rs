@@ -50,6 +50,7 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
   space archived | space restore ARCHIVE [--dry-run]
   rules show|add-keyword|remove-keyword|add-tag|remove-tag SPACE [WORD]
   node list [--all] | node rename|note|pause|resume|revoke|forget PEER [TEXT] [--dry-run]
+  node policy PEER [SPACE both|send|receive|off] [--later both|send|receive|off]
   connection show|rename|rotate|delete AGENT [NAME] [--dry-run]
   person list | person show|set|heir|recovery-key|disable|enable|delete NAME [--display D] [--role admin|member] [--dry-run]
   note add|show|list|edit|retire|restore SPACE [TEXT|ID] [--tag T] [--reason R]
@@ -183,6 +184,7 @@ pub const VALUE_FLAGS: &[&str] = &[
     "--limit",
     "--add",
     "--remove",
+    "--later",
 ];
 
 pub struct Args {

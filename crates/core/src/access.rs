@@ -806,6 +806,10 @@ pub fn rename(ctl: &Connection, agent: &str, new: &str) -> Result<bool> {
             "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (?1, ?2, NULL, 'rename', ?3)",
             params![util::now(), new, agent],
         )?;
+        // A machine's sync policy is kept under its name: it follows, so a rename never reopens a space set apart.
+        if agent != new {
+            crate::policy::rename(ctl, agent, new)?;
+        }
     }
     Ok(n == 1)
 }

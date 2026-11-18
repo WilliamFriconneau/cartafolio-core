@@ -20,7 +20,12 @@
 //! whole, may write); the log of a space (`spaces` read, `events`) is open to any machine of the person on the spaces
 //! it reaches (read for pulling, write for pushing), so a machine the person limited to some spaces keeps in step with
 //! those. The engine is `memcp_core::sync`; nothing here decides what a merge does.
+//!
+//! This node's sync policy for the machine of the key (`memcp_core::policy`, under the connection's name) holds on every
+//! route: a space set `off` is not listed, a space it does not give is not served (`events` read: 403), one it does not
+//! take is not written (`events` write: 403; an offer is `declined`, an archive `kept`), whatever the machine sends.
 
+use memcp_core::policy::{self, Policy};
 use memcp_core::{Space, access, directory, swarm, sync};
 use serde_json::{Value, json};
 
@@ -106,6 +111,10 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             {
                 crate::join::apply_answers(app, &ctl, &me, answers);
             }
+            // The machine's own side of the sync policy, for the page of this node (it decides nothing here).
+            if let Some(sides) = body["policy"].as_object() {
+                note_sides(&ctl, &caller, sides);
+            }
             match directory::merge(brain, from, &list, now) {
                 Ok(changed) => {
                     if let Some(name) = body["node"]["name"].as_str() {
@@ -126,6 +135,11 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 if !caller.can_read(&s) || !whole(&s) {
                     continue;
                 }
+                // A space the person set apart from this machine here is not listed to it at all.
+                let side = side(&ctl, &caller, &s);
+                if side == Policy::Off {
+                    continue;
+                }
                 type Layout = (String, Option<String>, Option<String>, i64);
                 let (kind, label, parent, position): Layout = ctl
                     .query_row(
@@ -136,7 +150,12 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                     .unwrap_or_else(|_| ("custom".into(), None, None, 0));
                 let head = sync::head(brain, &s).unwrap_or(0);
                 out.push(json!({
-                    "space": s.as_str(), "kind": kind, "head": head, "writable": caller.can_write(&s),
+                    "space": s.as_str(), "kind": kind, "head": head,
+                    // Writable: the key may write it, and this node takes it from this machine.
+                    "writable": caller.can_write(&s) && side.takes(),
+                    // This node's side for this machine: an older peer ignores it, a newer one pulls only when it
+                    // gives, and shows it on its page.
+                    "policy": side.as_str(),
                     "label": label, "parent": parent, "position": position,
                     "since": swarm::since(brain, &s).unwrap_or(0),
                     "triage": triage.as_ref() == Some(&s),
@@ -145,6 +164,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             let archived: Vec<Value> = swarm::tombstones(brain, &caller.user_id)
                 .unwrap_or_default()
                 .into_iter()
+                .filter(|(s, _)| side(&ctl, &caller, s).gives())
                 .map(|(s, at)| json!({ "space": s.as_str(), "archived_at": at }))
                 .collect();
             // The exchange's protocol and this node's version: machines of different versions keep in step as long as
@@ -154,6 +174,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 &json!({
                     "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out,
                     "offers": full_peer, "archived": archived,
+                    "later": policy::later(&ctl, &caller.agent).unwrap_or(Policy::Both).as_str(),
                 }),
             )
         }
@@ -172,7 +193,8 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 let Ok(space) = Space::new(body["space"].as_str().unwrap_or_default()) else {
                     return refused(400, "space: a space name");
                 };
-                return match swarm::archive_here(brain, &caller.user_id, &space, at) {
+                return match swarm::archive_from(brain, &caller.user_id, &caller.agent, &space, at)
+                {
                     Ok(done) => Response::json(
                         200,
                         &json!({ "result": if done { "archived" } else { "kept" }, "space": space.as_str() }),
@@ -184,7 +206,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 Ok(o) => o,
                 Err(e) => return refused(400, &e.to_string()),
             };
-            match swarm::accept(brain, &caller.user_id, &offer) {
+            match swarm::accept_from(brain, &caller.user_id, &caller.agent, &offer) {
                 Ok(answer) => Response::json(200, &answer.to_json()),
                 Err(e) => refused(409, &e.to_string()),
             }
@@ -196,6 +218,9 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             };
             if !caller.can_read(&space) || !whole(&space) {
                 return refused(403, "this key does not read this space");
+            }
+            if !side(&ctl, &caller, &space).gives() {
+                return refused(403, APART);
             }
             let after = req
                 .query
@@ -241,6 +266,9 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             };
             if !caller.can_write(&space) || !whole(&space) {
                 return refused(403, "this key does not write this space");
+            }
+            if !side(&ctl, &caller, &space).takes() {
+                return refused(403, APART);
             }
             let Ok(body) = serde_json::from_slice::<Value>(&req.body) else {
                 return refused(400, "JSON expected: {\"events\": [...]}");
@@ -294,6 +322,45 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             }
         }
         _ => refused(404, "not found"),
+    }
+}
+
+/// Why a request about a space is refused by the policy of this node.
+const APART: &str = "the person set this space apart from this machine on this node (sync policy)";
+
+/// This node's sync policy for `space` with the machine of this key. A policy that cannot be read is `off`: nothing
+/// goes or comes on a doubt.
+fn side(ctl: &rusqlite::Connection, caller: &access::Caller, space: &Space) -> Policy {
+    policy::of(ctl, &caller.agent, space.as_str()).unwrap_or(Policy::Off)
+}
+
+/// The most spaces a machine may tell its side of in one request.
+const MAX_SIDES: usize = 2_000;
+
+/// What the machine told of its own side, space by space (`*`: the spaces made later), kept for the page. Only the
+/// person's spaces, and only the four words.
+fn note_sides(
+    ctl: &rusqlite::Connection,
+    caller: &access::Caller,
+    sides: &serde_json::Map<String, Value>,
+) {
+    if sides.len() > MAX_SIDES || policy::clear_theirs(ctl, &caller.agent).is_err() {
+        return;
+    }
+    for (name, word) in sides {
+        let Some(p) = word.as_str().and_then(|w| Policy::parse(w).ok()) else {
+            continue;
+        };
+        if name == "*" {
+            let _ = policy::note_theirs_later(ctl, &caller.agent, Some(p));
+            continue;
+        }
+        let Ok(space) = Space::new(name) else {
+            continue;
+        };
+        if memcp_core::users::is_space_owner(ctl, &space, &caller.user_id).unwrap_or(false) {
+            let _ = policy::note_theirs(ctl, &caller.agent, space.as_str(), Some(p));
+        }
     }
 }
 

@@ -2,6 +2,30 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Sync policy per space and per machine (Unreleased)
+
+What a node does with each space of the person and each of their machines. Everything below is added; nothing is
+renamed. The rules are in [FEDERATION.md](FEDERATION.md#the-sync-policy-as-built). With nothing set, every space goes
+both ways, as before.
+
+- **Control migration 26**: table `sync_policy (peer, space, policy, set_at, theirs, theirs_at)`; `space = '*'` holds the
+  choice for the spaces made later. No row means `both`.
+- **`GET /admin/api/sync/policy?peer=PEER`**: `{peer, later, later_theirs, spaces: [{space, label, kind, parent, policy, set,
+  theirs, sensitive, exchanged}]}`. `policy` and `later` are `both`, `send`, `receive` or `off`; `set` says the space has a
+  choice of its own; `theirs` what the machine told of its side (or `null`); `sensitive` a space of health or money;
+  `exchanged` the two exchanged it before (an `off` erases nothing). A machine that is not the person's: 403.
+- **`POST /admin/api/sync/policy`** `{peer, space, policy}` or `{peer, later}`: sets it and answers the same view. Another
+  person's machine or space: 403; a word that is not a policy: 400. Audited as `sync_policy`.
+- **`GET /sync/spaces`**: a space set `off` for the asking machine is not listed; each listed space carries `policy` (this node's
+  side) and `writable` is `false` when this node does not take it; the answer carries `later`. `archived` leaves out the spaces
+  this node does not give.
+- **`POST /sync/spaces`**: an offer of a space this node does not take is answered `{result: "declined", space, why}` (200); an
+  archive told of such a space `{result: "kept"}`.
+- **`GET /sync/events`** answers 403 for a space this node does not give the machine, **`POST /sync/events`** 403 for one it does
+  not take.
+- **`POST /sync/peers`** may carry `policy: {space: word, "*": word}`: the sender's side, kept for the page only.
+- **Command line**: `memcp node policy PEER [SPACE POLICY | --later POLICY]`.
+
 ## Disputes (Unreleased)
 
 A fact changed differently on two nodes is shown and resolved by the person. Everything below is added; nothing is renamed.

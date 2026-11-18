@@ -261,7 +261,7 @@ pub const COMMANDS: &[Entry] = &[
     e("library remove", "unmounts a folder", Remote::Exec, true),
     e(
         "node",
-        "the other nodes: list, rename, note, pause, resume, revoke, forget",
+        "the other nodes: list, rename, note, pause, resume, revoke, forget, and the sync policy per space",
         Remote::Exec,
         false,
     ),

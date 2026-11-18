@@ -224,6 +224,10 @@ details.fold[open]>summary{margin-bottom:8px}
 @media (max-width:640px){.mrow{grid-template-columns:auto 1fr}.mrow .mprog,.mrow .mwhen{grid-column:2}}
 .mfoot{margin-top:10px;font-size:12.5px}
 .mrow .macts{grid-column:1/-1;display:flex;flex-wrap:wrap;gap:2px 4px;align-items:center}
+.mrow .mpol{grid-column:1/-1;border-top:1px solid var(--outline-var);padding-top:8px}
+.mpol .prow{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:center;padding:4px 0}
+.mpol .prow .pname{min-width:9em;flex:1 1 9em;overflow-wrap:anywhere}
+.mpol select{max-width:100%}
 /* Start: two choices, then at most four steps */
 .choices{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:18px 0}
 .choice{display:flex;flex-direction:column;gap:8px;align-items:flex-start;text-align:left;border-radius:28px;padding:24px;border:1px solid var(--outline-var);background:var(--sc);color:var(--on-surface);font-weight:400}
@@ -1228,6 +1232,19 @@ const FR = {
   "lowercase letters, digits and dashes": "lettres minuscules, chiffres et tirets",
   "Give it a name you will recognise": "Donnez-lui un nom que vous reconnaîtrez",
   "change access": "changer l’accès",
+  "spaces and ways": "espaces et sens",
+  "Choose which spaces go to this machine, and which way": "Choisir quels espaces vont vers cette machine, et dans quel sens",
+  "What this node does with each space and this machine": "Ce que ce nœud fait de chaque espace avec cette machine",
+  "Both ways: this node sends and takes. Send only: it sends and takes nothing. Receive only: it takes and sends nothing. No sync: neither, and it erases nothing: what the machine already holds stays on it.": "Dans les deux sens : ce nœud envoie et reçoit. Envoyer seulement : il envoie et ne reçoit rien. Recevoir seulement : il reçoit et n’envoie rien. Pas de synchro : ni l’un ni l’autre, et rien n’est effacé : ce que la machine détient déjà reste chez elle.",
+  "both ways": "dans les deux sens",
+  "send only": "envoyer seulement",
+  "receive only": "recevoir seulement",
+  "no sync": "pas de synchro",
+  "health or money": "santé ou argent",
+  "Spaces made later": "Espaces créés plus tard",
+  "the machine says": "la machine dit",
+  "it keeps what it already holds": "elle garde ce qu’elle détient déjà",
+  "Reading…": "Lecture…",
   "Add or remove spaces for this assistant; its key and address stay the same": "Ajouter ou retirer des espaces pour cet assistant ; sa clé et son adresse restent les mêmes",
   "keep my instructions from it": "ne pas lui dire mes consignes",
   "tell my instructions": "lui dire mes consignes",
@@ -3371,6 +3388,7 @@ function peerActs(p) {
     if (c) box.append(
       el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename"),
       el("button", { class: "link", title: "Add or remove spaces for this machine; its key stays the same", onclick: () => { regranting = startRegrant(c); render(); } }, "change access"));
+    if (p.state && p.state !== "revoked") box.append(el("button", { type: "button", class: "link", "data-policy": p.peer, title: "Choose which spaces go to this machine, and which way", onclick: () => togglePolicy(p.peer) }, "spaces and ways"));
     // DOM's append writes « null » for an empty slot: only the buttons that exist.
     if (p.state) box.append(...[
       el("button", { type: "button", class: "link", onclick: () => askText("A note about " + p.name, p.note || "", v => api("nodes/update", { peer: p.peer, note: v }).then(() => { toast("Done"); nodeDone(); }).catch(fail)) }, "note"),
@@ -3379,6 +3397,41 @@ function peerActs(p) {
       p.may_forget ? el("button", { type: "button", class: "link danger", onclick: () => previewThen("nodes/forget", { peer: p.peer }, nodeDone) }, "forget") : null].filter(Boolean));
   }
   return box.children.length ? box : null;
+}
+// ---- The sync policy of one machine: per space, and for the spaces made later (GET|POST /admin/api/sync/policy) ----
+// Each node enforces its own side; the other side shows when the machine told it. The block is drawn from what was
+// read last, so the refresh of the list every two seconds does not read it again.
+const POLICY = { open: null, view: null };
+const WAYS = [["both", "both ways"], ["send", "send only"], ["receive", "receive only"], ["off", "no sync"]];
+const wayLabel = w => (WAYS.find(x => x[0] === w) || [w, w])[1];
+async function togglePolicy(peer) {
+  if (POLICY.open === peer) { POLICY.open = null; POLICY.view = null; renderMachines(); return; }
+  POLICY.open = peer; POLICY.view = null; renderMachines();
+  try { POLICY.view = await api("sync/policy?peer=" + encodeURIComponent(peer)); } catch (x) { POLICY.open = null; fail(x); }
+  renderMachines();
+}
+function setPolicy(body) {
+  api("sync/policy", body).then(v => { POLICY.view = v; toast("Done"); renderMachines(); }).catch(fail);
+}
+function waySelect(value, onpick, name) {
+  return el("select", { "aria-label": name, onchange: e => onpick(e.target.value) },
+    ...WAYS.map(([w, label]) => el("option", { value: w, selected: value === w ? "" : null }, label)));
+}
+function policyBlock(peer) {
+  const v = POLICY.view;
+  if (!v || v.peer !== peer) return el("div", { class: "mpol" }, el("p", { class: "mute small" }, "Reading…"));
+  const rows = (v.spaces || []).map(r => el("div", { class: "prow", "data-space": r.space },
+    el("span", { class: "pname" }, r.label || r.space, r.sensitive ? el("span", { class: "badge off", style: "margin-left:6px" }, "health or money") : null),
+    waySelect(r.policy, w => setPolicy({ peer, space: r.space, policy: w }), r.label || r.space),
+    r.theirs ? el("span", { class: "msub" }, el("span", {}, "the machine says"), " ", el("span", {}, wayLabel(r.theirs))) : null,
+    r.policy === "off" && r.exchanged ? el("span", { class: "msub" }, "it keeps what it already holds") : null));
+  return el("div", { class: "mpol", "data-policy-of": peer },
+    el("div", { class: "mname" }, "What this node does with each space and this machine"),
+    el("p", { class: "mute small" }, "Both ways: this node sends and takes. Send only: it sends and takes nothing. Receive only: it takes and sends nothing. No sync: neither, and it erases nothing: what the machine already holds stays on it."),
+    ...rows,
+    el("div", { class: "prow", "data-space": "*" }, el("span", { class: "pname" }, "Spaces made later"),
+      waySelect(v.later, w => setPolicy({ peer, later: w }), "Spaces made later"),
+      v.later_theirs ? el("span", { class: "msub" }, el("span", {}, "the machine says"), " ", el("span", {}, wayLabel(v.later_theirs))) : null));
 }
 function machineRow(p) {
   const direct = p.direct !== false;
@@ -3408,7 +3461,8 @@ function machineRow(p) {
     el("div", { class: "mprog" }, direct ? el("div", { class: "msub" }, (busy || p.total ? pct + " %" : "") + (notes ? " · " + notes : "")) : "",
       direct ? el("div", { class: "meter" }, el("i", { style: "width:" + (busy || p.total ? pct : seen ? 100 : 0) + "%" })) : ""),
     el("span", { class: "mwhen" }, seen ? since(p.last_seen || p.last_activity) : ""), (direct || p.state) ? peerActs(p) : "",
-    reach.length ? el("div", { class: "macts" }, ...reach) : "");
+    reach.length ? el("div", { class: "macts" }, ...reach) : "",
+    POLICY.open && POLICY.open === p.peer ? policyBlock(p.peer) : "");
 }
 function renderMachines() {
   if (!S || !$("#machines")) return;

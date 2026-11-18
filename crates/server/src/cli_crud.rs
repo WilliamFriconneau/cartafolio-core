@@ -360,6 +360,9 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
     }
     let peer = c.arg(2, "the peer (peer-...)")?;
     let n = peers::get(&brain, &who, peer, t).map_err(fail)?;
+    if op == "policy" {
+        return node_policy(&brain, &who, c, peer);
+    }
     if c.dry() {
         sayln!("dry run: {} ({}) would be {op}d", n.name, n.state);
         return Ok(());
@@ -384,11 +387,53 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
         "forget" => peers::forget(&brain, &who, peer, t).map_err(fail)?,
         _ => {
             return Err(bad(
-                "node list|rename|note|pause|resume|revoke|forget PEER [TEXT]",
+                "node list|rename|note|pause|resume|revoke|forget PEER [TEXT] | node policy PEER [SPACE POLICY | --later POLICY]",
             ));
         }
     }
     sayln!("{peer}: {op} done.");
+    Ok(())
+}
+
+/// `node policy PEER`: what this node does with each space of the person and that machine; `node policy PEER SPACE
+/// POLICY` or `node policy PEER --later POLICY` sets it (`both`, `send`, `receive`, `off`).
+fn node_policy(brain: &Brain, who: &users::User, c: &Cmd, peer: &str) -> Result<(), Failure> {
+    use memcp_core::policy::{self, Policy};
+    if let Some(word) = (c.flag)("--later") {
+        let p = Policy::parse(word).map_err(fail)?;
+        policy::set_later(brain, who, peer, p).map_err(fail)?;
+    } else if let Some(s) = c.pos.get(3) {
+        let p = Policy::parse(c.arg(4, "the policy (both, send, receive, off)")?).map_err(fail)?;
+        policy::set(brain, who, peer, &space(s)?, p).map_err(fail)?;
+    }
+    let v = policy::view(brain, who, peer).map_err(fail)?;
+    sayln!("{peer}: what this node does with each space (both, send, receive, off)");
+    for r in v["spaces"].as_array().into_iter().flatten() {
+        let theirs = r["theirs"]
+            .as_str()
+            .map_or(String::new(), |t| format!("  the machine: {t}"));
+        let line = format!(
+            "{:<24} {:<8}{}{}{}",
+            r["space"].as_str().unwrap_or(""),
+            r["policy"].as_str().unwrap_or(""),
+            if r["sensitive"] == true {
+                "  health or money"
+            } else {
+                ""
+            },
+            if r["exchanged"] == true && r["policy"] == "off" {
+                "  (the machine keeps what it already holds)"
+            } else {
+                ""
+            },
+            theirs
+        );
+        sayln!("{}", line.trim_end());
+    }
+    sayln!(
+        "spaces made later: {}",
+        v["later"].as_str().unwrap_or("both")
+    );
     Ok(())
 }
 

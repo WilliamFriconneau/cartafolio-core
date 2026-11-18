@@ -2365,18 +2365,35 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
     };
     // The peers this replica syncs with, and how far it has pushed to each.
     let ctl = brain.open_control()?;
-    let mut peers: Vec<(String, i64)> = ctl
+    let peers: Vec<(String, i64)> = ctl
         .prepare("SELECT peer, pushed FROM sync_state WHERE space = ?1")?
         .query_map([space.as_str()], |r| Ok((r.get(0)?, r.get(1)?)))?
         .collect::<rusqlite::Result<_>>()?;
+    // A machine this node sends nothing of this space to (its policy is `receive` or `off`) holds nothing for it:
+    // it is neither a holder nor a reason to wait.
+    let gives = |peer: &str| {
+        crate::policy::of(&ctl, peer, space.as_str()).map(crate::policy::Policy::gives)
+    };
+    let mut kept = Vec::with_capacity(peers.len());
+    for p in peers {
+        if gives(&p.0)? {
+            kept.push(p);
+        }
+    }
+    let mut peers = kept;
     // A peer that holds a connection here pulls from this node: its progress is its own, so it counts as unknown.
-    let blind: i64 = ctl.query_row(
-        "SELECT count(*) FROM connections c WHERE c.kind = 'peer' AND c.revoked_at IS NULL
-           AND NOT EXISTS (SELECT 1 FROM sync_state s WHERE s.peer = c.agent AND s.space = ?1)",
-        [space.as_str()],
-        |r| r.get(0),
-    )?;
-    if blind > 0 {
+    let blind: Vec<String> = ctl
+        .prepare(
+            "SELECT c.agent FROM connections c WHERE c.kind = 'peer' AND c.revoked_at IS NULL
+               AND NOT EXISTS (SELECT 1 FROM sync_state s WHERE s.peer = c.agent AND s.space = ?1)",
+        )?
+        .query_map([space.as_str()], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut blind_given = false;
+    for b in &blind {
+        blind_given |= gives(b)?;
+    }
+    if blind_given {
         peers.clear();
     }
 

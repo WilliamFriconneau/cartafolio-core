@@ -798,3 +798,97 @@ fn the_folder_of_a_space_on_this_node_is_set_read_synced_and_put_back() -> Res {
     let _ = fs::remove_dir_all(&base);
     Ok(())
 }
+
+#[test]
+fn the_sync_policy_of_a_machine_is_read_and_set_by_its_person_only() -> Res {
+    let e = env()?;
+    let t = e.admin.clone();
+    let ctl = e.app.brain.open_control()?;
+    let key = access::connect_peer(
+        &ctl,
+        users::OWNER,
+        "peer-laptop-ab12",
+        &Rights::owner(),
+        false,
+    )?;
+    drop(ctl);
+    for s in ["health", "work"] {
+        e.app.brain.add_space_for(&Space::new(s)?, users::OWNER)?;
+    }
+    // Nothing set: both ways, for every space and for the spaces made later.
+    let v = get(&e, &t, "sync/policy?peer=peer-laptop-ab12")?;
+    assert_eq!(v["later"], "both");
+    let row = |v: &Value, s: &str| {
+        v["spaces"]
+            .as_array()
+            .and_then(|a| a.iter().find(|r| r["space"] == s).cloned())
+            .unwrap_or_default()
+    };
+    assert_eq!(row(&v, "health")["policy"], "both");
+    assert_eq!(row(&v, "health")["sensitive"], true);
+    assert_eq!(row(&v, "work")["sensitive"], false);
+    post(
+        &e,
+        &t,
+        "sync/policy",
+        json!({ "peer": "peer-laptop-ab12", "space": "health", "policy": "off" }),
+    )?;
+    post(
+        &e,
+        &t,
+        "sync/policy",
+        json!({ "peer": "peer-laptop-ab12", "later": "receive" }),
+    )?;
+    let v = get(&e, &t, "sync/policy?peer=peer-laptop-ab12")?;
+    assert_eq!(row(&v, "health")["policy"], "off");
+    assert_eq!(row(&v, "work")["policy"], "both", "already here");
+    assert_eq!(v["later"], "receive");
+    assert_eq!(audits(&e, "sync_policy"), 2);
+    // A word that is not a policy, a space that is not one.
+    for body in [
+        json!({ "peer": "peer-laptop-ab12", "space": "health", "policy": "sometimes" }),
+        json!({ "peer": "peer-laptop-ab12", "space": "nowhere", "policy": "off" }),
+        json!({ "peer": "peer-laptop-ab12" }),
+    ] {
+        let r = call(&e, &t, "POST", "sync/policy", body);
+        assert!(matches!(r.status, 400 | 403), "{}", r.body_json());
+    }
+    // Another person: neither reads nor sets it.
+    let m = e.member.clone();
+    let r = call(
+        &e,
+        &m,
+        "GET",
+        "sync/policy?peer=peer-laptop-ab12",
+        json!({}),
+    );
+    assert_eq!(r.status, 403, "{}", r.body_json());
+    let r = call(
+        &e,
+        &m,
+        "POST",
+        "sync/policy",
+        json!({ "peer": "peer-laptop-ab12", "space": "health", "policy": "both" }),
+    );
+    assert_eq!(r.status, 403, "{}", r.body_json());
+    // The machine's own key is not a key to the page.
+    let r = call(
+        &e,
+        &key,
+        "GET",
+        "sync/policy?peer=peer-laptop-ab12",
+        json!({}),
+    );
+    assert_eq!(r.status, 401);
+    let r = call(
+        &e,
+        &key,
+        "POST",
+        "sync/policy",
+        json!({ "peer": "peer-laptop-ab12", "space": "health", "policy": "both" }),
+    );
+    assert_eq!(r.status, 401);
+    let v = get(&e, &t, "sync/policy?peer=peer-laptop-ab12")?;
+    assert_eq!(row(&v, "health")["policy"], "off");
+    Ok(())
+}

@@ -7,10 +7,17 @@
 //! it (`POST /sync/spaces`) and then exchanged like the others; the person's Inbox here is paired with theirs
 //! there, whatever its name; an archive on either side archives the other's copy. A peer of an older version, which
 //! takes no offers, is kept in step as before, and the pass says what it could not give it.
+//!
+//! The sync policy of this node for the peer (`memcp_core::policy`, under the name this node keeps the peer by) is
+//! enforced here, space by space: a space this node does not give is neither pushed, offered nor told archived; one it
+//! does not take is neither pulled, made here from the peer's list, nor archived on the peer's word. The peer's own side
+//! (`policy` in its list of spaces) is kept for the page, and a pull or a push the peer said it would refuse is not
+//! tried. This node's side goes to the peer with the directory.
 
 use std::time::Duration;
 
 use memcp_core::catalogue::TRIAGE;
+use memcp_core::policy::{self, Policy};
 use memcp_core::swarm::{self, Answer};
 use memcp_core::sync::{self, Cursor, Event};
 use memcp_core::{Brain, Space, directory, triage, users};
@@ -38,6 +45,16 @@ pub struct Pass {
     pub archived: usize,
     /// What went wrong, in words, one line each; the pass goes on past them.
     pub problems: Vec<String>,
+}
+
+/// One space a pass exchanges: its name here and there, and the ways it goes.
+struct Pair {
+    here: Space,
+    there: String,
+    /// The peer's events are taken: this node takes the space from the peer, and the peer gives it.
+    pull: bool,
+    /// This node's events are given: this node gives the space to the peer, and the peer's key may write it.
+    push: bool,
 }
 
 /// The peer this node keeps in step with, reached at the address of this node's own connection there.
@@ -148,18 +165,22 @@ impl Peer {
         }
         let mut pass = Pass::default();
         let person = self.person(brain)?;
-        let pairs = self.spaces(brain, &person, &listed, now, &mut pass)?;
+        let (pairs, sides) = self.spaces(brain, &person, &listed, now, &mut pass)?;
         // Every space is made before any is filled: a space's parent is then here when its layout arrives.
-        for (local, remote, writable) in pairs {
+        for p in pairs {
             pass.spaces += 1;
-            if let Err(e) = self.pull(brain, &local, &remote, now, &mut pass) {
-                pass.problems.push(format!("{remote}: pull: {e}"));
+            if p.pull
+                && let Err(e) = self.pull(brain, &p.here, &p.there, now, &mut pass)
+            {
+                pass.problems.push(format!("{}: pull: {e}", p.there));
             }
-            if writable && let Err(e) = self.push(brain, &local, &remote, now, &mut pass) {
-                pass.problems.push(format!("{remote}: push: {e}"));
+            if p.push
+                && let Err(e) = self.push(brain, &p.here, &p.there, now, &mut pass)
+            {
+                pass.problems.push(format!("{}: push: {e}", p.there));
             }
         }
-        self.gossip(brain, now);
+        self.gossip(brain, now, sides);
         // A replica that holds a window drops what is outside it and acknowledged: local, nothing is sent.
         match sync::prune_all(brain, now) {
             Ok(Some(done)) => pass.pruned = done.iter().map(|p| p.facts).sum(),
@@ -169,9 +190,10 @@ impl Peer {
         Ok(pass)
     }
 
-    /// Which spaces this pass exchanges: `(here, there, writable there)`. The peer's archives are applied here, the
-    /// peer's spaces are made here, the person's Inbox is paired with the peer's, and the spaces of the person the
-    /// peer lacks are offered to it.
+    /// Which spaces this pass exchanges, and which ways, with this node's side for each space the peer listed (told
+    /// to the peer with the directory, under the peer's names). The peer's archives are applied here, the peer's
+    /// spaces are made here, the person's Inbox is paired with the peer's, and the spaces of the person the peer lacks
+    /// are offered to it: each as far as the policy of this node for the peer allows.
     fn spaces(
         &self,
         brain: &Brain,
@@ -179,11 +201,34 @@ impl Peer {
         listed: &Value,
         now: i64,
         pass: &mut Pass,
-    ) -> Result<Vec<(Space, String, bool)>, String> {
+    ) -> Result<(Vec<Pair>, serde_json::Map<String, Value>), String> {
         let fail = |e: memcp_core::Error| e.to_string();
+        let ctl = brain.open_control().map_err(fail)?;
+        // This node's side for a space (its name here) with this peer: a policy that cannot be read is `off`.
+        let side =
+            |space: &Space| policy::of(&ctl, &self.name, space.as_str()).unwrap_or(Policy::Off);
+        let mut sides = serde_json::Map::new();
+        sides.insert(
+            "*".into(),
+            json!(
+                policy::later(&ctl, &self.name)
+                    .unwrap_or(Policy::Off)
+                    .as_str()
+            ),
+        );
+        // What the peer tells of its own side: a newer peer says it per space it lists; it is kept for the page.
+        let told = listed["spaces"]
+            .as_array()
+            .is_some_and(|l| l.iter().any(|s| s["policy"].is_string()));
+        if told {
+            let _ = policy::clear_theirs(&ctl, &self.name);
+            let later = listed["later"].as_str().and_then(|w| Policy::parse(w).ok());
+            let _ = policy::note_theirs_later(&ctl, &self.name, later);
+        }
         let offers_ok = listed["offers"].as_bool() == Some(true);
         let entries = listed["spaces"].as_array().cloned().unwrap_or_default();
-        // 1. What the peer archived is archived here (an archive, never a deletion), unless the copy here is newer.
+        // 1. What the peer archived is archived here (an archive, never a deletion), unless the copy here is newer, or
+        // this node takes nothing of that space from the peer.
         for a in listed["archived"].as_array().into_iter().flatten() {
             let (Some(Ok(space)), Some(at)) = (
                 a["space"].as_str().map(Space::new),
@@ -191,7 +236,7 @@ impl Peer {
             ) else {
                 continue;
             };
-            match swarm::archive_here(brain, person, &space, at) {
+            match swarm::archive_from(brain, person, &self.name, &space, at) {
                 Ok(true) => pass.archived += 1,
                 Ok(false) => {}
                 Err(e) => pass.problems.push(format!("{space}: archive: {e}")),
@@ -218,10 +263,23 @@ impl Peer {
             };
             let kind = s["kind"].as_str().unwrap_or("custom");
             let writable = s["writable"].as_bool() == Some(true);
+            // The peer's side: an older peer says none, and serves both ways what the key reaches.
+            let their_side = s["policy"].as_str().and_then(|w| Policy::parse(w).ok());
+            let they_give = their_side.is_none_or(Policy::gives);
             // An older peer does not say when its copy began: it counts as made now.
             let since = s["since"].as_i64();
             if kind == TRIAGE {
                 if theirs.as_deref() != Some(name) {
+                    continue;
+                }
+                // The box here is judged by its name here, whatever the peer calls its own.
+                let here_name = mine.clone().unwrap_or_else(|| space.clone());
+                let mine_side = side(&here_name);
+                sides.insert(name.to_string(), json!(mine_side.as_str()));
+                if told {
+                    let _ = policy::note_theirs(&ctl, &self.name, here_name.as_str(), their_side);
+                }
+                if mine_side == Policy::Off || (mine.is_none() && !mine_side.takes()) {
                     continue;
                 }
                 let here = match &mine {
@@ -236,7 +294,21 @@ impl Peer {
                         space
                     }
                 };
-                pairs.push((here, name.to_string(), writable));
+                pairs.push(Pair {
+                    here,
+                    there: name.to_string(),
+                    pull: mine_side.takes() && they_give,
+                    push: mine_side.gives() && writable,
+                });
+                continue;
+            }
+            let mine_side = side(&space);
+            sides.insert(name.to_string(), json!(mine_side.as_str()));
+            if told {
+                let _ = policy::note_theirs(&ctl, &self.name, name, their_side);
+            }
+            // Set apart from this peer: not made here, not exchanged; a copy already here stays as it is.
+            if mine_side == Policy::Off {
                 continue;
             }
             // Archived here after the peer's copy began: the peer archives it too; it is not made again here.
@@ -244,6 +316,9 @@ impl Peer {
                 && let Some((_, at)) = swarm::archived_at(brain, &space).map_err(fail)?
                 && since.unwrap_or(0) < at
             {
+                if !mine_side.gives() {
+                    continue;
+                }
                 if offers_ok {
                     let said = self.post("spaces", &json!({ "space": name, "archived_at": at }));
                     if let Err(e) = said {
@@ -256,15 +331,25 @@ impl Peer {
                 }
                 continue;
             }
+            // A space this node does not take from the peer is not made here from its word.
+            if !brain.has_space(&space).map_err(fail)? && !mine_side.takes() {
+                continue;
+            }
             // One space that cannot be made here is said, and the others still go.
             if let Err(e) = swarm::adopt(brain, person, &space, kind, since.unwrap_or(now)) {
                 pass.problems.push(format!("{name}: made here: {e}"));
                 continue;
             }
-            pairs.push((space, name.to_string(), writable));
+            pairs.push(Pair {
+                here: space,
+                there: name.to_string(),
+                pull: mine_side.takes() && they_give,
+                push: mine_side.gives() && writable,
+            });
         }
-        // 3. The spaces of the person the peer lacks are offered to it. Inbox only when the peer has none.
-        let offers: Vec<swarm::Offer> = swarm::offers(brain, person)
+        // 3. The spaces of the person the peer lacks, and that this node gives it, are offered to it. Inbox only when
+        // the peer has none.
+        let offers: Vec<swarm::Offer> = swarm::offers_to(brain, person, &self.name)
             .map_err(fail)?
             .into_iter()
             .filter(|o| !listed_names.contains(o.space.as_str()))
@@ -277,7 +362,7 @@ impl Peer {
             })
             .collect();
         if offers.is_empty() {
-            return Ok(pairs);
+            return Ok((pairs, sides));
         }
         if !offers_ok {
             // A node of this version always lists its archives: then it is the key, not the version, that takes no offer.
@@ -295,22 +380,34 @@ impl Peer {
                     .collect::<Vec<_>>()
                     .join(", ")
             ));
-            return Ok(pairs);
+            return Ok((pairs, sides));
         }
         for o in offers {
             let answer = self
                 .post("spaces", &o.to_json())
                 .and_then(|v| Answer::from_json(&v).map_err(|e| e.to_string()));
+            let mine_side = side(&o.space);
+            let pair = |there: Space| Pair {
+                here: o.space.clone(),
+                there: there.as_str().to_string(),
+                pull: mine_side.takes(),
+                push: true,
+            };
             match answer {
                 Ok(Answer::Created(there)) => {
                     pass.offered += 1;
-                    pairs.push((o.space, there.as_str().to_string(), true));
+                    pairs.push(pair(there));
                 }
                 Ok(Answer::Held(there) | Answer::Triage(there)) => {
-                    pairs.push((o.space, there.as_str().to_string(), true));
+                    pairs.push(pair(there));
+                }
+                // The person set the space apart there: nothing to say, it is their choice; the page shows it.
+                Ok(Answer::Declined(_)) => {
+                    let _ =
+                        policy::note_theirs(&ctl, &self.name, o.space.as_str(), Some(Policy::Off));
                 }
                 Ok(Answer::Archived(at)) => {
-                    match swarm::archive_here(brain, person, &o.space, at) {
+                    match swarm::archive_from(brain, person, &self.name, &o.space, at) {
                         Ok(true) => pass.archived += 1,
                         Ok(false) => {}
                         Err(e) => pass.problems.push(format!("{}: archive: {e}", o.space)),
@@ -321,13 +418,13 @@ impl Peer {
                     .push(format!("{}: offer refused: {e}", o.space)),
             }
         }
-        Ok(pairs)
+        Ok((pairs, sides))
     }
 
     /// The peer directories, both ways: takes the peer's (`GET /sync/peers`), then gives this node's
     /// (`POST /sync/peers`). A peer without the endpoint (an older node) or a failure changes nothing: the
     /// directory is a courtesy, never a reason for a pass to fail.
-    fn gossip(&self, brain: &Brain, now: i64) {
+    fn gossip(&self, brain: &Brain, now: i64, sides: serde_json::Map<String, Value>) {
         // The name the peer goes by: the one it tells, else the one this node keeps it under.
         let mut asked = self.name.clone();
         if let Ok(theirs) = self.get("peers") {
@@ -354,9 +451,10 @@ impl Peer {
         {
             // The answers the person gave here to requests of that node go back with this exchange.
             let answers = directory::answers_for(brain, &asked).unwrap_or_default();
+            // This node's side of the sync policy, under the peer's names: for its page, it decides nothing there.
             let sent = self.post(
                 "peers",
-                &json!({ "node": node, "peers": peers, "answers": answers }),
+                &json!({ "node": node, "peers": peers, "answers": answers, "policy": sides }),
             );
             if sent.is_ok() && !answers.is_empty() {
                 let _ = directory::answers_delivered(brain, &asked);

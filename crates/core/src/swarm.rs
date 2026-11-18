@@ -207,16 +207,23 @@ pub enum Answer {
     Triage(Space),
     /// This node archived the space after the offering node's copy began: the offering node archives its copy too.
     Archived(i64),
+    /// This node takes nothing of that space from the offering machine (its policy there is `send` or `off`): nothing
+    /// was made, and nothing of it is exchanged.
+    Declined(Space),
 }
 
 impl Answer {
-    /// `{result: created|held|triage, space}` or `{result: archived, archived_at}`.
+    /// `{result: created|held|triage|declined, space}` or `{result: archived, archived_at}`.
     pub fn to_json(&self) -> Value {
         match self {
             Answer::Created(s) => json!({ "result": "created", "space": s.as_str() }),
             Answer::Held(s) => json!({ "result": "held", "space": s.as_str() }),
             Answer::Triage(s) => json!({ "result": "triage", "space": s.as_str() }),
             Answer::Archived(at) => json!({ "result": "archived", "archived_at": at }),
+            Answer::Declined(s) => json!({
+                "result": "declined", "space": s.as_str(),
+                "why": "the person set this space apart from this machine on that node",
+            }),
         }
     }
 
@@ -230,6 +237,7 @@ impl Answer {
             Some("created") => Ok(Answer::Created(space()?)),
             Some("held") => Ok(Answer::Held(space()?)),
             Some("triage") => Ok(Answer::Triage(space()?)),
+            Some("declined") => Ok(Answer::Declined(space()?)),
             Some("archived") => v["archived_at"]
                 .as_i64()
                 .map(Answer::Archived)
@@ -261,6 +269,19 @@ pub fn offers(brain: &Brain, user: &str) -> Result<Vec<Offer>> {
             parent: p.parent,
             position: p.position,
         });
+    }
+    Ok(out)
+}
+
+/// The spaces of `user` this node offers to the machine it knows as `peer`: [`offers`], less those it sends nothing of
+/// to that machine (`policy::Policy::gives`: a space set `receive` or `off` for it, or made later under such a choice).
+pub fn offers_to(brain: &Brain, user: &str, peer: &str) -> Result<Vec<Offer>> {
+    let ctl = brain.open_control()?;
+    let mut out = vec![];
+    for o in offers(brain, user)? {
+        if crate::policy::of(&ctl, peer, o.space.as_str())?.gives() {
+            out.push(o);
+        }
     }
     Ok(out)
 }
@@ -382,6 +403,35 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
         ],
     )?;
     Ok(Answer::Created(offer.space.clone()))
+}
+
+/// The machine this node knows as `peer` offers a space: [`accept`], unless this node takes nothing of that space from
+/// it ([`Answer::Declined`]; the person's box is judged by its name here).
+///
+/// # Errors
+/// As [`accept`].
+pub fn accept_from(brain: &Brain, user: &str, peer: &str, offer: &Offer) -> Result<Answer> {
+    let here = if offer.kind == TRIAGE {
+        crate::triage::of(brain, user)?.unwrap_or_else(|| offer.space.clone())
+    } else {
+        offer.space.clone()
+    };
+    if !crate::policy::of(&brain.open_control()?, peer, here.as_str())?.takes() {
+        return Ok(Answer::Declined(offer.space.clone()));
+    }
+    accept(brain, user, offer)
+}
+
+/// The machine this node knows as `peer` says `space` was archived at `at`: [`archive_here`], unless this node takes
+/// nothing of that space from it. Then nothing is archived and no mark is kept.
+///
+/// # Errors
+/// As [`archive_here`].
+pub fn archive_from(brain: &Brain, user: &str, peer: &str, space: &Space, at: i64) -> Result<bool> {
+    if !crate::policy::of(&brain.open_control()?, peer, space.as_str())?.takes() {
+        return Ok(false);
+    }
+    archive_here(brain, user, space, at)
 }
 
 /// A peer says `space` was archived at `at`: this node archives its copy of it, as an archive (exported, set aside,

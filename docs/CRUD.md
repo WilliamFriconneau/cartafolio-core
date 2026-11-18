@@ -58,6 +58,7 @@ connections that lose access.
 | Pause, resume sync | `peers::set_paused` | `node pause PEER`, `node resume PEER` | `POST /nodes/pause`, `POST /nodes/resume` | pause / resume button | - |
 | Revoke | `peers::revoke` | `node revoke PEER` (or `revoke`) | `POST /nodes/revoke` | "Revoke" | - |
 | Forget (remove from lists) | `peers::forget` | `node forget PEER` | `POST /nodes/forget` | "Forget" on a revoked or silent node | - |
+| Sync policy per space (both, send, receive, off) and for the spaces made later | `policy::set`, `policy::set_later`, `policy::view` | `node policy PEER [SPACE POLICY \| --later POLICY]` | `GET /sync/policy?peer=`, `POST /sync/policy` | « spaces and ways » on the machine | - |
 
 A node is a machine connection (kind `peer`, made by a pairing code, a join, or `memcp connect peer-…` on the node's own command line), named `peer-<machine>-xxxx`; the name alone makes nothing a machine. Revoking stops its key at once; the entry stays, marked
 revoked, with its history. Forgetting only hides a revoked node, or one silent for 30 days, from the lists (its sync
