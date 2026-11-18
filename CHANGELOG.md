@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261117.0.27
 
 - **ChatGPT and Le Chat connect.** Adding MemCP in ChatGPT (and in Le Chat) was refused: the node accepted only Claude's return address. It now accepts theirs, and names itself in every sign-in answer, as ChatGPT requires.
 - **Big files reach every machine.** A recording or a document of up to 2 GB (24 MB before) goes between your machines in pieces of 4 MB, each checked; a transfer cut halfway goes on where it stopped. A machine not yet updated keeps getting files up to 24 MB, and the bigger ones once it is. Big files come in from a watched folder.

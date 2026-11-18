@@ -2,12 +2,12 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
-## OAuth for ChatGPT and Le Chat (Unreleased)
+## OAuth for ChatGPT and Le Chat (20261117.0.27)
 
 - `GET /.well-known/oauth-authorization-server` adds `authorization_response_iss_parameter_supported: true`: every redirect of `/oauth/authorize` (a code, `access_denied`, `invalid_request`) carries `iss`, the node's public address, exactly as the metadata's `issuer` (RFC 9207).
 - `POST /oauth/register` accepts by default, besides Claude's callbacks: `https://chatgpt.com/connector_platform_oauth_redirect`, `https://chatgpt.com/connector/oauth/<id>` (an id of letters, digits, `-` and `_`, up to 128) and `https://callback.mistral.ai/v1/integrations_auth/oauth2_callback`. `oauth_redirect` still adds others. The consent page's `form-action` lists their origins.
 
-## Files in chunks, up to 2 GiB (Unreleased)
+## Files in chunks, up to 2 GiB (20261117.0.27)
 
 A file over 24 MiB travels between nodes in chunks of 4 MiB. Everything below is added; the protocol stays 1, and a node of
 an earlier version keeps exchanging files up to 24 MiB whole. The rules are in
@@ -36,7 +36,7 @@ an earlier version keeps exchanging files up to 24 MiB whole. The rules are in
   `sync::events_after_with`, `Page::withheld`, `Applied::wants`, `sync::note_held`, `note_withheld`, `take_withheld`;
   `tools::file_put_path`.
 
-## Sync policy per space and per machine (Unreleased)
+## Sync policy per space and per machine (20261117.0.27)
 
 What a node does with each space of the person and each of their machines. Everything below is added; nothing is
 renamed. The rules are in [FEDERATION.md](FEDERATION.md#the-sync-policy-as-built). With nothing set, every space goes
@@ -60,7 +60,7 @@ both ways, as before.
 - **`POST /sync/peers`** may carry `policy: {space: word, "*": word}`: the sender's side, kept for the page only.
 - **Command line**: `memcp node policy PEER [SPACE POLICY | --later POLICY]`.
 
-## Disputes (Unreleased)
+## Disputes (20261117.0.27)
 
 A fact changed differently on two nodes is shown and resolved by the person. Everything below is added; nothing is renamed.
 The rules are in [FEDERATION.md](FEDERATION.md#conflicts) and [TOOLS.md](TOOLS.md#disputes).
