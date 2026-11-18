@@ -80,6 +80,80 @@ Every command of `memcp` also runs against a node that is up, with a key ([CLI.m
 - **`GET /admin/api/export`** now sends the tar from a file, block by block, instead of holding it in memory; the answer is the same.
 - **`GET` and `POST /admin/api/space/folder`** are named by the command `memcp folder get|set` and are **pending** (they come with the space folders): the command answers exit 6, "pending", on a 404.
 - Command line only: `memcp status`, `memcp person new`, `memcp note recall`, `memcp note tags`, `memcp connection list|new|regrant|revoke|internal|readonly|person-guide|limit` (the former words still work), `memcp invite code|ticket|pending|approve|deny|allow` and `memcp join LINK|ID|ADDRESS [--ticket T]` (they call `POST /pairing`, `POST /nodes/invite`, `GET /join/pending`, `POST /join/approve|deny|allow-device`, `POST /nodes/add`, `GET /join-memory`), `memcp folder ...`. `--prefix` and `--token-env` are read as options with a value (they were read as switches, so `adopt DIR --prefix P` did not apply the prefix).
+## Call recordings carry their participants (next version)
+
+Everything below is added; nothing is renamed. `fields` of a fact keeps its form for the scalar fields, and gives a list for a name
+held more than once (and always for `caller` and `callee`).
+
+**`call`** (optional) on `remember`, on each record of `deposit`, and on `file_put`: `{ "caller": [..], "callee": [..], "app": "phone|facetime|whatsapp|teams|meet|zoom|other", "direction"?: "in|out|missed", "started_at"?: ISO 8601 or Unix seconds, "duration_s"?: integer }`. At most 20 participants (both sides), 80 characters each, no control character; `caller`, `callee` and `app` required, at least one participant; otherwise `invalid` and nothing is written. A name is kept as a slug (`Alice Martin`: `alice-martin`; `/` is a path level), a phone number as its digits, returned with a leading `+`.
+
+An iPhone call recording:
+
+```json
+{
+  "name": "file_put",
+  "arguments": {
+    "space": "personal",
+    "name": "2026-11-17-09h12-call.m4a",
+    "note": "Call recording",
+    "tags": ["inbox/audio"],
+    "data_base64": "AAAAGGZ0eXBNNEEg...",
+    "call": {
+      "caller": ["Alice Martin"],
+      "callee": ["+33 6 12 34 56 78"],
+      "app": "phone",
+      "direction": "in",
+      "started_at": "2026-11-17T09:12:00+01:00",
+      "duration_s": 754
+    }
+  }
+}
+```
+
+The description fact then reads:
+
+```json
+{
+  "id": "f_c1", "type": "file",
+  "tags": ["appel", "appel/phone", "field/call_app/phone", "field/call_direction/in", "field/call_duration_s/754",
+           "field/call_started_at/1794903120", "field/callee/33612345678", "field/caller/alice-martin",
+           "inbox/audio", "personal", "personnes/alice-martin"],
+  "fields": { "call_app": "phone", "call_direction": "in", "call_duration_s": "754", "call_started_at": "1794903120",
+              "callee": ["+33612345678"], "caller": ["alice-martin"] }
+}
+```
+
+A Teams meeting with three people, as a note:
+
+```json
+{
+  "name": "remember",
+  "arguments": {
+    "space": "work",
+    "text": "2026-11-17, weekly sync: budget approved.",
+    "call": { "caller": ["Alice Martin"], "callee": ["Bob", "Carol Durand"], "app": "teams" }
+  }
+}
+```
+
+```json
+{
+  "result": "created",
+  "fact": {
+    "id": "f_c2",
+    "tags": ["appel", "appel/teams", "field/call_app/teams", "field/callee/bob", "field/callee/carol-durand",
+             "field/caller/alice-martin", "personnes/alice-martin", "personnes/bob", "personnes/carol-durand", "work"],
+    "fields": { "call_app": "teams", "callee": ["bob", "carol-durand"], "caller": ["alice-martin"] }
+  }
+}
+```
+
+When the node transcribes a recording that has a call, the transcription note (tags `inbox`, `dictee`) **inherits** the same `field/...`, `personnes/...`, `appel` tags. The janitor keeps them when it files the note.
+
+**`tags_set`**: `fields` takes a list for `caller` and `callee` (the whole side is replaced; `[]` empties it); `add`/`remove` of `field/caller/<name>` and `field/callee/<name>` keep the `personnes/<name>` tags in step. **`tags_suggest`**: new optional `tags` (the note's tags); the `personnes/` ones make `route` answer `{ "space", "score", "by": "people" }` where earlier notes with that person went (learned when the person sends a note of Inbox to a space).
+
+**Core**: `memcp_core::call::people_names(brain, space?)` returns the distinct names of the `personnes/` tags with their counts, most first; `memcp_core::autotag::fields_json(tags)` is the JSON form of the fields.
+
 ## A folder for each space, on each node (next version)
 
 Everything below is added; nothing is renamed. The rules are in [FOLDERS.md](FOLDERS.md).

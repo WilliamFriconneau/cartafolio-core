@@ -112,7 +112,7 @@ pub(super) fn living(
                     .flatten()
                     .map(|f| f.tags)
                     .unwrap_or_default();
-                card["fields"] = json!(crate::autotag::fields_of(&tags));
+                card["fields"] = crate::autotag::fields_json(&tags);
                 card["tags"] = json!(tags);
             }
             board.insert((*col).to_string(), Value::Array(cards));
@@ -151,7 +151,7 @@ pub(super) fn living(
                 .and_then(|id| facts::read_fact(&conn, id).ok().flatten())
                 .map(|f| f.tags)
                 .unwrap_or_default();
-            d["fields"] = json!(crate::autotag::fields_of(&tags));
+            d["fields"] = crate::autotag::fields_json(&tags);
             d["tags"] = json!(tags);
         }
         let behind: i64 = conn

@@ -74,7 +74,19 @@ pub(super) fn tags_suggest(
         .filter(|(s, _)| Space::new(s).is_ok_and(|s| readable.contains(&s)))
         .map(|(s, score)| json!({ "space": s, "score": score }))
         .collect();
-    out["route"] = json!(route);
+    // The people of the note are a strong hint, ahead of its words: where earlier notes with them went.
+    let people = crate::call::people_of(&tags_arg_lenient(args));
+    let by_people: Vec<Value> = autotag::Store::open(brain.dir())
+        .route_people(&people)
+        .into_iter()
+        .filter(|(s, _)| Space::new(s).is_ok_and(|s| readable.contains(&s)))
+        .map(|(s, score)| json!({ "space": s, "score": score, "by": "people" }))
+        .collect();
+    out["route"] = json!(if by_people.is_empty() {
+        route
+    } else {
+        by_people
+    });
     Ok(out)
 }
 
@@ -118,6 +130,20 @@ pub(super) fn tags_set(
         for (name, value) in fields {
             let prefix = format!("{}{}/", autotag::FIELD_PREFIX, field_name(name));
             tags.retain(|t| !t.starts_with(&prefix));
+            // The participants of a call are a list: the whole list is set (an empty one takes them all off).
+            if let (Value::Array(list), true) = (
+                value,
+                crate::call::LIST_FIELDS.contains(&field_name(name).as_str()),
+            ) {
+                for item in list {
+                    let raw = item.as_str().ok_or_else(|| {
+                        ToolError::Invalid(format!("fields.{name}: a list of names or numbers"))
+                    })?;
+                    let p = crate::call::participant(raw)?;
+                    tags.push(format!("{prefix}{}", p.slug()));
+                }
+                continue;
+            }
             let text = match value {
                 Value::String(s) => s.clone(),
                 Value::Number(n) => n.to_string(),
@@ -131,6 +157,9 @@ pub(super) fn tags_set(
             }
         }
     }
+    // The person tags follow the participants: a name that leaves both sides of a call leaves the note, a name that
+    // comes in is a person of the note.
+    sync_people(&old.tags, &mut tags);
     let tags = facts::normalize_tags(&tags)?;
     if tags.is_empty() {
         return Err(ToolError::Invalid(
@@ -167,11 +196,48 @@ pub(super) fn tags_set(
     }))
 }
 
+/// The `personnes/` tags of a note follow its `field/caller` and `field/callee` tags (names only, never numbers).
+fn sync_people(old: &[String], tags: &mut Vec<String>) {
+    let people = |list: &[String]| -> std::collections::BTreeSet<String> {
+        list.iter()
+            .filter_map(|t| {
+                let rest = t.strip_prefix(autotag::FIELD_PREFIX)?;
+                let value = rest
+                    .strip_prefix("caller/")
+                    .or_else(|| rest.strip_prefix("callee/"))?;
+                (!value.chars().all(|c| c.is_ascii_digit())).then(|| value.to_string())
+            })
+            .collect()
+    };
+    let (before, after) = (people(old), people(tags));
+    for gone in before.difference(&after) {
+        let tag = format!("{}{gone}", crate::call::PERSON_PREFIX);
+        tags.retain(|t| *t != tag);
+    }
+    for new in after.difference(&before) {
+        let tag = format!("{}{new}", crate::call::PERSON_PREFIX);
+        if !tags.contains(&tag) {
+            tags.push(tag);
+        }
+    }
+}
+
 fn field_name(name: &str) -> String {
     name.trim()
         .to_lowercase()
         .chars()
         .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+        .collect()
+}
+
+/// The `tags` of a preview: what is not a tag is left out, nothing fails.
+fn tags_arg_lenient(args: &Value) -> Vec<String> {
+    args.get("tags")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(|t| facts::normalize_tag(t).ok())
         .collect()
 }
 

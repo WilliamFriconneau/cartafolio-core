@@ -114,6 +114,23 @@ impl From<rusqlite::Error> for ToolError {
     }
 }
 
+/// The `call` argument of `remember`, `deposit` records and `file_put` (see [`crate::call`]).
+fn call_prop() -> Value {
+    json!({
+        "type": "object",
+        "description": "A call recording and its participants: {caller: [names or numbers], callee: [names or numbers], app, direction?, started_at?, duration_s?}. At most 20 participants of 80 characters. The node keeps it as tags (`field/caller/<name>`, `field/callee/<name>`, `field/call_app/<app>`, `personnes/<name>` for each named person, `appel`, `appel/<app>`) and returns it in `fields`. A key limited to paths may send it: the tags of the call come on top of the paths it writes under.",
+        "properties": {
+            "caller": { "type": "array", "items": { "type": "string" }, "description": "Who called: names, or phone numbers (kept as digits, shown with a leading +)." },
+            "callee": { "type": "array", "items": { "type": "string" }, "description": "Who was called (everyone else in a meeting)." },
+            "app": { "type": "string", "enum": ["phone", "facetime", "whatsapp", "teams", "meet", "zoom", "other"] },
+            "direction": { "type": "string", "enum": ["in", "out", "missed"] },
+            "started_at": { "type": "string", "description": "ISO 8601 time (or Unix seconds)." },
+            "duration_s": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["caller", "callee", "app"]
+    })
+}
+
 fn space_prop(spaces: &[Space], what: &str) -> Value {
     let names: Vec<&str> = spaces.iter().map(Space::as_str).collect();
     json!({ "type": "string", "enum": names, "description": what })
@@ -295,6 +312,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "valid_from": { "type": "string", "description": "YYYY-MM-DD, if the fact dates from before today." },
                     "valid_to": { "type": "string", "description": "YYYY-MM-DD, only if the text says so." },
                     "distinct_from": { "type": "array", "items": { "type": "string" }, "description": "Ids of candidates you judge different." },
+                    "call": call_prop(),
                     "origin": {
                         "type": "object",
                         "description": "For an app depositing its own records. `app` names it, `id` is the app's own id for this record, `at` the instant of the data point (ISO 8601). The same app and id again changes nothing, or merges into the app's earlier version, which is never overwritten (two JSON objects merge field by field: a new field is added, a non-null value updates, a null or absent one erases nothing; any other text is appended); the fact is filed under sources/<app>; the answer's `cursor` says the latest point held for that app, to resume from. Records of different apps are all kept.",
@@ -414,6 +432,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                                 "kind": { "type": "string", "enum": ["fact", "decision", "context", "passage"] },
                                 "valid_from": { "type": "string" },
                                 "valid_to": { "type": "string" },
+                                "call": call_prop(),
                                 "origin": {
                                     "type": "object",
                                     "properties": {
@@ -474,6 +493,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "note": { "type": "string", "description": "What it is, in a sentence." },
                     "tags": { "type": "array", "items": { "type": "string" }, "description": "Paths to file it under, like for remember. An app depositing its own export uses sources/<app>." },
                     "data_base64": { "type": "string" },
+                    "call": call_prop(),
                     "space": space_prop(&writable, "Required if you can write to several spaces, unless you can write to the person's Inbox: a write that names no space goes there.")
                 },
                 "required": ["name", "data_base64"]
@@ -510,6 +530,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 "type": "object",
                 "properties": {
                     "text": { "type": "string" },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "The tags the note already carries: the `personnes/` ones lead `route` to where earlier notes with that person went." },
                     "space": space_prop(&readable, "The space the note is for; left out, only `route` is given.")
                 },
                 "required": ["text"]
@@ -662,7 +683,7 @@ fn sign_slug(name: &str) -> String {
 }
 
 /// `YYYY-MM-DDTHH:MM:SS` with `Z` or `±HH:MM` (as the node writes it), or Unix seconds, to UTC Unix seconds.
-fn parse_time(text: &str) -> Option<i64> {
+pub(crate) fn parse_time(text: &str) -> Option<i64> {
     let t = text.trim();
     if let Ok(n) = t.parse::<i64>() {
         return Some(n);
@@ -689,7 +710,7 @@ fn parse_time(text: &str) -> Option<i64> {
 }
 
 /// YYYY-MM-DD (or Unix seconds) to UTC Unix seconds.
-fn parse_date(v: &Value) -> Result<i64, ToolError> {
+pub(crate) fn parse_date(v: &Value) -> Result<i64, ToolError> {
     if let Some(n) = v.as_i64() {
         return Ok(n);
     }
@@ -952,6 +973,9 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                     .map(crate::origin::Origin::scope_tag)
                     .as_deref(),
             )?;
+            // The call's tags come after the check of the paths: they are the node's own tags for the form, so a device
+            // limited to its box can still say who spoke.
+            crate::call::add_to_tags(args, &mut fact.tags)?;
             // The node tags what is written: the tag of the space, then what the text says (see `autotag`).
             let text_to_tag = fact.text.clone();
             tagging::on_write(brain, caller, &space, &conn, &text_to_tag, &mut fact.tags);
@@ -1479,6 +1503,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             let note = args.get("note").and_then(Value::as_str).unwrap_or("");
             let mut tags = tags_arg(args)?;
             scope_tags(caller, &space, &mut tags, None)?;
+            crate::call::add_to_tags(args, &mut tags)?;
             // The description is tagged like a note: its words and the words of the file's name.
             let described = format!(
                 "{note} {}",

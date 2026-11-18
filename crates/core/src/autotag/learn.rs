@@ -173,6 +173,54 @@ impl Store {
         true
     }
 
+    /// The person sent a note about `people` (the names of its `personnes/` tags) to the space `to`.
+    pub fn learn_people_route(&self, people: &[String], to: &str) -> bool {
+        if people.is_empty() {
+            return false;
+        }
+        let _g = LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let mut data = self.load();
+        let bag = &mut data["people_routes"];
+        if !bag.is_object() {
+            *bag = json!({});
+        }
+        for p in people {
+            let e = &mut bag[p.as_str()];
+            e[to] = json!(e[to].as_u64().unwrap_or(0) + 1);
+            if let Some(o) = e.as_object_mut()
+                && o.len() > MAX_TAGS_PER_WORD
+                && let Some(least) = o
+                    .iter()
+                    .min_by_key(|(k, v)| (v.as_u64().unwrap_or(0), (*k).clone()))
+                    .map(|(k, _)| k.clone())
+            {
+                o.remove(&least);
+            }
+        }
+        bound(bag);
+        self.save(&data);
+        true
+    }
+
+    /// The spaces the person sent notes about these people to, best first, with their score. A person is a strong hint:
+    /// one note is enough, and the first space must hold more than twice the second. Empty when no space is sure.
+    pub fn route_people(&self, people: &[String]) -> Vec<(String, u64)> {
+        let data = self.load();
+        let bag = &data["people_routes"];
+        let mut by_space: BTreeMap<String, u64> = BTreeMap::new();
+        for p in people {
+            for (s, c) in bag[p.as_str()].as_object().into_iter().flatten() {
+                *by_space.entry(s.clone()).or_insert(0) += c.as_u64().unwrap_or(0);
+            }
+        }
+        let mut ranked: Vec<(String, u64)> = by_space.into_iter().filter(|(_, c)| *c > 0).collect();
+        ranked.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+        if ranked.len() > 1 && ranked[0].1 <= 2 * ranked[1].1 {
+            return vec![];
+        }
+        ranked
+    }
+
     /// What the person taught for a note of `space`.
     pub fn hints(&self, space: &str, text: &str) -> Hints {
         let data = self.load();

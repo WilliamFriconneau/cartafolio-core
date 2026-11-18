@@ -850,6 +850,7 @@ Writes a short, dated fact that stands on its own. An exact duplicate is dropped
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
+| `call` | object | no | a call and its participants, see below |
 | `distinct_from` | array of string | no | - |
 | `kind` | string | no | one of fact, decision, context, passage |
 | `origin` | object | no | - |
@@ -863,6 +864,8 @@ Writes a short, dated fact that stands on its own. An exact duplicate is dropped
 | `text` | string | yes | - |
 | `valid_from` | string | no | - |
 | `valid_to` | string | no | - |
+
+**`call`: a call recording and its participants** (also on the records of `deposit` and on `file_put`). `{ "caller": [names or numbers], "callee": [names or numbers], "app": "phone|facetime|whatsapp|teams|meet|zoom|other", "direction"?: "in|out|missed", "started_at"?: ISO 8601 or Unix seconds, "duration_s"?: whole seconds }`. `caller`, `callee` (lists, one may be empty) and `app` are required; at least one participant, **at most 20** in all, **80 characters** each, no control character; anything else is `invalid` and nothing is written. A name is kept as a slug (`Alice Martin` is `alice-martin`, accents folded, a `/` is a level of the path), a phone number as its digits (`+33 6 12 34 56 78` is `33612345678`; `00` is the international prefix) and comes back with a leading `+`. The node writes the tags `field/caller/<who>` and `field/callee/<who>` (one each), `field/call_app/<app>`, `field/call_direction/<dir>`, `field/call_started_at/<unix>`, `field/call_duration_s/<n>`, `personnes/<name>` for every **named** participant (never for a number), `appel` and `appel/<app>`. They come back in the `fields` of every fact returned: `caller` and `callee` are always lists, a name held more than once is a list, every other field stays a text: `{ "caller": ["alice-martin"], "callee": ["+33612345678"], "call_app": "phone", "call_direction": "in" }`. The tagger adds no second value of a field the write already carries. A key limited to paths may send `call`: the tags of the call come on top of the paths it writes under (it cannot read them back by its paths). `tags_set` corrects the participants; see [AUTOTAG.md](AUTOTAG.md) and [INTAKE.md](INTAKE.md).
 
 Example call and answer:
 
@@ -1043,6 +1046,7 @@ What the node's tagger would give a text, with no model and no write, so that an
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `space` | string | no | one of the spaces you can read |
+| `tags` | array of string | no | the tags the note already carries: its `personnes/` tags lead `route` (`"by": "people"`) to where earlier notes with that person went |
 | `text` | string | yes | - |
 
 Example call and answer:
@@ -1125,7 +1129,7 @@ Corrects or completes the tags of a note that exists: the note is replaced by it
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `add` | array of string | no | - |
-| `fields` | object | no | `{name: value}`; an empty value takes the field off |
+| `fields` | object | no | `{name: value}`; an empty value takes the field off; for `caller` and `callee`, a list of names or numbers that replaces the whole side (the `personnes/` tags follow) |
 | `id` | string | yes | - |
 | `learn` | boolean | no | default true |
 | `reason` | string | no | default `tags set by <connection>` |
@@ -1242,7 +1246,7 @@ Deposits records of an app in one call, in one space: each is a `remember` with 
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
-| `records` | array of object | yes | minItems 1 |
+| `records` | array of object | yes | minItems 1; a record may carry `call` as in `remember` |
 | `space` | string | no | one of health, home, personal, work |
 
 Example call and answer:
@@ -1354,6 +1358,7 @@ Keeps a photo, a document or a recording (JPEG, PNG, GIF, WebP, HEIC, PDF, text,
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
+| `call` | object | no | as in `remember`: the description of the file carries the call; with `inbox/audio`, the transcription inherits it |
 | `data_base64` | string | yes | - |
 | `name` | string | yes | - |
 | `note` | string | no | - |

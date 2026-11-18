@@ -554,6 +554,49 @@ fn a_note_no_keyword_places_goes_where_the_person_taught_the_node() {
 }
 
 #[test]
+fn a_note_with_a_person_goes_where_earlier_notes_with_that_person_went() {
+    let r = rig("people");
+    let mut o = owner(&r);
+    // Earlier notes about Bob went to work: the node learned the person (a file beside its databases).
+    let store = memcp_core::autotag::Store::open(&r.dir.join("engine"));
+    store.learn_people_route(&["bob".to_string()], "sam-work");
+    let edge = |text: &str, call: serde_json::Value| {
+        let mut edge = Client::new(&format!("{}/edge", r.base), &r.edge);
+        edge.call(
+            "remember",
+            json!({"text": text, "tags": ["inbox"], "call": call}),
+        )
+        .expect("a call into Inbox");
+    };
+    edge(
+        "Words that no keyword knows",
+        json!({"caller": ["Bob"], "callee": ["Alice"], "app": "phone"}),
+    );
+    edge(
+        "Other words that no keyword knows",
+        json!({"caller": ["Carol"], "callee": ["Alice"], "app": "phone"}),
+    );
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_once();
+    assert_eq!((report.sent, report.unsure), (1, 1), "{report:?}");
+    assert_eq!(texts(&mut o, "sam-work", &["janitor"], "words").len(), 1);
+    let sent = o
+        .call(
+            "recall",
+            json!({"space": "sam-work", "query": "words", "tags": ["janitor"], "limit": 10}),
+        )
+        .expect("recall");
+    assert!(
+        sent["results"][0]["tags"]
+            .to_string()
+            .contains("personnes/bob"),
+        "the person tag went with the note: {sent}"
+    );
+    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
+    let _ = std::fs::remove_dir_all(&r.dir);
+}
+
+#[test]
 fn the_model_proposes_keywords_written_as_a_new_rules_version_and_the_router_runs_again() {
     let r = rig("propose");
     let mut o = owner(&r);

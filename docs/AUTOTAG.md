@@ -39,6 +39,25 @@ tag: `field/<name>/<value>`, where a `/` of the value is one more level of the p
 Every fact the tools return carries `tags` and `fields` (the fields read back from the tags): `recall`, `read_fact`,
 `history`, `living_get` (cards and delta), the page's journal.
 
+## Calls and their participants
+
+A write may carry a `call` object ([TOOLS.md](TOOLS.md), `remember`): the node turns it into tags, with the same encoding as any
+field: `field/caller/<name>` and `field/callee/<name>` (one per participant), `field/call_app/<app>`, `field/call_direction/<dir>`,
+`field/call_started_at/<unix>`, `field/call_duration_s/<n>`, `personnes/<name>` for every named participant (not for a number),
+`appel` and `appel/<app>`. A name is a slug (`Alice Martin`: `alice-martin`), a phone number its digits, read back with a leading
+`+`. In `fields`, `caller` and `callee` are always lists; any name held twice is a list; the other fields stay texts.
+
+- **No duplicate.** The tagger adds nothing to a field the write already carries (one value per field it did not get from the
+  caller), and a tag given is never given twice.
+- **Strong hints for the router.** `personnes/` tags are not learned from the words of a note: they are learned **as people**. When
+  the person sends a note of Inbox to a space (`triage_send`), each person of the note counts for that space; one note is enough.
+  `tags_suggest` with `tags` (the note's tags) answers `route` with `"by": "people"` first when one space holds more than twice the
+  next, ahead of the words; the janitor places a note with such a person before it tries its keywords (after the person's own work rule).
+- **Corrections.** `tags_set` adds or removes `field/caller/<name>` or `field/callee/<name>` (or sets a whole side with `fields:
+  {"callee": ["bob", "+442079460958"]}`); the `personnes/` tag follows (a name that leaves both sides of the call leaves the note).
+  Changing people, call fields and `appel` tags is never learned as words.
+- `memcp_core::call::people_names(brain, space?)` gives the distinct names of the `personnes/` tags with the number of active notes.
+
 ## The health patterns
 
 French and English, folded (case and accents are ignored). A number counts only **next to its word**, with up to five filler
