@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261117.0.23
+
+- **The health referential is in the node.** The tagger reads one referential of signs, measures, vital constants and red flags (`health_referential`, docs/HEALTH.md) instead of its own patterns. Every tag it gave before is still given.
+- **Transcription knows what to expect.** The node gives the speech model the names, keywords and terms of your notes (`transcription_hints`, setting `transcribe_hints`), so they come out right.
+- **Call recordings carry their participants.** A recording says who called whom and with which app; its transcription inherits it, as fields and tags.
+
 ## 20261117.0.22
 
 - **What a peer could not keep is never taken as kept.** When a node refuses an event, or leaves it out of its window, the sender now knows it and keeps that event, so nothing is lost when the phone trims its 30 days. An event that waits for one that never comes no longer stops a space for ever. A space of another person with the same name is never mixed with yours, a merge reaches the other nodes as it is, and a file is at most 24 MB.
