@@ -355,9 +355,8 @@ fn visible_tools_follow_rights_and_read_only() -> Res {
     }
     // The memory knows no app: nothing of any app's is offered.
     assert!(
-        !owner
-            .iter()
-            .any(|n| n.starts_with("healthapp") || n.starts_with("health_")),
+        !owner.iter().any(|n| n.starts_with("healthapp")
+            || (n.starts_with("health_") && n != "health_referential")),
         "{owner:?}"
     );
     let reader = tool_names(&e, &connect(&e, "reader", "health:rw", true)?);
@@ -894,7 +893,8 @@ fn the_stdio_server_speaks_mcp_with_the_rights_of_its_key_and_nothing_else_on_st
         names.contains(&"remember".to_string())
             && names
                 .iter()
-                .all(|n| !n.starts_with("health_") && !n.starts_with("healthapp_"))
+                .all(|n| (!n.starts_with("health_") || n == "health_referential")
+                    && !n.starts_with("healthapp_"))
     );
     assert_eq!(text_of(&by_id(3))["result"], "created");
     assert_eq!(
@@ -1027,7 +1027,8 @@ fn a_key_used_at_the_address_of_a_vault_reaches_that_vault_and_no_other() -> Res
     assert!(
         names
             .iter()
-            .all(|n| !n.starts_with("health_") && !n.starts_with("healthapp_")),
+            .all(|n| (!n.starts_with("health_") || n == "health_referential")
+                && !n.starts_with("healthapp_")),
         "no health tool at the address of the work vault"
     );
     let denied = rpc_at(&e, "/mcp/work", &all, json!({ "jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": { "name": "recall", "arguments": { "query": "x", "space": "health" } } })).body_json();

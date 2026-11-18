@@ -784,7 +784,7 @@ dependencies = [
 
 [[package]]
 name = "memcp-health"
-version = "20261117.0.20"
+version = "20261117.0.22"
 dependencies = [
  "serde",
  "serde_json",
