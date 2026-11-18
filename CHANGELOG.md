@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261117.0.26
 
 - **Disputes are shown and resolved.** A note changed differently on two machines is counted and listed in Machines, with every version; you pick the one to keep, the others are retired (never erased) and every machine follows. An assistant sees the note flagged in dispute and resolves it only on your word (`disputes`, `dispute_resolve`).
 
