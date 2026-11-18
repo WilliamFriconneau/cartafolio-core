@@ -284,6 +284,12 @@ pub fn suggest(space: &SpaceInfo, rules: &Rules, vocab: &[String], text: &str) -
     out
 }
 
+/// The slugs of the signs (`signe/<slug>`) and of the measures the built-in health patterns know, in the order of the
+/// table: the signs first, then the measures.
+pub fn health_slugs() -> (Vec<&'static str>, Vec<&'static str>) {
+    (patterns::sign_slugs(), patterns::measure_slugs())
+}
+
 /// The candidate terms of a text for a vocabulary lookup: every run of one to three words, lowercase, as written and
 /// without accents, each once. For the node, which asks its table for those that exist.
 pub fn candidate_terms(text: &str) -> Vec<String> {

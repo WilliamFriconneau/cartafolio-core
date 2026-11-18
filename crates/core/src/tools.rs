@@ -30,6 +30,7 @@ mod living;
 mod overview;
 mod sorting;
 mod tagging;
+mod transcription;
 
 const WRITE_TOOLS: [&str; 16] = [
     "notes_move",
@@ -49,9 +50,10 @@ const WRITE_TOOLS: [&str; 16] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 16] = [
+const READ_TOOLS: [&str; 17] = [
     "triage_waiting",
     "tags_suggest",
+    "transcription_hints",
     "vocabulary_terms",
     "living_get",
     "peers",
@@ -486,6 +488,18 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
     }
     if !readable.is_empty() {
+        out.push(ToolDef {
+            name: "transcription_hints",
+            description: "A short ordered list of the words a speech model should expect when it reads this person's voice notes, drawn from what the caller reads, with no external model: proper names that recur in the notes (and the tags `personnes/…`, `lieux/…`), the keywords of the rules notes, the vocabulary terms (most used first, shortest first) and, for a health space, the signs and measures. `{space?, limit?, lang?}` gives `{words, text, groups: {names, keywords, vocabulary, health}, built_at, version}`: `words` is the list (at most `limit`, 120 by default, 500 at most, each item 40 characters or less, no duplicate whatever the case), `text` the same words comma separated, within about 220 tokens, for Whisper's initial prompt or the `contextualStrings` of Apple speech. Without `space`, every space the caller reads, and only those; the list is kept and worked out again when the notes, rules or vocabularies changed (`version` changes with them).".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "space": space_prop(&readable, "One space; left out, every space the caller reads."),
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 500, "description": "At most this many words (default 120)." },
+                    "lang": { "type": "string", "description": "`fr` or `en`: the language of the health terms; left out, both." }
+                }
+            }),
+        });
         out.push(ToolDef {
             name: "tags_suggest",
             description: "What the node's tagger would give a text, with no model and no write, so an app can show the tags before the note is written: the tag of the space first, then the tags proper to it (its keywords, its vocabularies and, in a health space, the signs and measures said: `signe/douleur` with a `level` of `2/10`, `mesure/tension` with a `tension` of `12/8`). Also says, in `route`, the space the person usually sends notes like this one to, when the node learned it.".into(),
@@ -1190,6 +1204,9 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         "peers" => crate::tools::overview::peers(brain, caller, name, args),
         "tags_set" => crate::tools::tagging::tags_set(brain, caller, name, args),
         "tags_suggest" => crate::tools::tagging::tags_suggest(brain, caller, name, args),
+        "transcription_hints" => {
+            crate::tools::transcription::transcription_hints(brain, caller, name, args)
+        }
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
         "notes_move" => crate::tools::sorting::notes_move(brain, caller, name, args),

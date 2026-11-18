@@ -74,6 +74,7 @@ pub mod text;
 pub mod tools;
 #[cfg(test)]
 mod tools_tests;
+pub mod transcription;
 pub mod triage;
 pub mod users;
 /// Clock, random bytes and small helpers shared by the other modules.

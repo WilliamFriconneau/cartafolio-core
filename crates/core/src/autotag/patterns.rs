@@ -339,6 +339,20 @@ const SIGNS: [(&str, Phrases); 20] = [
     ),
 ];
 
+/// The slugs of the signs the built-in patterns know, general pain last (`signe/<slug>` is the tag each one gives).
+pub(super) fn sign_slugs() -> Vec<&'static str> {
+    SIGNS
+        .iter()
+        .map(|(slug, _)| *slug)
+        .chain(std::iter::once("douleur"))
+        .collect()
+}
+
+/// The slugs of the measures the built-in patterns know.
+pub(super) fn measure_slugs() -> Vec<&'static str> {
+    MEASURES.iter().map(|(slug, _, _)| *slug).collect()
+}
+
 /// « douleur » and « pain » come after the specific pains, so that « douleur thoracique » is not also « douleur ».
 const PAIN: Phrases = &[
     &["douleur"],

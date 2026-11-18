@@ -8,7 +8,7 @@ The tools of this page and their fields are checked against `tools::definitions`
 
 | Rights | Tools |
 |---|---|
-| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
+| read on a space | `triage_waiting`, `recall`, `read_fact`, `history`, `peers`, `living_get`, `vocabulary_terms`, `rules_get`, `tags_suggest`, `transcription_hints`, `spaces`, `stats`, `file_list`, `file_get`, `folder_get` |
 | write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `folder_set`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase` |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a space | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
@@ -1068,6 +1068,51 @@ Example call and answer:
 }
 ```
 
+### `transcription_hints`
+
+A short ordered list of the words a speech model should expect when it reads this person's voice notes, drawn from what the caller reads, with no external model: the proper names that recur in the notes (a run of capitalised words said at least twice; never a capital that only starts a sentence, a day or a month) and the tags `personnes/…`, `lieux/…`, `produits/…`, `organisations/…`; the keywords of the `rules` notes; the terms of the vocabularies (most used first, then shortest first); and, for a health space the caller reads, the signs and measures of the built-in patterns. Most useful first (recent and frequent, specific before generic), no duplicate whatever the case, each item 40 characters or less. The node hands `text` to its own speech model as the initial prompt; an app gives `words` to Apple's speech recogniser as `contextualStrings`. See [INTAKE.md](INTAKE.md#guided-transcription).
+
+- **Seen with:** read access on at least one space (not a key limited to paths).
+- **Answer:** `{ space, lang, words, text, groups: { names, keywords, vocabulary, health }, built_at, version }`. `words` is the groups one after the other (names, keywords, vocabulary, health), at most `limit`; `text` the first words that fit in about 220 tokens, comma separated; `version` changes when the notes, rules or vocabularies it comes from changed (the list is kept and not worked out again until then, or after an hour).
+- **Errors:** `denied` for a space you cannot read.
+- **Effects:** None. Without `space`, the spaces the caller reads are mixed, and only those: a key limited to one space gets that space's hints.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `lang` | string | no | `fr` or `en`: the language of the health terms; another or none: both |
+| `limit` | integer | no | 1 to 500, default 120 |
+| `space` | string | no | one of the spaces you can read |
+
+Example call and answer:
+
+```json
+{
+  "name": "transcription_hints",
+  "arguments": {
+    "space": "personal",
+    "limit": 8,
+    "lang": "fr"
+  }
+}
+```
+
+```json
+{
+  "words": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "fuit"],
+  "text": "Quentin Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, fuit",
+  "groups": {
+    "names": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure"],
+    "keywords": ["chaudière", "devis"],
+    "vocabulary": ["plombier", "fuit"],
+    "health": []
+  },
+  "built_at": "2026-11-17T10:00:00Z",
+  "version": 4821907345211,
+  "space": "personal",
+  "lang": "fr"
+}
+```
+
 ### `tags_set`
 
 Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (a `supersede` with the same text), the reason is recorded and the history keeps the old tags. Nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`; `fields` sets named values kept as said. The node learns from the change unless `learn` is false.
@@ -1520,6 +1565,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |
 | `vocabulary_terms` | the terms of the vocabularies imported into a space, and the vocabularies with their source | built |
 | `tags_suggest` / `tags_set` | what the node's tagger gives a text (preview, no write), and the correction of the tags of a note (a `supersede` with the new set, reason recorded, history kept); see AUTOTAG.md | built |
+| `transcription_hints` | the short ordered list of words a speech model should expect (names that recur, rules keywords, vocabulary terms, health terms), for an initial prompt or `contextualStrings`; see INTAKE.md | built |
 | `library_search` | search the libraries mounted read-only on the spaces you can read: hits with path, title, snippet, type, dates | new |
 | `library_raise` | raise an original into a normal fact with a short summary you give, your tags and the path of the original | new |
 | `links` | the graph of spaces, tags and library folders, for an Obsidian-like view | new |
