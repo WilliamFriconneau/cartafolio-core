@@ -110,6 +110,30 @@ pub struct Page {
     pub head: i64,
     /// Whether the log holds more after `next`.
     pub more: bool,
+    /// The events left out because the peer takes no chunks (a node of an earlier version) and they are about a file
+    /// bigger than travels whole ([`crate::files::MAX_INLINE`]): `(seq, eid)`. They are not held by that peer.
+    pub withheld: Vec<(i64, String)>,
+}
+
+/// A file whose event waits for its chunks: the receiving node lacks them (see [`crate::chunks`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Wanted {
+    /// The file's digest.
+    pub file: String,
+    /// The digests of all its chunks, in order.
+    pub chunks: Vec<String>,
+    /// The positions of the chunks missing on the receiving node.
+    pub missing: Vec<usize>,
+}
+
+impl Wanted {
+    /// The wire form: `{file, missing: [{n, hash}]}`.
+    pub fn to_json(&self) -> Value {
+        json!({
+            "file": self.file,
+            "missing": self.missing.iter().map(|&n| json!({ "n": n, "hash": self.chunks.get(n) })).collect::<Vec<_>>(),
+        })
+    }
 }
 
 /// What applying events did.
@@ -132,6 +156,9 @@ pub struct Applied {
     pub not_kept: Vec<String>,
     /// What waited too many times for an event that never came and went on without it, in words.
     pub gave_up: Vec<String>,
+    /// Set when the batch stopped on a file whose chunks are not all here: the caller fetches them, then applies the
+    /// rest again.
+    pub wants: Option<Wanted>,
 }
 
 // --- clock -------------------------------------------------------------------------------------
@@ -295,6 +322,15 @@ pub(crate) fn record_fact_retired(
 
 /// A file was kept here (the bytes are read from disk when the event is sent).
 pub(crate) fn record_file_put(conn: &Connection, id: &str) -> Result<()> {
+    record_file_put_with(conn, id, None)
+}
+
+/// [`record_file_put`], with the digests of the chunks of a file too big to travel whole (see `crate::chunks`).
+pub(crate) fn record_file_put_with(
+    conn: &Connection,
+    id: &str,
+    chunks: Option<&[String]>,
+) -> Result<()> {
     let mut p = conn.query_row(
         "SELECT name, mime, size, sha256, note, fact_id, author, created_at FROM files WHERE id = ?1",
         [id],
@@ -318,8 +354,21 @@ pub(crate) fn record_file_put(conn: &Connection, id: &str) -> Result<()> {
             p["fact_fields"] = json!(fields);
         }
     }
+    if let Some(list) = chunks {
+        p["chunk_size"] = json!(crate::chunks::CHUNK_BYTES);
+        p["chunks"] = json!(list);
+    }
     let at = p["created_at"].as_i64().unwrap_or_else(util::now);
     record(conn, &format!("f:{id}"), "file_put", at, &p)
+}
+
+/// The digests of a big file's chunks, for its event: read from the bytes held here (an event logged without them).
+fn chunk_list(brain: &Brain, space: &Space, sha: &str) -> Result<Option<Vec<String>>> {
+    let path = crate::files::blob_path(brain, space, sha);
+    if !path.exists() {
+        return Ok(None);
+    }
+    Ok(Some(crate::chunks::hashes_of(&path)?))
 }
 
 /// A file was retired here; `erased` when its bytes were erased for good (a transcribed recording): every node then
@@ -494,7 +543,8 @@ pub fn head(brain: &Brain, space: &Space) -> Result<i64> {
 }
 
 /// The events after position `after`, at most `limit` and about `max_bytes`, without the ones `exclude_via`
-/// delivered. A file's bytes travel inside its event.
+/// delivered, for a peer that takes no chunks: a file's bytes travel inside its event, and a file bigger than that
+/// allows is left out ([`Page::withheld`]). See [`events_after_with`].
 pub fn events_after(
     brain: &Brain,
     space: &Space,
@@ -502,6 +552,20 @@ pub fn events_after(
     limit: usize,
     max_bytes: usize,
     exclude_via: Option<&str>,
+) -> Result<Page> {
+    events_after_with(brain, space, after, limit, max_bytes, exclude_via, false)
+}
+
+/// [`events_after`] for a peer that takes chunks when `chunks` is true: a file up to [`crate::files::MAX_INLINE`]
+/// travels inside its event, a bigger one as the list of its chunks (`chunk_size`, `chunks`), fetched apart.
+pub fn events_after_with(
+    brain: &Brain,
+    space: &Space,
+    after: i64,
+    limit: usize,
+    max_bytes: usize,
+    exclude_via: Option<&str>,
+    chunks: bool,
 ) -> Result<Page> {
     let conn = brain.open_space(space)?;
     ensure_layout_log(brain, space, &conn)?;
@@ -532,6 +596,7 @@ pub fn events_after(
         },
     )?;
     let mut events = Vec::new();
+    let mut withheld = Vec::new();
     let mut next = after.max(0);
     let mut bytes = 0usize;
     let mut stopped_early = false;
@@ -545,8 +610,21 @@ pub fn events_after(
             next = ev.seq;
             continue;
         }
-        if ev.kind == "file_put" {
-            attach_bytes(brain, space, &conn, &mut ev)?;
+        if ev.kind == "file_put" && !attach_bytes(brain, space, &conn, &mut ev, chunks)? {
+            next = ev.seq;
+            withheld.push((ev.seq, ev.eid));
+            continue;
+        }
+        // The retirement of a big file a peer without chunks never got goes with it, unless it erased the bytes: then
+        // the file's record travels without them, to every node.
+        if ev.kind == "file_retired"
+            && !chunks
+            && ev.payload.get("erased").and_then(Value::as_bool) != Some(true)
+            && big_file(&conn, ev.payload["id"].as_str().unwrap_or_default())?
+        {
+            next = ev.seq;
+            withheld.push((ev.seq, ev.eid));
+            continue;
         }
         // An event that would take the page past its size goes first in the next one: a page with a file stays under
         // what a node reads in one request (see `crate::files::MAX_BYTES`).
@@ -564,47 +642,84 @@ pub fn events_after(
         next,
         head,
         more: stopped_early || next < head,
+        withheld,
     })
 }
 
+/// Whether the file is bigger than travels whole.
+fn big_file(conn: &Connection, id: &str) -> Result<bool> {
+    Ok(conn
+        .query_row("SELECT size FROM files WHERE id = ?1", [id], |r| {
+            r.get::<_, i64>(0)
+        })
+        .optional()?
+        .is_some_and(|n| n > crate::files::MAX_INLINE as i64))
+}
+
 /// The bytes of a file travel inside its event, unless they are gone: erased here (a transcribed recording, never sent
-/// again from any node), or bigger than a file may be to travel (one kept before that limit): then the record travels
-/// alone, marked `erased`.
-fn attach_bytes(brain: &Brain, space: &Space, conn: &Connection, ev: &mut Event) -> Result<()> {
+/// again from any node), or not on this node; then the record travels alone, marked `erased`. A file bigger than
+/// [`crate::files::MAX_INLINE`] travels as the list of its chunks to a peer that takes them (`chunks`), and not at all
+/// to one that does not: `false` then, the event is left out.
+fn attach_bytes(
+    brain: &Brain,
+    space: &Space,
+    conn: &Connection,
+    ev: &mut Event,
+    chunks: bool,
+) -> Result<bool> {
     let sha = ev.payload["sha256"]
         .as_str()
         .unwrap_or_default()
         .to_string();
-    let id = ev.payload["id"].as_str().unwrap_or_default();
+    let id = ev.payload["id"].as_str().unwrap_or_default().to_string();
     let erased = conn
         .query_row(
             "SELECT retired_reason FROM files WHERE id = ?1",
-            [id],
+            [&id],
             |r| r.get::<_, Option<String>>(0),
         )
         .optional()?
         .flatten()
         .is_some_and(|r| crate::files::is_erased_reason(&r));
-    let too_big = ev.payload["size"]
+    let big = ev.payload["size"]
         .as_i64()
-        .is_some_and(|n| n > crate::files::MAX_BYTES as i64);
-    let bytes = if erased || too_big {
-        None
-    } else {
-        crate::files::read_blob(brain, space, &sha)?
-    };
+        .is_some_and(|n| n > crate::files::MAX_INLINE as i64);
     // A log row written by an earlier version may still hold the bytes it received: they are never sent from there.
+    let listed = ev.payload.get("chunks").cloned();
     if let Some(o) = ev.payload.as_object_mut() {
         o.remove("data");
         o.remove("erased");
+        o.remove("chunks");
+        o.remove("chunk_size");
     }
-    match bytes {
+    if erased {
+        ev.payload["erased"] = json!(true);
+        return Ok(true);
+    }
+    if big {
+        if !chunks {
+            return Ok(false);
+        }
+        let list = match listed.filter(Value::is_array) {
+            Some(l) => Some(l),
+            None => chunk_list(brain, space, &sha)?.map(|l| json!(l)),
+        };
+        match list {
+            Some(l) => {
+                ev.payload["chunk_size"] = json!(crate::chunks::CHUNK_BYTES);
+                ev.payload["chunks"] = l;
+            }
+            None => ev.payload["erased"] = json!(true),
+        }
+        return Ok(true);
+    }
+    match crate::files::read_blob(brain, space, &sha)? {
         Some(b) => {
             ev.payload["data"] = json!(base64::engine::general_purpose::STANDARD.encode(b));
         }
         None => ev.payload["erased"] = json!(true),
     }
-    Ok(())
+    Ok(true)
 }
 
 /// Facts in dispute: the fact and what was done to it differently (the ids of its replacements, `retired`). Only the
@@ -974,6 +1089,8 @@ enum Fault {
         kind: &'static str,
         id: String,
     },
+    /// A big file whose chunks are not all here: it and the ones after wait until they are fetched.
+    Chunks(Wanted),
     Fatal(Error),
 }
 
@@ -1376,7 +1493,71 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
     if clean.is_empty() {
         return Err(Fault::Bad("a file needs a name".into()));
     }
-    let mime = if p.get("erased").and_then(Value::as_bool) != Some(true) {
+    let chunked = p.get("chunks").filter(|c| c.is_array());
+    let mime = if p.get("erased").and_then(Value::as_bool) == Some(true) {
+        // Erased at the origin: any chunks of it kept aside here go.
+        crate::chunks::drop_staged(brain, space, sha);
+        let claimed = req(p, "mime")?;
+        if crate::files::is_kept_type(claimed) {
+            claimed.to_string()
+        } else {
+            "application/octet-stream".into()
+        }
+    } else if let Some(list) = chunked {
+        if p.get("chunk_size").and_then(Value::as_u64) != Some(crate::chunks::CHUNK_BYTES as u64) {
+            return Err(Fault::Bad(
+                "the chunks are not of the size this node takes".into(),
+            ));
+        }
+        if size <= 0 || size > crate::files::MAX_BYTES as i64 {
+            return Err(Fault::Bad("the file is bigger than a space keeps".into()));
+        }
+        let hashes: Vec<String> = list
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|h| {
+                h.as_str()
+                    .filter(|h| crate::chunks::is_digest(h))
+                    .map(String::from)
+            })
+            .collect();
+        if hashes.len() != list.as_array().map_or(0, Vec::len)
+            || hashes.len() != crate::chunks::count(size.unsigned_abs())
+        {
+            return Err(Fault::Bad(
+                "the list of chunks does not fit the size".into(),
+            ));
+        }
+        if !crate::files::hold_or_link(brain, space, sha).map_err(Fault::from)?
+            && !crate::chunks::assemble(brain, space, sha, size.unsigned_abs(), &hashes)
+                .map_err(Fault::from)?
+        {
+            let missing = crate::chunks::missing(brain, space, sha, &hashes);
+            crate::chunks::want(brain, space, sha).map_err(Fault::from)?;
+            return Err(Fault::Chunks(Wanted {
+                file: sha.to_string(),
+                chunks: hashes,
+                missing,
+            }));
+        }
+        // The type is what the bytes say, read from the first of them.
+        let mut head = vec![0u8; 64 * 1024];
+        let n = std::io::Read::read(
+            &mut std::fs::File::open(crate::files::blob_path(brain, space, sha))
+                .map_err(|e| Fault::Fatal(e.into()))?,
+            &mut head,
+        )
+        .map_err(|e| Fault::Fatal(e.into()))?;
+        head.truncate(n);
+        match crate::files::sniff_head(&head, &clean) {
+            Some(m) => m.to_string(),
+            None => {
+                let _ = crate::files::remove_blob(brain, space, sha);
+                return Err(Fault::Bad("this kind of file is not kept".into()));
+            }
+        }
+    } else {
         let data = req(p, "data")?;
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(data)
@@ -1389,13 +1570,6 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
             .ok_or_else(|| Fault::Bad("this kind of file is not kept".into()))?;
         crate::files::store_blob(brain, space, sha, &bytes).map_err(Fault::from)?;
         sniffed.to_string()
-    } else {
-        let claimed = req(p, "mime")?;
-        if crate::files::is_kept_type(claimed) {
-            claimed.to_string()
-        } else {
-            "application/octet-stream".into()
-        }
     };
     // The same name with other content: both stay, and the later one by the clock takes the name with its
     // node and time, on every node alike.
@@ -1905,6 +2079,17 @@ pub fn apply_window(
                 out.stopped = Some(format!("{kind} {id} has not arrived"));
                 break;
             }
+            Err(Fault::Chunks(w)) => {
+                tx.execute_batch("ROLLBACK TO ev; RELEASE ev")?;
+                out.stopped = Some(format!(
+                    "file {} waits for {} of its {} chunks",
+                    w.file,
+                    w.missing.len(),
+                    w.chunks.len()
+                ));
+                out.wants = Some(w);
+                break;
+            }
             Err(Fault::Fatal(e)) => return Err(e),
         }
     }
@@ -2342,6 +2527,50 @@ pub fn note_unheld(brain: &Brain, peer: &str, space: &Space, eids: &[String]) ->
     }
     tx.commit()?;
     Ok(())
+}
+
+/// `peer` now keeps these events of `space` (a later push it took): an earlier « not kept » of them no longer holds.
+pub fn note_held(brain: &Brain, peer: &str, space: &Space, eids: &[String]) -> Result<()> {
+    if eids.is_empty() {
+        return Ok(());
+    }
+    let conn = brain.open_space(space)?;
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    for eid in eids {
+        tx.execute(
+            "DELETE FROM sync_unheld WHERE peer = ?1 AND eid = ?2",
+            params![peer, eid],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
+fn withheld_key(who: &str) -> String {
+    format!("withheld:{who}")
+}
+
+/// Events of `space` from position `seq` on were left out for `who` because it takes no chunks (see
+/// [`Page::withheld`]): kept, the earliest only, so that once `who` takes chunks the exchange goes back there.
+pub fn note_withheld(brain: &Brain, space: &Space, who: &str, seq: i64) -> Result<()> {
+    let conn = brain.open_space(space)?;
+    let key = withheld_key(who);
+    let earliest = meta_get(&conn, &key)?
+        .and_then(|v| v.parse::<i64>().ok())
+        .map_or(seq, |was| was.min(seq));
+    meta_set(&conn, &key, &earliest.to_string())
+}
+
+/// The earliest position left out for `who` (see [`note_withheld`]), forgotten as it is read: the caller goes back
+/// before it now that `who` takes chunks.
+pub fn take_withheld(brain: &Brain, space: &Space, who: &str) -> Result<Option<i64>> {
+    let conn = brain.open_space(space)?;
+    let key = withheld_key(who);
+    let seq = meta_get(&conn, &key)?.and_then(|v| v.parse::<i64>().ok());
+    if seq.is_some() {
+        conn.execute("DELETE FROM meta WHERE k = ?1", [key])?;
+    }
+    Ok(seq)
 }
 
 fn strings(conn: &Connection, sql: &str, arg: impl rusqlite::ToSql) -> Result<Vec<String>> {

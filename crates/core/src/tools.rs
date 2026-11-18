@@ -931,6 +931,76 @@ pub fn call(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<
     result
 }
 
+/// `file_put`: the bytes in `data_base64`, or read from the file `from` (a big file on this node's disk, up to
+/// [`crate::files::MAX_BYTES`], never held whole in memory).
+fn file_put(
+    brain: &Brain,
+    caller: &Caller,
+    author: &str,
+    args: &Value,
+    from: Option<&std::path::Path>,
+) -> Result<Value, ToolError> {
+    use base64::Engine as _;
+    let space = write_space(brain, caller, args)?;
+    let bytes = match from {
+        Some(_) => vec![],
+        None => base64::engine::general_purpose::STANDARD
+            .decode(str_arg(args, "data_base64")?.trim())
+            .map_err(|_| ToolError::Invalid("data_base64: not valid base64".into()))?,
+    };
+    let note = args.get("note").and_then(Value::as_str).unwrap_or("");
+    let mut tags = tags_arg(args)?;
+    scope_tags(caller, &space, &mut tags, None)?;
+    crate::call::add_to_tags(args, &mut tags)?;
+    // The description is tagged like a note: its words and the words of the file's name.
+    let described = format!(
+        "{note} {}",
+        str_arg(args, "name")?.replace(['-', '_', '.'], " ")
+    );
+    tagging::on_write(
+        brain,
+        caller,
+        &space,
+        &brain.open_space(&space)?,
+        &described,
+        &mut tags,
+    );
+    let name = str_arg(args, "name")?;
+    let f = match from {
+        Some(path) => crate::files::put_path(brain, &space, author, name, note, path, &tags)?,
+        None => crate::files::put_tagged(brain, &space, author, name, note, &bytes, &tags)?,
+    };
+    Ok(json!({ "result": "kept", "file": f.to_json() }))
+}
+
+/// The tool `file_put` with the bytes read from a file of this node's disk instead of `data_base64`: what a watched
+/// folder uses for a file too big to come in one piece. The same rights, tags and audit as the tool.
+pub fn file_put_path(
+    brain: &Brain,
+    caller: &Caller,
+    args: &Value,
+    path: &std::path::Path,
+) -> Result<Value, ToolError> {
+    if !visible(caller, "file_put") {
+        return Err(ToolError::Unknown);
+    }
+    let result = file_put(brain, caller, caller.agent.as_str(), args, Some(path));
+    let (ok, detail) = match &result {
+        Ok(_) => (true, String::new()),
+        Err(e) => (false, format!("{e:?}")),
+    };
+    let ids = result.as_ref().ok().map(fact_ids_of).unwrap_or_default();
+    if let Ok(v) = &result {
+        mark_inbox_write(brain, "file_put", args, v);
+    }
+    for space in audit_spaces(brain, caller, "file_put", args) {
+        if let Ok(conn) = brain.open_space(&space) {
+            let _ = facts::audit(&conn, &caller.agent, "file_put", ok, &ids, args, &detail);
+        }
+    }
+    result
+}
+
 /// The file whose time says when an inbox was last written to: what wakes the janitor (it files the inboxes once the
 /// writing has calmed down). Only its date matters; it holds nothing.
 pub const INBOX_WRITTEN: &str = "inbox-written";
@@ -1553,41 +1623,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 "message": "The guide of the space is replaced. The earlier text stays in the history; the person can restore it on their page."
             }))
         }
-        "file_put" => {
-            use base64::Engine as _;
-            let space = write_space(brain, caller, args)?;
-            let data = str_arg(args, "data_base64")?;
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(data.trim())
-                .map_err(|_| ToolError::Invalid("data_base64: not valid base64".into()))?;
-            let note = args.get("note").and_then(Value::as_str).unwrap_or("");
-            let mut tags = tags_arg(args)?;
-            scope_tags(caller, &space, &mut tags, None)?;
-            crate::call::add_to_tags(args, &mut tags)?;
-            // The description is tagged like a note: its words and the words of the file's name.
-            let described = format!(
-                "{note} {}",
-                str_arg(args, "name")?.replace(['-', '_', '.'], " ")
-            );
-            tagging::on_write(
-                brain,
-                caller,
-                &space,
-                &brain.open_space(&space)?,
-                &described,
-                &mut tags,
-            );
-            let f = crate::files::put_tagged(
-                brain,
-                &space,
-                author,
-                str_arg(args, "name")?,
-                note,
-                &bytes,
-                &tags,
-            )?;
-            Ok(json!({ "result": "kept", "file": f.to_json() }))
-        }
+        "file_put" => file_put(brain, caller, author, args, None),
         "file_retire" => {
             let id = str_arg(args, "id")?;
             let Some(space) = locate_file(brain, &caller.writable(), id)? else {

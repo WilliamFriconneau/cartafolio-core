@@ -8,7 +8,11 @@ The SQL (`crates/core/src/schema.rs`) is the source of truth; this is the map.
   old version (`status`: proposed, active, replaced, retired); `fact_events` is
   append-only (triggers refuse an update or a delete). Search is FTS5.
 - `files`: bytes on disk under `files/<space>/<sha256>`, stored once; a file held in
-  several spaces is a hard link, so each space keeps its own path.
+  several spaces is a hard link, so each space keeps its own path. A file is at most 2 GiB.
+  The chunks of a big file received from a peer wait in `sync-chunks/<space>/<sha256>/`, one
+  file per chunk named by its digest, until the file is whole and checked; then they go (see
+  [FEDERATION.md](FEDERATION.md#files-in-chunks-as-built)). A file the page serves from a
+  link to its bytes passes through `outgoing/` and is removed once sent.
 
 ## What is held twice
 

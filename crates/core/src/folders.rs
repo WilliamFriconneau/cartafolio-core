@@ -39,8 +39,10 @@ pub const CONFLICT_TAG: &str = "conflict";
 /// The subfolder that holds the space's files.
 pub const FILES_DIR: &str = "files";
 
-/// A file bigger than this is left alone: the biggest a space keeps (see `files::MAX_BYTES`).
-const MAX_FILE: i64 = files::MAX_BYTES as i64;
+/// A file of the folder bigger than this is left alone: the engine compares a file's content in memory, so it takes
+/// what is read whole (see `files::MAX_INLINE`). A bigger file of the space (one that came from a peer or a watched
+/// folder) is still written to the folder, copied a block at a time.
+const MAX_FILE: i64 = files::MAX_INLINE as i64;
 /// Deepest subfolder the engine goes into.
 const MAX_DEPTH: usize = 12;
 /// Most files one folder may hold for the engine.
@@ -795,6 +797,27 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> Result<Seen> {
     })
 }
 
+/// [`write_atomic`] from a file, copied a block at a time.
+fn copy_atomic(from: &Path, path: &Path) -> Result<Seen> {
+    let dir = path
+        .parent()
+        .ok_or_else(|| Error::Invalid("no folder".into()))?;
+    fs::create_dir_all(dir)?;
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let tmp = dir.join(format!(".{name}.memcp-tmp"));
+    fs::copy(from, &tmp)?;
+    fs::File::open(&tmp)?.sync_all()?;
+    fs::rename(&tmp, path)?;
+    let meta = fs::metadata(path)?;
+    Ok(Seen {
+        size: i64::try_from(meta.len()).unwrap_or(i64::MAX),
+        mtime: mtime_ns(&meta),
+    })
+}
+
 fn within(root: &Path, rel: &str) -> PathBuf {
     rel.split('/')
         .fold(root.to_path_buf(), |p, part| p.join(part))
@@ -923,7 +946,15 @@ impl Pass<'_> {
 
     /// Reads a file; `None` when it cannot be read now (a cloud placeholder not downloaded, a file being replaced).
     fn read(&mut self, rel: &str) -> Option<Vec<u8>> {
-        match fs::read(within(&self.root, rel)) {
+        let path = within(&self.root, rel);
+        if fs::metadata(&path).is_ok_and(|m| m.len() > MAX_FILE as u64) {
+            self.rep.errors.push(format!(
+                "{rel}: too big (over {} MB), left alone",
+                MAX_FILE / 1024 / 1024
+            ));
+            return None;
+        }
+        match fs::read(path) {
             Ok(b) => Some(b),
             Err(e) => {
                 self.rep
@@ -1297,7 +1328,11 @@ impl Pass<'_> {
         let mut gone = gone;
         let mut moved: Vec<String> = vec![];
         for new in fresh.clone() {
-            let Ok(bytes) = fs::read(within(&self.root, &new)) else {
+            let path = within(&self.root, &new);
+            if fs::metadata(&path).is_ok_and(|m| m.len() > MAX_FILE as u64) {
+                continue;
+            }
+            let Ok(bytes) = fs::read(path) else {
                 continue;
             };
             let sha = hash_bytes(&bytes);
@@ -1420,8 +1455,18 @@ impl Pass<'_> {
             if shown.contains(&id) {
                 continue;
             }
-            let Some(bytes) = files::read_blob(self.brain, self.space, &sha)? else {
+            let blob = files::blob_path(self.brain, self.space, &sha);
+            let Ok(meta) = fs::metadata(&blob) else {
                 continue;
+            };
+            // A big file is copied a block at a time; a smaller one is read and checked as before.
+            let bytes = if meta.len() > MAX_FILE as u64 {
+                None
+            } else {
+                let Some(b) = files::read_blob(self.brain, self.space, &sha)? else {
+                    continue;
+                };
+                Some(b)
             };
             let name = if name.is_empty() || skipped(&name) {
                 format!("file-{}", short_id(&id))
@@ -1451,12 +1496,15 @@ impl Pass<'_> {
                     rel = make(n);
                 }
             }
-            let seen = write_atomic(&within(&self.root, &rel), &bytes)?;
+            let seen = match &bytes {
+                Some(b) => write_atomic(&within(&self.root, &rel), b)?,
+                None => copy_atomic(&blob, &within(&self.root, &rel))?,
+            };
             self.save(Row {
                 rel,
                 kind: Kind::File,
                 obj: Some(id),
-                sha: hash_bytes(&bytes),
+                sha: bytes.as_deref().map_or(sha, hash_bytes),
                 mtime: seen.mtime,
                 size: seen.size,
                 st: St::Tracked,

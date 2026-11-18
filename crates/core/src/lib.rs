@@ -46,6 +46,7 @@ pub mod autotag;
 mod brain;
 pub mod call;
 pub mod catalogue;
+pub mod chunks;
 pub mod directory;
 mod error;
 pub mod export;

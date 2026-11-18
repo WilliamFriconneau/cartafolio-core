@@ -139,6 +139,25 @@ impl Memory {
         Ok((answer["file"].clone(), bytes))
     }
 
+    /// [`Memory::file_put`] for a file on disk, read a block at a time (a big one, up to `memcp_core::files::MAX_BYTES`).
+    pub fn file_put_path(
+        &mut self,
+        space: &str,
+        name: &str,
+        note: &str,
+        tags: &[&str],
+        path: &std::path::Path,
+    ) -> Result<Value, Failure> {
+        let caller = self.caller()?;
+        tools::file_put_path(
+            &self.brain,
+            &caller,
+            &json!({ "space": space, "name": name, "note": note, "tags": tags }),
+            path,
+        )
+        .map_err(Failure::from)
+    }
+
     /// Keeps a file under `tags` of `space`, with a line saying what it is.
     pub fn file_put(
         &mut self,

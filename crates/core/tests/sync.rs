@@ -503,7 +503,7 @@ fn a_file_is_never_bigger_than_a_node_reads_and_a_page_stays_under_its_size() ->
     let a = node(&t, "a")?;
     let s = sp("notes");
     let mut big = b"%PDF-1.4\n".to_vec();
-    big.resize(memcp_core::files::MAX_BYTES + 1, b'a');
+    big.resize(memcp_core::files::MAX_INLINE + 1, b'a');
     assert!(memcp_core::files::put(&a, &s, "me", "big.pdf", "", &big).is_err());
     // Two files that fit: a page of 1.5 of them holds one, and the next page the other.
     let mut one = b"%PDF-1.4\n".to_vec();

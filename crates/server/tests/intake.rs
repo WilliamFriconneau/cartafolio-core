@@ -701,3 +701,33 @@ fn transcribe_hints_is_on_unless_it_is_turned_off() {
     );
     assert!(VoiceSettings::default().hints);
 }
+
+#[test]
+fn a_recording_too_big_for_one_request_comes_in_from_a_watched_folder_read_a_block_at_a_time() {
+    let w = world("watch-big", false);
+    let drop = w.dir.join("Drop");
+    // 30 MiB: more than any request carries, far less than a space keeps.
+    let mut long = b"RIFF\0\0\0\0WAVEfmt ".to_vec();
+    long.resize(30 * 1024 * 1024, 5);
+    let path = file(&drop, "conference.wav", &long);
+    let r = intake::watch::put_file(&mut w.memory(), &path, "sam-me", 0).expect("taken");
+    assert_eq!(r.files, 1, "{r:?}");
+    let listed = w
+        .memory()
+        .call("file_list", json!({ "space": "sam-me", "limit": 5 }))
+        .expect("files");
+    let f = &listed["files"][0];
+    assert_eq!(f["size"], 30 * 1024 * 1024);
+    assert_eq!(f["mime"], "audio/wav");
+    // It waits under inbox/audio like any recording; read back whole through a tool, it is too big.
+    let waiting = voice::waiting(&mut w.memory()).expect("waiting");
+    assert_eq!(waiting.iter().map(|x| x.1).sum::<u64>(), 1, "{waiting:?}");
+    assert!(
+        w.memory()
+            .call("file_get", json!({ "id": f["id"] }))
+            .is_err()
+    );
+    // A text that big is not made into notes.
+    let text = file(&drop, "dump.txt", &vec![b'a'; 25 * 1024 * 1024]);
+    assert!(intake::watch::put_file(&mut w.memory(), &text, "sam-me", 0).is_err());
+}

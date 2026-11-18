@@ -13,6 +13,14 @@
 //! does not take is neither pulled, made here from the peer's list, nor archived on the peer's word. The peer's own side
 //! (`policy` in its list of spaces) is kept for the page, and a pull or a push the peer said it would refuse is not
 //! tried. This node's side goes to the peer with the directory.
+//!
+//! A file bigger than travels inside its event (`memcp_core::files::MAX_INLINE`) goes in chunks with a peer that says it
+//! takes them (`chunks` in its list of spaces; see `memcp_core::chunks`): pulled, the chunks this node lacks are fetched
+//! from the peer (`GET /sync/chunk`) and checked one by one; pushed, the peer says which it lacks (`wants`) and this node
+//! sends them (`POST /sync/chunk`). Either way the file's event is dealt with only once the whole file is here and
+//! matches its digest; a chunk that does not match is refused, and what came stays for the next pass. A peer that takes
+//! no chunks (an earlier version) gets the smaller files whole and none of the bigger ones: the pass says so, they are
+//! not counted as held by it, and they go once it takes chunks.
 
 use std::time::Duration;
 
@@ -43,6 +51,10 @@ pub struct Pass {
     pub offered: usize,
     /// Spaces archived in this pass because the other side archived them (here or there).
     pub archived: usize,
+    /// Chunks of big files received from the peer in this pass.
+    pub chunks_in: usize,
+    /// Chunks of big files given to the peer in this pass.
+    pub chunks_out: usize,
     /// What went wrong, in words, one line each; the pass goes on past them.
     pub problems: Vec<String>,
 }
@@ -53,6 +65,8 @@ struct Pair {
     there: String,
     /// The peer's events are taken: this node takes the space from the peer, and the peer gives it.
     pull: bool,
+    /// The peer takes and gives big files in chunks.
+    chunks: bool,
     /// This node's events are given: this node gives the space to the peer, and the peer's key may write it.
     push: bool,
 }
@@ -170,12 +184,12 @@ impl Peer {
         for p in pairs {
             pass.spaces += 1;
             if p.pull
-                && let Err(e) = self.pull(brain, &p.here, &p.there, now, &mut pass)
+                && let Err(e) = self.pull(brain, &p, now, &mut pass)
             {
                 pass.problems.push(format!("{}: pull: {e}", p.there));
             }
             if p.push
-                && let Err(e) = self.push(brain, &p.here, &p.there, now, &mut pass)
+                && let Err(e) = self.push(brain, &p, now, &mut pass)
             {
                 pass.problems.push(format!("{}: push: {e}", p.there));
             }
@@ -226,6 +240,8 @@ impl Peer {
             let _ = policy::note_theirs_later(&ctl, &self.name, later);
         }
         let offers_ok = listed["offers"].as_bool() == Some(true);
+        // A peer that takes chunks says their size; one of another size is taken as one that takes none.
+        let chunks = listed["chunks"].as_u64() == Some(memcp_core::chunks::CHUNK_BYTES as u64);
         let entries = listed["spaces"].as_array().cloned().unwrap_or_default();
         // 1. What the peer archived is archived here (an archive, never a deletion), unless the copy here is newer, or
         // this node takes nothing of that space from the peer.
@@ -298,6 +314,7 @@ impl Peer {
                     here,
                     there: name.to_string(),
                     pull: mine_side.takes() && they_give,
+                    chunks,
                     push: mine_side.gives() && writable,
                 });
                 continue;
@@ -344,6 +361,7 @@ impl Peer {
                 here: space,
                 there: name.to_string(),
                 pull: mine_side.takes() && they_give,
+                chunks,
                 push: mine_side.gives() && writable,
             });
         }
@@ -391,6 +409,7 @@ impl Peer {
                 here: o.space.clone(),
                 there: there.as_str().to_string(),
                 pull: mine_side.takes(),
+                chunks,
                 push: true,
             };
             match answer {
@@ -462,21 +481,17 @@ impl Peer {
         }
     }
 
-    /// The peer's events of `remote` after this node's cursor, applied to `space` here.
-    fn pull(
-        &self,
-        brain: &Brain,
-        space: &Space,
-        remote: &str,
-        now: i64,
-        pass: &mut Pass,
-    ) -> Result<(), String> {
+    /// The peer's events of the pair after this node's cursor, applied here. A big file's event waits for its chunks:
+    /// they are fetched from the peer, then the rest of the page is applied.
+    fn pull(&self, brain: &Brain, p: &Pair, now: i64, pass: &mut Pass) -> Result<(), String> {
+        let (space, remote) = (&p.here, p.there.as_str());
         // A replica that holds a window leaves out what is older than it (pinned notes excepted).
         let cutoff = sync::window_cutoff(brain, now).map_err(|e| e.to_string())?;
+        let ask = if p.chunks { "&chunks=1" } else { "" };
         loop {
             let (pulled, _) = sync::cursors(brain, &self.name, space).map_err(|e| e.to_string())?;
             let page = self.get(&format!(
-                "events?space={remote}&after={pulled}&limit={PAGE}"
+                "events?space={remote}&after={pulled}&limit={PAGE}{ask}"
             ))?;
             let raw = page["events"].as_array().cloned().unwrap_or_default();
             let events: Vec<Event> = raw
@@ -491,27 +506,59 @@ impl Peer {
                     raw.len() - events.len()
                 ));
             }
-            let done = sync::apply_window(brain, space, &events, &self.name, cutoff)
-                .map_err(|e| e.to_string())?;
-            pass.pulled += done.applied;
-            pass.disputed += done.disputed;
-            // What this node refused or gave up waiting for is said, never passed over in silence.
-            if let Some(line) = refusals(
-                "refused here",
-                done.rejected.iter().map(|(_, w)| w.as_str()),
-            ) {
-                pass.problems
-                    .push(format!("{}: pull: {line}", space.as_str()));
-            }
-            for g in &done.gave_up {
-                pass.problems.push(format!("{}: pull: {g}", space.as_str()));
+            let mut consumed = 0usize;
+            let mut stopped;
+            let mut fetched: Option<String> = None;
+            loop {
+                let done =
+                    sync::apply_window(brain, space, &events[consumed..], &self.name, cutoff)
+                        .map_err(|e| e.to_string())?;
+                pass.pulled += done.applied;
+                pass.disputed += done.disputed;
+                // What this node refused or gave up waiting for is said, never passed over in silence.
+                if let Some(line) = refusals(
+                    "refused here",
+                    done.rejected.iter().map(|(_, w)| w.as_str()),
+                ) {
+                    pass.problems
+                        .push(format!("{}: pull: {line}", space.as_str()));
+                }
+                for g in &done.gave_up {
+                    pass.problems.push(format!("{}: pull: {g}", space.as_str()));
+                }
+                consumed += done.consumed;
+                stopped = done.stopped.is_some();
+                // A big file waits for its chunks: fetched from the peer, then the rest is applied again. The same
+                // file asked twice in a row means the peer could not give it whole: it waits for the next pass.
+                match done.wants {
+                    Some(w) if p.chunks && fetched.as_deref() != Some(w.file.as_str()) => {
+                        match self.fetch(brain, space, remote, &w, pass) {
+                            Ok(()) => fetched = Some(w.file),
+                            Err(e) => {
+                                pass.problems.push(format!("{}: pull: {e}", space.as_str()));
+                                break;
+                            }
+                        }
+                    }
+                    Some(w) => {
+                        pass.problems.push(format!(
+                            "{}: pull: file {} waits for {} chunk(s) the peer did not give",
+                            space.as_str(),
+                            w.file,
+                            w.missing.len()
+                        ));
+                        break;
+                    }
+                    None => break,
+                }
             }
             let next = page["next"].as_i64().unwrap_or(pulled);
             let head = page["head"].as_i64().unwrap_or(next);
             // Past what was dealt with only: an event waiting for another stops the cursor there.
-            let to = if done.stopped.is_some() {
-                events
-                    .get(done.consumed.saturating_sub(1))
+            let to = if stopped {
+                consumed
+                    .checked_sub(1)
+                    .and_then(|i| events.get(i))
                     .map_or(pulled, |e| e.seq.max(pulled))
             } else {
                 next
@@ -519,29 +566,81 @@ impl Peer {
             sync::set_cursor(brain, &self.name, space, Cursor::Pulled, to)
                 .map_err(|e| e.to_string())?;
             let _ = sync::note_transfer(brain, &self.name, space, "receiving", to, head, now);
-            if done.stopped.is_some() || page["more"].as_bool() != Some(true) || to <= pulled {
+            if stopped || page["more"].as_bool() != Some(true) || to <= pulled {
                 return Ok(());
             }
         }
     }
 
-    /// This node's events of `space` after the peer's cursor, given to the peer's `remote`.
-    fn push(
+    /// The chunks of a big file this node lacks, fetched from the peer and kept aside, each checked against its digest.
+    fn fetch(
         &self,
         brain: &Brain,
         space: &Space,
         remote: &str,
-        now: i64,
+        w: &sync::Wanted,
         pass: &mut Pass,
     ) -> Result<(), String> {
+        for &n in &w.missing {
+            let Some(hash) = w.chunks.get(n) else {
+                continue;
+            };
+            let bytes = self.get_raw(&format!(
+                "chunk?space={remote}&file={}&n={n}&hash={hash}",
+                w.file
+            ))?;
+            memcp_core::chunks::store(brain, space, &w.file, hash, &bytes)
+                .map_err(|e| format!("chunk {n} of file {} refused: {e}", w.file))?;
+            pass.chunks_in += 1;
+        }
+        Ok(())
+    }
+
+    /// This node's events of the pair after the peer's cursor, given to the peer. A big file goes in chunks to a peer
+    /// that takes them (the peer says which it lacks), and not at all to one that does not: said, and not held by it.
+    fn push(&self, brain: &Brain, p: &Pair, now: i64, pass: &mut Pass) -> Result<(), String> {
+        let (space, remote) = (&p.here, p.there.as_str());
+        let fail = |e: memcp_core::Error| e.to_string();
+        // The peer takes chunks now: what was left out for it when it did not goes again.
+        if p.chunks
+            && let Some(seq) = sync::take_withheld(brain, space, &self.name).map_err(fail)?
+        {
+            let (_, pushed) = sync::cursors(brain, &self.name, space).map_err(fail)?;
+            if seq - 1 < pushed {
+                sync::set_cursor(brain, &self.name, space, Cursor::Pushed, (seq - 1).max(0))
+                    .map_err(fail)?;
+            }
+        }
+        let mut sent: Option<String> = None;
         loop {
-            let (_, pushed) = sync::cursors(brain, &self.name, space).map_err(|e| e.to_string())?;
-            let page = sync::events_after(brain, space, pushed, PAGE, PAGE_BYTES, Some(&self.name))
-                .map_err(|e| e.to_string())?;
+            let (_, pushed) = sync::cursors(brain, &self.name, space).map_err(fail)?;
+            let page = sync::events_after_with(
+                brain,
+                space,
+                pushed,
+                PAGE,
+                PAGE_BYTES,
+                Some(&self.name),
+                p.chunks,
+            )
+            .map_err(fail)?;
+            if let Some((first, _)) = page.withheld.first() {
+                let eids: Vec<String> = page.withheld.iter().map(|(_, e)| e.clone()).collect();
+                sync::note_unheld(brain, &self.name, space, &eids).map_err(fail)?;
+                sync::note_withheld(brain, space, &self.name, *first).map_err(fail)?;
+                let files = eids.iter().filter(|e| e.starts_with("f:")).count();
+                if files > 0 {
+                    pass.problems.push(format!(
+                        "{}: push: {files} file(s) over {} MB not sent: the peer runs an earlier version, which takes no chunks",
+                        space.as_str(),
+                        memcp_core::files::MAX_INLINE / 1024 / 1024
+                    ));
+                }
+            }
             if page.events.is_empty() {
                 if page.next > pushed {
                     sync::set_cursor(brain, &self.name, space, Cursor::Pushed, page.next)
-                        .map_err(|e| e.to_string())?;
+                        .map_err(fail)?;
                 }
                 // A page of events that came from this peer (none to send back) is not the end: after a large copy
                 // from it, this node's own notes wait further on.
@@ -595,22 +694,110 @@ impl Peer {
                     pass.problems.push(format!("{}: push: {g}", space.as_str()));
                 }
             }
-            sync::note_unheld(brain, &self.name, space, &unheld).map_err(|e| e.to_string())?;
+            sync::note_unheld(brain, &self.name, space, &unheld).map_err(fail)?;
+            // What the peer kept now is held by it, whatever it said of it before.
+            let kept: Vec<String> = dealt
+                .iter()
+                .map(|e| e.eid.clone())
+                .filter(|e| !unheld.contains(e))
+                .collect();
+            sync::note_held(brain, &self.name, space, &kept).map_err(fail)?;
             let stopped = !answer["stopped"].is_null();
             let to = if stopped || consumed < page.events.len() {
-                page.events
-                    .get(consumed.saturating_sub(1))
+                consumed
+                    .checked_sub(1)
+                    .and_then(|i| page.events.get(i))
                     .map_or(pushed, |e| e.seq.max(pushed))
             } else {
                 page.next
             };
-            sync::set_cursor(brain, &self.name, space, Cursor::Pushed, to)
-                .map_err(|e| e.to_string())?;
+            sync::set_cursor(brain, &self.name, space, Cursor::Pushed, to).map_err(fail)?;
             let _ = sync::note_transfer(brain, &self.name, space, "sending", to, page.head, now);
+            // A big file waits there for its chunks: they are sent, then the rest goes. The same file asked again
+            // right after means it did not come whole: it waits for the next pass.
+            if p.chunks
+                && let Some(file) = answer["wants"]["file"].as_str()
+            {
+                if sent.as_deref() == Some(file) {
+                    pass.problems.push(format!(
+                        "{}: push: the peer still lacks chunks of file {file} after they were sent",
+                        space.as_str()
+                    ));
+                    return Ok(());
+                }
+                self.give(
+                    brain,
+                    space,
+                    remote,
+                    file,
+                    &answer["wants"]["missing"],
+                    pass,
+                )?;
+                sent = Some(file.to_string());
+                continue;
+            }
             if stopped || !page.more || to <= pushed {
                 return Ok(());
             }
         }
+    }
+
+    /// The chunks of a big file the peer lacks, read from this node's copy and sent; a chunk of this copy that does not
+    /// match its digest is not sent.
+    fn give(
+        &self,
+        brain: &Brain,
+        space: &Space,
+        remote: &str,
+        file: &str,
+        missing: &Value,
+        pass: &mut Pass,
+    ) -> Result<(), String> {
+        for m in missing.as_array().into_iter().flatten() {
+            let (Some(n), Some(hash)) = (m["n"].as_u64(), m["hash"].as_str()) else {
+                continue;
+            };
+            let n = usize::try_from(n).map_err(|e| e.to_string())?;
+            let bytes = memcp_core::chunks::read(brain, space, file, n, Some(hash))
+                .map_err(|e| e.to_string())?
+                .ok_or_else(|| format!("chunk {n} of file {file} is not on this node"))?;
+            if memcp_core::chunks::digest(&bytes) != hash {
+                return Err(format!(
+                    "chunk {n} of file {file} does not match its digest on this node: not sent"
+                ));
+            }
+            let mut res = self
+                .agent
+                .post(&format!(
+                    "{}/sync/chunk?space={remote}&file={file}&hash={hash}",
+                    self.address
+                ))
+                .header("Authorization", &format!("Bearer {}", self.key))
+                .header("Content-Type", "application/octet-stream")
+                .send(&bytes[..])
+                .map_err(|e| format!("unreachable: {e}"))?;
+            read(&mut res)?;
+            pass.chunks_out += 1;
+        }
+        Ok(())
+    }
+
+    /// Raw bytes from the peer's `/sync/` routes (a chunk), at most one chunk.
+    fn get_raw(&self, path: &str) -> Result<Vec<u8>, String> {
+        let mut res = self
+            .agent
+            .get(&format!("{}/sync/{path}", self.address))
+            .header("Authorization", &format!("Bearer {}", self.key))
+            .call()
+            .map_err(|e| format!("unreachable: {e}"))?;
+        if res.status().as_u16() != 200 {
+            return read(&mut res).map(|_| vec![]);
+        }
+        res.body_mut()
+            .with_config()
+            .limit(memcp_core::chunks::CHUNK_BYTES as u64 + 1)
+            .read_to_vec()
+            .map_err(|e| format!("unreadable: {e}"))
     }
 }
 
