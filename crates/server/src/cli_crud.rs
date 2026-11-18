@@ -71,6 +71,8 @@ fn tool(
         no_person_guide: true,
         rate_per_min: access::DEFAULT_RATE_PER_MIN,
         max_text: access::DEFAULT_MAX_TEXT,
+        kind: access::Kind::Console,
+        local: true,
     };
     memcp_core::tools::call(brain, &caller, name, args).map_err(fail)
 }

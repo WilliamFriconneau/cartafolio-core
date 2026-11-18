@@ -13,7 +13,7 @@ use memcp_core::users::OWNER;
 use serde_json::{Value, json};
 
 /// Every tool of the core, as seen by the union of an owner, a read-only key and a key that may
-/// propose the guide of its app.
+/// propose the guide of its app, each used from the node's own machine (where every tool is offered).
 fn all_tools() -> Result<BTreeMap<String, Value>, Box<dyn std::error::Error>> {
     let t = Temp::new("tools-doc");
     let b = brain(&t)?;
@@ -33,7 +33,8 @@ fn all_tools() -> Result<BTreeMap<String, Value>, Box<dyn std::error::Error>> {
             false,
             false,
         )?;
-        let caller = access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?;
+        let mut caller = access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?;
+        caller.local = true;
         for d in tools::definitions(&caller) {
             out.entry(d.name.to_string())
                 .or_insert_with(|| json!({ "description": d.description, "schema": d.schema }));

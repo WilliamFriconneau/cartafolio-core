@@ -26,8 +26,8 @@ use super::{Error, Memory};
 pub const SETTLE_SECS: i64 = 3;
 /// The most a note of this kind holds (the memory takes 4000 characters).
 const NOTE_MAX: usize = 3500;
-/// The biggest file taken (read whole into memory).
-const FILE_MAX: u64 = 100 * 1024 * 1024;
+/// The biggest file taken: the biggest a space keeps (see `memcp_core::files::MAX_BYTES`).
+const FILE_MAX: u64 = memcp_core::files::MAX_BYTES as u64;
 /// Tries before a file the memory refuses is left alone.
 const MAX_FAILS: u64 = 3;
 /// How deep the folder is read.

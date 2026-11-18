@@ -179,13 +179,11 @@ fn revoking_the_connection_of_a_peer_revokes_its_entry() -> Res {
     let t = Temp::new("dir-conn");
     let a = node(&t, "alpha")?;
     let ctl = a.open_control()?;
-    access::connect_for(
+    access::connect_peer(
         &ctl,
         OWNER,
         "peer-charlie-ab12",
         &Rights::parse("all")?,
-        None,
-        false,
         false,
     )?;
     directory::merge(&a, "bravo", &[told("charlie", NOW, "")], NOW)?;
@@ -347,15 +345,19 @@ fn an_assistant_connection_is_cloud_when_it_comes_from_the_internet_and_local_ot
     let a = node(&t, "alpha")?;
     let ctl = a.open_control()?;
     for name in ["claude-web", "claude-code", "unused", "peer-bravo-0001"] {
-        access::connect_for(
-            &ctl,
-            OWNER,
-            name,
-            &Rights::parse("all")?,
-            None,
-            false,
-            false,
-        )?;
+        (if name.starts_with("peer-") {
+            access::connect_peer(&ctl, OWNER, name, &Rights::parse("all")?, false)
+        } else {
+            access::connect_for(
+                &ctl,
+                OWNER,
+                name,
+                &Rights::parse("all")?,
+                None,
+                false,
+                false,
+            )
+        })?;
     }
     for (name, ip) in [
         ("claude-web", "34.120.5.9"),
@@ -413,13 +415,11 @@ fn the_peers_tool_lists_the_union_with_the_direct_peers_first() -> Res {
     let t = Temp::new("dir-tool");
     let a = node(&t, "alpha")?;
     let ctl = a.open_control()?;
-    access::connect_for(
+    access::connect_peer(
         &ctl,
         OWNER,
         "peer-bravo-0001",
         &Rights::parse("all")?,
-        None,
-        false,
         false,
     )?;
     let tok = access::connect_for(

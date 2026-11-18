@@ -141,7 +141,7 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `invite pending` | devices asking to join | needs a node | yes, through the page's routes | any person |
 | `invite approve` | lets a device in | needs a node | yes, through the page's routes | any person |
 | `invite deny` | turns a device away | needs a node | yes, through the page's routes | any person |
-| `invite allow` | lets a named device come back without the words | needs a node | yes, through the page's routes | any person |
+| `invite allow` | lets a device come back without the words, with a one-time ticket | needs a node | yes, through the page's routes | any person |
 | `join` | asks another node (link, id or address) to let this node in | needs a node | yes, through the page's routes | administrator |
 | `export` | writes a person's memory to a folder | yes | yes, streamed down | any person |
 | `adopt` | takes the spaces of an export into the node | yes | yes, files are sent first | administrator |

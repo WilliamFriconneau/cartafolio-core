@@ -152,6 +152,40 @@ pub fn list_users(ctl: &Connection) -> Result<Vec<User>> {
         .collect::<rusqlite::Result<_>>()?)
 }
 
+/// The person whose memory this node holds, for a sync that was not told one: the node's peer connection on another
+/// node says whose memory it is there, and this is the same human here, whatever their id or name on each node.
+/// Among the enabled people who own a space here: the bootstrap user, else the first administrator, else the first
+/// person. With no space owned yet: the bootstrap user, else the first administrator, else the first person.
+/// `None` when nobody is enabled.
+pub fn node_person(ctl: &Connection) -> Result<Option<String>> {
+    let mut people: Vec<User> = list_users(ctl)?
+        .into_iter()
+        .filter(|u| !u.disabled)
+        .collect();
+    let owning: Vec<User> = people
+        .iter()
+        .filter(|u| {
+            ctl.query_row(
+                "SELECT 1 FROM space_members WHERE user_id = ?1 AND owner = 1 LIMIT 1",
+                [&u.id],
+                |_| Ok(()),
+            )
+            .optional()
+            .is_ok_and(|x| x.is_some())
+        })
+        .cloned()
+        .collect();
+    if !owning.is_empty() {
+        people = owning;
+    }
+    let pick = people
+        .iter()
+        .find(|u| u.id == OWNER)
+        .or_else(|| people.iter().find(|u| u.admin))
+        .or_else(|| people.first());
+    Ok(pick.map(|u| u.id.clone()))
+}
+
 fn admins_left(ctl: &Connection, without: &str) -> Result<i64> {
     Ok(ctl.query_row(
         "SELECT count(*) FROM users WHERE role = 'admin' AND disabled_at IS NULL AND id <> ?1",

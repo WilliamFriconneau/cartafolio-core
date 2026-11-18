@@ -108,22 +108,39 @@ fn world() -> Result<World, Box<dyn std::error::Error>> {
     })
 }
 
+/// A connection used from the node's own machine (`local`), as most of the matrix is; [`afar`] is the same key used
+/// from elsewhere.
 fn caller(
     w: &World,
     name: &str,
     rights: &str,
     read_only: bool,
 ) -> Result<Caller, Box<dyn std::error::Error>> {
+    let mut c = afar(w, name, rights, read_only)?;
+    c.local = true;
+    Ok(c)
+}
+
+fn afar(
+    w: &World,
+    name: &str,
+    rights: &str,
+    read_only: bool,
+) -> Result<Caller, Box<dyn std::error::Error>> {
     let ctl = w.brain.open_control()?;
-    let tok = access::connect_for(
-        &ctl,
-        OWNER,
-        name,
-        &Rights::parse(rights)?,
-        None,
-        read_only,
-        false,
-    )?;
+    let tok = (if name.starts_with("peer-") {
+        access::connect_peer(&ctl, OWNER, name, &Rights::parse(rights)?, false)
+    } else {
+        access::connect_for(
+            &ctl,
+            OWNER,
+            name,
+            &Rights::parse(rights)?,
+            None,
+            read_only,
+            false,
+        )
+    })?;
     Ok(access::authenticate(&ctl, &tok, util::now())?.ok_or("refused")?)
 }
 
@@ -155,6 +172,13 @@ fn shown(kind: &str) -> Vec<&'static str> {
             v.extend(SORT);
             v.push("guide_set");
         }
+        // A key used from another machine is never offered to point a space at a folder of this one.
+        "all-rw-afar" => {
+            v.extend(READ);
+            v.extend(WRITE.iter().filter(|t| **t != "folder_set"));
+            v.extend(SORT);
+            v.push("guide_set");
+        }
         "one-r" | "forced-read-only" => v.extend(READ),
         "path-rw" => v.extend([
             "recall", "remember", "deposit", "retire", "file_put", "stats",
@@ -177,6 +201,7 @@ fn shown(kind: &str) -> Vec<&'static str> {
 fn kinds(w: &World) -> Result<Vec<(&'static str, Caller)>, Box<dyn std::error::Error>> {
     Ok(vec![
         ("all-rw", caller(w, "k-all", "all", false)?),
+        ("all-rw-afar", afar(w, "k-all-afar", "all", false)?),
         ("one-r", caller(w, "k-one-r", "work:r", false)?),
         ("one-rw", caller(w, "k-one-rw", "work:rw", false)?),
         (
@@ -322,7 +347,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
                 continue;
             }
             // Spaces that are forbidden and spaces that do not exist get one answer.
-            if kind == "all-rw" || kind == "peer" || kind == "forced-read-only" {
+            if matches!(kind, "all-rw" | "all-rw-afar" | "peer" | "forced-read-only") {
                 // These reach `health` too: the question is only about a space that does not exist.
                 let ghost = tools::call(
                     &w.brain,
@@ -367,7 +392,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
 fn a_fact_of_a_space_the_connection_does_not_reach_is_unknown_to_it() -> Res {
     let w = world()?;
     for (kind, c) in kinds(&w)? {
-        if matches!(kind, "all-rw" | "peer" | "forced-read-only") {
+        if matches!(kind, "all-rw" | "all-rw-afar" | "peer" | "forced-read-only") {
             continue;
         }
         for tool in ["read_fact", "history"] {
@@ -401,7 +426,7 @@ fn writes_succeed_where_the_connection_writes_and_nowhere_else() -> Res {
             let here = run(&w, &c, tool, args_for(&w, tool, "work", &w.work_fact));
             let writes_work = matches!(
                 kind,
-                "one-rw" | "all-rw" | "peer" | "path-rw" | "guide-path"
+                "one-rw" | "all-rw" | "all-rw-afar" | "peer" | "path-rw" | "guide-path"
             );
             // A path key writes under its path only: `rules_set` and `living_set` are not among its tools.
             assert_eq!(
@@ -665,13 +690,11 @@ fn peers_lists_only_the_peers_of_the_person_and_is_open_to_any_reader() -> Res {
     let ctl = w.brain.open_control()?;
     let other = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
     w.brain.add_vault(&other, "ann", "me")?;
-    access::connect_for(
+    access::connect_peer(
         &ctl,
         &other,
         "peer-ann-phone-1",
         &Rights::parse("ann-me:rw")?,
-        None,
-        false,
         false,
     )?;
     let _peer = caller(&w, "peer-laptop-ab12", "all", false)?;
@@ -767,15 +790,7 @@ fn a_revoked_an_expired_or_a_rotated_key_is_refused_without_saying_why() -> Res 
     assert!(access::authenticate(&ctl, &old, now)?.is_none());
     assert!(access::authenticate(&ctl, &new, now)?.is_some());
     // A peer is no different from another connection: revoked, it is refused.
-    let tok = access::connect_for(
-        &ctl,
-        OWNER,
-        "peer-box-0001",
-        &Rights::parse("all")?,
-        None,
-        false,
-        false,
-    )?;
+    let tok = access::connect_peer(&ctl, OWNER, "peer-box-0001", &Rights::parse("all")?, false)?;
     assert!(access::revoke(&ctl, "peer-box-0001")?);
     assert!(access::authenticate(&ctl, &tok, now)?.is_none());
     // A key that never existed.

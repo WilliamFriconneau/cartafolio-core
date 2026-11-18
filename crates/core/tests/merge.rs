@@ -639,3 +639,119 @@ fn another_persons_space_cannot_be_merged_into() -> Res {
     assert!(e.to_string().contains("cannot write"), "{e}");
     Ok(())
 }
+
+/// A replica of `space` kept by sync from `from`: everything after its cursor, applied.
+fn catch_up(from: &Brain, to: &Brain, space: &str) -> Res {
+    let s = sp(space);
+    loop {
+        let (pulled, _) = memcp_core::sync::cursors(to, "peer-from", &s)?;
+        let page = memcp_core::sync::events_after(from, &s, pulled, 50, 1 << 20, None)?;
+        let r = memcp_core::sync::apply(to, &s, &page.events, "peer-from")?;
+        assert!(r.stopped.is_none(), "{r:?}");
+        assert!(r.rejected.is_empty(), "{r:?}");
+        memcp_core::sync::set_cursor(
+            to,
+            "peer-from",
+            &s,
+            memcp_core::sync::Cursor::Pulled,
+            page.next,
+        )?;
+        if !page.more {
+            return Ok(());
+        }
+    }
+}
+
+/// What two replicas must agree on: every note (id, text, kind, status, link, date, author, type, fields, tags) and
+/// every file (id, name, digest, status, note, date).
+fn replica_state(brain: &Brain, space: &str) -> Result<Vec<String>, Box<dyn Error>> {
+    let c = brain.open_space(&sp(space))?;
+    let mut st = c.prepare(
+        "SELECT f.id || '|' || f.text || '|' || f.kind || '|' || f.status || '|' || coalesce(f.replaced_by, '') || '|' ||
+                f.created_at || '|' || f.author || '|' || coalesce(f.type, '') || '|' || coalesce(f.fields, '') || '|' ||
+                coalesce((SELECT group_concat(tag) FROM (SELECT tag FROM fact_tags t WHERE t.fact_id = f.id ORDER BY tag)), '')
+         FROM facts f ORDER BY f.id",
+    )?;
+    let mut rows: Vec<String> = st.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?;
+    let mut st = c.prepare(
+        "SELECT 'file|' || id || '|' || name || '|' || sha256 || '|' || status || '|' || coalesce(fact_id, '') || '|' || created_at
+         FROM files ORDER BY id",
+    )?;
+    rows.extend(
+        st.query_map([], |r| r.get::<_, String>(0))?
+            .collect::<Result<Vec<_>, _>>()?,
+    );
+    Ok(rows)
+}
+
+#[test]
+fn a_merge_reaches_the_replicas_of_the_target_space() -> Res {
+    let mut w = drifted(|b| {
+        say(b, "sam-work", "The audit is due on Friday.", &[])?;
+        say(b, "sam-work", "Meetings are on Tuesdays.", &[])?;
+        Ok(())
+    })?;
+    // Here, the audit note drifted (same id, another text); the log is started again from what this copy holds.
+    {
+        let conn = w.mine.open_space(&sp("sam-work"))?;
+        conn.execute(
+            "UPDATE facts SET text = 'The audit moved to Monday.', text_hash = 'h-mine' WHERE text LIKE 'The audit%'",
+            [],
+        )?;
+        conn.execute_batch(
+            "DROP TRIGGER sync_log_no_delete; DELETE FROM sync_log;
+             DELETE FROM meta WHERE k IN ('sync_backfilled', 'sync_layout_logged');",
+        )?;
+    }
+    // A replica of this copy's space, in step before the merge.
+    let replica = Brain::init(
+        &w.t.path().join("replica"),
+        &[sp("sam-work")],
+        Language::English,
+    )?;
+    catch_up(&w.mine, &replica, "sam-work")?;
+    assert_eq!(
+        replica_state(&replica, "sam-work")?,
+        replica_state(&w.mine, "sam-work")?
+    );
+
+    // There: an old note, a tag on a note both hold, a file. The merge takes theirs for the drifted note.
+    let old = say(
+        &w.other,
+        "sam-work",
+        "The boiler was serviced in 2020.",
+        &[],
+    )?;
+    w.other.open_space(&sp("sam-work"))?.execute(
+        "UPDATE facts SET created_at = 1600000000 WHERE id = ?1",
+        [&old],
+    )?;
+    w.other.open_space(&sp("sam-work"))?.execute(
+        "INSERT INTO fact_tags (fact_id, tag) SELECT id, 'work/meetings' FROM facts WHERE text LIKE 'Meetings%'",
+        [],
+    )?;
+    files::put(
+        &w.other,
+        &sp("sam-work"),
+        "sam",
+        "lease.txt",
+        "The flat lease",
+        b"Lease text, twelve months.",
+    )?;
+    export_now(&mut w, "second", 1_900_000_100)?;
+    let p = plan_of(&w, Policy::TakeTheirs)?;
+    let r = merge::apply(&w.mine, &p, &opts(&w, 1_900_000_300))?;
+    assert_eq!(
+        (r.lines[0].replaced, r.lines[0].tagged, r.lines[0].files),
+        (1, 1, 1),
+        "{r:?}"
+    );
+
+    // The replica, in step again, holds what the merged copy holds.
+    catch_up(&w.mine, &replica, "sam-work")?;
+    assert_eq!(
+        replica_state(&replica, "sam-work")?,
+        replica_state(&w.mine, "sam-work")?
+    );
+    Ok(())
+}
