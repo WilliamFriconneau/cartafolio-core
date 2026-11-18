@@ -20,6 +20,8 @@ jobs:
         with:
           targets: ${{ matrix.target }}
       - name: Build with cross
+        # memcp-health (the health referential, docs/HEALTH.md) is a library with no binary: it is built into
+        # memcp-server and memcp-janitor, which depend on it, and needs no line of its own here.
         run: |
           cargo install cross --locked
           cross build --release --locked --target ${{ matrix.target }} -p memcp-server -p memcp-manager -p memcp-janitor

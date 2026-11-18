@@ -64,7 +64,7 @@ The router, for one note:
   name as keywords (the person's page can change them). A space with children is a folder: when it and one of its
   descendants match a note, the most specific wins, and the parent only gets a note that no child matches. A keyword listed
   by a parent and by its child belongs to the child.
-- The health rule (`#santé`) and the work rule (`work_words`, meeting recordings) still come first, as before.
+- The health rule (`#santé`) and the work rule (`work_words`, meeting recordings) still come first, as before. The health rule files the note under `journal/<date>` and `sante` and adds the tags the health referential finds in its words (`alerte/<id>` for a red flag, `signe/<name>`, `mesure/<name>`; see [HEALTH.md](HEALTH.md)); the words stay untouched.
 
 A note tagged `inbox` in a space goes to another space only when the router names that space; otherwise it is filed in its
 own space as before (see 1).
