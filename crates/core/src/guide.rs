@@ -174,6 +174,9 @@ fn index_of(brain: &Brain, space: &Space) -> Option<String> {
 /// A recording that has waited this long for a text is reported to the assistant that connects.
 const VOICE_LATE_SECS: i64 = 30 * 60;
 
+/// How many waiting notes and files the warning counts at most: past that, the number is a floor.
+const WAITING_COUNTED: usize = 10_000;
+
 /// What a connection is told when it connects: the general rules, then the guide of the
 /// person and of each vault it reaches (instructions, written by a person), then the index
 /// of each of those vaults (data, written by assistants). Nothing about a vault it does not
@@ -188,21 +191,22 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
 
     let mut spaces = caller.readable();
     spaces.sort();
-    // Notes waiting in Inbox mean the janitor has not done its work: the first assistant to
-    // connect says so, and asks the person whether it should do the sorting.
+    // What waits in Inbox for a decision means the janitor has not done its work: the first assistant to
+    // connect says so, and asks the person whether it should do the sorting. Counted as `triage_waiting`
+    // counts: the notes tagged `inbox` and the files not placed, never the other facts the space holds
+    // (keywords, a reader's dossier, a recording already transcribed).
     for s in &spaces {
         if crate::triage::is_triage(brain, s) {
-            let waiting = brain
-                .open_space(s)
+            let waiting = crate::triage::waiting(brain, s, WAITING_COUNTED)
                 .ok()
-                .and_then(|c| crate::facts::counts(&c).ok())
-                .and_then(|c| c["active"].as_u64())
+                .and_then(|w| w["count"].as_u64())
                 .unwrap_or(0);
             if waiting > 0 {
                 out.push_str(&format!(
-                    " ATTENTION: {waiting} notes wait in the person's Inbox (`{}`; nothing has sorted them). Tell the person at \
-                     once, and ask whether you should sort them now: read them, then `supersede` each into \
-                     the right space with its real tags, or `retire` it.",
+                    " ATTENTION: {waiting} {} wait for a decision in the person's Inbox (`{}`). Tell the person at \
+                     once, and ask whether you should sort them now: read them with `triage_waiting`, then \
+                     `supersede` each into the right space with its real tags, or `retire` it.",
+                    if waiting == 1 { "item" } else { "items" },
                     s.as_str()
                 ));
             }

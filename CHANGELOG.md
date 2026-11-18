@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.25
+
+- **The Inbox warning counts what waits.** An assistant that connects is told how many notes and files wait for a decision in the Inbox, counted as `triage_waiting` counts them, not every fact the Inbox space holds (keywords, a reader's dossier, recordings already transcribed).
+
 ## 20261117.0.24
 
 - **Connecting an assistant is three short steps.** ChatGPT and Le Chat (Mistral) have their own steps, with the menus they use; Claude is one choice for the web, the app and the phone. Each step says only what to do, and the text that sets your memory up is folded away until you want it.
