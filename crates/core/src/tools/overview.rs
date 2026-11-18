@@ -21,7 +21,7 @@ pub(super) fn peers(
     let mut locals: Vec<Local> = Vec::new();
     for c in all
         .iter()
-        .filter(|c| c.user_id == caller.user_id && c.agent.starts_with("peer-"))
+        .filter(|c| c.user_id == caller.user_id && c.kind == crate::access::Kind::Peer)
     {
         let mut l = progress(&c.agent).map_or_else(
             || Local {

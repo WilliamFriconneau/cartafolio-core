@@ -252,13 +252,11 @@ fn a_member_cannot_touch_another_persons_objects() -> Res {
         false,
         false,
     )?;
-    access::connect_for(
+    access::connect_peer(
         &ctl,
         users::OWNER,
         "peer-pc-cd34",
         &Rights::parse(&format!("{space}:rw"))?,
-        None,
-        false,
         false,
     )?;
     drop(ctl);
@@ -333,13 +331,11 @@ fn a_node_is_listed_renamed_paused_revoked_and_forgotten() -> Res {
     let e = env()?;
     let t = e.admin.clone();
     let ctl = e.app.brain.open_control()?;
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &ctl,
         users::OWNER,
         "peer-laptop-ab12",
         &Rights::owner(),
-        None,
-        false,
         false,
     )?;
     drop(ctl);

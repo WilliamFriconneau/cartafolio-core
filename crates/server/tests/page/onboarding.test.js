@@ -310,8 +310,9 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   await bp.context().close(); bare.stop();
 
   // ---- Peers live in Machines only; assistants say where they run; French from the first paint ----
+  // A machine's connection is made by a pairing, a join or the node's own command line, never from the page.
+  full.run("connect", "peer-laptop-ab12", "--all");
   await page.evaluate(async () => {
-    await api("connections", { agent: "peer-laptop-ab12", rights: "all" });
     await api("connections", { agent: "claudeai", rights: "all" });
     await api("connections", { agent: "claude-code", rights: "all" });
   });

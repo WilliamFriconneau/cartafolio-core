@@ -828,8 +828,22 @@ fn agent_of(f: &Fact) -> String {
 }
 
 /// Writes a copy of one of their notes, with its tags, dates and author, in the caller's
-/// transaction. `replaces` links it to the note it supersedes.
+/// transaction. `replaces` links it to the note it supersedes. It is logged for the peers once its date is set, so
+/// the replicas of the space get the note as it is here.
 fn insert_copy(
+    dst: &Connection,
+    space: &Space,
+    f: &Fact,
+    tags: &[String],
+    replaces: Option<&str>,
+) -> Result<String> {
+    let id = insert_copy_unlogged(dst, space, f, tags, replaces)?;
+    crate::sync::record_fact_created(dst, &id)?;
+    Ok(id)
+}
+
+/// [`insert_copy`] without the entry in the peers' log: the caller logs it.
+fn insert_copy_unlogged(
     dst: &Connection,
     space: &Space,
     f: &Fact,
@@ -842,7 +856,7 @@ fn insert_copy(
     new.valid_to = f.valid_to;
     new.tags = facts::normalize_tags(tags)?;
     let text = facts::check_text(&f.text)?;
-    let id = facts::insert(dst, space, &f.author, &new, &text, replaces)?.id;
+    let id = facts::insert_unlogged(dst, space, &f.author, &new, &text, replaces, None)?.id;
     dst.execute(
         "UPDATE facts SET created_at = ?2 WHERE id = ?1",
         params![id, f.created_at],
@@ -858,6 +872,9 @@ fn merge_event(dst: &Connection, fact_id: &str, action: &str, detail: Value) -> 
     Ok(())
 }
 
+const REPLACED: &str = "replaced by the version of another memory";
+const RETAGGED: &str = "tags of another memory added";
+
 /// The other's version replaces the target's: the old one is marked replaced, its text stays.
 fn replace_note(dst: &Connection, space: &Space, mine: &str, theirs: &Fact) -> Result<()> {
     let old = facts::read_fact(dst, mine)?.ok_or_else(|| Error::UnknownFact(mine.into()))?;
@@ -869,21 +886,48 @@ fn replace_note(dst: &Connection, space: &Space, mine: &str, theirs: &Fact) -> R
             .filter(|t| !old.tags.contains(t))
             .cloned(),
     );
+    supersede_with(dst, space, mine, theirs, &tags, REPLACED)
+}
+
+/// Tags of theirs that a note of the target lacks. The note is replaced by a copy of itself with every tag, as a
+/// note is when it is filed elsewhere: tags travel to the peers only with a note, so this is how the replicas of the
+/// space get them too.
+fn add_tags(dst: &Connection, space: &Space, fact_id: &str, tags: &[String]) -> Result<()> {
+    let old = facts::read_fact(dst, fact_id)?.ok_or_else(|| Error::UnknownFact(fact_id.into()))?;
+    let mut all = old.tags.clone();
+    all.extend(facts::normalize_tags(tags)?);
+    supersede_with(dst, space, fact_id, &old, &all, RETAGGED)
+}
+
+/// `mine` is replaced by a copy of `by` carrying `tags`, in the caller's transaction, and both changes are logged for
+/// the peers (the new note, then the replacement), as `facts::supersede` logs them.
+fn supersede_with(
+    dst: &Connection,
+    space: &Space,
+    mine: &str,
+    by: &Fact,
+    tags: &[String],
+    reason: &str,
+) -> Result<()> {
+    // The old note leaves the active set first (one text is active once), then the new one comes and they are linked:
+    // the link names a note that does not exist yet, so the foreign key is checked at the commit.
     dst.execute_batch("PRAGMA defer_foreign_keys = ON")?;
     let changed = dst.execute(
         "UPDATE facts SET status = 'replaced', replaced_by = ?1, status_at = ?2, status_by = 'merge',
-                status_reason = 'replaced by the version of another memory'
+                status_reason = ?3
          WHERE id = ?1 AND status = 'active'",
-        params![mine, util::now()],
+        params![mine, util::now(), reason],
     )?;
     if changed != 1 {
         return Err(Error::Invalid(format!("fact {mine} is no longer active")));
     }
-    let id = insert_copy(dst, space, theirs, &tags, Some(mine))?;
+    let id = insert_copy_unlogged(dst, space, by, tags, Some(mine))?;
     dst.execute(
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![mine, id],
     )?;
+    crate::sync::record_fact_created(dst, &id)?;
+    crate::sync::record_fact_superseded(dst, mine, &id, "merge", Some(reason))?;
     merge_event(
         dst,
         mine,
@@ -891,16 +935,6 @@ fn replace_note(dst: &Connection, space: &Space, mine: &str, theirs: &Fact) -> R
         json!({ "by": id, "reason": "merge" }),
     )?;
     dst.execute_batch("PRAGMA defer_foreign_keys = OFF")?;
-    Ok(())
-}
-
-fn add_tags(dst: &Connection, fact_id: &str, tags: &[String]) -> Result<()> {
-    for tag in facts::normalize_tags(tags)? {
-        dst.execute(
-            "INSERT OR IGNORE INTO fact_tags (fact_id, tag) VALUES (?1, ?2)",
-            params![fact_id, tag],
-        )?;
-    }
     Ok(())
 }
 
@@ -974,7 +1008,7 @@ fn copy_file(
     new.kind = "context".into();
     new.tags = facts::normalize_tags(&tags)?;
     let checked = facts::check_text(&text)?;
-    let fact = facts::insert(dst, space, &author, &new, &checked, None)?;
+    let fact = facts::insert_unlogged(dst, space, &author, &new, &checked, None, None)?;
     dst.execute(
         "UPDATE facts SET type = 'file', fields = ?2, created_at = ?3 WHERE id = ?1",
         params![fact.id, json!({ "file_id": id }).to_string(), created],
@@ -994,6 +1028,9 @@ fn copy_file(
             f.created_at
         ],
     )?;
+    // Logged once both are complete: the note first, then its file (a peer takes a file only after its note).
+    crate::sync::record_fact_created(dst, &fact.id)?;
+    crate::sync::record_file_put(dst, &id)?;
     Ok(())
 }
 
@@ -1170,7 +1207,7 @@ fn run(
                     add_tags: tags,
                 } => {
                     if !tags.is_empty() {
-                        add_tags(dst, &mine, &tags)?;
+                        add_tags(dst, &r.dest, &mine, &tags)?;
                         lr.tagged += 1;
                     }
                 }

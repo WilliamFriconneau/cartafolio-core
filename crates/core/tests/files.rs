@@ -98,12 +98,15 @@ fn m4a(len: usize) -> Vec<u8> {
 }
 
 #[test]
-fn a_recording_of_any_size_is_kept() -> Res {
+fn a_recording_up_to_the_most_a_file_may_be_is_kept() -> Res {
     let t = Temp::new("files");
     let b = brain(&t)?;
     let home = sp("home");
+    // One byte more than a file may be to reach the other nodes is refused, whatever its kind.
+    let over = m4a(files::MAX_BYTES + 1);
+    assert!(files::put(&b, &home, "sam", "Long.m4a", "", &over).is_err());
     // Recognised by its content, whatever the name: a voice memo is far bigger than a photo may be.
-    let big = m4a(30 * 1024 * 1024);
+    let big = m4a(files::MAX_BYTES);
     let f = files::put(&b, &home, "sam", "Mémo vocal.m4a", "dictée du matin", &big)?;
     assert_eq!(f.mime, "audio/mp4");
     assert!(f.is_audio() && !f.is_image());

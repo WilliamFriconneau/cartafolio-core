@@ -176,6 +176,44 @@ pub const DEFAULT_RATE_PER_MIN: i64 = 6000;
 /// [`crate::facts::MAX_TEXT_BYTES`]).
 pub const DEFAULT_MAX_TEXT: i64 = i64::MAX;
 
+/// What made a connection. Set once, by the code that creates the connection, and never derived from its name: a name is
+/// chosen by whoever asks for it, so it proves nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum Kind {
+    /// Made by the person for an assistant or a program (page, command line, setup, a companion service).
+    #[default]
+    Assistant,
+    /// Made by an OAuth consent (an assistant that signed in, such as a cloud service).
+    Oauth,
+    /// Made for a machine of the person by a pairing code or a join request ([`crate::pairing::redeem`]), or by the
+    /// node's owner on the command line. The only kind that takes part in the synchronisation between nodes.
+    Peer,
+    /// The key of the admin page ([`console_token`]); it never opens MCP.
+    Console,
+}
+
+impl Kind {
+    /// The word stored in `connections.kind`.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Kind::Assistant => "assistant",
+            Kind::Oauth => "oauth",
+            Kind::Peer => "peer",
+            Kind::Console => "console",
+        }
+    }
+
+    /// The kind stored as `word`; an unknown word is read as an assistant, the kind with the fewest powers.
+    pub fn parse(word: &str) -> Kind {
+        match word {
+            "oauth" => Kind::Oauth,
+            "peer" => Kind::Peer,
+            "console" => Kind::Console,
+            _ => Kind::Assistant,
+        }
+    }
+}
+
 /// Who is calling, and what it may do. Built from the connection, never from arguments.
 #[derive(Clone, Debug)]
 pub struct Caller {
@@ -202,9 +240,29 @@ pub struct Caller {
     pub rate_per_min: i64,
     /// Longest text of one fact, in characters.
     pub max_text: i64,
+    /// What made the connection (see [`Kind`]).
+    pub kind: Kind,
+    /// The call came from this machine: the standard input of a local program, or HTTP from the loopback address with
+    /// no proxy in between. Set by the transport, never by the connection; `false` from [`authenticate`].
+    pub local: bool,
 }
 
 impl Caller {
+    /// Whether this is a machine of the person with the full powers of one: a connection made for a peer
+    /// ([`Kind::Peer`]) that reaches every space of the person, whole, and may write. Only such a caller may invite or
+    /// answer devices that join, offer spaces, read the peer directory or the sync status, and run a sync. Nothing
+    /// about it is read from its name.
+    pub fn is_peer(&self) -> bool {
+        self.kind == Kind::Peer && self.all_spaces && !self.is_scoped() && !self.read_only_forced
+    }
+
+    /// Whether this caller may point a space at a folder of this machine: the admin page, or a program on this machine
+    /// that did not sign in through OAuth. A key used from elsewhere (a cloud assistant, another machine) never may: a
+    /// folder is a path of this machine's disk.
+    pub fn may_set_folders(&self) -> bool {
+        self.kind == Kind::Console || (self.local && self.kind != Kind::Oauth)
+    }
+
     fn knows(&self, s: &Space) -> bool {
         self.known.contains(s)
     }
@@ -337,6 +395,8 @@ pub struct ConnectionInfo {
     pub no_person_guide: bool,
     /// One of the program's own tools (janitor, transcription, report, rangers), not an assistant.
     pub internal: bool,
+    /// What made the connection.
+    pub kind: Kind,
 }
 
 /// SHA-256 of a token: the only form in which a token is stored and compared.
@@ -353,6 +413,18 @@ fn refuse_vault_name(ctl: &Connection, name: &str) -> Result<()> {
     if is_vault.is_some() {
         return Err(Error::Invalid(format!(
             "{name} is the name of a space: a connection needs another name"
+        )));
+    }
+    Ok(())
+}
+
+/// Names starting with [`crate::sync::PEER_PREFIX`] are kept for the connections of machines ([`Kind::Peer`]): a name
+/// such as `peer-…` on another kind would read as a machine in every list.
+fn refuse_peer_name(name: &str, kind: Kind) -> Result<()> {
+    if kind != Kind::Peer && name.starts_with(crate::sync::PEER_PREFIX) {
+        return Err(Error::Invalid(format!(
+            "names starting with {} are kept for the machines of the person",
+            crate::sync::PEER_PREFIX
         )));
     }
     Ok(())
@@ -486,14 +558,85 @@ pub fn connect(
 /// that name gets a new token and the old one stops working. An agent name belongs to one person.
 ///
 /// # Errors
-/// [`Error::Invalid`] for a bad name, a name that is a vault's name or another person's, no space
-/// requested, a grant on a space the person does not reach (a connection never goes beyond its
-/// person), an unknown or disabled person, or an existing name without `rotate`.
+/// [`Error::Invalid`] for a bad name, a name that is a vault's name or another person's, a name
+/// starting with `peer-` (kept for machines, see [`connect_peer`]), no space requested, a grant on a
+/// space the person does not reach (a connection never goes beyond its person), an unknown or
+/// disabled person, or an existing name without `rotate`.
 ///
 /// # Effects
-/// A row in `connections` and its grants; a `connect` row in the control audit log.
+/// A row in `connections` of kind [`Kind::Assistant`] and its grants; a `connect` row in the control audit log.
 pub fn connect_for(
     ctl: &Connection,
+    user_id: &str,
+    agent: &str,
+    rights: &Rights,
+    days: Option<i64>,
+    read_only: bool,
+    rotate: bool,
+) -> Result<String> {
+    connect_as(
+        ctl,
+        Kind::Assistant,
+        user_id,
+        agent,
+        rights,
+        days,
+        read_only,
+        rotate,
+    )
+}
+
+/// [`connect_for`] for a connection made by an OAuth consent ([`Kind::Oauth`]).
+///
+/// # Errors
+/// As [`connect_for`].
+pub fn connect_oauth(
+    ctl: &Connection,
+    user_id: &str,
+    agent: &str,
+    rights: &Rights,
+    days: Option<i64>,
+    read_only: bool,
+    rotate: bool,
+) -> Result<String> {
+    connect_as(
+        ctl,
+        Kind::Oauth,
+        user_id,
+        agent,
+        rights,
+        days,
+        read_only,
+        rotate,
+    )
+}
+
+/// A connection for a machine of the person ([`Kind::Peer`]), named `peer-…`. Only the code that makes machines calls
+/// it: a pairing code or a join request the person allowed ([`crate::pairing::redeem`]), and the node's own command
+/// line. With `rotate`, the person's existing connection of that name gets a new key and becomes a machine's.
+///
+/// # Errors
+/// As [`connect_for`], and [`Error::Invalid`] for a name that does not start with `peer-`.
+pub fn connect_peer(
+    ctl: &Connection,
+    user_id: &str,
+    agent: &str,
+    rights: &Rights,
+    rotate: bool,
+) -> Result<String> {
+    if !agent.starts_with(crate::sync::PEER_PREFIX) {
+        return Err(Error::Invalid(format!(
+            "the connection of a machine is named {}…",
+            crate::sync::PEER_PREFIX
+        )));
+    }
+    connect_as(ctl, Kind::Peer, user_id, agent, rights, None, false, rotate)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn connect_as(
+    ctl: &Connection,
+    kind: Kind,
     user_id: &str,
     agent: &str,
     rights: &Rights,
@@ -507,6 +650,7 @@ pub fn connect_for(
         ));
     }
     refuse_vault_name(ctl, agent)?;
+    refuse_peer_name(agent, kind)?;
     if !rights.all_spaces && rights.grants.is_empty() {
         return Err(Error::Invalid("no space requested".into()));
     }
@@ -537,16 +681,18 @@ pub fn connect_for(
             )));
         }
         Some((id, _)) if rotate => {
+            // Remade by this code: it is of the kind this code makes, whatever it was before.
             tx.execute(
                 "UPDATE connections SET hash = ?2, all_spaces = ?3, created_at = ?4,
-                 expires_at = ?5, revoked_at = NULL, read_only_forced = ?6 WHERE id = ?1",
+                 expires_at = ?5, revoked_at = NULL, read_only_forced = ?6, kind = ?7 WHERE id = ?1",
                 params![
                     id,
                     hash_token(&token),
                     i64::from(rights.all_spaces),
                     now,
                     days.map(|d| now + d * 86_400),
-                    i64::from(read_only)
+                    i64::from(read_only),
+                    kind.as_str()
                 ],
             )?;
             id
@@ -559,8 +705,8 @@ pub fn connect_for(
         None => {
             let id = hex(&util::random_bytes::<6>());
             tx.execute(
-                "INSERT INTO connections (id, agent, user_id, hash, all_spaces, created_at, expires_at, read_only_forced)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                "INSERT INTO connections (id, agent, user_id, hash, all_spaces, created_at, expires_at, read_only_forced, kind)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
                 params![
                     id,
                     agent,
@@ -569,7 +715,8 @@ pub fn connect_for(
                     i64::from(rights.all_spaces),
                     now,
                     days.map(|d| now + d * 86_400),
-                    i64::from(read_only)
+                    i64::from(read_only),
+                    kind.as_str()
                 ],
             )?;
             id
@@ -633,6 +780,9 @@ pub fn rename(ctl: &Connection, agent: &str, new: &str) -> Result<bool> {
         ));
     }
     refuse_vault_name(ctl, new)?;
+    if let Some(info) = get(ctl, agent)? {
+        refuse_peer_name(new, info.kind)?;
+    }
     let taken: Option<String> = ctl
         .query_row(
             "SELECT agent FROM connections WHERE agent = ?1",
@@ -738,12 +888,12 @@ pub fn console_token(ctl: &Connection, user_id: &str) -> Result<String> {
         .optional()?;
     match existing {
         Some(id) => tx.execute(
-            "UPDATE connections SET hash = ?2, revoked_at = NULL, created_at = ?3, console = 1, user_id = ?4 WHERE id = ?1",
+            "UPDATE connections SET hash = ?2, revoked_at = NULL, created_at = ?3, console = 1, user_id = ?4, kind = 'console' WHERE id = ?1",
             params![id, hash_token(&token), now, u.id],
         )?,
         None => tx.execute(
-            "INSERT INTO connections (id, agent, user_id, hash, all_spaces, created_at, read_only_forced, console)
-             VALUES (?1, ?2, ?3, ?4, 0, ?5, 1, 1)",
+            "INSERT INTO connections (id, agent, user_id, hash, all_spaces, created_at, read_only_forced, console, kind)
+             VALUES (?1, ?2, ?3, ?4, 0, ?5, 1, 1, 'console')",
             params![hex(&util::random_bytes::<6>()), agent, u.id, hash_token(&token), now],
         )?,
     };
@@ -791,12 +941,21 @@ fn find_token(ctl: &Connection, token: &str, now: i64, console: bool) -> Result<
     Ok(active.then_some(id))
 }
 
-type ConnectionRow = (String, String, i64, i64, Option<i64>, Option<i64>, i64);
+type ConnectionRow = (
+    String,
+    String,
+    i64,
+    i64,
+    Option<i64>,
+    Option<i64>,
+    i64,
+    String,
+);
 
 fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
-    let (agent, user_id, all, ro, rate, max_text, no_guide): ConnectionRow = ctl.query_row(
+    let (agent, user_id, all, ro, rate, max_text, no_guide, kind): ConnectionRow = ctl.query_row(
         "SELECT agent, coalesce(user_id, 'owner'), all_spaces, read_only_forced, rate_per_min,
-         max_text, no_person_guide FROM connections WHERE id = ?1",
+         max_text, no_person_guide, kind FROM connections WHERE id = ?1",
         [id],
         |r| {
             Ok((
@@ -807,12 +966,14 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
                 r.get(4)?,
                 r.get(5)?,
                 r.get(6)?,
+                r.get(7)?,
             ))
         },
     )?;
+    let kind = Kind::parse(&kind);
     let reach = crate::users::access_of(ctl, &user_id)?;
     // A machine of the person reaches every space of theirs, present and future: every node is equal.
-    let all = if all == 0 && ro == 0 && is_machine(ctl, &agent, id)? {
+    let all = if all == 0 && ro == 0 && kind == Kind::Peer && is_machine(ctl, id)? {
         1
     } else {
         all
@@ -879,17 +1040,16 @@ fn caller_by_id(ctl: &Connection, id: &str) -> Result<Caller> {
         no_person_guide: no_guide != 0,
         rate_per_min: rate.unwrap_or(DEFAULT_RATE_PER_MIN),
         max_text: max_text.unwrap_or(DEFAULT_MAX_TEXT),
+        kind,
+        local: false,
     })
 }
 
-/// Whether the connection `id` is a machine of the person that joined before a peer reached every space by itself
-/// (`pairing::create_for_peer` now gives `all`): named `peer-…`, limited by no path, and holding read and write on the
-/// person's Inbox and on at least one other space, as a join gave it. A device paired to capture holds the box
-/// alone and stays limited to it.
-fn is_machine(ctl: &Connection, agent: &str, id: &str) -> Result<bool> {
-    if !agent.starts_with(crate::sync::PEER_PREFIX) {
-        return Ok(false);
-    }
+/// Whether the machine connection ([`Kind::Peer`]) `id` joined before a peer reached every space by itself
+/// (`pairing::create_for_peer` now gives `all`): limited by no path, and holding read and write on the person's Inbox
+/// and on at least one other space, as a join gave it. A device paired to capture holds the box alone and stays
+/// limited to it.
+fn is_machine(ctl: &Connection, id: &str) -> Result<bool> {
     let paths: i64 = ctl.query_row(
         "SELECT count(*) FROM grant_paths WHERE connection_id = ?1",
         [id],
@@ -938,7 +1098,7 @@ pub fn revoke(ctl: &Connection, agent: &str) -> Result<bool> {
             params![util::now(), agent],
         )?;
         // A peer's revocation spreads through the peer directory.
-        if agent.starts_with(crate::sync::PEER_PREFIX) {
+        if get(ctl, agent)?.is_some_and(|c| c.kind == Kind::Peer) {
             crate::directory::revoked_connection(ctl, agent, util::now())?;
         }
     }
@@ -1079,7 +1239,7 @@ pub fn set_limit(ctl: &Connection, agent: &str, key: &str, value: i64) -> Result
 pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
     let mut st = ctl.prepare(
         "SELECT id, agent, coalesce(user_id, 'owner'), created_at, expires_at, revoked_at, last_used_at,
-         read_only_forced, all_spaces, no_person_guide, internal FROM connections WHERE console = 0 ORDER BY created_at, agent",
+         read_only_forced, all_spaces, no_person_guide, internal, kind FROM connections WHERE console = 0 ORDER BY created_at, agent",
     )?;
     let rows = st.query_map([], |r| {
         Ok((
@@ -1095,6 +1255,7 @@ pub fn list(ctl: &Connection) -> Result<Vec<ConnectionInfo>> {
                 read_only_forced: r.get::<_, i64>(7)? != 0,
                 no_person_guide: r.get::<_, i64>(9)? != 0,
                 internal: r.get::<_, i64>(10)? != 0,
+                kind: Kind::parse(&r.get::<_, String>(11)?),
             },
             r.get::<_, i64>(8)? != 0,
         ))

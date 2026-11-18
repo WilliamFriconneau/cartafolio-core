@@ -851,13 +851,14 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
             .any(|p| p["name"] == json!("beta") && p["revoked"] != json!(true)),
         "{status_body}"
     );
-    // A lets the device back in for a while, without comparing words: it comes in at once.
+    // A lets the device back in, without comparing words: the page shows a one-time ticket, the device gives it.
     let (status, v) = a.admin_post(
         "/join/allow-device",
         &json!({ "device": "beta", "minutes": 5 }),
     );
     assert_eq!(status, 200, "{v}");
     assert_eq!(v["result"], json!("allowed"), "{v}");
+    let ticket = v["ticket"].as_str().expect("a ticket").to_string();
     std::fs::remove_dir_all(b.data.join("peers")).unwrap();
     let status_file = root.path("rejoin.json");
     let mut cmd = Command::new(exe("memcp-sync"));
@@ -865,7 +866,8 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
         .arg(&b.data)
         .args(["--join", &a.base(), "--status-file"])
         .arg(&status_file)
-        .args(["--name", "beta"]);
+        .args(["--name", "beta"])
+        .env("MEMCP_JOIN_TICKET", &ticket);
     let mut rejoin = Proc::spawn(cmd);
     assert!(rejoin.wait(30).expect("the join did not finish").success());
     let again = peering_of(&b.data);
@@ -873,7 +875,7 @@ fn a_revoked_node_is_refused_and_a_node_allowed_in_advance_rejoins_without_words
     b.sync_ok(&again);
     assert_eq!(b.count(), 7);
     assert_eq!(b.fingerprint(), a.fingerprint());
-    // The permission was for one time only: a second device of that name waits for a person.
+    // The ticket was for one time only, and the name alone lets nobody in: nothing waits that a person did not see.
     let (_, pending) = a.admin_get("/join/pending");
     assert!(pending["requests"].as_array().unwrap().is_empty());
 }
@@ -2552,4 +2554,87 @@ fn a_merge_is_planned_and_applied_and_files_are_sent_through_a_node() {
         &["merge", "--apply", plan.to_str().unwrap()],
     );
     assert_eq!(refused.status.code(), Some(4), "{}", text_of(&refused));
+}
+
+// --- one person under two ids: a laptop's own memory joined to a home node of several people ----------------------
+
+/// The active notes of `space` on `node`, by text.
+fn texts(node: &Node, space: &str) -> Vec<String> {
+    let mut v: Vec<String> = node
+        .notes()
+        .get(space)
+        .map(|l| l.iter().map(|(_, t)| t.clone()).collect())
+        .unwrap_or_default();
+    v.sort();
+    v
+}
+
+#[test]
+fn a_laptop_joined_to_a_person_of_another_id_shares_their_inbox_and_spaces_and_nothing_else() {
+    let root = Root::new("person");
+    // Home: several people; `robin` is a person made later (an id `u_…`), the bootstrap user someone else.
+    let mut home = Node::init(&root, "home", false);
+    home.cli(&["person", "new", "robin", "--role", "admin"]);
+    home.cli(&["person", "new", "carol"]);
+    home.cli(&[
+        "intake",
+        "text",
+        "Book the car service for December",
+        "--user",
+        "robin",
+    ]);
+    home.cli(&["intake", "text", "Private to carol", "--user", "carol"]);
+    home.cli(&["space", "new", "Diary", "--user", "carol"]);
+    home.serve();
+    let out = home.cli(&["console-token", "robin"]);
+    // The page robin signs in to: the join is his, so is the peer connection it makes.
+    home.console = Some(token_in(&out, "hcpc_"));
+    // The laptop: its own memory, its person made there under another name and id (the bootstrap user owns nothing).
+    let laptop = Node::init(&root, "laptop", false);
+    laptop.cli(&["person", "new", "rob", "--role", "admin"]);
+    laptop.cli(&[
+        "intake",
+        "text",
+        "Call the plumber about the kitchen tap",
+        "--user",
+        "rob",
+    ]);
+    laptop.cli(&["space", "new", "Music", "--user", "rob"]);
+    let peer = join_by_sync(&root, &mut home, &laptop, "laptop");
+    laptop.sync_ok(&peer);
+    laptop.sync_ok(&peer);
+    let both = vec![
+        "Book the car service for December".to_string(),
+        "Call the plumber about the kitchen tap".to_string(),
+    ];
+    assert_eq!(texts(&home, "robin-a-trier"), both);
+    assert_eq!(texts(&laptop, "rob-a-trier"), both);
+    // The space made on the laptop is robin's at home; nothing of carol's is on the laptop.
+    let hb = home.brain();
+    let ctl = hb.open_control().unwrap();
+    let robin = memcp_core::users::resolve(&ctl, "robin").unwrap().id;
+    let music = Space::new("rob-music").unwrap();
+    assert!(memcp_core::users::is_space_owner(&ctl, &music, &robin).unwrap());
+    let on_laptop: Vec<String> = laptop
+        .brain()
+        .spaces()
+        .unwrap()
+        .iter()
+        .map(|s| s.as_str().to_string())
+        .collect();
+    assert!(
+        on_laptop.iter().all(|s| !s.starts_with("carol")),
+        "{on_laptop:?}"
+    );
+    assert!(
+        laptop
+            .notes()
+            .values()
+            .flatten()
+            .all(|(_, t)| t != "Private to carol"),
+        "carol's note crossed"
+    );
+    // One box on the laptop: the home box was paired with it, not copied beside it.
+    let boxes = on_laptop.iter().filter(|s| s.ends_with("-a-trier")).count();
+    assert_eq!(boxes, 1, "{on_laptop:?}");
 }

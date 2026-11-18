@@ -4,7 +4,7 @@
 /// Migrations of a space file.
 pub(crate) const SPACE_MIGRATIONS: &[&str] = &[
     SPACE_V1, SPACE_V2, SPACE_V3, SPACE_V4, SPACE_V5, SPACE_V6, SPACE_V7, SPACE_V8, SPACE_V9,
-    SPACE_V10, SPACE_V11, SPACE_V12,
+    SPACE_V10, SPACE_V11, SPACE_V12, SPACE_V13,
 ];
 
 /// Migrations of the control database (`control.sqlite`).
@@ -33,6 +33,7 @@ pub(crate) const CONTROL_MIGRATIONS: &[&str] = &[
     CONTROL_V22,
     CONTROL_V23,
     CONTROL_V24,
+    CONTROL_V25,
 ];
 
 /// Number of migrations a space database goes through; a file recording a higher
@@ -591,6 +592,40 @@ CREATE TRIGGER fact_events_no_delete BEFORE DELETE ON fact_events
   BEGIN SELECT RAISE(ABORT,'append-only'); END;
 ";
 
+/// What the exchange between peers must remember beyond the log itself:
+/// - `sync_unheld`: the events of this log a peer took without keeping them (it refused them, or left them out of
+///   its window). The peer does not hold them, so the window of this replica never counts them as acknowledged by it.
+/// - `sync_rejected`: the events received here and refused, so that an event that needs one of them is refused too
+///   instead of waiting for it for ever.
+/// - `sync_waiting`: how many exchanges stopped on an event that has not arrived (`needs`, its eid), so that what needs
+///   one that never comes goes on without it in the end.
+/// - `sync_deferred`: a layout change that names a parent space this node does not hold yet: kept aside and tried
+///   again at each exchange, then logged once it applies.
+const SPACE_V13: &str = r"
+CREATE TABLE sync_unheld (
+  peer TEXT NOT NULL,
+  eid  TEXT NOT NULL,
+  at   INTEGER NOT NULL,
+  PRIMARY KEY (peer, eid)
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_rejected (
+  eid TEXT PRIMARY KEY,
+  why TEXT NOT NULL,
+  at  INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_waiting (
+  needs TEXT PRIMARY KEY,
+  stops INTEGER NOT NULL,
+  since INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+CREATE TABLE sync_deferred (
+  eid   TEXT PRIMARY KEY,
+  via   TEXT NOT NULL,
+  event TEXT NOT NULL,
+  at    INTEGER NOT NULL
+) STRICT, WITHOUT ROWID;
+";
+
 /// A connection of the program's own tools (the janitor, voice transcription, the weekly report, the device
 /// rangers) is marked `internal`: the page keeps it out of the list of connected assistants and shows it in its own
 /// section, with its own controls.
@@ -657,4 +692,46 @@ CREATE TABLE folder_state (
   err TEXT,
   PRIMARY KEY (space, rel)
 ) STRICT, WITHOUT ROWID;
+";
+
+/// What made each connection (`access::Kind`), so that no power hangs on a name anyone may choose. Existing rows are
+/// read conservatively: `console` for the admin page's keys; `oauth` for the connections an OAuth consent made (they
+/// hold a refresh token, whose row follows a rename); `peer` only for the connections a pairing code or a join request
+/// made, which the node recorded itself: the code's row names the connection it made (`pairings.agent`), and the audit
+/// says `paired` or `joined` with its name, followed through every later `rename` (`detail` holds the old name).
+///
+/// The code's row is deleted a day after the code expires, and a machine made by `memcp connect peer-…` or by the page
+/// has no such audit line, so a second, durable proof keeps the machines already in step: a connection that synced as
+/// a machine. Its `peer-…` name is in `sync_state` (this node noted a transfer or a cursor with it) or is the `link` of
+/// a node of `peer_directory` (it told this node its directory), followed through renames like the first proof; and
+/// it holds what a machine holds: every space, whole, and may write. Such a connection already ran the sync as a full
+/// machine before this migration, so keeping it one stops nothing that works; the name alone, or sync rows alone,
+/// prove nothing.
+/// Every other row is an `assistant`: a machine the node cannot prove joins again.
+const CONTROL_V25: &str = r"
+ALTER TABLE connections ADD COLUMN kind TEXT NOT NULL DEFAULT 'assistant'
+  CHECK (kind IN ('assistant','oauth','peer','console'));
+UPDATE connections SET kind = 'console' WHERE console = 1;
+UPDATE connections SET kind = 'oauth'
+  WHERE console = 0 AND agent IN (SELECT agent FROM oauth_refresh);
+WITH RECURSIVE made(agent) AS (
+  SELECT agent FROM pairings WHERE used_at IS NOT NULL AND agent IS NOT NULL
+  UNION
+  SELECT agent FROM auth_audit WHERE event IN ('paired', 'joined') AND agent IS NOT NULL
+  UNION
+  SELECT a.agent FROM auth_audit a JOIN made m ON a.event = 'rename' AND a.detail = m.agent
+)
+UPDATE connections SET kind = 'peer'
+  WHERE kind = 'assistant' AND agent IN (SELECT agent FROM made);
+WITH RECURSIVE synced(agent) AS (
+  SELECT peer FROM sync_state WHERE substr(peer, 1, 5) = 'peer-'
+  UNION
+  SELECT link FROM peer_directory WHERE substr(link, 1, 5) = 'peer-'
+  UNION
+  SELECT a.agent FROM auth_audit a JOIN synced s ON a.event = 'rename' AND a.detail = s.agent
+)
+UPDATE connections SET kind = 'peer'
+  WHERE kind = 'assistant' AND console = 0 AND all_spaces = 1 AND read_only_forced = 0
+    AND agent IN (SELECT agent FROM synced)
+    AND NOT EXISTS (SELECT 1 FROM grant_paths g WHERE g.connection_id = connections.id);
 ";

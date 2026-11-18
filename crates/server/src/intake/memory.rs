@@ -92,6 +92,8 @@ impl Memory {
             no_person_guide: true,
             rate_per_min: access::DEFAULT_RATE_PER_MIN,
             max_text: access::DEFAULT_MAX_TEXT,
+            kind: access::Kind::Assistant,
+            local: false,
         })
     }
 

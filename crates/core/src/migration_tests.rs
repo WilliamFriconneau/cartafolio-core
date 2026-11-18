@@ -429,3 +429,181 @@ fn pairings_made_under_the_old_table_name_are_kept_and_still_redeemed() {
     drop(conn);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// The kind of a connection was not stored: a connection named `peer-…` was taken for a machine whatever made it. The
+/// upgrade marks a machine only what the node recorded making as one (a pairing code's row, a `paired` or `joined` in
+/// the audit, followed through its renames); a connection that only has the name is an assistant from then on.
+#[test]
+fn connections_get_their_kind_from_what_made_them_never_from_their_name() {
+    let dir = temp("connection-kinds");
+    let brain = Brain::init(&dir, &[Space::new("work").unwrap()], Language::English).unwrap();
+    let path = dir.join("control.sqlite");
+    remove_db(&path);
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
+            .unwrap();
+        migrate(&conn, &CONTROL_MIGRATIONS[..24]).unwrap();
+        conn.execute("INSERT INTO meta (k, v) VALUES ('kind', 'control')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO spaces (name, created_at) VALUES ('work', 1700000000)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO space_members (space, user_id, can_write, owner) VALUES ('work', 'owner', 1, 1)",
+            [],
+        )
+        .unwrap();
+        for (agent, console) in [
+            ("peer-paired-ab12", 0),
+            ("study-mac", 0),
+            ("peer-fake", 0),
+            ("oauth-owner-x", 0),
+            ("console-owner", 1),
+        ] {
+            conn.execute(
+                "INSERT INTO connections (id, agent, hash, all_spaces, created_at, user_id, console)
+                 VALUES (?1, ?1, ?2, 1, 1700000000, 'owner', ?3)",
+                params![agent, access::hash_token(&format!("key-{agent}")), console],
+            )
+            .unwrap();
+        }
+        // A pairing code's row names the connection it made.
+        conn.execute(
+            "INSERT INTO pairings (hash, user_id, rights, created_at, expires_at, used_at, agent)
+             VALUES (?1, 'owner', 'all', 1700000000, 1700000600, 1700000100, 'peer-paired-ab12')",
+            [vec![7u8; 32]],
+        )
+        .unwrap();
+        // A join recorded in the audit, then a rename by the person: `study-mac` was `peer-joined-cd34`.
+        conn.execute_batch(
+            "INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (1700000200, 'peer-joined-cd34', NULL, 'joined', 'Mac');
+             INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (1700000300, 'study-mac', NULL, 'rename', 'peer-joined-cd34');
+             INSERT INTO oauth_clients (client_id, name, redirect_uris, created_at) VALUES ('c1', 'x', '[]', 1700000000);
+             INSERT INTO oauth_refresh (hash, client_id, user_id, agent, created_at) VALUES (X'01', 'c1', 'owner', 'oauth-owner-x', 1700000000);",
+        )
+        .unwrap();
+    }
+    let conn = brain.open_control().unwrap();
+    assert_eq!(version(&conn), CONTROL_MIGRATIONS.len());
+    let kind = |agent: &str| -> String {
+        conn.query_row(
+            "SELECT kind FROM connections WHERE agent = ?1",
+            [agent],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(kind("peer-paired-ab12"), "peer");
+    assert_eq!(kind("study-mac"), "peer");
+    assert_eq!(kind("peer-fake"), "assistant");
+    assert_eq!(kind("oauth-owner-x"), "oauth");
+    assert_eq!(kind("console-owner"), "console");
+    let caller = |agent: &str| {
+        access::authenticate(&conn, &format!("key-{agent}"), 1_800_000_000)
+            .unwrap()
+            .unwrap()
+    };
+    assert!(caller("peer-paired-ab12").is_peer());
+    assert!(caller("study-mac").is_peer());
+    assert!(!caller("peer-fake").is_peer(), "a name proves nothing");
+    assert!(!caller("oauth-owner-x").is_peer());
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A machine joined long ago may have lost its first proof (the pairing code's row is deleted a day after the code
+/// expires; a machine made by `memcp connect peer-…` never had an audit line). It keeps its kind when it already synced
+/// as a machine: its `peer-…` name in `sync_state` or as the `link` of a node of the peer directory (followed through a
+/// rename), with every space, whole, and writing. Sync rows without those rights, or rights without sync rows, prove
+/// nothing.
+#[test]
+fn a_machine_that_already_synced_stays_a_machine_without_its_pairing_proof() {
+    let dir = temp("connection-kinds-synced");
+    let brain = Brain::init(&dir, &[Space::new("work").unwrap()], Language::English).unwrap();
+    let path = dir.join("control.sqlite");
+    remove_db(&path);
+    {
+        let conn = Connection::open(&path).unwrap();
+        conn.execute_batch("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON;")
+            .unwrap();
+        migrate(&conn, &CONTROL_MIGRATIONS[..24]).unwrap();
+        conn.execute("INSERT INTO meta (k, v) VALUES ('kind', 'control')", [])
+            .unwrap();
+        conn.execute(
+            "INSERT INTO spaces (name, created_at) VALUES ('work', 1700000000)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT OR IGNORE INTO space_members (space, user_id, can_write, owner) VALUES ('work', 'owner', 1, 1)",
+            [],
+        )
+        .unwrap();
+        // (name, every space, read only forced)
+        for (agent, all, ro) in [
+            ("peer-mac-ef56", 1, 0),
+            ("peer-phone-gh78", 1, 0),
+            ("kitchen-ipad", 1, 0),
+            ("peer-limited", 0, 0),
+            ("peer-reader", 1, 1),
+            ("peer-scoped", 1, 0),
+            ("peer-idle", 1, 0),
+            ("assistant-sync", 1, 0),
+        ] {
+            conn.execute(
+                "INSERT INTO connections (id, agent, hash, all_spaces, read_only_forced, created_at, user_id)
+                 VALUES (?1, ?1, ?2, ?3, ?4, 1700000000, 'owner')",
+                params![agent, access::hash_token(&format!("key-{agent}")), all, ro],
+            )
+            .unwrap();
+        }
+        conn.execute_batch(
+            "INSERT INTO sync_state (peer, space, pulled, pushed) VALUES ('peer-mac-ef56', 'work', 12, 40);
+             INSERT INTO sync_state (peer, space, dir, done, total, at) VALUES ('peer-limited', 'work', 'sending', 3, 3, 1700000500);
+             INSERT INTO sync_state (peer, space, pushed) VALUES ('peer-reader', 'work', 5);
+             INSERT INTO sync_state (peer, space, pushed) VALUES ('peer-scoped', 'work', 5);
+             INSERT INTO sync_state (peer, space, pushed) VALUES ('assistant-sync', 'work', 5);
+             INSERT INTO sync_state (peer, space, pushed) VALUES ('peer-old-ipad', 'work', 9);
+             INSERT INTO grants (connection_id, space, can_read, can_write) VALUES ('peer-scoped', 'work', 1, 1);
+             INSERT INTO grant_paths (connection_id, space, path, can_write) VALUES ('peer-scoped', 'work', 'notes', 1);
+             INSERT INTO auth_audit (ts, agent, ip, event, detail) VALUES (1700000300, 'kitchen-ipad', NULL, 'rename', 'peer-old-ipad');
+             INSERT INTO peer_directory (name, last_seen, first_seen, stamp, link)
+               VALUES ('phone', 1700000400, 1700000000, 's1', 'peer-phone-gh78');",
+        )
+        .unwrap();
+    }
+    let conn = brain.open_control().unwrap();
+    assert_eq!(version(&conn), CONTROL_MIGRATIONS.len());
+    let kind = |agent: &str| -> String {
+        conn.query_row(
+            "SELECT kind FROM connections WHERE agent = ?1",
+            [agent],
+            |r| r.get(0),
+        )
+        .unwrap()
+    };
+    assert_eq!(kind("peer-mac-ef56"), "peer", "its cursors prove it synced");
+    assert_eq!(kind("peer-phone-gh78"), "peer", "it told its directory");
+    assert_eq!(kind("kitchen-ipad"), "peer", "synced, then renamed");
+    assert_eq!(kind("peer-limited"), "assistant", "not every space");
+    assert_eq!(kind("peer-reader"), "assistant", "may not write");
+    assert_eq!(kind("peer-scoped"), "assistant", "not whole");
+    assert_eq!(kind("peer-idle"), "assistant", "a name proves nothing");
+    assert_eq!(
+        kind("assistant-sync"),
+        "assistant",
+        "never a machine's name"
+    );
+    let caller = |agent: &str| {
+        access::authenticate(&conn, &format!("key-{agent}"), 1_800_000_000)
+            .unwrap()
+            .unwrap()
+    };
+    assert!(caller("peer-mac-ef56").is_peer());
+    assert!(caller("peer-phone-gh78").is_peer());
+    drop(conn);
+    let _ = std::fs::remove_dir_all(&dir);
+}

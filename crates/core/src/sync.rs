@@ -127,6 +127,11 @@ pub struct Applied {
     pub consumed: usize,
     /// Set when an event needs one that has not arrived: the rest waits.
     pub stopped: Option<String>,
+    /// The events dealt with but not kept here (refused, or left out of this replica's window), by eid: the sender must
+    /// not count them as held by this node.
+    pub not_kept: Vec<String>,
+    /// What waited too many times for an event that never came and went on without it, in words.
+    pub gave_up: Vec<String>,
 }
 
 // --- clock -------------------------------------------------------------------------------------
@@ -317,9 +322,19 @@ pub(crate) fn record_file_put(conn: &Connection, id: &str) -> Result<()> {
     record(conn, &format!("f:{id}"), "file_put", at, &p)
 }
 
-pub(crate) fn record_file_retired(conn: &Connection, id: &str, reason: &str) -> Result<()> {
+/// A file was retired here; `erased` when its bytes were erased for good (a transcribed recording): every node then
+/// erases its copy of them too.
+pub(crate) fn record_file_retired(
+    conn: &Connection,
+    id: &str,
+    reason: &str,
+    erased: bool,
+) -> Result<()> {
     let at = util::now();
-    let p = json!({ "id": id, "reason": reason, "at": at });
+    let mut p = json!({ "id": id, "reason": reason, "at": at });
+    if erased {
+        p["erased"] = json!(true);
+    }
     record(conn, &format!("fr:{id}"), "file_retired", at, &p)
 }
 
@@ -412,7 +427,9 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
         for (id, status, reason) in files {
             record_file_put(conn, &id)?;
             if status == "retired" {
-                record_file_retired(conn, &id, &reason.unwrap_or_default())?;
+                let reason = reason.unwrap_or_default();
+                let erased = crate::files::is_erased_reason(&reason);
+                record_file_retired(conn, &id, &reason, erased)?;
             }
         }
         meta_set(conn, "sync_backfilled", &util::now().to_string())
@@ -524,14 +541,22 @@ pub fn events_after(
             stopped_early = true;
             break;
         }
-        next = ev.seq;
         if exclude_via.is_some() && via.as_deref() == exclude_via {
+            next = ev.seq;
             continue;
         }
         if ev.kind == "file_put" {
-            attach_bytes(brain, space, &mut ev)?;
+            attach_bytes(brain, space, &conn, &mut ev)?;
         }
-        bytes += ev.payload.to_string().len();
+        // An event that would take the page past its size goes first in the next one: a page with a file stays under
+        // what a node reads in one request (see `crate::files::MAX_BYTES`).
+        let size = ev.payload.to_string().len();
+        if !events.is_empty() && bytes + size > max_bytes {
+            stopped_early = true;
+            break;
+        }
+        next = ev.seq;
+        bytes += size;
         events.push(ev);
     }
     Ok(Page {
@@ -542,12 +567,38 @@ pub fn events_after(
     })
 }
 
-fn attach_bytes(brain: &Brain, space: &Space, ev: &mut Event) -> Result<()> {
+/// The bytes of a file travel inside its event, unless they are gone: erased here (a transcribed recording, never sent
+/// again from any node), or bigger than a file may be to travel (one kept before that limit): then the record travels
+/// alone, marked `erased`.
+fn attach_bytes(brain: &Brain, space: &Space, conn: &Connection, ev: &mut Event) -> Result<()> {
     let sha = ev.payload["sha256"]
         .as_str()
         .unwrap_or_default()
         .to_string();
-    match crate::files::read_blob(brain, space, &sha)? {
+    let id = ev.payload["id"].as_str().unwrap_or_default();
+    let erased = conn
+        .query_row(
+            "SELECT retired_reason FROM files WHERE id = ?1",
+            [id],
+            |r| r.get::<_, Option<String>>(0),
+        )
+        .optional()?
+        .flatten()
+        .is_some_and(|r| crate::files::is_erased_reason(&r));
+    let too_big = ev.payload["size"]
+        .as_i64()
+        .is_some_and(|n| n > crate::files::MAX_BYTES as i64);
+    let bytes = if erased || too_big {
+        None
+    } else {
+        crate::files::read_blob(brain, space, &sha)?
+    };
+    // A log row written by an earlier version may still hold the bytes it received: they are never sent from there.
+    if let Some(o) = ev.payload.as_object_mut() {
+        o.remove("data");
+        o.remove("erased");
+    }
+    match bytes {
         Some(b) => {
             ev.payload["data"] = json!(base64::engine::general_purpose::STANDARD.encode(b));
         }
@@ -582,15 +633,39 @@ enum Step {
     Refused(String),
     /// About something this replica's window left out or pruned: ignored, and not logged (see [`prune_window`]).
     Dropped,
+    /// A layout change that names a parent space this node does not hold yet: kept aside, not logged, and tried again
+    /// at each exchange until it applies (see `sync_deferred`).
+    Deferred,
+    /// A recording erased at its origin: the record says so here too, and these bytes go once the change is committed.
+    Erased(String),
 }
 
 /// A problem with one event.
 enum Fault {
     /// The event is malformed: refused, not kept.
     Bad(String),
-    /// It needs an event that has not arrived: it and the ones after wait.
-    Missing(String),
+    /// It needs an event that has not arrived (a `fact` or a `file`, by id): it and the ones after wait.
+    Missing {
+        kind: &'static str,
+        id: String,
+    },
     Fatal(Error),
+}
+
+fn missing(kind: &'static str, id: &str) -> Fault {
+    Fault::Missing {
+        kind,
+        id: id.to_string(),
+    }
+}
+
+/// The eid of the event that makes a `fact` or a `file`.
+fn creation_eid(kind: &str, id: &str) -> String {
+    if kind == "file" {
+        format!("f:{id}")
+    } else {
+        format!("c:{id}")
+    }
 }
 
 impl From<rusqlite::Error> for Fault {
@@ -709,7 +784,7 @@ fn apply_created(conn: &Connection, space: &Space, p: &Value, via: &str) -> Outc
         }
         // A predecessor this replica pruned or left out is not waited for: the link to it is not kept.
         if !exists(conn, "facts", r)? && !gone(conn, "fact", r)? {
-            return Err(Fault::Missing(format!("fact {r} has not arrived")));
+            return Err(missing("fact", r));
         }
     }
     let replaces = replaces.filter(|r| exists(conn, "facts", r).unwrap_or(false));
@@ -811,11 +886,11 @@ fn apply_superseded(conn: &Connection, p: &Value, at: i64, via: &str) -> Outcome
         if gone(conn, "fact", old)? {
             return Ok(Step::Dropped);
         }
-        return Err(Fault::Missing(format!("fact {old} has not arrived")));
+        return Err(missing("fact", old));
     };
     if !exists(conn, "facts", by)? {
         if !gone(conn, "fact", by)? {
-            return Err(Fault::Missing(format!("fact {by} has not arrived")));
+            return Err(missing("fact", by));
         }
         // Replaced by a note this replica does not hold: an open fact is closed as retired, with that reason.
         if status == "active" || status == "proposed" {
@@ -894,7 +969,7 @@ fn apply_retired(conn: &Connection, p: &Value, at: i64, via: &str) -> Outcome {
         if gone(conn, "fact", id)? {
             return Ok(Step::Dropped);
         }
-        return Err(Fault::Missing(format!("fact {id} has not arrived")));
+        return Err(missing("fact", id));
     };
     let history = |conn: &Connection| {
         facts::event(
@@ -967,7 +1042,7 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
                 mark_gone(conn, "file", id)?;
                 return Ok(Step::Dropped);
             }
-            return Err(Fault::Missing(format!("fact {f} has not arrived")));
+            return Err(missing("fact", f));
         }
     }
     // The name is cleaned as it is when an assistant puts a file: no path, no control character.
@@ -1050,21 +1125,36 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
 
 fn apply_file_retired(conn: &Connection, p: &Value) -> Outcome {
     let id = id_of(p, "id")?;
-    let status: Option<String> = conn
-        .query_row("SELECT status FROM files WHERE id = ?1", [id], |r| r.get(0))
+    let reason = opt(p, "reason").unwrap_or_default();
+    // Erased at the origin: the flag, or the reason a node of an earlier version gives.
+    let erase = p.get("erased").and_then(Value::as_bool) == Some(true)
+        || crate::files::is_erased_reason(reason);
+    let row: Option<(String, Option<String>, String)> = conn
+        .query_row(
+            "SELECT status, retired_reason, sha256 FROM files WHERE id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
         .optional()?;
-    match status.as_deref() {
-        None if gone(conn, "file", id)? => Ok(Step::Dropped),
-        None => Err(Fault::Missing(format!("file {id} has not arrived"))),
-        Some("retired") => Ok(Step::Skipped),
-        Some(_) => {
-            conn.execute(
-                "UPDATE files SET status = 'retired', retired_reason = ?2 WHERE id = ?1",
-                params![id, opt(p, "reason").unwrap_or_default()],
-            )?;
-            Ok(Step::Applied)
+    let Some((status, was, sha)) = row else {
+        if gone(conn, "file", id)? {
+            return Ok(Step::Dropped);
         }
+        return Err(missing("file", id));
+    };
+    let already_erased = was.as_deref().is_some_and(crate::files::is_erased_reason);
+    if status == "retired" && (!erase || already_erased) {
+        return Ok(Step::Skipped);
     }
+    conn.execute(
+        "UPDATE files SET status = 'retired', retired_reason = ?2 WHERE id = ?1",
+        params![id, reason],
+    )?;
+    Ok(if erase {
+        Step::Erased(sha)
+    } else {
+        Step::Applied
+    })
 }
 
 fn apply_layout(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -> Outcome {
@@ -1119,10 +1209,9 @@ fn apply_layout(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -> 
                         |r| r.get(0),
                     )
                     .optional()?;
+                // The parent is made here by a later exchange (or brought back): the move waits for it, aside.
                 if known.is_none() {
-                    return Ok(Step::Refused(format!(
-                        "parent {parent} is not on this node"
-                    )));
+                    return Ok(Step::Deferred);
                 }
                 // Two nodes moving two spaces under each other: the later change is refused and reported.
                 let mut up = Some(parent.as_str().to_string());
@@ -1339,7 +1428,9 @@ pub fn apply_window(
 ) -> Result<Applied> {
     let conn = brain.open_space(space)?;
     let mut out = Applied::default();
+    let mut erased: Vec<String> = Vec::new();
     let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    retry_deferred(brain, space, &tx, &mut erased)?;
     for ev in events {
         if tx
             .query_row("SELECT 1 FROM sync_log WHERE eid = ?1", [&ev.eid], |_| {
@@ -1353,25 +1444,82 @@ pub fn apply_window(
             continue;
         }
         tx.execute_batch("SAVEPOINT ev")?;
-        match apply_one(brain, space, &tx, ev, via, cutoff) {
+        let mut outcome = apply_one(brain, space, &tx, ev, via, cutoff);
+        if let Err(Fault::Missing { kind, id }) = &outcome {
+            let (kind, id) = (*kind, id.clone());
+            let needs = creation_eid(kind, &id);
+            let refused: Option<String> = tx
+                .query_row(
+                    "SELECT why FROM sync_rejected WHERE eid = ?1",
+                    [&needs],
+                    |r| r.get(0),
+                )
+                .optional()?;
+            let waited: i64 = tx
+                .query_row(
+                    "SELECT stops FROM sync_waiting WHERE needs = ?1",
+                    [&needs],
+                    |r| r.get(0),
+                )
+                .optional()?
+                .unwrap_or(0);
+            if let Some(why) = refused {
+                // What it needs was refused here: it can never apply, so it is refused too instead of waiting for ever.
+                outcome = Err(Fault::Bad(format!(
+                    "it needs {kind} {id}, which this node refused ({why})"
+                )));
+            } else if waited >= MAX_WAITS {
+                // It waited at every exchange for an event no peer has (pruned or left out where it comes from): it
+                // goes on as if that note or file were outside this replica's window, and the pass says so.
+                tx.execute_batch("ROLLBACK TO ev")?;
+                mark_gone(&tx, kind, &id)?;
+                tx.execute("DELETE FROM sync_waiting WHERE needs = ?1", [&needs])?;
+                out.gave_up.push(format!(
+                    "{kind} {id} never arrived after {MAX_WAITS} exchanges: what needed it went on without it"
+                ));
+                outcome = apply_one(brain, space, &tx, ev, via, cutoff);
+            }
+        }
+        match outcome {
             Ok(step) => {
                 observe(&tx, &ev.hlc)?;
-                if !matches!(step, Step::Dropped) {
-                    record_raw(
-                        &tx,
-                        &ev.eid,
-                        &ev.hlc,
-                        &ev.origin,
-                        Some(via),
-                        &ev.kind,
-                        ev.at,
-                        &ev.payload,
-                    )?;
+                match &step {
+                    Step::Dropped => {}
+                    Step::Deferred => {
+                        tx.execute(
+                            "INSERT INTO sync_deferred (eid, via, event, at) VALUES (?1, ?2, ?3, ?4)
+                             ON CONFLICT(eid) DO UPDATE SET via = excluded.via, event = excluded.event",
+                            params![ev.eid, via, ev.to_json().to_string(), util::now()],
+                        )?;
+                    }
+                    _ => {
+                        record_raw(
+                            &tx,
+                            &ev.eid,
+                            &ev.hlc,
+                            &ev.origin,
+                            Some(via),
+                            &ev.kind,
+                            ev.at,
+                            &logged(&ev.payload),
+                        )?;
+                    }
                 }
+                // Arrived after all: nothing waits for it, and an earlier refusal of it no longer holds.
+                tx.execute("DELETE FROM sync_rejected WHERE eid = ?1", [&ev.eid])?;
+                tx.execute("DELETE FROM sync_waiting WHERE needs = ?1", [&ev.eid])?;
                 tx.execute_batch("RELEASE ev")?;
                 match step {
                     Step::Applied => out.applied += 1,
-                    Step::Skipped | Step::Dropped => out.skipped += 1,
+                    Step::Erased(sha) => {
+                        out.applied += 1;
+                        erased.push(sha);
+                    }
+                    Step::Skipped | Step::Deferred => out.skipped += 1,
+                    Step::Dropped => {
+                        out.skipped += 1;
+                        out.not_kept.push(ev.eid.clone());
+                    }
                     Step::Disputed => {
                         out.applied += 1;
                         out.disputed += 1;
@@ -1382,19 +1530,118 @@ pub fn apply_window(
             }
             Err(Fault::Bad(why)) => {
                 tx.execute_batch("ROLLBACK TO ev; RELEASE ev")?;
+                // Remembered only when the eid is the one its content gives (a malformed event cannot name another), and
+                // not for a stamp ahead of this node's clock: that says nothing of the change, which may come again.
+                let ahead = parse_hlc(&ev.hlc)
+                    .is_some_and(|(ms, _)| ms > util::now_ms().saturating_add(MAX_DRIFT_MS));
+                if !ahead && expected_eid(ev).is_ok_and(|e| e == ev.eid) {
+                    tx.execute(
+                        "INSERT INTO sync_rejected (eid, why, at) VALUES (?1, ?2, ?3)
+                         ON CONFLICT(eid) DO UPDATE SET why = excluded.why, at = excluded.at",
+                        params![ev.eid, why, util::now()],
+                    )?;
+                }
                 out.rejected.push((ev.eid.clone(), why));
+                out.not_kept.push(ev.eid.clone());
                 out.consumed += 1;
             }
-            Err(Fault::Missing(why)) => {
+            Err(Fault::Missing { kind, id }) => {
                 tx.execute_batch("ROLLBACK TO ev; RELEASE ev")?;
-                out.stopped = Some(why);
+                tx.execute(
+                    "INSERT INTO sync_waiting (needs, stops, since) VALUES (?1, 1, ?2)
+                     ON CONFLICT(needs) DO UPDATE SET stops = stops + 1",
+                    params![creation_eid(kind, &id), util::now()],
+                )?;
+                out.stopped = Some(format!("{kind} {id} has not arrived"));
                 break;
             }
             Err(Fault::Fatal(e)) => return Err(e),
         }
     }
     tx.commit()?;
+    remove_erased(brain, space, &conn, &erased)?;
     Ok(out)
+}
+
+/// A received event as the log keeps it: without the bytes of a file, which live once, in the space's files, and are
+/// read from there when the event is sent on (an erased recording then travels without them).
+fn logged(payload: &Value) -> Value {
+    let mut p = payload.clone();
+    if let Some(o) = p.as_object_mut() {
+        o.remove("data");
+        o.remove("erased");
+    }
+    p
+}
+
+/// How many exchanges an event may stop on one that has not arrived before it goes on without it.
+const MAX_WAITS: i64 = 10;
+
+/// The layout changes kept aside because their parent space was not here: each is tried again, logged once it applies,
+/// and dropped once it is refused. In the caller's transaction.
+fn retry_deferred(
+    brain: &Brain,
+    space: &Space,
+    tx: &Connection,
+    erased: &mut Vec<String>,
+) -> Result<()> {
+    let rows: Vec<(String, String, String)> = tx
+        .prepare("SELECT eid, via, event FROM sync_deferred ORDER BY at, eid")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    for (eid, via, event) in rows {
+        let Some(ev) = serde_json::from_str::<Value>(&event)
+            .ok()
+            .and_then(|v| Event::from_json(&v).ok())
+        else {
+            tx.execute("DELETE FROM sync_deferred WHERE eid = ?1", [&eid])?;
+            continue;
+        };
+        tx.execute_batch("SAVEPOINT deferred")?;
+        match apply_one(brain, space, tx, &ev, &via, None) {
+            Ok(Step::Deferred) => tx.execute_batch("RELEASE deferred")?,
+            Ok(step) => {
+                record_raw(
+                    tx,
+                    &ev.eid,
+                    &ev.hlc,
+                    &ev.origin,
+                    Some(&via),
+                    &ev.kind,
+                    ev.at,
+                    &logged(&ev.payload),
+                )?;
+                if let Step::Erased(sha) = step {
+                    erased.push(sha);
+                }
+                tx.execute("DELETE FROM sync_deferred WHERE eid = ?1", [&eid])?;
+                tx.execute_batch("RELEASE deferred")?;
+            }
+            Err(Fault::Fatal(e)) => return Err(e),
+            Err(_) => {
+                tx.execute_batch("ROLLBACK TO deferred; RELEASE deferred")?;
+                tx.execute("DELETE FROM sync_deferred WHERE eid = ?1", [&eid])?;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The bytes of recordings erased at their origin go here too, once the change is committed, unless another record of
+/// the space still holds them.
+fn remove_erased(brain: &Brain, space: &Space, conn: &Connection, shas: &[String]) -> Result<()> {
+    for sha in shas {
+        let held: bool = conn.query_row(
+            "SELECT count(*) > 0 FROM files WHERE sha256 = ?1
+             AND NOT (status = 'retired' AND retired_reason LIKE 'erased: %')",
+            [sha],
+            |r| r.get(0),
+        )?;
+        if !held {
+            crate::files::remove_blob(brain, space, sha)?;
+        }
+    }
+    Ok(())
 }
 
 // --- cursors and status --------------------------------------------------------------------------
@@ -1438,6 +1685,34 @@ pub fn set_cursor(brain: &Brain, peer: &str, space: &Space, which: Cursor, to: i
         params![peer, space.as_str(), to],
     )?;
     Ok(())
+}
+
+const PASS_KEY: &str = "sync_pass:";
+
+/// Keeps what the latest pass with `peer` could not do (one line each; none when all went well), so the page and the
+/// apps show it: a sync started in the background has no one reading its output. Effect: one row of the control `meta`.
+pub fn note_pass(brain: &Brain, peer: &str, at: i64, problems: &[String]) -> Result<()> {
+    brain.open_control()?.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        params![
+            format!("{PASS_KEY}{peer}"),
+            json!({ "at": at, "problems": problems }).to_string()
+        ],
+    )?;
+    Ok(())
+}
+
+/// The latest pass with `peer` as [`note_pass`] kept it: `{at, problems}`; `None` before the first.
+pub fn last_pass(ctl: &Connection, peer: &str) -> Option<Value> {
+    ctl.query_row(
+        "SELECT v FROM meta WHERE k = ?1",
+        [format!("{PASS_KEY}{peer}")],
+        |r| r.get::<_, String>(0),
+    )
+    .optional()
+    .ok()
+    .flatten()
+    .and_then(|v| serde_json::from_str(&v).ok())
 }
 
 /// Notes that `peer` moved events of `space`: the direction as this node sees it (`sending`: its events
@@ -1507,7 +1782,7 @@ pub fn machine_name(peer: &str) -> String {
 pub fn status(brain: &Brain, now: i64) -> Result<Vec<PeerStatus>> {
     let ctl = brain.open_control()?;
     let mut peers: BTreeSet<String> = ctl
-        .prepare("SELECT agent FROM connections WHERE agent LIKE 'peer-%' AND revoked_at IS NULL")?
+        .prepare("SELECT agent FROM connections WHERE kind = 'peer' AND revoked_at IS NULL")?
         .query_map([], |r| r.get(0))?
         .collect::<rusqlite::Result<_>>()?;
     let rows: Vec<(String, String, String, i64, i64, i64)> = ctl
@@ -1594,35 +1869,6 @@ impl PeerStatus {
     }
 }
 
-/// Makes the space on this node when a peer has it and this node does not (the first join is a full copy).
-pub fn ensure_space(brain: &Brain, space: &Space, kind: &str) -> Result<()> {
-    use crate::catalogue::{CUSTOM, TRIAGE};
-    // Inbox is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here: a node that lost
-    // the kind could not tell its own box from any space, nor pair a device for it.
-    let set = |brain: &Brain| -> Result<()> {
-        if kind == TRIAGE {
-            brain.open_control()?.execute(
-                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
-                [space.as_str(), TRIAGE],
-            )?;
-            Ok(())
-        } else {
-            brain.set_space_kind(space, kind)
-        }
-    };
-    if brain.has_space(space)? {
-        // A box that an earlier version made `custom` here is put right.
-        if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
-            set(brain)?;
-        }
-        return Ok(());
-    }
-    brain.add_space(space)?;
-    // A kind this node's catalogue does not know stays `custom`.
-    let _ = set(brain);
-    Ok(())
-}
-
 // --- a replica that holds a window ---------------------------------------------------------------
 //
 // A phone holds the last N days of a memory, not all of it. The setting is the replica's own (the control
@@ -1697,30 +1943,55 @@ impl Pruned {
     }
 }
 
-type LogRows = Vec<(i64, Option<String>)>;
+type LogRows = Vec<(i64, Option<String>, String)>;
 
-/// Whether every peer of the space holds the log rows named: for each row, the peer sent it here, or this node
-/// has pushed past it. No peer, or no row, is never enough.
-fn acknowledged(rows: &LogRows, peers: &[(String, i64)]) -> bool {
+/// Whether every peer of the space holds the log rows named: for each row, the peer sent it here, or this node has
+/// pushed past it and the peer kept it (`unheld` lists the `(peer, eid)` a peer took without keeping: refused, or left
+/// out of its own window). No peer, or no row, is never enough.
+fn acknowledged(
+    rows: &LogRows,
+    peers: &[(String, i64)],
+    unheld: &BTreeSet<(String, String)>,
+) -> bool {
     !peers.is_empty()
         && !rows.is_empty()
-        && rows.iter().all(|(seq, via)| {
-            peers
-                .iter()
-                .all(|(peer, pushed)| via.as_deref() == Some(peer.as_str()) || pushed >= seq)
+        && rows.iter().all(|(seq, via, eid)| {
+            peers.iter().all(|(peer, pushed)| {
+                via.as_deref() == Some(peer.as_str())
+                    || (pushed >= seq && !unheld.contains(&(peer.clone(), eid.clone())))
+            })
         })
 }
 
 fn log_rows(conn: &Connection, eid: &str, prefix: bool) -> Result<LogRows> {
     let sql = if prefix {
-        "SELECT seq, via FROM sync_log WHERE substr(eid, 1, length(?1)) = ?1"
+        "SELECT seq, via, eid FROM sync_log WHERE substr(eid, 1, length(?1)) = ?1"
     } else {
-        "SELECT seq, via FROM sync_log WHERE eid = ?1"
+        "SELECT seq, via, eid FROM sync_log WHERE eid = ?1"
     };
     Ok(conn
         .prepare(sql)?
-        .query_map([eid], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .query_map([eid], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?
         .collect::<rusqlite::Result<_>>()?)
+}
+
+/// `peer` took these events of `space` without keeping them (it refused them, or left them out of its window): they
+/// never count as held by it, so the window of this replica keeps what they are about. Effect: rows of
+/// `sync_unheld` in the space.
+pub fn note_unheld(brain: &Brain, peer: &str, space: &Space, eids: &[String]) -> Result<()> {
+    if eids.is_empty() {
+        return Ok(());
+    }
+    let conn = brain.open_space(space)?;
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    for eid in eids {
+        tx.execute(
+            "INSERT OR IGNORE INTO sync_unheld (peer, eid, at) VALUES (?1, ?2, ?3)",
+            params![peer, eid, util::now()],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
 }
 
 fn strings(conn: &Connection, sql: &str, arg: impl rusqlite::ToSql) -> Result<Vec<String>> {
@@ -1750,7 +2021,7 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         .collect::<rusqlite::Result<_>>()?;
     // A peer that holds a connection here pulls from this node: its progress is its own, so it counts as unknown.
     let blind: i64 = ctl.query_row(
-        "SELECT count(*) FROM connections c WHERE c.agent LIKE 'peer-%' AND c.revoked_at IS NULL
+        "SELECT count(*) FROM connections c WHERE c.kind = 'peer' AND c.revoked_at IS NULL
            AND NOT EXISTS (SELECT 1 FROM sync_state s WHERE s.peer = c.agent AND s.space = ?1)",
         [space.as_str()],
         |r| r.get(0),
@@ -1759,6 +2030,10 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         peers.clear();
     }
 
+    let unheld: BTreeSet<(String, String)> = conn
+        .prepare("SELECT peer, eid FROM sync_unheld")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
     let old: Vec<(String, String)> = conn
         .prepare("SELECT id, status FROM facts WHERE created_at < ?1 ORDER BY created_at, rowid")?
         .query_map([cutoff], |r| Ok((r.get(0)?, r.get(1)?)))?
@@ -1782,7 +2057,7 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         for fid in strings(&conn, "SELECT id FROM files WHERE fact_id = ?1", id)? {
             rows.extend(file_rows(&fid)?);
         }
-        if !created.is_empty() && acknowledged(&rows, &peers) {
+        if !created.is_empty() && acknowledged(&rows, &peers, &unheld) {
             doomed.insert(id.clone());
         } else {
             out.kept_unacknowledged += 1;
@@ -1815,7 +2090,7 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
         "SELECT id FROM files WHERE fact_id IS NULL AND created_at < ?1",
         cutoff,
     )? {
-        if acknowledged(&file_rows(&fid)?, &peers) {
+        if acknowledged(&file_rows(&fid)?, &peers, &unheld) {
             doomed_files.push(fid);
         }
     }

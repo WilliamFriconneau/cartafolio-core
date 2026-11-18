@@ -51,13 +51,11 @@ fn node(name: &str) -> Node {
 /// Serves `n` and makes a connection there for one machine of the person: its address and key.
 fn serve(n: &Node, machine: &str) -> (String, String) {
     let agent = format!("peer-{machine}-0001");
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &n.brain.open_control().unwrap(),
         OWNER,
         &agent,
         &Rights::parse("all").unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();
@@ -85,13 +83,11 @@ fn serve(n: &Node, machine: &str) -> (String, String) {
 /// Another connection on an already served node (`serve` started its server).
 fn connection(n: &Node, address_of_first: &str, machine: &str) -> (String, String) {
     let agent = format!("peer-{machine}-0001");
-    let key = access::connect_for(
+    let key = access::connect_peer(
         &n.brain.open_control().unwrap(),
         OWNER,
         &agent,
         &Rights::parse("all").unwrap(),
-        None,
-        false,
         false,
     )
     .unwrap();
@@ -370,4 +366,49 @@ fn a_peer_of_an_older_version_is_kept_in_step_and_the_pass_says_what_it_did_not_
     assert_eq!(p.problems.len(), 1, "{:?}", p.problems);
     assert!(p.problems[0].contains("older version"), "{:?}", p.problems);
     assert!(p.problems[0].contains("bea-music"), "{:?}", p.problems);
+}
+
+#[test]
+fn a_window_replica_never_prunes_a_note_its_peer_refused() {
+    let a = node("alma");
+    let b = node("bea");
+    let (addr, key) = serve(&a, "b");
+    let b_to_a = Peer::new(&addr, &key, "peer-a");
+    // B keeps 30 days. It holds two old notes: one A takes, one A refuses (an author longer than a peer accepts).
+    memcp_core::sync::set_window_days(&b.brain, Some(30)).unwrap();
+    let conn = b.brain.open_space(&b.triage).unwrap();
+    let taken = note(&b, &b.triage, "The boiler was serviced in March");
+    let long = "x".repeat(300);
+    let Remembered::Created(refused) = facts::remember(
+        &conn,
+        &b.triage,
+        &long,
+        NewFact::agent("The only copy of the gate code", "agent:dictation"),
+        &[],
+    )
+    .unwrap() else {
+        panic!("not created");
+    };
+    let old = util::now() - 90 * 86_400;
+    for id in [&taken, &refused.id] {
+        conn.execute(
+            &format!("UPDATE facts SET created_at = {old} WHERE id = ?1"),
+            [id.as_str()],
+        )
+        .unwrap();
+    }
+
+    let p = b_to_a.sync_once(&b.brain, util::now()).unwrap();
+    // The refusal is said; the note A took is pruned on B, the one A refused stays: it exists nowhere else.
+    assert!(
+        p.problems.iter().any(|x| x.contains("refused")),
+        "{:?}",
+        p.problems
+    );
+    assert_eq!(p.pruned, 1, "{p:?}");
+    assert_eq!(active(&b, &b.triage), ["The only copy of the gate code"]);
+    assert_eq!(active(&a, &a.triage), ["The boiler was serviced in March"]);
+    // And at the next passes too.
+    b_to_a.sync_once(&b.brain, util::now()).unwrap();
+    assert_eq!(active(&b, &b.triage), ["The only copy of the gate code"]);
 }

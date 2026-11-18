@@ -218,3 +218,40 @@ fn two_passes_that_make_the_same_space_at_once_both_succeed() -> Res {
     }
     Ok(())
 }
+
+#[test]
+fn an_archive_stamped_in_the_future_is_bounded_and_a_restored_space_still_comes_back() -> Res {
+    let t = Temp::new("swarm-future");
+    let (a, _) = node(&t, "alma")?;
+    let (b, _) = node(&t, "bea")?;
+    let garden = a.add_custom_space(OWNER, "alma", "Garden", None)?;
+    let offer = swarm::offers(&a, OWNER)?
+        .into_iter()
+        .find(|o| o.space == garden)
+        .ok_or("no offer")?;
+    swarm::accept(&b, OWNER, &offer)?;
+    // A peer with a clock years ahead says the space was archived: B archives its copy, and keeps the mark only as far
+    // ahead as a clock may drift.
+    let now = util::now();
+    let far = now + 10 * 365 * 86_400;
+    assert!(swarm::archive_here(&b, OWNER, &garden, far)?);
+    let (_, kept) = swarm::archived_at(&b, &garden)?.ok_or("no mark")?;
+    assert!(kept <= util::now() + 600, "{kept}");
+    // Brought back on B, the space stays, whatever the peer says again of that archive.
+    let archived = b.archived_spaces(OWNER)?;
+    b.restore_space(OWNER, &archived[0].name, false)?;
+    assert!(!swarm::archive_here(&b, OWNER, &garden, far)?);
+    assert!(b.has_space(&garden)?);
+    // And a node that was told of that archive, as marks travel (the time B keeps), takes B's copy again.
+    let (c, _) = node(&t, "cyd")?;
+    swarm::archive_here(&c, OWNER, &garden, kept)?;
+    let back = swarm::offers(&b, OWNER)?
+        .into_iter()
+        .find(|o| o.space == garden)
+        .ok_or("no offer")?;
+    assert_eq!(
+        swarm::accept(&c, OWNER, &back)?,
+        Answer::Created(garden.clone())
+    );
+    Ok(())
+}

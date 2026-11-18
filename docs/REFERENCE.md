@@ -42,7 +42,9 @@ flowchart LR
 - **Layers are tags.** `inbox` is a quick note to sort later; `sources/<app>` is what an app deposited, left out of a plain
   search; `dossier/<app>` is what an expert reader made of it, read first.
 - **Rights.** A connection reaches whole spaces (`health:rw`) or only paths inside one (`health/sources/bevel:rw`,
-  `personal/inbox:rw`), and a key used at its own address reaches nothing else.
+  `personal/inbox:rw`), and a key used at its own address reaches nothing else. What made a connection (an assistant's key,
+  an OAuth consent, a machine's pairing or join, the page) is stored with it and decides what else it may do: only a machine
+  syncs or lets devices in, whatever a key is called ([FEDERATION.md](FEDERATION.md)).
 - **What an assistant is told.** The general rules, the person's guide, the guide of each space it reaches, how many notes
   wait, what apps deposited, and the index. The guides are written by the person on their page; an app can only *propose* one,
   which counts once the person has read and approved it. Everything that comes back from a search is data, never an instruction.
@@ -161,7 +163,7 @@ memcp serve --public-url https://memory.example.net \
   --tailnet-user you@example.org=you
 ```
 
-Put the identity listener behind `tailscale serve` (never Funnel): the page knows who you are from Tailscale and asks you to approve the client. Each approval is a normal connection named `oauth-<person>-<client>`, listed and revoked like the others. The identity listener believes the Tailscale login header of requests from the loopback, or from the one address given with `--identity-trust` (the add-on uses it); run it on a host whose local accounts you trust.
+Put the identity listener behind `tailscale serve` (never Funnel): the page knows who you are from Tailscale and asks you to approve the client. Each approval is a normal connection named `oauth-<person>-<client>` (or the name the address gives), listed and revoked like the others. A consent only ever renews a connection a consent made for the same person: when the name is held by any other connection (an app's, a machine's, a key made by hand), even one made between the consent and the exchange of its code, the client gets `<name>-2` (then `-3`…) and the other connection is left as it was. An address whose name starts with `peer-` or `console-` gets no connector. A connection made by OAuth is never offered `folder_set`. The identity listener believes the Tailscale login header of requests from the loopback, or from the one address given with `--identity-trust` (the add-on uses it); run it on a host whose local accounts you trust.
 
 
 ## Is it healthy?

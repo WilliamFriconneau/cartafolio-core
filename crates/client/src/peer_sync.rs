@@ -47,8 +47,9 @@ pub struct Peer {
     key: String,
     /// The name this node keeps the peer under (its cursors and its status).
     name: String,
-    /// The person of this node whose spaces are kept in step with the peer (the first administrator by default).
-    person: String,
+    /// The person of this node whose spaces are kept in step with the peer: the one named, else the person whose memory
+    /// this node holds (`users::node_person`), found at each pass.
+    person: Option<String>,
     agent: ureq::Agent,
 }
 
@@ -66,16 +67,29 @@ impl Peer {
             address: address.trim_end_matches('/').to_string(),
             key: key.to_string(),
             name: name.to_string(),
-            person: users::OWNER.to_string(),
+            person: None,
             agent,
         }
     }
 
     /// The person of this node (a user id) whose spaces are kept in step with the peer: the spaces made here from the
-    /// peer's are theirs, and theirs are the spaces offered to the peer. By default the first administrator.
+    /// peer's are theirs, and theirs are the spaces offered to the peer. By default the person whose memory this node
+    /// holds: the peer connection says whose memory it is on the peer, and that is the same human here, whatever their
+    /// id or name on each node (see `users::node_person`).
     pub fn with_person(mut self, user_id: &str) -> Peer {
-        self.person = user_id.to_string();
+        self.person = Some(user_id.to_string());
         self
+    }
+
+    /// The person of this node the pass is for.
+    fn person(&self, brain: &Brain) -> Result<String, String> {
+        if let Some(p) = &self.person {
+            return Ok(p.clone());
+        }
+        let ctl = brain.open_control().map_err(|e| e.to_string())?;
+        users::node_person(&ctl)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "nobody on this node: no person to keep in step".to_string())
     }
 
     fn get(&self, path: &str) -> Result<Value, String> {
@@ -99,8 +113,19 @@ impl Peer {
         read(&mut res)
     }
 
-    /// One pass over every space the peer's key reaches.
+    /// One pass over every space the peer's key reaches. What it could not do is kept for the page and the apps
+    /// (`sync::note_pass`), as well as returned.
     pub fn sync_once(&self, brain: &Brain, now: i64) -> Result<Pass, String> {
+        let done = self.sync_inner(brain, now);
+        let problems = match &done {
+            Ok(p) => p.problems.clone(),
+            Err(e) => vec![e.clone()],
+        };
+        let _ = sync::note_pass(brain, &self.name, now, &problems);
+        done
+    }
+
+    fn sync_inner(&self, brain: &Brain, now: i64) -> Result<Pass, String> {
         // The person paused this machine: nothing is exchanged until they resume it.
         if brain
             .open_control()
@@ -122,7 +147,8 @@ impl Peer {
             ));
         }
         let mut pass = Pass::default();
-        let pairs = self.spaces(brain, &listed, now, &mut pass)?;
+        let person = self.person(brain)?;
+        let pairs = self.spaces(brain, &person, &listed, now, &mut pass)?;
         // Every space is made before any is filled: a space's parent is then here when its layout arrives.
         for (local, remote, writable) in pairs {
             pass.spaces += 1;
@@ -149,6 +175,7 @@ impl Peer {
     fn spaces(
         &self,
         brain: &Brain,
+        person: &str,
         listed: &Value,
         now: i64,
         pass: &mut Pass,
@@ -164,7 +191,7 @@ impl Peer {
             ) else {
                 continue;
             };
-            match swarm::archive_here(brain, &self.person, &space, at) {
+            match swarm::archive_here(brain, person, &space, at) {
                 Ok(true) => pass.archived += 1,
                 Ok(false) => {}
                 Err(e) => pass.problems.push(format!("{space}: archive: {e}")),
@@ -172,7 +199,7 @@ impl Peer {
         }
         // 2. The peer's spaces. Its Inbox (the one it names as the person's, else the first) goes with the box of
         // the person here, whatever the names; its other boxes are its own janitor's.
-        let mine = triage::of(brain, &self.person).map_err(fail)?;
+        let mine = triage::of(brain, person).map_err(fail)?;
         let theirs = entries
             .iter()
             .find(|s| s["triage"].as_bool() == Some(true))
@@ -200,8 +227,12 @@ impl Peer {
                 let here = match &mine {
                     Some(t) => t.clone(),
                     None => {
-                        swarm::adopt(brain, &self.person, &space, TRIAGE, since.unwrap_or(now))
-                            .map_err(fail)?;
+                        if let Err(e) =
+                            swarm::adopt(brain, person, &space, TRIAGE, since.unwrap_or(now))
+                        {
+                            pass.problems.push(format!("{name}: made here: {e}"));
+                            continue;
+                        }
                         space
                     }
                 };
@@ -225,11 +256,15 @@ impl Peer {
                 }
                 continue;
             }
-            swarm::adopt(brain, &self.person, &space, kind, since.unwrap_or(now)).map_err(fail)?;
+            // One space that cannot be made here is said, and the others still go.
+            if let Err(e) = swarm::adopt(brain, person, &space, kind, since.unwrap_or(now)) {
+                pass.problems.push(format!("{name}: made here: {e}"));
+                continue;
+            }
             pairs.push((space, name.to_string(), writable));
         }
         // 3. The spaces of the person the peer lacks are offered to it. Inbox only when the peer has none.
-        let offers: Vec<swarm::Offer> = swarm::offers(brain, &self.person)
+        let offers: Vec<swarm::Offer> = swarm::offers(brain, person)
             .map_err(fail)?
             .into_iter()
             .filter(|o| !listed_names.contains(o.space.as_str()))
@@ -245,8 +280,14 @@ impl Peer {
             return Ok(pairs);
         }
         if !offers_ok {
+            // A node of this version always lists its archives: then it is the key, not the version, that takes no offer.
+            let why = if listed.get("archived").is_some() {
+                "the key of this node there is not a peer of the person that reaches all their spaces, so it offers none"
+            } else {
+                "the peer runs an older version and takes no new space"
+            };
             pass.problems.push(format!(
-                "the peer runs an older version and takes no new space: {} not offered ({})",
+                "{why}: {} not offered ({})",
                 offers.len(),
                 offers
                     .iter()
@@ -269,13 +310,15 @@ impl Peer {
                     pairs.push((o.space, there.as_str().to_string(), true));
                 }
                 Ok(Answer::Archived(at)) => {
-                    match swarm::archive_here(brain, &self.person, &o.space, at) {
+                    match swarm::archive_here(brain, person, &o.space, at) {
                         Ok(true) => pass.archived += 1,
                         Ok(false) => {}
                         Err(e) => pass.problems.push(format!("{}: archive: {e}", o.space)),
                     }
                 }
-                Err(e) => pass.problems.push(format!("{}: offer: {e}", o.space)),
+                Err(e) => pass
+                    .problems
+                    .push(format!("{}: offer refused: {e}", o.space)),
             }
         }
         Ok(pairs)
@@ -354,6 +397,17 @@ impl Peer {
                 .map_err(|e| e.to_string())?;
             pass.pulled += done.applied;
             pass.disputed += done.disputed;
+            // What this node refused or gave up waiting for is said, never passed over in silence.
+            if let Some(line) = refusals(
+                "refused here",
+                done.rejected.iter().map(|(_, w)| w.as_str()),
+            ) {
+                pass.problems
+                    .push(format!("{}: pull: {line}", space.as_str()));
+            }
+            for g in &done.gave_up {
+                pass.problems.push(format!("{}: pull: {g}", space.as_str()));
+            }
             let next = page["next"].as_i64().unwrap_or(pulled);
             let head = page["head"].as_i64().unwrap_or(next);
             // Past what was dealt with only: an event waiting for another stops the cursor there.
@@ -414,6 +468,36 @@ impl Peer {
             let consumed = answer["consumed"]
                 .as_u64()
                 .map_or(page.events.len(), |c| c as usize);
+            // What the peer took without keeping is never counted as held by it: the window here keeps those notes.
+            let dealt = &page.events[..consumed.min(page.events.len())];
+            let unheld: Vec<String> = match answer["not_kept"].as_array() {
+                Some(list) => {
+                    let whys = list.iter().filter_map(|n| n["why"].as_str());
+                    if let Some(line) = refusals("refused by the peer", whys) {
+                        pass.problems
+                            .push(format!("{}: push: {line}", space.as_str()));
+                    }
+                    list.iter()
+                        .filter_map(|n| n["eid"].as_str().map(String::from))
+                        .collect()
+                }
+                // A peer of an earlier version says only how many it refused, not which: none of this page counts.
+                None if answer["malformed"].as_u64().unwrap_or(0) > 0 => {
+                    pass.problems.push(format!(
+                        "{}: push: {} event(s) refused by the peer (an earlier version, which does not say which)",
+                        space.as_str(),
+                        answer["malformed"]
+                    ));
+                    dealt.iter().map(|e| e.eid.clone()).collect()
+                }
+                None => vec![],
+            };
+            for g in answer["gave_up"].as_array().into_iter().flatten() {
+                if let Some(g) = g.as_str() {
+                    pass.problems.push(format!("{}: push: {g}", space.as_str()));
+                }
+            }
+            sync::note_unheld(brain, &self.name, space, &unheld).map_err(|e| e.to_string())?;
             let stopped = !answer["stopped"].is_null();
             let to = if stopped || consumed < page.events.len() {
                 page.events
@@ -430,6 +514,25 @@ impl Peer {
             }
         }
     }
+}
+
+/// One line for the events refused on one side, `None` when there are none: how many, and the first reasons.
+fn refusals<'a>(side: &str, whys: impl Iterator<Item = &'a str>) -> Option<String> {
+    let whys: Vec<&str> = whys.collect();
+    if whys.is_empty() {
+        return None;
+    }
+    let mut first: Vec<&str> = vec![];
+    for w in &whys {
+        if !first.contains(w) && first.len() < 3 {
+            first.push(w);
+        }
+    }
+    Some(format!(
+        "{} event(s) {side}: {}",
+        whys.len(),
+        first.join("; ")
+    ))
 }
 
 fn read(res: &mut ureq::http::Response<ureq::Body>) -> Result<Value, String> {
