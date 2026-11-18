@@ -467,7 +467,9 @@ fn refuse_secret_place(canon: &Path) -> Result<()> {
         places.extend(SECRET_HOME.iter().map(|p| home.join(p)));
     }
     for place in places {
-        let place = fs::canonicalize(&place).unwrap_or(place);
+        // Resolved the way `canon` is, even when the place does not exist on this machine: on Windows a resolved path
+        // carries the `\\?\` prefix, and a place left as written would never compare equal to one.
+        let place = resolved_ahead(&place);
         if canon.starts_with(&place) || place.starts_with(canon) {
             return Err(Error::Invalid(format!(
                 "{} is, or holds, a folder of the system or of keys ({}): a space never sits there",
