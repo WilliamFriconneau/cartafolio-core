@@ -34,11 +34,21 @@ pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
         return Ok(s);
     }
     let space = catalogue::vault_name(person, TRIAGE)?;
-    brain.add_space_for(&space, user_id)?;
-    brain.open_control()?.execute(
-        "UPDATE spaces SET kind = ?2 WHERE name = ?1",
-        [space.as_str(), TRIAGE],
-    )?;
+    // A box an earlier version left `custom` (a crash between its creation and its kind) is put right.
+    if brain.has_space(&space)?
+        && crate::users::is_space_owner(&brain.open_control()?, &space, user_id)?
+        && brain.space_kind(&space)? == catalogue::CUSTOM
+    {
+        brain.open_control()?.execute(
+            "UPDATE spaces SET kind = ?2 WHERE name = ?1",
+            [space.as_str(), TRIAGE],
+        )?;
+        return Ok(space);
+    }
+    // Made a box in the one transaction that makes it: never a `custom` space left by a crash.
+    let mut new = crate::brain::NewSpace::owned_by(user_id);
+    new.kind = TRIAGE.to_string();
+    brain.make_space(&space, &new, &|_| Ok(()))?;
     Ok(space)
 }
 

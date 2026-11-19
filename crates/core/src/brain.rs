@@ -50,7 +50,8 @@ impl Brain {
         let result = (|| {
             init_control(dir, &mut created)?;
             for space in spaces {
-                brain.create_space(space, crate::users::OWNER, &mut created)?;
+                brain.make_space(space, &NewSpace::owned_by(crate::users::OWNER), &|_| Ok(()))?;
+                created.push(dir.join(space.file_name()));
             }
             write_private(
                 &dir.join(CONFIG_FILE),
@@ -211,26 +212,12 @@ impl Brain {
                 "{person} already has a {kind} space ({space})"
             )));
         }
-        self.add_space_for(&space, user_id)?;
-        self.set_space_kind(&space, kind)?;
-        // A device paired before Inbox existed, for « all my vaults », writes to the inbox of this one too.
-        let ctl = self.open_control()?;
-        let ids: Vec<String> = ctl
-            .prepare(
-                "SELECT id FROM connections WHERE user_id = ?1 AND all_inboxes = 1 AND revoked_at IS NULL",
-            )?
-            .query_map([user_id], |r| r.get(0))?
-            .collect::<std::result::Result<_, _>>()?;
-        for id in ids {
-            ctl.execute(
-                "INSERT OR IGNORE INTO grants (connection_id, space, can_read, can_write) VALUES (?1, ?2, 1, 1)",
-                rusqlite::params![id, space.as_str()],
-            )?;
-            ctl.execute(
-                "INSERT OR IGNORE INTO grant_paths (connection_id, space, path, can_write) VALUES (?1, ?2, 'inbox', 1)",
-                rusqlite::params![id, space.as_str()],
-            )?;
-        }
+        // One transaction makes it: its kind, and the inbox of the devices paired for « all my vaults » (a device
+        // paired before Inbox existed writes to the inbox of this one too).
+        let mut new = NewSpace::owned_by(user_id);
+        new.kind = kind.to_string();
+        new.inbox_grants = true;
+        self.make_space(&space, &new, &|_| Ok(()))?;
         Ok(space)
     }
 
@@ -242,26 +229,53 @@ impl Brain {
     /// Creates a new space (its file and its registration) owned by `user_id`,
     /// who gets read and write access. Refuses an existing one.
     pub fn add_space_for(&self, space: &Space, user_id: &str) -> Result<()> {
-        let known_user = self
-            .open_control()?
+        self.make_space(space, &NewSpace::owned_by(user_id), &|_| Ok(()))
+    }
+
+    /// Makes a space exist, all at once or not at all (see `docs/CRASH.md`): its file is written under a temporary
+    /// name (`prepare` writes what it must hold from the start: rules, the events of its layout), made durable and
+    /// linked in under its own name, never over another file; then one control transaction registers it with its
+    /// kind, label, place, time and grants. A crash before the registration leaves a file no one registered, which
+    /// holds no note: the start-up pass removes it, and so does the next creation of that name.
+    pub(crate) fn make_space(
+        &self,
+        space: &Space,
+        new: &NewSpace,
+        prepare: &dyn Fn(&Connection) -> Result<()>,
+    ) -> Result<()> {
+        self.check_free(space, &new.owner)?;
+        // The sweep of a node that starts leaves alone what is being made.
+        let _writing = crate::recover::writing(self)?;
+        let path = self.dir.join(space.file_name());
+        self.write_space_file(space, &path, prepare)?;
+        crate::failpoint::hit(crate::failpoint::at::SPACE_CREATE_FILE)?;
+        if let Err(e) = self.register(space, new) {
+            remove_db_files(&path);
+            return Err(e);
+        }
+        Ok(())
+    }
+
+    /// The name is free for a new space of `owner`: an unknown person, a name registered or used by a connection are
+    /// refused; a file left by a creation cut off (no note, no file, nothing under way) is removed first.
+    fn check_free(&self, space: &Space, owner: &str) -> Result<()> {
+        let ctl = self.open_control()?;
+        let known_user = ctl
             .query_row(
                 "SELECT 1 FROM users WHERE id = ?1 AND disabled_at IS NULL",
-                [user_id],
+                [owner],
                 |_| Ok(()),
             )
             .optional()?
             .is_some();
         if !known_user {
-            return Err(Error::Invalid(format!(
-                "unknown or disabled user: {user_id}"
-            )));
+            return Err(Error::Invalid(format!("unknown or disabled user: {owner}")));
         }
-        if self.has_space(space)? || self.dir.join(space.file_name()).exists() {
+        if self.has_space(space)? {
             return Err(Error::Invalid(format!("space {space} already exists")));
         }
         // A vault and a connection end an address the same way (`/mcp/<name>`): never the same name.
-        let used: Option<i64> = self
-            .open_control()?
+        let used: Option<i64> = ctl
             .query_row(
                 "SELECT 1 FROM connections WHERE agent = ?1",
                 [space.as_str()],
@@ -273,33 +287,87 @@ impl Brain {
                 "{space} is the name of a connection: a space needs another name"
             )));
         }
-        let mut created = Vec::new();
-        self.create_space(space, user_id, &mut created)
-            .inspect_err(|_| {
-                for p in &created {
-                    remove_db_files(p);
-                }
-            })
+        if self.dir.join(space.file_name()).exists() && !crate::recover::clear_orphan(self, space)?
+        {
+            return Err(Error::Invalid(format!("space {space} already exists")));
+        }
+        Ok(())
     }
 
-    fn create_space(&self, space: &Space, owner: &str, created: &mut Vec<PathBuf>) -> Result<()> {
-        let path = self.dir.join(space.file_name());
-        create_private_file(&path, created)?;
-        let conn = open_db(&path)?;
-        migrate(&conn, SPACE_MIGRATIONS)?;
-        write_meta(&conn, &[("space", space.as_str())])?;
-        drop(conn);
+    /// Writes the file of a new space under a temporary name, then links it in under `path`, never over a file there.
+    fn write_space_file(
+        &self,
+        space: &Space,
+        path: &Path,
+        prepare: &dyn Fn(&Connection) -> Result<()>,
+    ) -> Result<()> {
+        let tmp = self.dir.join(format!(
+            "{}{space}-{}.sqlite",
+            NEW_PREFIX,
+            crate::util::random_base32(8)
+        ));
+        let made = (|| -> Result<()> {
+            create_private_file(&tmp, &mut Vec::new())?;
+            {
+                let conn = open_db(&tmp)?;
+                migrate(&conn, SPACE_MIGRATIONS)?;
+                write_meta(&conn, &[("space", space.as_str())])?;
+                crate::sync::ensure_log(&conn)?;
+                prepare(&conn)?;
+                let _: rusqlite::Result<i64> =
+                    conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(1));
+            }
+            // Closed: its log is folded in; the file is the whole database.
+            fs::File::open(&tmp)?.sync_all()?;
+            match fs::hard_link(&tmp, path) {
+                Ok(()) => Ok(()),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                    Err(Error::Invalid(format!("space {space} already exists")))
+                }
+                Err(e) => Err(e.into()),
+            }
+        })();
+        remove_db_files(&tmp);
+        made?;
+        crate::fsx::sync_dir(&self.dir)?;
+        Ok(())
+    }
+
+    /// The one control transaction that makes a space exist.
+    fn register(&self, space: &Space, new: &NewSpace) -> Result<()> {
         let ctl = self.open_control()?;
         let tx =
             rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
         tx.execute(
-            "INSERT INTO spaces (name, created_at) VALUES (?1, ?2)",
-            (space.as_str(), now()),
+            "INSERT INTO spaces (name, created_at, kind, label, parent, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            rusqlite::params![
+                space.as_str(),
+                new.created_at,
+                new.kind,
+                new.label,
+                new.parent.as_ref().map(Space::as_str),
+                new.position
+            ],
         )?;
         tx.execute(
             "INSERT INTO space_members (space, user_id, can_write, owner) VALUES (?1, ?2, 1, 1)",
-            (space.as_str(), owner),
+            (space.as_str(), &new.owner),
         )?;
+        if new.inbox_grants {
+            tx.execute(
+                "INSERT OR IGNORE INTO grants (connection_id, space, can_read, can_write)
+                 SELECT id, ?2, 1, 1 FROM connections WHERE user_id = ?1 AND all_inboxes = 1 AND revoked_at IS NULL",
+                (&new.owner, space.as_str()),
+            )?;
+            tx.execute(
+                "INSERT OR IGNORE INTO grant_paths (connection_id, space, path, can_write)
+                 SELECT id, ?2, 'inbox', 1 FROM connections WHERE user_id = ?1 AND all_inboxes = 1 AND revoked_at IS NULL",
+                (&new.owner, space.as_str()),
+            )?;
+        }
+        if let Some(since) = new.adopted_since {
+            crate::swarm::forget_older_archive(&tx, space, since)?;
+        }
         tx.commit()?;
         Ok(())
     }
@@ -310,10 +378,21 @@ impl Brain {
         if !self.has_space(space)? {
             return Err(Error::UnknownSpace(space.to_string()));
         }
+        if !self.dir.join(space.file_name()).is_file() {
+            self.heal(space)?;
+        }
         let conn = self.open_existing(&space.file_name())?;
         migrate(&conn, SPACE_MIGRATIONS)?;
         crate::sync::ensure_log(&conn)?;
-        let declared = meta(&conn, "space")?;
+        let mut declared = meta(&conn, "space")?;
+        // A file an earlier version made and left before it named its space, which holds nothing yet: it is this one.
+        if declared.is_none() && !crate::recover::holds_data(&conn)? {
+            conn.execute(
+                "INSERT OR IGNORE INTO meta (k, v) VALUES ('space', ?1)",
+                [space.as_str()],
+            )?;
+            declared = Some(space.as_str().to_string());
+        }
         if declared.as_deref() != Some(space.as_str()) {
             return Err(Error::Schema(format!(
                 "{} declares space {:?} instead of {:?}",
@@ -323,6 +402,24 @@ impl Brain {
             )));
         }
         Ok(conn)
+    }
+
+    /// A registered space without its file: a space made by an earlier version whose file went, and nothing under way
+    /// holds it (an archive or a restore cut off is finished by [`Brain::recover`], never covered over). It gets an
+    /// empty file, as when it was made.
+    fn heal(&self, space: &Space) -> Result<()> {
+        if crate::recover::in_flight(self, space)? {
+            return Err(Error::Schema(format!(
+                "{space} is being archived or restored: the node finishes it when it starts (recover)"
+            )));
+        }
+        let path = self.dir.join(space.file_name());
+        let _writing = crate::recover::writing(self)?;
+        match self.write_space_file(space, &path, &|_| Ok(())) {
+            // Another process healed it first.
+            Err(Error::Invalid(_)) if path.is_file() => Ok(()),
+            other => other,
+        }
     }
 
     /// Opens the control database (tokens, rights, spaces, authentication audit).
@@ -405,6 +502,46 @@ impl Brain {
             return Err(Error::NotInitialized(self.dir.clone()));
         }
         open_db(&path)
+    }
+}
+
+/// The prefix of the temporary file a new space is written under, before it is linked in (swept at start).
+pub(crate) const NEW_PREFIX: &str = ".new-";
+
+/// What a new space is registered with: everything that makes it exist, in one control transaction.
+#[derive(Clone, Debug)]
+pub(crate) struct NewSpace {
+    /// Its owner, who reads and writes it.
+    pub owner: String,
+    /// Its kind (`custom` by default).
+    pub kind: String,
+    /// The label the person gave it.
+    pub label: Option<String>,
+    /// The space it sits under.
+    pub parent: Option<Space>,
+    /// Its order among its brothers.
+    pub position: i64,
+    /// When its copy began.
+    pub created_at: i64,
+    /// The devices paired for « all my vaults » write to its inbox.
+    pub inbox_grants: bool,
+    /// Made from a peer's copy that began then: an older archive mark of it here no longer holds.
+    pub adopted_since: Option<i64>,
+}
+
+impl NewSpace {
+    /// A plain space of `owner`, made now.
+    pub(crate) fn owned_by(owner: &str) -> NewSpace {
+        NewSpace {
+            owner: owner.to_string(),
+            kind: crate::catalogue::CUSTOM.to_string(),
+            label: None,
+            parent: None,
+            position: 0,
+            created_at: now(),
+            inbox_grants: false,
+            adopted_since: None,
+        }
     }
 }
 
@@ -511,7 +648,7 @@ fn create_private_file(path: &Path, created: &mut Vec<PathBuf>) -> Result<()> {
     Ok(())
 }
 
-fn remove_db_files(path: &Path) {
+pub(crate) fn remove_db_files(path: &Path) {
     let _ = fs::remove_file(path);
     for suffix in ["-wal", "-shm", "-journal"] {
         let mut s = path.as_os_str().to_os_string();

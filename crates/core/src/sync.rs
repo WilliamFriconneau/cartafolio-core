@@ -387,26 +387,63 @@ pub(crate) fn record_file_retired(
     record(conn, &format!("fr:{id}"), "file_retired", at, &p)
 }
 
-/// A layout field of the space changed here (`label`, `parent` or `position`).
-pub(crate) fn record_layout(conn: &Connection, field: &str, value: Value) -> Result<()> {
-    let hlc = stamp(conn)?;
-    let origin = replica(conn)?;
-    let p = json!({ "field": field, "value": value });
-    record_raw(
-        conn,
-        &format!("l:{field}:{hlc}"),
-        &hlc,
-        &origin,
-        None,
-        "layout_changed",
-        util::now(),
-        &p,
-    )?;
-    conn.execute(
-        "INSERT INTO sync_fields (field, hlc) VALUES (?1, ?2) ON CONFLICT(field) DO UPDATE SET hlc = excluded.hlc",
-        params![field, hlc],
-    )?;
-    Ok(())
+/// Layout fields of the space changed here, logged in one transaction (the caller's, or one of its own) with the
+/// stamp of each field; `token`, when given, is kept in the same transaction, so that the control database's mark of
+/// this change is known to be logged ([`layout_logged`]).
+pub(crate) fn record_layout_fields(
+    conn: &Connection,
+    fields: &[(&str, Value)],
+    token: Option<&str>,
+) -> Result<()> {
+    let own = conn.is_autocommit();
+    if own {
+        conn.execute_batch("BEGIN IMMEDIATE")?;
+    }
+    let done = (|| -> Result<()> {
+        // Logged already by another pass (read under the write lock): once.
+        if let Some(t) = token
+            && meta_get(conn, "layout_token")?.as_deref() == Some(t)
+        {
+            return Ok(());
+        }
+        for (field, value) in fields {
+            let hlc = stamp(conn)?;
+            let origin = replica(conn)?;
+            let p = json!({ "field": field, "value": value });
+            record_raw(
+                conn,
+                &format!("l:{field}:{hlc}"),
+                &hlc,
+                &origin,
+                None,
+                "layout_changed",
+                util::now(),
+                &p,
+            )?;
+            conn.execute(
+                "INSERT INTO sync_fields (field, hlc) VALUES (?1, ?2) ON CONFLICT(field) DO UPDATE SET hlc = excluded.hlc",
+                params![field, hlc],
+            )?;
+        }
+        if let Some(t) = token {
+            meta_set(conn, "layout_token", t)?;
+        }
+        Ok(())
+    })();
+    if own {
+        match &done {
+            Ok(()) => conn.execute_batch("COMMIT")?,
+            Err(_) => {
+                let _ = conn.execute_batch("ROLLBACK");
+            }
+        }
+    }
+    done
+}
+
+/// Whether the layout change marked `token` in the control database is already in this space's log.
+pub(crate) fn layout_logged(conn: &Connection, token: &str) -> Result<bool> {
+    Ok(meta_get(conn, "layout_token")?.as_deref() == Some(token))
 }
 
 /// A space that existed before the log gets the events of what it already holds, once, before anything else is
@@ -580,18 +617,37 @@ fn ensure_layout_log(brain: &Brain, space: &Space, conn: &Connection) -> Result<
             |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
         )
         .optional()?;
+    let mut fields = vec![];
     if let Some((label, parent, position)) = row {
         if let Some(l) = label {
-            record_layout(conn, "label", json!(l))?;
+            fields.push(("label", json!(l)));
         }
         if let Some(p) = parent {
-            record_layout(conn, "parent", json!(p))?;
+            fields.push(("parent", json!(p)));
         }
         if position != 0 {
-            record_layout(conn, "position", json!(position))?;
+            fields.push(("position", json!(position)));
         }
     }
-    meta_set(conn, "sync_layout_logged", "1")
+    // The events and the flag in one transaction: written twice, or never, is not possible.
+    conn.execute_batch("BEGIN IMMEDIATE")?;
+    let done = (|| -> Result<()> {
+        if meta_get(conn, "sync_layout_logged")?.is_some() {
+            return Ok(());
+        }
+        record_layout_fields(conn, &fields, None)?;
+        meta_set(conn, "sync_layout_logged", "1")
+    })();
+    match done {
+        Ok(()) => {
+            conn.execute_batch("COMMIT")?;
+            Ok(())
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(e)
+        }
+    }
 }
 
 // --- reading the log -----------------------------------------------------------------------------
@@ -1594,7 +1650,8 @@ fn apply_file_put(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -
                 "the list of chunks does not fit the size".into(),
             ));
         }
-        if !crate::files::hold_or_link(brain, space, sha).map_err(Fault::from)?
+        if !crate::files::hold_or_link(brain, space, sha, size.unsigned_abs())
+            .map_err(Fault::from)?
             && !crate::chunks::assemble(brain, space, sha, size.unsigned_abs(), &hashes)
                 .map_err(Fault::from)?
         {

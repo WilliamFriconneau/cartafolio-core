@@ -283,12 +283,15 @@ pub fn forget(brain: &Brain, who: &User, peer: &str, now: i64) -> Result<()> {
         )));
     }
     let ctl = brain.open_control()?;
-    ctl.execute("DELETE FROM sync_state WHERE peer = ?1", [peer])?;
-    ctl.execute(
+    // Its progress goes and the mark that it is forgotten comes in one transaction.
+    let tx = rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute("DELETE FROM sync_state WHERE peer = ?1", [peer])?;
+    tx.execute(
         "INSERT INTO peer_meta (peer, forgotten_at) VALUES (?1, ?2)
          ON CONFLICT(peer) DO UPDATE SET forgotten_at = excluded.forgotten_at",
         params![peer, now],
     )?;
+    tx.commit()?;
     auth_event(&ctl, Some(&who.id), None, "node_forget", peer);
     Ok(())
 }

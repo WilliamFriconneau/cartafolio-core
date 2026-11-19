@@ -211,17 +211,30 @@ fn other_blob_dirs(brain: &Brain, space: Option<&Space>) -> Vec<PathBuf> {
         .collect()
 }
 
-fn link_from_another_space(brain: &Brain, space: &Space, sha: &str, path: &Path) -> bool {
+/// Whether `path` holds `size` bytes: a copy torn by a crash (written straight under its name by an earlier version)
+/// is shorter, and is never taken for the file.
+pub(crate) fn whole(path: &Path, size: u64) -> bool {
+    fs::metadata(path).is_ok_and(|m| m.is_file() && m.len() == size)
+}
+
+fn link_from_another_space(
+    brain: &Brain,
+    space: &Space,
+    sha: &str,
+    path: &Path,
+    size: u64,
+) -> bool {
     other_blob_dirs(brain, Some(space))
         .iter()
         .map(|d| d.join(sha))
-        .any(|from| from.exists() && fs::hard_link(&from, path).is_ok())
+        .any(|from| whole(&from, size) && fs::hard_link(&from, path).is_ok())
 }
 
 /// Writes the bytes of a file once per content, private. Already held in another
 /// space, they are a hard link there: each space keeps its own path, so
 /// retiring it in one space leaves the other intact, and nothing tells a
-/// space what another holds.
+/// space what another holds. Bytes already under that name that are not these (torn by a crash, damaged) are
+/// written again.
 pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) -> Result<()> {
     let dir = blob_dir(brain, space);
     DirBuilder::new()
@@ -229,17 +242,24 @@ pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) 
         .private_dir()
         .create(&dir)?;
     let path = dir.join(sha);
-    if !path.exists() && !link_from_another_space(brain, space, sha, &path) {
-        let tmp = dir.join(format!(".{sha}.tmp"));
-        let mut f = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .private_file()
-            .open(&tmp)?;
-        f.write_all(bytes)?;
-        f.sync_all()?;
-        fs::rename(&tmp, &path)?;
+    let size = bytes.len() as u64;
+    let held = whole(&path, size) && fs::read(&path).is_ok_and(|b| b == bytes);
+    if !held {
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        if !link_from_another_space(brain, space, sha, &path, size) {
+            let tmp = dir.join(format!(".{sha}.tmp"));
+            let mut f = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true)
+                .private_file()
+                .open(&tmp)?;
+            f.write_all(bytes)?;
+            f.sync_all()?;
+            fs::rename(&tmp, &path)?;
+        }
         crate::fsx::sync_dir(&dir)?;
     }
     Ok(())
@@ -293,19 +313,23 @@ pub fn blob_path(brain: &Brain, space: &Space, sha: &str) -> PathBuf {
     blob_dir(brain, space).join(sha)
 }
 
-/// Whether this node holds the bytes of `sha` in `space`: already there, or a hard link made to the same bytes held in
-/// another space of this node (nothing travels then).
-pub(crate) fn hold_or_link(brain: &Brain, space: &Space, sha: &str) -> Result<bool> {
+/// Whether this node holds the `size` bytes of `sha` in `space`: already there, or a hard link made to the same bytes
+/// held in another space of this node (nothing travels then). Bytes there of another size (torn by a crash) are
+/// removed, so they are sent again.
+pub(crate) fn hold_or_link(brain: &Brain, space: &Space, sha: &str, size: u64) -> Result<bool> {
     let path = blob_path(brain, space, sha);
-    if path.exists() {
+    if whole(&path, size) {
         return Ok(true);
+    }
+    if path.exists() {
+        fs::remove_file(&path)?;
     }
     let dir = blob_dir(brain, space);
     DirBuilder::new()
         .recursive(true)
         .private_dir()
         .create(&dir)?;
-    Ok(link_from_another_space(brain, space, sha, &path))
+    Ok(link_from_another_space(brain, space, sha, &path, size))
 }
 
 /// Stores a file in a space and describes it with a fact. Returns its record.
@@ -497,7 +521,11 @@ pub fn put_path(
         return Ok(same);
     }
     let target = dir.join(&sha);
-    if target.exists() || link_from_another_space(brain, space, &sha, &target) {
+    if whole(&target, size) || {
+        // Bytes of another size under that name (torn by a crash) are replaced.
+        let _ = fs::remove_file(&target);
+        link_from_another_space(brain, space, &sha, &target, size)
+    } {
         let _ = fs::remove_file(&tmp);
     } else {
         fs::rename(&tmp, &target)?;

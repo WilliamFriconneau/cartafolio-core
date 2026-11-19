@@ -196,7 +196,37 @@ fn complete(
     for f in notes {
         let id = crate::triage::filed_id(&f.id, to);
         tx.execute_batch("SAVEPOINT copy")?;
-        match facts::remember_as_in(&tx, to, &f.author, copy_of(f), &id) {
+        // A copy of an earlier version of this note already in the target (a peer replaced the note while its move was
+        // under way): it leaves the active set first, and the new copy replaces it.
+        let olds = older_copies(src, &tx, to, f)?;
+        if !olds.is_empty() {
+            tx.execute_batch("PRAGMA defer_foreign_keys = ON")?;
+            for o in &olds {
+                tx.execute(
+                    "UPDATE facts SET status = 'replaced', replaced_by = ?1, status_at = ?2, status_by = ?3,
+                            status_reason = ?4 WHERE id = ?1 AND status = 'active'",
+                    params![o, crate::util::now(), who, NEWER],
+                )?;
+            }
+        }
+        let made = facts::remember_as_in(&tx, to, &f.author, copy_of(f), &id);
+        if let Ok(Remembered::Created(n) | Remembered::Duplicate(n)) = &made {
+            for o in &olds {
+                tx.execute(
+                    "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
+                    params![o, n.id],
+                )?;
+                crate::sync::record_fact_superseded(&tx, o, &n.id, who, Some(NEWER))?;
+                facts::event(
+                    &tx,
+                    o,
+                    who,
+                    "supersede",
+                    serde_json::json!({ "by": n.id, "reason": NEWER }),
+                )?;
+            }
+        }
+        match made {
             Ok(Remembered::Created(_)) => copied.push(Some(true)),
             Ok(Remembered::Duplicate(d)) => copied.push(Some(d.id != id)),
             Ok(Remembered::NeedsDecision(_)) => {
@@ -215,6 +245,7 @@ fn complete(
         }
         tx.execute_batch("RELEASE copy")?;
     }
+    tx.execute_batch("PRAGMA defer_foreign_keys = OFF")?;
     tx.commit()?;
     crate::failpoint::hit(crate::failpoint::at::MOVE_COPIES)?;
     let reason = format!("moved to {to}");
@@ -233,6 +264,68 @@ fn complete(
     crate::sync::settle_disputes(&tx)?;
     tx.commit()?;
     Ok(done)
+}
+
+/// Why the copy of an earlier version of a moved note is replaced in the target.
+const NEWER: &str = "a newer version of the note was moved";
+
+/// The copies in the target `dst` of the earlier versions of `f` (those it replaces, one after the other), still
+/// active: written by a move of the note cut off before a peer replaced it.
+fn older_copies(src: &Connection, dst: &Connection, to: &Space, f: &Fact) -> Result<Vec<String>> {
+    let mut out = vec![];
+    let mut back = f.replaces.clone();
+    let mut hops = 0;
+    while let Some(old) = back {
+        hops += 1;
+        if hops > 64 {
+            break;
+        }
+        let copy = crate::triage::filed_id(&old, to);
+        if facts::read_fact(dst, &copy)?.is_some_and(|c| c.status == "active") {
+            out.push(copy);
+        }
+        back = facts::read_fact(src, &old)?.and_then(|o| o.replaces);
+    }
+    Ok(out)
+}
+
+/// What became of a note whose move was cut off, when it is no longer active: replaced (by a peer: the source cannot
+/// refuse its events), its newest version, which the move takes instead; retired by someone, the reason, which its
+/// copy in the target takes too; retired by the move itself, nothing.
+enum Since {
+    Newer(Box<Fact>),
+    Retired(String),
+    Done,
+}
+
+fn since_cut(src: &Connection, f: &Fact) -> Result<Since> {
+    let mut cur = f.clone();
+    let mut hops = 0;
+    while cur.status == "replaced" && hops < 64 {
+        hops += 1;
+        match cur
+            .replaced_by
+            .as_deref()
+            .map(|n| facts::read_fact(src, n))
+            .transpose()?
+            .flatten()
+        {
+            Some(n) if n.id != cur.id => cur = n,
+            _ => break,
+        }
+    }
+    Ok(match cur.status.as_str() {
+        "active" if cur.id != f.id => Since::Newer(Box::new(cur)),
+        "retired"
+            if !cur
+                .status_reason
+                .as_deref()
+                .is_some_and(|r| r.starts_with("moved to ")) =>
+        {
+            Since::Retired(cur.status_reason.unwrap_or_else(|| "retired".into()))
+        }
+        _ => Since::Done,
+    })
 }
 
 impl Moved {
@@ -411,13 +504,51 @@ impl Brain {
                 return Ok(0);
             }
         };
+        let dst = self.open_space(&to)?;
         let mut notes = vec![];
         let mut gone = vec![];
         for (id, _, _) in part {
-            match facts::read_fact(src, id)? {
-                Some(f) if f.status == "active" => notes.push(f),
-                // Retired or replaced since: the move ended, or someone decided otherwise. Nothing to write.
-                _ => gone.push(id),
+            let Some(f) = facts::read_fact(src, id)? else {
+                gone.push(id);
+                continue;
+            };
+            if f.status == "active" {
+                notes.push(f);
+                continue;
+            }
+            match since_cut(src, &f)? {
+                // Replaced meanwhile (by a peer's event): the newest version moves in its place, and its copy replaces
+                // the copy already written, so the note ends active once, in the target.
+                Since::Newer(n) => {
+                    let tx = begin(src)?;
+                    tx.execute(
+                        "INSERT OR IGNORE INTO move_pending (source, target_space, who, at) VALUES (?1, ?2, ?3, ?4)",
+                        params![n.id, to.as_str(), who, crate::util::now()],
+                    )?;
+                    tx.execute("DELETE FROM move_pending WHERE source = ?1", [id])?;
+                    tx.commit()?;
+                    if !notes.iter().any(|x: &Fact| x.id == n.id) {
+                        notes.push(*n);
+                    }
+                }
+                // Retired meanwhile by someone: the copy already written goes too, for the same reason.
+                Since::Retired(reason) => {
+                    let tx = begin(&dst)?;
+                    let mut back = Some(f.id.clone());
+                    let mut hops = 0;
+                    while let Some(v) = back {
+                        hops += 1;
+                        if hops > 64 {
+                            break;
+                        }
+                        let copy = crate::triage::filed_id(&v, &to);
+                        facts::retire_if_active(&tx, who, &copy, &reason)?;
+                        back = facts::read_fact(src, &v)?.and_then(|o| o.replaced_by);
+                    }
+                    tx.commit()?;
+                    gone.push(id);
+                }
+                Since::Done => gone.push(id),
             }
         }
         if !gone.is_empty() {
@@ -426,7 +557,6 @@ impl Brain {
         if notes.is_empty() {
             return Ok(0);
         }
-        let dst = self.open_space(&to)?;
         let done = complete(src, &dst, &to, who, &notes)?;
         Ok(done.moved + done.already)
     }

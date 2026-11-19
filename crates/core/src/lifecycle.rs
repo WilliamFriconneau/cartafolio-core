@@ -9,6 +9,10 @@
 //! The archive folder is `<data>/archive` (`MEMCP_ARCHIVE` moves it): one folder per archived space,
 //! `<space>-<time>/`, with `archive.json` (what the space was), `export/` (the export, checked) and `live/` (the
 //! database and its files).
+//!
+//! `archive.json` is also the journal of the deletion and of the restore (`state`: `deleting`, `archived`,
+//! `restoring`): each step is skipped once done, so [`Brain::recover`] finishes one a crash cut off (see
+//! `docs/CRASH.md`).
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -297,23 +301,33 @@ impl Brain {
                 return Err(Error::Invalid(format!("unknown kind {k:?}")));
             }
         }
-        let space = self.add_custom_space(user_id, person, &new.label, new.parent.as_ref())?;
-        if let Some(k) = &kind {
-            self.set_space_kind(&space, k)?;
-        }
-        if !new.keywords.is_empty() || !new.tags.is_empty() {
-            let conn = self.open_space(&space)?;
-            rules::edit(
-                &conn,
-                &space,
-                person,
-                &rules::Edit {
-                    add_keywords: new.keywords.clone(),
-                    add_tags: new.tags.clone(),
-                    ..Default::default()
-                },
-            )?;
-        }
+        // Its kind, label, place, keywords and tags come with it, in one creation.
+        let kind = kind.unwrap_or_else(|| crate::catalogue::CUSTOM.to_string());
+        let space = self.add_space_placed(
+            user_id,
+            person,
+            &new.label,
+            new.parent.as_ref(),
+            &kind,
+            &|conn| {
+                if new.keywords.is_empty() && new.tags.is_empty() {
+                    return Ok(());
+                }
+                let declared: String =
+                    conn.query_row("SELECT v FROM meta WHERE k = 'space'", [], |r| r.get(0))?;
+                rules::edit(
+                    conn,
+                    &Space::new(&declared)?,
+                    person,
+                    &rules::Edit {
+                        add_keywords: new.keywords.clone(),
+                        add_tags: new.tags.clone(),
+                        ..Default::default()
+                    },
+                )?;
+                Ok(())
+            },
+        )?;
         auth_event(
             &self.open_control()?,
             Some(user_id),
@@ -467,6 +481,7 @@ impl Brain {
         if dry_run {
             return Ok(report);
         }
+        let _busy = crate::recover::busy(self)?;
         if archive.exists() {
             return Err(Error::Invalid(format!(
                 "{} already exists: try again in a second",
@@ -480,56 +495,13 @@ impl Brain {
         let exported =
             crate::export::export_space(self, &who, space, &kind, &archive.join("export"), at)?;
         crate::export::verify_export(&exported)?;
-        // 2. Into: the merge engine copies what is active; the keywords and tags join the target's.
-        if let Some(t) = &into {
-            let before = rules::read(&self.open_space(t)?).1;
-            let plan = Plan {
-                export: exported.clone(),
-                user: who.name.clone(),
-                created_at: util::iso(at),
-                lines: vec![Line {
-                    source: space.to_string(),
-                    kind: kind.clone(),
-                    action: Action::Merge,
-                    target: t.to_string(),
-                    rename: None,
-                    policy: Policy::KeepBoth,
-                    preview: Preview::default(),
-                    note: "space deleted into another".into(),
-                    guide: "none".into(),
-                }],
-            };
-            let r = merge::apply_in_place(self, &plan)?;
-            let line = r.lines.first().cloned().unwrap_or_default();
-            report.merged = Some(json!({
-                "added": line.added, "tagged": line.tagged, "files": line.files, "left": line.left,
-            }));
-            let mut joined = Rules {
-                tags: before.tags,
-                keywords: before.keywords,
-            };
-            joined.tags.extend(info.rules.tags.clone());
-            joined.keywords.extend(info.rules.keywords.clone());
-            if let Some(k) = rules::clean_keyword(&info.label) {
-                joined.keywords.push(k);
-            }
-            rules::write(&self.open_space(t)?, t, &who.name, &joined)?;
-        }
-        // 3. The children move up.
-        for (c, p) in &kids {
-            self.set_layout(
-                user_id,
-                c,
-                &Change {
-                    parent: Some(p.clone()),
-                    ..Default::default()
-                },
-            )?;
-        }
-        // 4. Aside, not erased.
-        self.move_aside(user_id, space, &archive, &info, &report, at)?;
-        // The other nodes of the person archive their copy too (see `swarm`).
-        crate::swarm::note_archived(self, space, user_id, at)?;
+        // 2. The journal: from here on the deletion ends done, at the latest when the node starts again.
+        let journal = self.deletion(
+            user_id, &who.name, space, &info, &report, &kids, &exported, at,
+        )?;
+        write_journal(&archive, &journal)?;
+        crate::failpoint::hit(crate::failpoint::at::ARCHIVE_JOURNAL)?;
+        report.merged = self.finish_delete(&archive, &journal)?;
         auth_event(
             &self.open_control()?,
             Some(user_id),
@@ -540,15 +512,20 @@ impl Brain {
         Ok(report)
     }
 
-    fn move_aside(
+    /// What the journal of a deletion holds: what the space was (the manifest of the archive), and what is left to
+    /// do (`state` `deleting`, the target, the children, the export).
+    #[allow(clippy::too_many_arguments)]
+    fn deletion(
         &self,
         user_id: &str,
+        user_name: &str,
         space: &Space,
-        archive: &Path,
         info: &SpaceInfo,
         report: &DeleteReport,
+        kids: &[(Space, Option<Space>)],
+        exported: &Path,
         at: i64,
-    ) -> Result<()> {
+    ) -> Result<Value> {
         let ctl = self.open_control()?;
         let mut grants: Vec<Value> = ctl
             .prepare(
@@ -586,24 +563,120 @@ impl Brain {
                 |r| r.get(0),
             )
             .unwrap_or(at);
-        let manifest = json!({
-            "format": "memcp-archived-space", "version": 1,
+        Ok(json!({
+            "format": "memcp-archived-space", "version": 1, "state": DELETING,
             "space": space.as_str(), "label": info.label, "kind": info.kind,
             "parent": info.parent.as_ref().map(Space::as_str), "position": info.position,
             "owner": user_id, "created_at": created, "archived_at": at,
             "disposition": report.disposition, "into": report.into, "facts": info.facts,
             "grants": grants,
-        });
+            "user_name": user_name,
+            "export": exported.to_string_lossy(),
+            "tags": info.rules.tags, "keywords": info.rules.keywords,
+            "children": kids.iter().map(|(c, p)| json!({ "space": c.as_str(), "goes_under": p.as_ref().map(Space::as_str) })).collect::<Vec<_>>(),
+        }))
+    }
+
+    /// Does what the journal of a deletion says is left: into another space, the merge (merging twice changes
+    /// nothing) and the rules joined; the children moved up; the space unregistered with the mark of its archive, in
+    /// one control transaction; its database and files set aside; the journal closed (`archived`). Each step is
+    /// skipped once done, so it runs again after a crash at any point.
+    fn finish_delete(&self, archive: &Path, j: &Value) -> Result<Option<Value>> {
+        let space = Space::new(j["space"].as_str().unwrap_or_default())?;
+        let owner = j["owner"].as_str().unwrap_or_default();
+        let user_name = j["user_name"].as_str().unwrap_or(owner);
+        let at = j["archived_at"].as_i64().unwrap_or_else(util::now);
+        let mut merged = None;
+        if self.has_space(&space)? {
+            if let Some(t) = j["into"].as_str() {
+                let t = Space::new(t)?;
+                let plan = Plan {
+                    export: PathBuf::from(j["export"].as_str().unwrap_or_default()),
+                    user: user_name.to_string(),
+                    created_at: util::iso(at),
+                    lines: vec![Line {
+                        source: space.to_string(),
+                        kind: j["kind"].as_str().unwrap_or("custom").to_string(),
+                        action: Action::Merge,
+                        target: t.to_string(),
+                        rename: None,
+                        policy: Policy::KeepBoth,
+                        preview: Preview::default(),
+                        note: "space deleted into another".into(),
+                        guide: "none".into(),
+                    }],
+                };
+                let r = merge::apply_in_place(self, &plan)?;
+                let line = r.lines.first().cloned().unwrap_or_default();
+                merged = Some(json!({
+                    "added": line.added, "tagged": line.tagged, "files": line.files, "left": line.left,
+                }));
+                crate::failpoint::hit(crate::failpoint::at::ARCHIVE_MERGED)?;
+                // The keywords and tags join the target's (written again, they change nothing).
+                let before = rules::read(&self.open_space(&t)?).1;
+                let mut joined = Rules {
+                    tags: before.tags,
+                    keywords: before.keywords,
+                };
+                joined.tags.extend(strings(&j["tags"]));
+                joined.keywords.extend(strings(&j["keywords"]));
+                if let Some(k) = rules::clean_keyword(j["label"].as_str().unwrap_or_default()) {
+                    joined.keywords.push(k);
+                }
+                rules::write(&self.open_space(&t)?, &t, user_name, &joined)?;
+            }
+            // The children move up (those still under it).
+            for c in j["children"].as_array().into_iter().flatten() {
+                let child = Space::new(c["space"].as_str().unwrap_or_default())?;
+                let under: Option<Option<String>> = self
+                    .open_control()?
+                    .query_row(
+                        "SELECT parent FROM spaces WHERE name = ?1",
+                        [child.as_str()],
+                        |r| r.get(0),
+                    )
+                    .optional()?;
+                if under.flatten().as_deref() != Some(space.as_str()) {
+                    continue;
+                }
+                let goes = match c["goes_under"].as_str() {
+                    Some(p) => Some(Space::new(p)?),
+                    None => None,
+                };
+                self.set_layout(
+                    owner,
+                    &child,
+                    &Change {
+                        parent: Some(goes),
+                        ..Default::default()
+                    },
+                )?;
+            }
+            self.unregister(&space, owner, at)?;
+            crate::failpoint::hit(crate::failpoint::at::ARCHIVE_UNREGISTERED)?;
+        }
+        // Aside, not erased.
+        shift(
+            &pieces(self, &space, &archive.join("live")),
+            true,
+            Some(crate::failpoint::at::ARCHIVE_DB),
+        )?;
+        let mut done = j.clone();
+        done["state"] = json!(ARCHIVED);
+        write_journal(archive, &done)?;
+        Ok(merged)
+    }
+
+    /// The space leaves the control database, and the mark of its archive is kept for the other nodes (see `swarm`),
+    /// in one transaction: a space unregistered here is always one the peers are told is archived.
+    fn unregister(&self, space: &Space, owner: &str, at: i64) -> Result<()> {
         // Fold the write-ahead log into the file so that one file is the whole database.
         {
             let c = self.open_space(space)?;
             let _: rusqlite::Result<i64> =
                 c.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(1));
         }
-        let live = archive.join("live");
-        fs::create_dir_all(&live)?;
-        let db = self.dir().join(space.file_name());
-        let blobs = self.dir().join("files").join(space.as_str());
+        let ctl = self.open_control()?;
         let tx =
             rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
         for sql in [
@@ -620,22 +693,11 @@ impl Brain {
         ] {
             tx.execute(sql, [space.as_str()])?;
         }
-        fs::write(
-            archive.join("archive.json"),
-            serde_json::to_string_pretty(&manifest).unwrap_or_default(),
+        tx.execute(
+            "DELETE FROM meta WHERE k = ?1",
+            [crate::layout::pending_key(space)],
         )?;
-        fs::rename(&db, live.join(space.file_name()))?;
-        // The log goes with the file: a connection still reading keeps the checkpoint above from folding the last
-        // writes in, and removing the log lost them.
-        for ext in ["-wal", "-shm"] {
-            let side = PathBuf::from(format!("{}{ext}", db.display()));
-            if side.exists() {
-                fs::rename(&side, live.join(format!("{}{ext}", space.file_name())))?;
-            }
-        }
-        if blobs.is_dir() {
-            fs::rename(&blobs, live.join("files"))?;
-        }
+        crate::swarm::mark_archived_in(&tx, space, owner, at)?;
         tx.commit()?;
         Ok(())
     }
@@ -647,13 +709,15 @@ impl Brain {
             return Ok(out);
         };
         for e in rd.flatten() {
-            let Ok(text) = fs::read_to_string(e.path().join("archive.json")) else {
+            let Ok(text) = fs::read_to_string(e.path().join(JOURNAL)) else {
                 continue;
             };
             let Ok(v) = serde_json::from_str::<Value>(&text) else {
                 continue;
             };
-            if v["owner"].as_str() != Some(user_id) {
+            if v["owner"].as_str() != Some(user_id)
+                || v["state"].as_str().is_some_and(|s| s != ARCHIVED)
+            {
                 continue;
             }
             out.push(Archived {
@@ -678,18 +742,23 @@ impl Brain {
         }
         let dir = self.archive_root().join(archive);
         let v: Value = serde_json::from_str(
-            &fs::read_to_string(dir.join("archive.json"))
+            &fs::read_to_string(dir.join(JOURNAL))
                 .map_err(|_| Error::Invalid(format!("no archived space {archive}")))?,
         )
         .map_err(|e| Error::Invalid(format!("the archive is unreadable: {e}")))?;
         if v["owner"].as_str() != Some(user_id) {
             return Err(Error::Invalid(format!("no archived space {archive}")));
         }
-        let space = Space::new(v["space"].as_str().unwrap_or_default())?;
-        if self.has_space(&space)? || self.dir().join(space.file_name()).exists() {
+        if let Some(s) = v["state"].as_str().filter(|s| *s != ARCHIVED) {
             return Err(Error::Invalid(format!(
-                "{space} exists already: delete or rename it first"
+                "{archive} is {s}: the node finishes it when it starts"
             )));
+        }
+        let space = Space::new(v["space"].as_str().unwrap_or_default())?;
+        let in_use =
+            || Error::Invalid(format!("{space} exists already: delete or rename it first"));
+        if self.has_space(&space)? || crate::recover::in_flight(self, &space)? {
+            return Err(in_use());
         }
         let live = dir.join("live");
         if !live.join(space.file_name()).is_file() {
@@ -698,6 +767,57 @@ impl Brain {
         if dry_run {
             return Ok(space);
         }
+        let _busy = crate::recover::busy(self)?;
+        if self.dir().join(space.file_name()).exists()
+            && !crate::recover::clear_orphan(self, &space)?
+        {
+            return Err(in_use());
+        }
+        let mut j = v.clone();
+        j["state"] = json!(RESTORING);
+        write_journal(&dir, &j)?;
+        crate::failpoint::hit(crate::failpoint::at::RESTORE_JOURNAL)?;
+        self.finish_restore(&dir, &j)?;
+        auth_event(
+            &self.open_control()?,
+            Some(user_id),
+            None,
+            "space_restore",
+            &format!("{space} from {archive}"),
+        );
+        Ok(space)
+    }
+
+    /// Does what the journal of a restore says is left: the database and files move back (never over a file there),
+    /// then one control transaction registers the space with its place and grants and the mark that it is back; the
+    /// journal closes (`restored.json`). Once registered, the space is the restored one: no other creation takes a
+    /// name whose restore is under way.
+    fn finish_restore(&self, dir: &Path, j: &Value) -> Result<Space> {
+        let space = Space::new(j["space"].as_str().unwrap_or_default())?;
+        let owner = j["owner"].as_str().unwrap_or_default();
+        let live = dir.join("live");
+        if self.has_space(&space)? {
+            shift(&pieces(self, &space, &live), false, None)?;
+        } else {
+            shift(
+                &pieces(self, &space, &live),
+                false,
+                Some(crate::failpoint::at::RESTORE_DB),
+            )?;
+            crate::failpoint::hit(crate::failpoint::at::RESTORE_FILES)?;
+            self.reregister(&space, owner, j)?;
+            crate::failpoint::hit(crate::failpoint::at::RESTORE_REGISTERED)?;
+        }
+        // The file must declare this space and open cleanly.
+        self.open_space(&space)?;
+        fs::rename(dir.join(JOURNAL), dir.join("restored.json"))?;
+        crate::fsx::sync_dir(dir)?;
+        Ok(space)
+    }
+
+    /// The control transaction of a restore: the space, its owner, the grants that still have a connection, and the
+    /// mark that it is back (newer than the archive, so the other nodes take it again).
+    fn reregister(&self, space: &Space, user_id: &str, v: &Value) -> Result<()> {
         let ctl = self.open_control()?;
         let tx =
             rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
@@ -755,37 +875,242 @@ impl Brain {
                 )?;
             }
         }
-        fs::rename(
-            live.join(space.file_name()),
-            self.dir().join(space.file_name()),
-        )?;
-        for ext in ["-wal", "-shm"] {
-            let side = live.join(format!("{}{ext}", space.file_name()));
-            if side.exists() {
-                fs::rename(
-                    &side,
-                    self.dir().join(format!("{}{ext}", space.file_name())),
-                )?;
+        crate::swarm::mark_restored_in(&tx, space, util::now())?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Finishes the archives and restores a crash cut off (run by [`Brain::recover`]): a deletion goes on to its end
+    /// (into a target that is gone, it is given up and the space stays); a restore goes on to its end. An archive
+    /// written by an earlier version, which moved the files before its control transaction, is put right: a space
+    /// still registered gets its files back and the archive is given up (`aborted.json`); files a restore had begun
+    /// to move back go back into the archive. Answers how many it settled, and what it could not.
+    pub(crate) fn settle_archives(&self) -> (usize, Vec<String>) {
+        let mut done = 0;
+        let mut failed = vec![];
+        let Ok(rd) = fs::read_dir(self.archive_root()) else {
+            return (done, failed);
+        };
+        for e in rd.flatten() {
+            let dir = e.path();
+            let Ok(text) = fs::read_to_string(dir.join(JOURNAL)) else {
+                continue;
+            };
+            let Ok(v) = serde_json::from_str::<Value>(&text) else {
+                continue;
+            };
+            let r = match v["state"].as_str() {
+                Some(DELETING) => self.settle_deletion(&dir, &v),
+                Some(RESTORING) => self.finish_restore(&dir, &v).map(|_| true),
+                Some(ARCHIVED) | None => self.settle_legacy(&dir, &v),
+                Some(_) => Ok(false),
+            };
+            match r {
+                Ok(true) => done += 1,
+                Ok(false) => {}
+                Err(e) => failed.push(format!("{}: {e}", e_name(&dir))),
             }
         }
-        let blobs = live.join("files");
-        if blobs.is_dir() {
-            fs::create_dir_all(self.dir().join("files"))?;
-            fs::rename(&blobs, self.dir().join("files").join(space.as_str()))?;
-        }
-        tx.commit()?;
-        // The file must declare this space and open cleanly.
-        self.open_space(&space)?;
-        let _ = fs::rename(dir.join("archive.json"), dir.join("restored.json"));
-        // Brought back after it was archived: newer than the archive, so the other nodes take it again.
-        crate::swarm::note_restored(self, &space, util::now())?;
-        auth_event(
-            &self.open_control()?,
-            Some(user_id),
-            None,
-            "space_restore",
-            &format!("{space} from {archive}"),
-        );
-        Ok(space)
+        (done, failed)
     }
+
+    fn settle_deletion(&self, dir: &Path, v: &Value) -> Result<bool> {
+        let space = Space::new(v["space"].as_str().unwrap_or_default())?;
+        let target_gone = match v["into"].as_str() {
+            Some(t) => !self.has_space(&Space::new(t)?)?,
+            None => false,
+        };
+        if target_gone && self.has_space(&space)? {
+            // Nothing went into it: the space stays as it was.
+            fs::rename(dir.join(JOURNAL), dir.join("aborted.json"))?;
+            return Ok(true);
+        }
+        self.finish_delete(dir, v)?;
+        Ok(true)
+    }
+
+    fn settle_legacy(&self, dir: &Path, v: &Value) -> Result<bool> {
+        let Ok(space) = Space::new(v["space"].as_str().unwrap_or_default()) else {
+            return Ok(false);
+        };
+        let live = dir.join("live");
+        let in_live = live.join(space.file_name()).is_file();
+        let in_data = self.dir().join(space.file_name()).is_file();
+        if self.has_space(&space)? {
+            // A space of that name made or brought back after the archive is another copy: left alone.
+            let at = v["archived_at"].as_i64().unwrap_or(i64::MAX);
+            if crate::swarm::since(self, &space)? > at || in_live == in_data {
+                return Ok(false);
+            }
+            // The archive's control transaction never committed: the space stays, its files come back.
+            shift(&pieces(self, &space, &live), false, None)?;
+            fs::rename(dir.join(JOURNAL), dir.join("aborted.json"))?;
+            crate::fsx::sync_dir(dir)?;
+            return Ok(true);
+        }
+        if in_data && !in_live {
+            // A restore whose control transaction never committed: the files go back into the archive.
+            shift(&pieces(self, &space, &live), true, None)?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
+    /// Whether an archive or a restore of `space` is under way (its journal says `deleting` or `restoring`).
+    pub(crate) fn archive_in_flight(&self, space: &Space) -> bool {
+        let Ok(rd) = fs::read_dir(self.archive_root()) else {
+            return false;
+        };
+        rd.flatten().any(|e| {
+            fs::read_to_string(e.path().join(JOURNAL))
+                .ok()
+                .and_then(|t| serde_json::from_str::<Value>(&t).ok())
+                .is_some_and(|v| {
+                    v["space"].as_str() == Some(space.as_str())
+                        && matches!(v["state"].as_str(), Some(DELETING | RESTORING))
+                })
+        })
+    }
+}
+
+/// The journal of an archived space, and its manifest once archived.
+const JOURNAL: &str = "archive.json";
+/// The deletion is under way.
+const DELETING: &str = "deleting";
+/// The space is archived: its database and files are in `live/`.
+const ARCHIVED: &str = "archived";
+/// The restore is under way.
+const RESTORING: &str = "restoring";
+
+fn e_name(dir: &Path) -> String {
+    dir.file_name()
+        .map(|n| n.to_string_lossy().to_string())
+        .unwrap_or_default()
+}
+
+fn strings(v: &Value) -> Vec<String> {
+    v.as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.as_str().map(String::from))
+        .collect()
+}
+
+/// Writes the journal whole or not at all: a temporary file, made durable, renamed in.
+fn write_journal(dir: &Path, v: &Value) -> Result<()> {
+    use crate::fsx::PrivateFile as _;
+    use std::io::Write as _;
+    let tmp = dir.join(".archive.json.tmp");
+    let mut f = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .private_file()
+        .open(&tmp)?;
+    f.write_all(
+        serde_json::to_string_pretty(v)
+            .unwrap_or_default()
+            .as_bytes(),
+    )?;
+    f.sync_all()?;
+    drop(f);
+    fs::rename(&tmp, dir.join(JOURNAL))?;
+    crate::fsx::sync_dir(dir)?;
+    Ok(())
+}
+
+/// The pieces of a space on disk, each with its place in the archive: the database, its log, its shared memory, its
+/// folder of files.
+fn pieces(brain: &Brain, space: &Space, live: &Path) -> Vec<(PathBuf, PathBuf)> {
+    let db = brain.dir().join(space.file_name());
+    let mut out = vec![(db.clone(), live.join(space.file_name()))];
+    for ext in ["-wal", "-shm"] {
+        out.push((
+            PathBuf::from(format!("{}{ext}", db.display())),
+            live.join(format!("{}{ext}", space.file_name())),
+        ));
+    }
+    out.push((
+        brain.dir().join("files").join(space.as_str()),
+        live.join("files"),
+    ));
+    out
+}
+
+fn exists(p: &Path) -> bool {
+    fs::symlink_metadata(p).is_ok()
+}
+
+fn empty_dir(p: &Path) -> bool {
+    fs::read_dir(p).is_ok_and(|mut d| d.next().is_none())
+}
+
+#[cfg(unix)]
+fn same_file(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt as _;
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(x), Ok(y)) => x.dev() == y.dev() && x.ino() == y.ino(),
+        _ => false,
+    }
+}
+
+#[cfg(not(unix))]
+fn same_file(_: &Path, _: &Path) -> bool {
+    false
+}
+
+/// Moves the pieces of a space, `aside` into the archive or back out of it, each once and never over another file:
+/// a file is linked under its new name then unlinked (a crash between leaves two names of one file, which the next
+/// pass ends), a folder is renamed. A piece already moved is skipped, so it runs again after a crash. `point` stops
+/// it after its first piece (the tests).
+fn shift(pairs: &[(PathBuf, PathBuf)], aside: bool, point: Option<&'static str>) -> Result<()> {
+    let mut first = true;
+    for (a, b) in pairs {
+        let (src, dst) = if aside { (a, b) } else { (b, a) };
+        if !exists(src) {
+            continue;
+        }
+        if let Some(parent) = dst.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if exists(dst) {
+            if src.is_dir() && dst.is_dir() {
+                if empty_dir(dst) {
+                    fs::remove_dir(dst)?;
+                    fs::rename(src, dst)?;
+                } else if empty_dir(src) {
+                    fs::remove_dir(src)?;
+                } else {
+                    return Err(Error::Schema(format!(
+                        "{} and {} both hold files: the node will not choose",
+                        src.display(),
+                        dst.display()
+                    )));
+                }
+            } else if same_file(src, dst) {
+                fs::remove_file(src)?;
+            } else {
+                return Err(Error::Schema(format!(
+                    "{} and {} both exist: the node will not choose",
+                    src.display(),
+                    dst.display()
+                )));
+            }
+        } else if src.is_dir() {
+            fs::rename(src, dst)?;
+        } else {
+            fs::hard_link(src, dst)?;
+            fs::remove_file(src)?;
+        }
+        for p in [src.parent(), dst.parent()].into_iter().flatten() {
+            crate::fsx::sync_dir(p)?;
+        }
+        if first {
+            first = false;
+            if let Some(p) = point {
+                crate::failpoint::hit(p)?;
+            }
+        }
+    }
+    Ok(())
 }

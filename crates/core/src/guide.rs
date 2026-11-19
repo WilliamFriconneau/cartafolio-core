@@ -123,16 +123,35 @@ pub fn set(ctl: &Connection, author: &str, scope: &str, body: &str) -> Result<Gu
         return Err(Error::Invalid("this is already the guide".into()));
     }
     let now = util::now();
-    let tx = rusqlite::Transaction::new_unchecked(ctl, rusqlite::TransactionBehavior::Immediate)?;
-    tx.execute(
-        "UPDATE guides SET current = 0, ended_at = ?2 WHERE scope = ?1 AND current = 1",
-        params![scope, now],
-    )?;
-    tx.execute(
-        "INSERT INTO guides (scope, body, author, created_at) VALUES (?1, ?2, ?3, ?4)",
-        params![scope, text, author, now],
-    )?;
-    tx.commit()?;
+    // Its own transaction, or a part of the caller's (an adoption registers its spaces and their guides at once).
+    let own = ctl.is_autocommit();
+    ctl.execute_batch(if own {
+        "BEGIN IMMEDIATE"
+    } else {
+        "SAVEPOINT guide_set"
+    })?;
+    let written = (|| -> Result<()> {
+        ctl.execute(
+            "UPDATE guides SET current = 0, ended_at = ?2 WHERE scope = ?1 AND current = 1",
+            params![scope, now],
+        )?;
+        ctl.execute(
+            "INSERT INTO guides (scope, body, author, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![scope, text, author, now],
+        )?;
+        Ok(())
+    })();
+    match written {
+        Ok(()) => ctl.execute_batch(if own { "COMMIT" } else { "RELEASE guide_set" })?,
+        Err(e) => {
+            let _ = ctl.execute_batch(if own {
+                "ROLLBACK"
+            } else {
+                "ROLLBACK TO guide_set; RELEASE guide_set"
+            });
+            return Err(e);
+        }
+    }
     crate::users::audit(ctl, author, "guide_set", scope);
     current(ctl, scope)?.ok_or_else(|| Error::Schema("guide not found after writing".into()))
 }

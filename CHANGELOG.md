@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Deleting, archiving, restoring, making, merging and adopting spaces survive a crash.** Cut off at any instant, each one ends done or not done when the node starts again: a deleted space never comes back from another machine, an archive always restores, a merge finished after a crash doubles nothing, and no half-made space blocks its name.
+
 ## 20261117.0.32
 
 - **A connection made on a node served on another port works.** Without `--public-url`, the server and the manager hand out the address they listen on (a wildcard host becomes 127.0.0.1), not port 8791: the Mac app, which serves on 8799, no longer throws its connection away.

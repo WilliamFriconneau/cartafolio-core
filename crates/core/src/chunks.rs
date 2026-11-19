@@ -190,9 +190,13 @@ pub(crate) fn assemble(
     hashes: &[String],
 ) -> Result<bool> {
     let target = crate::files::blob_path(brain, space, sha);
-    if target.exists() {
+    if crate::files::whole(&target, size) {
         drop_staged(brain, space, sha);
         return Ok(true);
+    }
+    // Bytes of another size under that name (torn by a crash) are not the file: put together again.
+    if target.exists() {
+        fs::remove_file(&target)?;
     }
     if !missing(brain, space, sha, hashes).is_empty() {
         return Ok(false);

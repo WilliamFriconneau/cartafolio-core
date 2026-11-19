@@ -32,6 +32,34 @@ pub mod at {
     pub const MOVE_JOURNAL: &str = "move.journal";
     /// A move of notes: the copies are written, no source is retired.
     pub const MOVE_COPIES: &str = "move.copies";
+    /// A new space: its file is linked in under its name, it is not registered.
+    pub const SPACE_CREATE_FILE: &str = "space.create.file";
+    /// A deletion: the export is checked and the journal written (`deleting`), nothing else is done.
+    pub const ARCHIVE_JOURNAL: &str = "space.archive.journal";
+    /// A deletion into another space: the merge is committed, the space is still registered.
+    pub const ARCHIVE_MERGED: &str = "space.archive.merged";
+    /// A deletion: the space is unregistered with the mark of its archive, its files are where they were.
+    pub const ARCHIVE_UNREGISTERED: &str = "space.archive.unregistered";
+    /// A deletion: the database is in the archive, its log and its files are not yet.
+    pub const ARCHIVE_DB: &str = "space.archive.db";
+    /// A restore: the journal says `restoring`, nothing has moved.
+    pub const RESTORE_JOURNAL: &str = "space.restore.journal";
+    /// A restore: the database is back, its log and its files are not yet.
+    pub const RESTORE_DB: &str = "space.restore.db";
+    /// A restore: every piece is back, the space is not registered.
+    pub const RESTORE_FILES: &str = "space.restore.files";
+    /// A restore: registered, the journal not closed.
+    pub const RESTORE_REGISTERED: &str = "space.restore.registered";
+    /// A layout change: committed in the control database with its mark, not yet in the space's log.
+    pub const LAYOUT_CONTROL: &str = "layout.set.control";
+    /// A layout change: in the space's log, its mark not yet cleared.
+    pub const LAYOUT_LOGGED: &str = "layout.set.logged";
+    /// A merge: its journal is written and its new spaces made, no target is committed.
+    pub const MERGE_SPACES: &str = "merge.run.spaces";
+    /// A merge: the first target is committed, not the others.
+    pub const MERGE_TARGET: &str = "merge.run.target";
+    /// An adoption of an export: the databases and files are in place, nothing is registered.
+    pub const ADOPT_FILES: &str = "export.adopt.files";
 }
 
 thread_local! {

@@ -64,9 +64,12 @@ fn settle_marks(ctl: &Connection) -> Result<()> {
 
 /// When `space` was archived on this node or on a node it heard from, and by whose decision: `(owner, at)`.
 pub fn archived_at(brain: &Brain, space: &Space) -> Result<Option<(String, i64)>> {
-    let ctl = brain.open_control()?;
-    settle_marks(&ctl)?;
-    Ok(meta(&ctl, &format!("{ARCHIVED}{space}"))?.and_then(|v| {
+    archived_at_in(&brain.open_control()?, space)
+}
+
+fn archived_at_in(ctl: &Connection, space: &Space) -> Result<Option<(String, i64)>> {
+    settle_marks(ctl)?;
+    Ok(meta(ctl, &format!("{ARCHIVED}{space}"))?.and_then(|v| {
         let v: Value = serde_json::from_str(&v).ok()?;
         Some((v["owner"].as_str()?.to_string(), v["at"].as_i64()?))
     }))
@@ -74,30 +77,48 @@ pub fn archived_at(brain: &Brain, space: &Space) -> Result<Option<(String, i64)>
 
 /// Keeps the mark of an archive (the newest one wins), so it travels to the other nodes.
 pub(crate) fn note_archived(brain: &Brain, space: &Space, owner: &str, at: i64) -> Result<()> {
+    mark_archived_in(&brain.open_control()?, space, owner, at)
+}
+
+/// [`note_archived`] on the caller's control connection, inside its transaction: the space unregistered and its mark
+/// kept are one change (a crash between let a peer give the archived space back).
+pub(crate) fn mark_archived_in(
+    ctl: &Connection,
+    space: &Space,
+    owner: &str,
+    at: i64,
+) -> Result<()> {
     let at = bounded(at);
-    if archived_at(brain, space)?.is_some_and(|(_, was)| was >= at) {
+    if archived_at_in(ctl, space)?.is_some_and(|(_, was)| was >= at) {
         return Ok(());
     }
-    let ctl = brain.open_control()?;
     meta_set(
-        &ctl,
+        ctl,
         &format!("{ARCHIVED}{space}"),
         &json!({ "owner": owner, "at": at }).to_string(),
     )?;
-    meta_del(&ctl, &format!("{RESTORED}{space}"))
+    meta_del(ctl, &format!("{RESTORED}{space}"))
 }
 
 /// A space brought back from its archive: the mark goes, and the copy counts as begun now, or just after the archive
 /// it comes back from if that one is stamped later (a clock ahead): a space brought back always wins over the archives
-/// this node knew of.
-pub(crate) fn note_restored(brain: &Brain, space: &Space, at: i64) -> Result<()> {
-    let at = match archived_at(brain, space)? {
+/// this node knew of. On the caller's control connection, inside the transaction that registers it again.
+pub(crate) fn mark_restored_in(ctl: &Connection, space: &Space, at: i64) -> Result<()> {
+    let at = match archived_at_in(ctl, space)? {
         Some((_, archived)) => at.max(archived.saturating_add(1)),
         None => at,
     };
-    let ctl = brain.open_control()?;
-    meta_del(&ctl, &format!("{ARCHIVED}{space}"))?;
-    meta_set(&ctl, &format!("{RESTORED}{space}"), &at.to_string())
+    meta_del(ctl, &format!("{ARCHIVED}{space}"))?;
+    meta_set(ctl, &format!("{RESTORED}{space}"), &at.to_string())
+}
+
+/// A space made here from a peer's copy that began at `since`: an older archive mark of it no longer holds. Inside
+/// the transaction that registers it.
+pub(crate) fn forget_older_archive(ctl: &Connection, space: &Space, since: i64) -> Result<()> {
+    if archived_at_in(ctl, space)?.is_some_and(|(_, at)| at < since) {
+        meta_del(ctl, &format!("{ARCHIVED}{space}"))?;
+    }
+    Ok(())
 }
 
 /// When this node's copy of `space` began, in seconds: the time the space was made at its origin (a copy made from a
@@ -293,18 +314,18 @@ pub fn offers_to(brain: &Brain, user: &str, peer: &str) -> Result<Vec<Offer>> {
 /// # Errors
 /// [`Error::Invalid`] when a space of that name here belongs to another person: the two are never paired.
 pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -> Result<bool> {
-    let set_kind = |brain: &Brain| -> Result<()> {
-        if kind == TRIAGE {
-            // Inbox is not in the catalogue (`set_space_kind` refuses it), yet it must stay one here.
-            brain.open_control()?.execute(
-                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
-                [space.as_str(), TRIAGE],
-            )?;
-            Ok(())
-        } else {
-            brain.set_space_kind(space, kind)
-        }
-    };
+    adopt_placed(brain, user, space, kind, since, None)
+}
+
+/// [`adopt`], placed as the offer says (its label, parent and position), all in the one transaction that makes it.
+fn adopt_placed(
+    brain: &Brain,
+    user: &str,
+    space: &Space,
+    kind: &str,
+    since: i64,
+    offer: Option<&Offer>,
+) -> Result<bool> {
     let other_person = || {
         Error::Invalid(format!(
             "{space} is the name of a space of another person here: it is not exchanged"
@@ -318,11 +339,36 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
         }
         // A box that an earlier version made `custom` here is put right.
         if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
-            set_kind(brain)?;
+            brain.open_control()?.execute(
+                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
+                [space.as_str(), TRIAGE],
+            )?;
         }
         return Ok(false);
     }
-    if let Err(e) = brain.add_space_for(space, user) {
+    // Inbox is not in the catalogue, yet it must stay one here; a kind this node's catalogue does not know stays
+    // `custom`.
+    let kind = if kind == TRIAGE || brain.catalogue()?.iter().any(|k| k.key == kind) {
+        kind.to_string()
+    } else {
+        CUSTOM.to_string()
+    };
+    let mut new = crate::brain::NewSpace::owned_by(user);
+    new.kind = kind;
+    new.created_at = since;
+    new.adopted_since = Some(since);
+    if let Some(o) = offer {
+        let ctl = brain.open_control()?;
+        new.label.clone_from(&o.label);
+        new.parent = o
+            .parent
+            .clone()
+            .filter(|p| is_space_owner(&ctl, p, user).unwrap_or(false));
+        new.position = o.position;
+    }
+    // Its layout comes with the peer's events: never recorded again here under a stamp of this node's.
+    let made = brain.make_space(space, &new, &|conn| crate::sync::mark_layout_logged(conn));
+    if let Err(e) = made {
         // Another pass of this node (it runs one per peer, each its own process) may be making the same space at this
         // moment: once it is made, it is held here, as above.
         let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
@@ -334,18 +380,6 @@ pub fn adopt(brain: &Brain, user: &str, space: &Space, kind: &str, since: i64) -
         }
         return Err(e);
     }
-    // A kind this node's catalogue does not know stays `custom`.
-    let _ = set_kind(brain);
-    let ctl = brain.open_control()?;
-    ctl.execute(
-        "UPDATE spaces SET created_at = ?2 WHERE name = ?1",
-        params![space.as_str(), since],
-    )?;
-    // The space is back: an older archive mark of it here no longer holds.
-    if archived_at(brain, space)?.is_some_and(|(_, at)| at < since) {
-        meta_del(&ctl, &format!("{ARCHIVED}{space}"))?;
-    }
-    crate::sync::mark_layout_logged(&brain.open_space(space)?)?;
     Ok(true)
 }
 
@@ -385,22 +419,15 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
     {
         return Ok(Answer::Archived(at));
     }
-    adopt(brain, user, &offer.space, &offer.kind, offer.since)?;
     // The layout the offer carries, so the space shows in its place at once; the events that follow say the same
     // under their own stamps. Not recorded as events of this node (see `adopt`).
-    let ctl = brain.open_control()?;
-    let parent = offer
-        .parent
-        .as_ref()
-        .filter(|p| is_space_owner(&ctl, p, user).unwrap_or(false));
-    ctl.execute(
-        "UPDATE spaces SET label = ?2, parent = ?3, position = ?4 WHERE name = ?1",
-        params![
-            offer.space.as_str(),
-            offer.label,
-            parent.map(Space::as_str),
-            offer.position
-        ],
+    adopt_placed(
+        brain,
+        user,
+        &offer.space,
+        &offer.kind,
+        offer.since,
+        Some(offer),
     )?;
     Ok(Answer::Created(offer.space.clone()))
 }

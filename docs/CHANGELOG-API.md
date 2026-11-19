@@ -2,6 +2,25 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Crash safety of spaces (Unreleased)
+
+- `Recovered` (what `Brain::recover()` answers) gains `spaces` (archives, restores, merges, adoptions and layout
+  changes a crash cut off, finished or undone), `orphans` (files of a space a creation cut off, removed), `stray`
+  (space files registered nowhere that hold notes, left in place and named) and `unsettled` (what could not be
+  finished, with the reason; tried again at the next start). `is_clean()` and `summary()` count them.
+- An archive folder's `archive.json` has a `state`: `deleting` and `restoring` while under way, `archived` once done
+  (an archive without `state`, written earlier, counts as archived). `archived_spaces` lists only archived ones;
+  `restore_space` of one under way is refused (`invalid`, `… is deleting: the node finishes it when it starts`). An
+  archive given up (its target gone, or an earlier version's archive whose control rows were never removed) is
+  renamed `aborted.json`. The journal also holds `user_name`, `export`, `tags`, `keywords` and `children`.
+- No space is made under a name whose archive, restore or adoption is under way (`invalid`, `… already exists`).
+- A data directory gets `spaces.lock` (the lock of operations on whole spaces), and control `meta` rows
+  `merge_pending:<id>`, `adopt_pending:<id>` and `layout_pending:<space>` while those operations are under way.
+- A space created with keywords or tags (`space_create`, the page) holds its rules and the
+  events of its layout from its first instant: no separate write follows the creation.
+- A file's bytes under their name with another size than its record says are not taken for the file: a peer is asked
+  for them again, a put or a merge writes them again.
+
 ## Crash safety of files (20261117.0.30)
 
 - The node runs `Brain::recover()` (new, returns `Recovered`) at start, before serving; it replaces the call to

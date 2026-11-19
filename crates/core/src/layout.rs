@@ -7,7 +7,8 @@
 
 use std::collections::BTreeMap;
 
-use rusqlite::{OptionalExtension, params};
+use rusqlite::{Connection, OptionalExtension, params};
+use serde_json::{Value, json};
 
 use crate::brain::Brain;
 use crate::catalogue::{CUSTOM, vault_name};
@@ -226,18 +227,22 @@ impl Brain {
                 params![space.as_str(), pos],
             )?;
         }
+        // The change and the mark that it is still to log for the peers are one: a crash before it is logged is
+        // logged at the next start (`settle`), never lost (a later, older event of a peer would undo it).
+        let mut fields = vec![];
+        if label.is_some() {
+            fields.push("label");
+        }
+        if change.parent.is_some() {
+            fields.push("parent");
+        }
+        if change.position.is_some() {
+            fields.push("position");
+        }
+        mark_pending(&tx, space, &fields)?;
         tx.commit()?;
-        let log = self.open_space(space)?;
-        if let Some(l) = &label {
-            crate::sync::record_layout(&log, "label", serde_json::json!(l))?;
-        }
-        if let Some(parent) = &change.parent {
-            let v = parent.as_ref().map(Space::as_str);
-            crate::sync::record_layout(&log, "parent", serde_json::json!(v))?;
-        }
-        if let Some(pos) = change.position {
-            crate::sync::record_layout(&log, "position", serde_json::json!(pos))?;
-        }
+        crate::failpoint::hit(crate::failpoint::at::LAYOUT_CONTROL)?;
+        log_pending(self, space)?;
         Ok(())
     }
 
@@ -249,6 +254,19 @@ impl Brain {
         person: &str,
         label: &str,
         parent: Option<&Space>,
+    ) -> Result<Space> {
+        self.add_space_placed(user_id, person, label, parent, CUSTOM, &|_| Ok(()))
+    }
+
+    /// [`Brain::add_custom_space`] of a kind, with what `prepare` writes in its file before it exists (its rules).
+    pub(crate) fn add_space_placed(
+        &self,
+        user_id: &str,
+        person: &str,
+        label: &str,
+        parent: Option<&Space>,
+        kind: &str,
+        prepare: &dyn Fn(&rusqlite::Connection) -> Result<()>,
     ) -> Result<Space> {
         let label = clean_label(label)?;
         if let Some(p) = parent {
@@ -293,10 +311,8 @@ impl Brain {
             }
         }
         let space = space.ok_or_else(|| Error::Invalid("no free name for this space".into()))?;
-        self.add_space_for(&space, user_id)?;
-        self.set_space_kind(&space, CUSTOM)?;
-        let ctl = self.open_control()?;
-        let next: i64 = ctl
+        let next: i64 = self
+            .open_control()?
             .query_row(
                 "SELECT COALESCE(MAX(position), 0) + 1 FROM spaces WHERE parent IS ?1",
                 [parent.map(Space::as_str)],
@@ -304,16 +320,118 @@ impl Brain {
             )
             .optional()?
             .unwrap_or(1);
-        ctl.execute(
-            "UPDATE spaces SET label = ?2, parent = ?3, position = ?4 WHERE name = ?1",
-            params![space.as_str(), label, parent.map(Space::as_str), next],
-        )?;
-        let log = self.open_space(&space)?;
-        crate::sync::record_layout(&log, "label", serde_json::json!(label))?;
-        if let Some(p) = parent {
-            crate::sync::record_layout(&log, "parent", serde_json::json!(p.as_str()))?;
-        }
-        crate::sync::record_layout(&log, "position", serde_json::json!(next))?;
+        let mut new = crate::brain::NewSpace::owned_by(user_id);
+        new.kind = kind.to_string();
+        new.label = Some(label.clone());
+        new.parent = parent.cloned();
+        new.position = next;
+        // Its layout is in its log from the start: the file is made with the events, before it is registered.
+        self.make_space(&space, &new, &|log| {
+            let mut fields = vec![("label", json!(label))];
+            if let Some(p) = parent {
+                fields.push(("parent", json!(p.as_str())));
+            }
+            fields.push(("position", json!(next)));
+            crate::sync::record_layout_fields(log, &fields, None)?;
+            crate::sync::mark_layout_logged(log)?;
+            prepare(log)
+        })?;
         Ok(space)
     }
+}
+
+/// The control database's mark of a layout change of `space` not yet in the space's log.
+pub(crate) fn pending_key(space: &Space) -> String {
+    format!("layout_pending:{space}")
+}
+
+/// Adds `fields` to the mark of `space`, under a new token, in the caller's control transaction.
+fn mark_pending(ctl: &Connection, space: &Space, fields: &[&str]) -> Result<()> {
+    if fields.is_empty() {
+        return Ok(());
+    }
+    let key = pending_key(space);
+    let old: Option<String> = ctl
+        .query_row("SELECT v FROM meta WHERE k = ?1", [&key], |r| r.get(0))
+        .optional()?;
+    let mut all: Vec<String> = old
+        .and_then(|v| serde_json::from_str::<Value>(&v).ok())
+        .and_then(|v| v["fields"].as_array().cloned())
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|f| f.as_str().map(String::from))
+        .collect();
+    for f in fields {
+        if !all.iter().any(|a| a == f) {
+            all.push((*f).to_string());
+        }
+    }
+    let v = json!({ "token": crate::util::random_base32(12), "fields": all }).to_string();
+    ctl.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2) ON CONFLICT(k) DO UPDATE SET v = excluded.v",
+        params![key, v],
+    )?;
+    Ok(())
+}
+
+/// Logs the layout change marked for `space` (its fields, with the values the control database holds now), once:
+/// the space's log keeps the token of the mark in the same transaction, so a crash after it is not logged twice. Then
+/// clears the mark, unless a newer change marked it again meanwhile. Answers whether there was a mark.
+pub(crate) fn log_pending(brain: &Brain, space: &Space) -> Result<bool> {
+    let ctl = brain.open_control()?;
+    let key = pending_key(space);
+    let Some(v) = ctl
+        .query_row("SELECT v FROM meta WHERE k = ?1", [&key], |r| {
+            r.get::<_, String>(0)
+        })
+        .optional()?
+    else {
+        return Ok(false);
+    };
+    let mark: Value = serde_json::from_str(&v).unwrap_or(Value::Null);
+    let token = mark["token"].as_str().unwrap_or_default();
+    let row: Option<(Option<String>, Option<String>, i64)> = ctl
+        .query_row(
+            "SELECT label, parent, position FROM spaces WHERE name = ?1",
+            [space.as_str()],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .optional()?;
+    if let Some((label, parent, position)) = row {
+        let log = brain.open_space(space)?;
+        if !crate::sync::layout_logged(&log, token)? {
+            let fields: Vec<(&str, Value)> = mark["fields"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .filter_map(|f| match f.as_str() {
+                    Some("label") => Some(("label", json!(label))),
+                    Some("parent") => Some(("parent", json!(parent))),
+                    Some("position") => Some(("position", json!(position))),
+                    _ => None,
+                })
+                .collect();
+            crate::sync::record_layout_fields(&log, &fields, Some(token))?;
+        }
+        crate::failpoint::hit(crate::failpoint::at::LAYOUT_LOGGED)?;
+    }
+    ctl.execute("DELETE FROM meta WHERE k = ?1 AND v = ?2", params![key, v])?;
+    Ok(true)
+}
+
+/// The layout changes a crash left unlogged, logged (run by [`Brain::recover`]). Answers how many.
+pub(crate) fn settle(brain: &Brain) -> Result<usize> {
+    let keys: Vec<String> = brain
+        .open_control()?
+        .prepare("SELECT k FROM meta WHERE k LIKE 'layout_pending:%'")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut n = 0;
+    for k in keys {
+        let Ok(space) = Space::new(k.trim_start_matches("layout_pending:")) else {
+            continue;
+        };
+        n += usize::from(log_pending(brain, &space)?);
+    }
+    Ok(n)
 }

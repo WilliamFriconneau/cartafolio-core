@@ -712,6 +712,8 @@ struct Resolved<'a> {
     dest: Space,
     /// The space is to be created.
     create: bool,
+    /// The space was created by this plan, before a crash cut it off: it takes the other's guide as a new one does.
+    made: bool,
     kind: String,
 }
 
@@ -721,6 +723,7 @@ fn resolve<'a>(
     user: &User,
     manifest: &Value,
     plan: &'a Plan,
+    made: &[String],
 ) -> Result<Vec<Resolved<'a>>> {
     let known: Vec<&str> = export::manifest_spaces(manifest)
         .map(|a| a.iter().filter_map(|v| v["name"].as_str()).collect())
@@ -771,7 +774,9 @@ fn resolve<'a>(
             )));
         }
         if create {
-            if brain.dir().join(dest.file_name()).exists() {
+            if brain.dir().join(dest.file_name()).exists()
+                && !crate::recover::clear_orphan(brain, &dest)?
+            {
                 return Err(Error::Invalid(format!("{dest} is in the way")));
             }
             if !created.insert(dest.to_string()) {
@@ -782,6 +787,7 @@ fn resolve<'a>(
         }
         out.push(Resolved {
             line,
+            made: !create && made.iter().any(|m| m == dest.as_str()),
             dest,
             create,
             kind: kind_or_custom(brain, &line.kind)?,
@@ -795,6 +801,8 @@ fn resolve<'a>(
 struct Undo {
     spaces: Vec<Space>,
     files: Vec<PathBuf>,
+    /// A target is committed: nothing is undone any more, the rest is finished.
+    committed: bool,
 }
 
 impl Undo {
@@ -971,7 +979,7 @@ fn copy_file(
         .private_dir()
         .create(&dir)?;
     let path = dir.join(&f.sha256);
-    if !path.exists() {
+    if !crate::files::whole(&path, bytes.len() as u64) {
         let tmp = dir.join(format!(".{}.tmp", f.sha256));
         let mut out = fs::OpenOptions::new()
             .write(true)
@@ -1057,7 +1065,7 @@ pub fn apply(brain: &Brain, plan: &Plan, opts: &Options) -> Result<Report> {
     if user.disabled {
         return Err(Error::Invalid(format!("{} is disabled", user.name)));
     }
-    let resolved = resolve(brain, &ctl, &user, &manifest, plan)?;
+    let resolved = resolve(brain, &ctl, &user, &manifest, plan, &[])?;
 
     // Is there anything to do? Then the backup comes first.
     let mut pending = 0;
@@ -1085,14 +1093,19 @@ pub fn apply(brain: &Brain, plan: &Plan, opts: &Options) -> Result<Report> {
     }
     let backup = brain.backup(&opts.backup_to, usize::MAX, opts.at)?;
 
+    let _busy = crate::recover::busy(brain)?;
+    let key = journal(&ctl, plan, &resolved)?;
     let mut undo = Undo::default();
     match run(brain, &ctl, &user, plan, &resolved, opts, &mut undo) {
         Ok(mut report) => {
+            close(&ctl, &key)?;
             report.backup = Some(backup);
             Ok(report)
         }
+        Err(e) if cut_off(&e, &undo) => Err(e),
         Err(e) => {
             undo.run(brain);
+            close(&ctl, &key)?;
             Err(match e {
                 Error::Invalid(m) => Error::Invalid(format!(
                     "{m} (nothing was changed; the backup is in {})",
@@ -1110,20 +1123,113 @@ pub(crate) fn apply_in_place(brain: &Brain, plan: &Plan) -> Result<Report> {
     let manifest = export::verify_export(&plan.export)?;
     let ctl = brain.open_control()?;
     let user = users::resolve(&ctl, &plan.user)?;
-    let resolved = resolve(brain, &ctl, &user, &manifest, plan)?;
+    let resolved = resolve(brain, &ctl, &user, &manifest, plan, &[])?;
+    let opts = Options {
+        backup_to: PathBuf::new(),
+        at: util::now(),
+        stop_after: None,
+    };
+    let key = journal(&ctl, plan, &resolved)?;
+    let mut undo = Undo::default();
+    match run(brain, &ctl, &user, plan, &resolved, &opts, &mut undo) {
+        Ok(report) => {
+            close(&ctl, &key)?;
+            Ok(report)
+        }
+        Err(e) if cut_off(&e, &undo) => Err(e),
+        Err(e) => {
+            undo.run(brain);
+            close(&ctl, &key)?;
+            Err(e)
+        }
+    }
+}
+
+/// The control database's journal of a merge under way: its plan, and the spaces it creates.
+const MERGING: &str = "merge_pending:";
+
+/// Writes the journal of a merge before it changes anything: a crash at any point after leaves it, and the start-up
+/// pass finishes the merge ([`settle`]); merging what is already merged changes nothing.
+fn journal(ctl: &Connection, plan: &Plan, resolved: &[Resolved<'_>]) -> Result<String> {
+    let key = format!("{MERGING}{}", util::random_base32(10));
+    let create: Vec<&str> = resolved
+        .iter()
+        .filter(|r| r.create)
+        .map(|r| r.dest.as_str())
+        .collect();
+    ctl.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2)",
+        params![
+            key,
+            json!({ "plan": plan.to_text(), "create": create }).to_string()
+        ],
+    )?;
+    Ok(key)
+}
+
+fn close(ctl: &Connection, key: &str) -> Result<()> {
+    ctl.execute("DELETE FROM meta WHERE k = ?1", [key])?;
+    Ok(())
+}
+
+/// A failure that leaves the merge to finish rather than to undo: a test's failpoint (a crash there), or a failure
+/// after a target was committed (what is committed is not taken back; the rest follows).
+fn cut_off(e: &Error, undo: &Undo) -> bool {
+    undo.committed || e.to_string().contains("(failpoint)")
+}
+
+/// Finishes the merges a crash cut off (run by [`Brain::recover`]): each journal's plan is applied again, the spaces
+/// it made already counted as made by it. Answers how many it finished; what it could not finish is said in
+/// `unsettled` and tried again at the next start.
+pub(crate) fn settle(brain: &Brain, unsettled: &mut Vec<String>) -> usize {
+    let Ok(ctl) = brain.open_control() else {
+        return 0;
+    };
+    let rows: Vec<(String, String)> = match ctl
+        .prepare("SELECT k, v FROM meta WHERE k LIKE 'merge_pending:%'")
+        .and_then(|mut st| {
+            st.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()
+        }) {
+        Ok(r) => r,
+        Err(e) => {
+            unsettled.push(format!("merge: {e}"));
+            return 0;
+        }
+    };
+    let mut n = 0;
+    for (key, v) in rows {
+        match resume(brain, &ctl, &v) {
+            Ok(()) => {
+                let _ = close(&ctl, &key);
+                n += 1;
+            }
+            Err(e) => unsettled.push(format!("merge {key}: {e}")),
+        }
+    }
+    n
+}
+
+fn resume(brain: &Brain, ctl: &Connection, v: &str) -> Result<()> {
+    let v: Value = serde_json::from_str(v)
+        .map_err(|e| Error::Schema(format!("a merge journal is unreadable: {e}")))?;
+    let plan = Plan::from_text(v["plan"].as_str().unwrap_or_default())?;
+    let made: Vec<String> = v["create"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.as_str().map(String::from))
+        .collect();
+    let manifest = export::verify_export(&plan.export)?;
+    let user = users::resolve(ctl, &plan.user)?;
+    let resolved = resolve(brain, ctl, &user, &manifest, &plan, &made)?;
     let opts = Options {
         backup_to: PathBuf::new(),
         at: util::now(),
         stop_after: None,
     };
     let mut undo = Undo::default();
-    match run(brain, &ctl, &user, plan, &resolved, &opts, &mut undo) {
-        Ok(report) => Ok(report),
-        Err(e) => {
-            undo.run(brain);
-            Err(e)
-        }
-    }
+    run(brain, ctl, &user, &plan, &resolved, &opts, &mut undo).map(|_| ())
 }
 
 fn proposals(
@@ -1158,12 +1264,15 @@ fn run(
 ) -> Result<Report> {
     // The bytes copied are named by records only at the commit: the sweep of a node that starts waits.
     let _writing = crate::recover::writing(brain)?;
-    // New spaces first: they are registered, and undone if anything fails.
+    // New spaces first, each made with its kind at once: they are registered, and undone if anything fails before a
+    // commit.
     for r in resolved.iter().filter(|r| r.create) {
-        brain.add_space_for(&r.dest, &user.id)?;
+        let mut new = crate::brain::NewSpace::owned_by(&user.id);
+        new.kind.clone_from(&r.kind);
+        brain.make_space(&r.dest, &new, &|_| Ok(()))?;
         undo.spaces.push(r.dest.clone());
-        brain.set_space_kind(&r.dest, &r.kind)?;
     }
+    crate::failpoint::hit(crate::failpoint::at::MERGE_SPACES)?;
     let mut dests: Vec<Space> = vec![];
     for r in resolved {
         if !dests.contains(&r.dest) {
@@ -1307,7 +1416,7 @@ fn run(
         let scope = guide::space_scope(&r.dest);
         let mine = guide::current(ctl, &scope)?;
         let differs = mine.as_ref().is_none_or(|g| g.body != theirs.trim());
-        if differs && (r.create || (r.line.policy == Policy::Replace && mine.is_some())) {
+        if differs && (r.create || r.made || (r.line.policy == Policy::Replace && mine.is_some())) {
             guide::set(ctl, &user.id, &scope, theirs)?;
             report.lines[n].guide_replaced = true;
         } else if differs {
@@ -1316,8 +1425,13 @@ fn run(
                 .push((r.dest.to_string(), theirs.clone()));
         }
     }
+    // One commit per target: a crash between leaves the journal, and the merge is finished at the next start.
     for tx in txs {
         tx.commit()?;
+        if !undo.committed {
+            undo.committed = true;
+            crate::failpoint::hit(crate::failpoint::at::MERGE_TARGET)?;
+        }
     }
     Ok(report)
 }

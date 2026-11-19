@@ -33,6 +33,15 @@ use crate::space::Space;
 /// What [`Brain::recover`] did.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Recovered {
+    /// Operations on whole spaces cut off, finished or undone: archives and restores, merges, adoptions of an export,
+    /// layout changes not yet in a space's log.
+    pub spaces: usize,
+    /// Files of a space a creation cut off left (registered nowhere, holding no note), removed.
+    pub orphans: usize,
+    /// Files of a space registered nowhere that hold notes: left where they are, for the person to decide.
+    pub stray: Vec<String>,
+    /// What could not be finished, and why (tried again at the next start).
+    pub unsettled: Vec<String>,
     /// Notes of a move cut off, finished.
     pub moves: usize,
     /// Events of files missing from the peers' log, written.
@@ -50,13 +59,41 @@ pub struct Recovered {
 impl Recovered {
     /// Whether nothing needed doing (the sweep aside).
     pub fn is_clean(&self) -> bool {
-        self.moves + self.events + self.blobs + self.temporary + self.staged == 0
+        self.moves
+            + self.events
+            + self.blobs
+            + self.temporary
+            + self.staged
+            + self.spaces
+            + self.orphans
+            == 0
+            && self.stray.is_empty()
+            && self.unsettled.is_empty()
     }
 
     /// One line for the log of the node.
     pub fn summary(&self) -> String {
+        let mut extra = String::new();
+        if self.spaces + self.orphans > 0 {
+            extra.push_str(&format!(
+                "; {} operation(s) on spaces finished, {} empty space file(s) left by a creation removed",
+                self.spaces, self.orphans
+            ));
+        }
+        if !self.stray.is_empty() {
+            extra.push_str(&format!(
+                "; space files registered nowhere, holding notes, left in place: {}",
+                self.stray.join(", ")
+            ));
+        }
+        if !self.unsettled.is_empty() {
+            extra.push_str(&format!(
+                "; not finished yet: {}",
+                self.unsettled.join("; ")
+            ));
+        }
         format!(
-            "recovery: {} note(s) of a move finished, {} file event(s) logged, {} unheld file(s), {} half-written file(s) and {} chunk folder(s) removed{}",
+            "recovery: {} note(s) of a move finished, {} file event(s) logged, {} unheld file(s), {} half-written file(s) and {} chunk folder(s) removed{}{extra}",
             self.moves,
             self.events,
             self.blobs,
@@ -93,6 +130,29 @@ pub(crate) fn writing(brain: &Brain) -> Result<Writing> {
     Ok(Writing(f))
 }
 
+const SPACES_LOCK: &str = "spaces.lock";
+
+/// Held while an operation on whole spaces runs (a deletion, a restore, a merge, an adoption); released when dropped.
+pub(crate) struct Busy(#[allow(dead_code)] File);
+
+fn spaces_lock_file(brain: &Brain) -> Result<File> {
+    Ok(OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .private_file()
+        .open(brain.dir().join(SPACES_LOCK))?)
+}
+
+/// Takes the lock of the operations on whole spaces shared: the start-up pass finishes the ones a crash cut off only
+/// when none is under way in another process (it takes it alone).
+pub(crate) fn busy(brain: &Brain) -> Result<Busy> {
+    let f = spaces_lock_file(brain)?;
+    f.lock_shared()?;
+    Ok(Busy(f))
+}
+
 /// Whether a record of the space still needs the bytes `sha`: one that is not an erased recording.
 pub(crate) fn held(conn: &Connection, sha: &str) -> Result<bool> {
     Ok(conn.query_row(
@@ -118,6 +178,121 @@ pub(crate) fn drop_unless_held(
     }
     crate::files::remove_blob(brain, space, sha)?;
     Ok(true)
+}
+
+/// Whether a space file holds a note or a file: what a person wrote, not the settings a creation writes with it (its
+/// rules note).
+pub(crate) fn holds_data(conn: &Connection) -> Result<bool> {
+    let table = |t: &str| -> Result<bool> {
+        Ok(conn.query_row(
+            "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = ?1",
+            [t],
+            |r| r.get(0),
+        )?)
+    };
+    if table("files")? {
+        let n: i64 = conn.query_row("SELECT count(*) FROM files", [], |r| r.get(0))?;
+        if n > 0 {
+            return Ok(true);
+        }
+    }
+    if table("facts")? {
+        let settings = if table("fact_tags")? {
+            "SELECT count(*) FROM facts WHERE id NOT IN (SELECT fact_id FROM fact_tags WHERE tag = 'rules')"
+        } else {
+            "SELECT count(*) FROM facts"
+        };
+        let n: i64 = conn.query_row(settings, [], |r| r.get(0))?;
+        if n > 0 {
+            return Ok(true);
+        }
+    }
+    Ok(false)
+}
+
+/// Whether an archive, a restore or an adoption of `space` is under way: its files are not to be touched but by it.
+pub(crate) fn in_flight(brain: &Brain, space: &Space) -> Result<bool> {
+    Ok(brain.archive_in_flight(space) || crate::export::adopting(brain, space)?)
+}
+
+/// Removes the file of `space` that a creation cut off left: registered nowhere, nothing under way, and no note or
+/// file in it. Done only when no one else is writing (the lock of the bytes alone). Answers whether the name is free.
+pub(crate) fn clear_orphan(brain: &Brain, space: &Space) -> Result<bool> {
+    let path = brain.dir().join(space.file_name());
+    if !path.exists() {
+        return Ok(true);
+    }
+    if brain.has_space(space)? || in_flight(brain, space)? {
+        return Ok(false);
+    }
+    let f = lock_file(brain)?;
+    match f.try_lock() {
+        Ok(()) => {}
+        Err(TryLockError::WouldBlock) => return Ok(false),
+        Err(TryLockError::Error(e)) => return Err(e.into()),
+    }
+    remove_orphan(brain, space)
+}
+
+/// [`clear_orphan`] once the lock is held alone.
+fn remove_orphan(brain: &Brain, space: &Space) -> Result<bool> {
+    let path = brain.dir().join(space.file_name());
+    if brain.has_space(space)? || in_flight(brain, space)? {
+        return Ok(false);
+    }
+    let data = {
+        let conn = crate::brain::open_db(&path)?;
+        holds_data(&conn)?
+    };
+    if data {
+        return Ok(false);
+    }
+    crate::brain::remove_db_files(&path);
+    // Its folder of files, if it is empty.
+    let _ = fs::remove_dir(brain.dir().join("files").join(space.as_str()));
+    crate::fsx::sync_dir(brain.dir())?;
+    Ok(true)
+}
+
+/// The data folder swept (the caller holds the lock alone): the files new spaces and adoptions were written under, and
+/// the copies a merge reads from, an hour old; then the space files registered nowhere.
+fn sweep_data(brain: &Brain, out: &mut Recovered) -> Result<()> {
+    let registered: HashSet<String> = brain.spaces()?.iter().map(|s| s.file_name()).collect();
+    let Ok(entries) = fs::read_dir(brain.dir()) else {
+        return Ok(());
+    };
+    for e in entries.flatten() {
+        let name = e.file_name().to_string_lossy().into_owned();
+        let old = || {
+            e.metadata()
+                .and_then(|m| m.modified())
+                .ok()
+                .and_then(|t| t.elapsed().ok())
+                .is_some_and(|d| d.as_secs() > 3600)
+        };
+        if name.starts_with(crate::brain::NEW_PREFIX)
+            || name.starts_with(crate::export::ADOPT_PREFIX)
+            || (name.starts_with(".merge-") && old())
+        {
+            out.temporary += usize::from(remove(&e.path())?);
+            continue;
+        }
+        let Some(stem) = name.strip_suffix(".sqlite") else {
+            continue;
+        };
+        if registered.contains(&name) {
+            continue;
+        }
+        let Ok(space) = Space::new(stem) else {
+            continue;
+        };
+        if remove_orphan(brain, &space)? {
+            out.orphans += 1;
+        } else if !in_flight(brain, &space)? && !brain.has_space(&space)? {
+            out.stray.push(name);
+        }
+    }
+    Ok(())
 }
 
 fn is_half_written(name: &str) -> bool {
@@ -189,10 +364,33 @@ impl Brain {
     /// Finishes or undoes, in every space, what a crash cut off (see the module documentation). Run when the node
     /// starts, before it serves; safe at any time and from several processes.
     pub fn recover(&self) -> Result<Recovered> {
-        let mut out = Recovered {
-            moves: self.finish_moves()?,
-            ..Recovered::default()
-        };
+        let mut out = Recovered::default();
+        // Whole spaces first: what the other steps read must be registered and in place. Only when no such operation
+        // runs in another process: what it is doing is not cut off.
+        let alone = spaces_lock_file(self)?;
+        match alone.try_lock() {
+            Ok(()) => {
+                match crate::export::settle_adoptions(self) {
+                    Ok(n) => out.spaces += n,
+                    Err(e) => out.unsettled.push(format!("adoption: {e}")),
+                }
+                out.spaces += crate::merge::settle(self, &mut out.unsettled);
+                let (n, failed) = self.settle_archives();
+                out.spaces += n;
+                out.unsettled.extend(failed);
+                drop(alone);
+            }
+            Err(TryLockError::WouldBlock) => out.unsettled.push(
+                "an operation on spaces runs in another process: what a crash cut off is settled at the next start"
+                    .into(),
+            ),
+            Err(TryLockError::Error(e)) => return Err(e.into()),
+        }
+        match crate::layout::settle(self) {
+            Ok(n) => out.spaces += n,
+            Err(e) => out.unsettled.push(format!("layout: {e}")),
+        }
+        out.moves = self.finish_moves()?;
         let spaces = self.spaces()?;
         for space in &spaces {
             let conn = self.open_space(space)?;
@@ -202,6 +400,7 @@ impl Brain {
         match f.try_lock() {
             Ok(()) => {
                 out.swept = true;
+                sweep_data(self, &mut out)?;
                 for space in &spaces {
                     let conn = self.open_space(space)?;
                     sweep(self, space, &conn, &mut out)?;

@@ -561,7 +561,11 @@ pub fn adopt(
             Some(p) => format!("{p}-{orig}"),
             None => orig.clone(),
         })?;
-        if brain.has_space(&target)? || brain.dir().join(target.file_name()).exists() {
+        if brain.has_space(&target)?
+            || crate::recover::in_flight(brain, &target)?
+            || (brain.dir().join(target.file_name()).exists()
+                && !crate::recover::clear_orphan(brain, &target)?)
+        {
             taken.push(target.to_string());
         }
         let kind = v["kind"].as_str().unwrap_or("custom");
@@ -590,15 +594,28 @@ pub fn adopt(
         .and_then(|v| v.as_array().cloned())
         .unwrap_or_default();
 
+    // The journal first: the names being adopted, in the control database. A crash before the registration below
+    // leaves files no one registered; the start-up pass removes them (`settle_adoptions`). The sweep waits meanwhile.
+    let _busy = crate::recover::busy(brain)?;
+    let _writing = crate::recover::writing(brain)?;
+    let key = format!("{ADOPTING}{}", util::random_base32(10));
+    let names: Vec<&str> = plan.iter().map(|p| p.target.as_str()).collect();
+    ctl.execute(
+        "INSERT INTO meta (k, v) VALUES (?1, ?2)",
+        rusqlite::params![key, json!(names).to_string()],
+    )?;
     let mut made: Vec<PathBuf> = vec![];
-    let mut registered: Vec<Space> = vec![];
     let mut done: Vec<Adopted> = vec![];
     let run = (|| -> Result<()> {
         for p in &plan {
-            let tmp = brain.dir().join(format!(".adopt-{}.sqlite", p.target));
+            let tmp = brain.dir().join(format!(
+                "{ADOPT_PREFIX}{}-{}.sqlite",
+                p.target,
+                util::random_base32(8)
+            ));
+            made.push(tmp.clone());
             fs::copy(space_file(dir, &p.orig), &tmp)?;
             crate::fsx::set_private_file(&tmp)?;
-            made.push(tmp.clone());
             let (facts, files) = {
                 let conn = brain::open_db(&tmp)?;
                 if p.orig != p.target.as_str() {
@@ -633,10 +650,19 @@ pub fn adopt(
                     files,
                 )
             };
+            // Closed: the file is the whole database. Linked in under its name, never over another file.
+            fs::File::open(&tmp)?.sync_all()?;
             let final_path = brain.dir().join(p.target.file_name());
-            fs::rename(&tmp, &final_path)?;
-            made.retain(|m| m != &tmp);
+            fs::hard_link(&tmp, &final_path).map_err(|e| {
+                if e.kind() == std::io::ErrorKind::AlreadyExists {
+                    Error::Invalid(format!("{} is already in use here", p.target))
+                } else {
+                    e.into()
+                }
+            })?;
             made.push(final_path);
+            brain::remove_db_files(&tmp);
+            crate::fsx::sync_dir(brain.dir())?;
 
             let blobs = dir.join("files").join(&p.orig);
             if blobs.is_dir() {
@@ -645,21 +671,17 @@ pub fn adopt(
                 made.push(to.clone());
                 for entry in fs::read_dir(&blobs)? {
                     let path = entry?.path();
-                    if let Some(name) = path.file_name() {
-                        fs::copy(&path, to.join(name))?;
-                        crate::fsx::set_private_file(&to.join(name))?;
+                    if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                        // Whole or absent under its final name: a torn copy would pass for the file.
+                        let part = to.join(format!(".{name}.tmp"));
+                        fs::copy(&path, &part)?;
+                        crate::fsx::set_private_file(&part)?;
+                        fs::File::open(&part)?.sync_all()?;
+                        fs::rename(&part, to.join(name))?;
                     }
                 }
+                crate::fsx::sync_dir(&to)?;
             }
-            ctl.execute(
-                "INSERT INTO spaces (name, created_at, kind) VALUES (?1, ?2, ?3)",
-                rusqlite::params![p.target.as_str(), util::now(), p.kind],
-            )?;
-            ctl.execute(
-                "INSERT INTO space_members (space, user_id, can_write, owner) VALUES (?1, ?2, 1, 1)",
-                rusqlite::params![p.target.as_str(), owner.id],
-            )?;
-            registered.push(p.target.clone());
             done.push(Adopted {
                 name: p.target.to_string(),
                 kind: p.kind.clone(),
@@ -667,13 +689,27 @@ pub fn adopt(
                 files,
             });
         }
+        crate::failpoint::hit(crate::failpoint::at::ADOPT_FILES)?;
+        // One transaction registers every space, their guides, and closes the journal.
+        let tx =
+            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+        for p in &plan {
+            tx.execute(
+                "INSERT INTO spaces (name, created_at, kind) VALUES (?1, ?2, ?3)",
+                rusqlite::params![p.target.as_str(), util::now(), p.kind],
+            )?;
+            tx.execute(
+                "INSERT INTO space_members (space, user_id, can_write, owner) VALUES (?1, ?2, 1, 1)",
+                rusqlite::params![p.target.as_str(), owner.id],
+            )?;
+        }
         // The instructions in force at the time of the export come back, for each vault, and
         // for the person if they have none yet.
         for g in guides.iter().filter(|g| g["current"] == true) {
             let scope = g["scope"].as_str().unwrap_or_default();
             let body = g["body"].as_str().unwrap_or_default();
             let target = if scope == "person" {
-                if guide::current(&ctl, &guide::person_scope(&owner.id))?.is_some() {
+                if guide::current(&tx, &guide::person_scope(&owner.id))?.is_some() {
                     continue;
                 }
                 guide::person_scope(&owner.id)
@@ -685,30 +721,74 @@ pub fn adopt(
             } else {
                 continue;
             };
-            guide::set(&ctl, &owner.id, &target, body)?;
+            guide::set(&tx, &owner.id, &target, body)?;
         }
+        tx.execute("DELETE FROM meta WHERE k = ?1", [&key])?;
+        tx.commit()?;
         Ok(())
     })();
     if let Err(e) = run {
-        // Undo: nothing of a half-taken export stays.
-        for s in &registered {
-            let _ = ctl.execute("DELETE FROM space_members WHERE space = ?1", [s.as_str()]);
-            let _ = ctl.execute(
-                "DELETE FROM guides WHERE scope = ?1",
-                [guide::space_scope(s)],
-            );
-            let _ = ctl.execute("DELETE FROM spaces WHERE name = ?1", [s.as_str()]);
+        if e.to_string().contains("(failpoint)") {
+            return Err(e);
         }
+        // Undo: nothing of a half-taken export stays.
         for path in made.iter().rev() {
             if path.is_dir() {
                 let _ = fs::remove_dir_all(path);
             } else {
-                let _ = fs::remove_file(path);
-                let _ = fs::remove_file(format!("{}-wal", path.display()));
-                let _ = fs::remove_file(format!("{}-shm", path.display()));
+                brain::remove_db_files(path);
             }
         }
+        let _ = ctl.execute("DELETE FROM meta WHERE k = ?1", [&key]);
         return Err(e);
     }
     Ok(done)
+}
+
+/// The prefix of the file a database being adopted is checked under, before it is linked in (swept at start).
+pub(crate) const ADOPT_PREFIX: &str = ".adopt-";
+/// The control database's journal of an adoption under way: the names it is making.
+const ADOPTING: &str = "adopt_pending:";
+
+fn adoptions(ctl: &Connection) -> Result<Vec<(String, Vec<String>)>> {
+    let rows: Vec<(String, String)> = ctl
+        .prepare("SELECT k, v FROM meta WHERE k LIKE 'adopt_pending:%'")?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    Ok(rows
+        .into_iter()
+        .map(|(k, v)| {
+            let names = serde_json::from_str::<Vec<String>>(&v).unwrap_or_default();
+            (k, names)
+        })
+        .collect())
+}
+
+/// Whether an adoption under way is making `space`.
+pub(crate) fn adopting(brain: &Brain, space: &Space) -> Result<bool> {
+    Ok(adoptions(&brain.open_control()?)?
+        .iter()
+        .any(|(_, names)| names.iter().any(|n| n == space.as_str())))
+}
+
+/// The adoptions a crash cut off are undone (run by [`Brain::recover`]): the files of the names they were making and
+/// that no one registered are removed, and the journal goes. Answers how many.
+pub(crate) fn settle_adoptions(brain: &Brain) -> Result<usize> {
+    let ctl = brain.open_control()?;
+    let pending = adoptions(&ctl)?;
+    for (key, names) in &pending {
+        for n in names {
+            let Ok(space) = Space::new(n) else {
+                continue;
+            };
+            if brain.has_space(&space)? {
+                continue;
+            }
+            brain::remove_db_files(&brain.dir().join(space.file_name()));
+            let _ = fs::remove_dir_all(brain.dir().join("files").join(space.as_str()));
+        }
+        crate::fsx::sync_dir(brain.dir())?;
+        ctl.execute("DELETE FROM meta WHERE k = ?1", [key])?;
+    }
+    Ok(pending.len())
 }
