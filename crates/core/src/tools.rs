@@ -913,7 +913,7 @@ pub fn call(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<
         }
         return Err(ToolError::Unknown);
     }
-    let result = run(brain, caller, name, args);
+    let mut result = run(brain, caller, name, args);
     // Audit: the space touched keeps a trace of the call (never the full text).
     let (ok, detail) = match &result {
         Ok(_) => (true, String::new()),
@@ -928,7 +928,86 @@ pub fn call(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<
             let _ = facts::audit(&conn, &caller.agent, name, ok, &ids, args, &detail);
         }
     }
+    if let Ok(value) = &mut result {
+        add_journal_handoff(brain, caller, name, args, value);
+    }
     result
+}
+
+/// Repeat the journal requirement in the tool result: a client may not pass the
+/// initialization guide to the assistant, or may cache it across conversations.
+fn add_journal_handoff(
+    brain: &Brain,
+    caller: &Caller,
+    name: &str,
+    args: &Value,
+    value: &mut Value,
+) {
+    if !matches!(
+        caller.kind,
+        crate::access::Kind::Assistant | crate::access::Kind::Oauth
+    ) {
+        return;
+    }
+    let (result_key, explicit_space) = match name {
+        "recall" | "library_search" => ("results", true),
+        "file_list" => ("files", true),
+        "read_fact" => ("fact", false),
+        "history" => ("chain", false),
+        "file_get" => ("file", false),
+        "living_get" => ("space", true),
+        _ => return,
+    };
+    let mut read = std::collections::BTreeSet::new();
+    if explicit_space {
+        if let Some(space) = args["space"].as_str().and_then(|s| Space::new(s).ok()) {
+            read.insert(space);
+        } else if let [space] = caller.readable().as_slice() {
+            read.insert(space.clone());
+        }
+    }
+    let results = &value[result_key];
+    let items = results
+        .as_array()
+        .map_or(std::slice::from_ref(results), Vec::as_slice);
+    read.extend(
+        items
+            .iter()
+            .filter_map(|item| Space::new(item["space"].as_str()?).ok()),
+    );
+    let spaces: Vec<_> = read
+        .iter()
+        .filter(|space| {
+            caller.can_read(space)
+                && caller.read_paths(space).is_none()
+                && !crate::triage::is_triage(brain, space)
+        })
+        .map(|space| {
+            let access = if caller.can_write(space) {
+                "writable"
+            } else {
+                "read-only"
+            };
+            format!("`{space}` ({access})", space = space.as_str())
+        })
+        .collect();
+    if spaces.is_empty() {
+        return;
+    }
+    let reminder = format!(
+        "Journal handoff required before ending a substantive exchange: use `remember` to write one \
+         brief, dated entry per topic in the relevant space, tagged `journal` or filed under that space's \
+         dated journal path. Combine several messages on the same topic in one handoff, not one entry per \
+         message or tool call. Summarize what was discussed, the important reasoning (what mattered, \
+         why a choice was made, or what remains uncertain), any advice actually given, and the agreed \
+         decision or next step. Use `supersede` to update an existing entry for the exchange. \
+         Keep each space's information in that space. If the relevant space is read-only or the write \
+         fails, tell the person; do not write the handoff elsewhere. Spaces involved in this read: {}.",
+        spaces.join(", "),
+    );
+    if let Some(object) = value.as_object_mut() {
+        object.insert("assistant_instructions".into(), json!(reminder));
+    }
 }
 
 /// `file_put`: the bytes in `data_base64`, or read from the file `from` (a big file on this node's disk, up to

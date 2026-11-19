@@ -118,6 +118,97 @@ fn text_of(v: &Value) -> Value {
         .unwrap_or(Value::Null)
 }
 
+#[test]
+fn space_reads_repeat_the_journal_handoff_without_initializing() -> Res {
+    let e = env()?;
+    let writer = connect(&e, "health-writer", "health:rw,work:rw", false)?;
+    let reader = connect(&e, "health-reader", "health:rw,work:rw", true)?;
+    let scoped = connect(&e, "health-app", "health/journal:rw", false)?;
+    let work = connect(&e, "work-reader", "work:rw", true)?;
+    let saved = text_of(&call(
+        &e,
+        &writer,
+        "remember",
+        json!({ "space": "health", "text": "The person mentioned a walk.", "tags": ["journal"] }),
+    ));
+    assert!(saved.get("assistant_instructions").is_none());
+    let id = saved["fact"]["id"]
+        .as_str()
+        .ok_or("missing saved health fact")?;
+
+    let lookup = json!({ "query": "walk" });
+    let unrestricted = text_of(&call(&e, &writer, "recall", lookup.clone()));
+    let reminder = unrestricted["assistant_instructions"]
+        .as_str()
+        .ok_or("missing handoff reminder")?;
+    assert!(reminder.contains("`remember`"));
+    assert!(reminder.contains("advice actually given"));
+    assert!(reminder.contains("Combine several messages on the same topic in one handoff"));
+    assert!(reminder.contains("important reasoning"));
+    assert!(reminder.contains("`health` (writable)"));
+    assert_eq!(unrestricted["notice"], memcp_core::tools::NOTICE);
+    assert_eq!(unrestricted["results"][0]["id"], id);
+
+    let empty = text_of(&call(
+        &e,
+        &writer,
+        "recall",
+        json!({ "space": "health", "query": "zzzz" }),
+    ));
+    assert_eq!(empty["results"], json!([]));
+    assert_eq!(empty["assistant_instructions"], reminder);
+    for name in ["read_fact", "history"] {
+        let read = text_of(&call(&e, &writer, name, json!({ "id": id })));
+        assert_eq!(read["assistant_instructions"], reminder);
+    }
+    let read_only = text_of(&call(&e, &reader, "recall", lookup.clone()));
+    assert!(
+        read_only["assistant_instructions"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("`health` (read-only)")
+    );
+    let scoped_read = text_of(&call(&e, &scoped, "recall", lookup));
+    assert_eq!(scoped_read["results"][0]["id"], id);
+    assert!(scoped_read.get("assistant_instructions").is_none());
+    let work_read = text_of(&call(
+        &e,
+        &writer,
+        "recall",
+        json!({ "space": "work", "query": "walk" }),
+    ));
+    let work_reminder = work_read["assistant_instructions"]
+        .as_str()
+        .ok_or("missing work handoff reminder")?;
+    assert!(work_reminder.contains("`work` (writable)"));
+    assert!(!work_reminder.contains("`health`"));
+    let denied = call(
+        &e,
+        &work,
+        "recall",
+        json!({ "space": "health", "query": "walk" }),
+    );
+    assert_eq!(denied["result"]["isError"], true);
+    assert!(!denied.to_string().contains("handoff"));
+
+    let named = sp("person-project");
+    e.app.brain.add_space(&named)?;
+    let named_writer = connect(&e, "named-writer", "person-project:rw", false)?;
+    let named_read = text_of(&call(
+        &e,
+        &named_writer,
+        "recall",
+        json!({ "query": "zzzz" }),
+    ));
+    assert!(
+        named_read["assistant_instructions"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("`person-project` (writable)")
+    );
+    Ok(())
+}
+
 fn tool_names(e: &Env, token: &str) -> Vec<String> {
     rpc(
         e,
@@ -772,7 +863,7 @@ fn the_handshake_tells_a_connection_the_guides_of_what_it_reaches_only() -> Res 
             "{method}: nothing about a vault it cannot reach"
         );
         assert!(
-            w.starts_with("memcp memory."),
+            w.starts_with("This service is called MemCP."),
             "the general rules come first"
         );
     }

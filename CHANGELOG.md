@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.28
+
+- **Space reads remind assistants to write a journal handoff.** MemCP repeats the reminder in the tool response, even when the client did not show the initial guide. One entry per topic brings together the important reasoning, any advice given and the agreed next step.
+
 ## 20261117.0.27
 
 - **ChatGPT and Le Chat connect.** Adding MemCP in ChatGPT (and in Le Chat) was refused: the node accepted only Claude's return address. It now accepts theirs, and names itself in every sign-in answer, as ChatGPT requires.

@@ -2,6 +2,10 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Journal handoff reminder (20261117.0.28)
+
+Reads by assistants can include an `assistant_instructions` string at the top level of the tool payload, separate from stored records. It lists the whole, non-Inbox spaces involved in the read, with the connection's write rights. It asks for one dated handoff per substantive topic, covering the reasoning across multiple messages. Clients can ignore the new field without losing any data.
+
 ## OAuth for ChatGPT and Le Chat (20261117.0.27)
 
 - `GET /.well-known/oauth-authorization-server` adds `authorization_response_iss_parameter_supported: true`: every redirect of `/oauth/authorize` (a code, `access_denied`, `invalid_request`) carries `iss`, the node's public address, exactly as the metadata's `issuer` (RFC 9207).
