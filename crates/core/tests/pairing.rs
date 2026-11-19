@@ -79,7 +79,8 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     let brain = brain(&t)?;
     let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
     let box_ = memcp_core::Space::new(&triage)?;
-    let work = brain.add_vault(users::OWNER, "owner", "work")?;
+    // The usual `work` space of a fresh memory already is a work space: the owner keeps one, so this test uses it.
+    let work = memcp_core::Space::new("work")?;
     let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "device-phone");
     n.tags = vec!["inbox".into()];
     let Remembered::Created(note) =

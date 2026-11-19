@@ -379,3 +379,26 @@ fn a_profession_for_a_game_master_is_proposed_accepted_and_applies_to_its_space_
     );
     Ok(())
 }
+
+#[test]
+fn the_usual_spaces_of_a_fresh_memory_have_their_kind_so_the_toolkit_works_at_once() -> Res {
+    let t = Temp::new("toolkit-kinds");
+    let b = brain(&t)?;
+    for (space, kind) in [
+        ("health", "health"),
+        ("home", "home"),
+        ("work", "work"),
+        ("personal", "me"),
+    ] {
+        assert_eq!(b.space_kind(&sp(space))?, kind, "{space}");
+    }
+    let c = caller(&b, "assistant", "all")?;
+    let made = call(
+        &b,
+        &c,
+        "target_set",
+        json!({ "problem": "Sommeil", "signs": ["sleep_changes"] }),
+    )?;
+    assert_eq!(made["result"], "created", "{made}");
+    Ok(())
+}

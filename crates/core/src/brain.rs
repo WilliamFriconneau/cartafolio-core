@@ -50,7 +50,9 @@ impl Brain {
         let result = (|| {
             init_control(dir, &mut created)?;
             for space in spaces {
-                brain.make_space(space, &NewSpace::owned_by(crate::users::OWNER), &|_| Ok(()))?;
+                let mut new = NewSpace::owned_by(crate::users::OWNER);
+                new.kind = crate::catalogue::default_kind(space.as_str()).to_string();
+                brain.make_space(space, &new, &|_| Ok(()))?;
                 created.push(dir.join(space.file_name()));
             }
             write_private(

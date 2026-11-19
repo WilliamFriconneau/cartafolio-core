@@ -585,7 +585,8 @@ fn the_bank_statement_tools_follow_the_money_vault_and_its_rights() -> Res {
         dir,
         app: App::new(brain),
     };
-    // No vault of the money kind: the tools do not exist, whatever the rights.
+    // No vault of the money kind (the space is made custom here): the tools do not exist, whatever the rights.
+    e.app.brain.set_space_kind(&sp("finances"), "custom")?;
     let all = connect(&e, "owner", "all", false)?;
     assert!(
         !tool_names(&e, &all)

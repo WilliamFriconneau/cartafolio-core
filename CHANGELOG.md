@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261119.2.1
+
+- **A fresh memory gives its usual spaces their kind.** `memcp init --defaults` and `setup` made `health`, `home`, `finances`, `hobbies`, `work` and `personal` as custom spaces, so `target_set` answered « health is not a health space » until `space kind` was run. They are now made as health, home, money, hobbies, work and me spaces, and the toolkit of their profession works at once. A memory that already exists is not touched.
+
 ## 20261119.2.0
 
 - **Each space is a profession, with its toolkit.** `space_view capabilities` carries `profession`, the tool `skills` lists the professions of the spaces a key reads, and the instructions of the MCP server say in a line what each kind of space is an expert of. A kind may have several profiles (health: nurse, coach, doctor); the person adds or replaces profiles in `professions.json` beside the memory. See [PROFESSIONS.md](docs/PROFESSIONS.md).

@@ -1,5 +1,5 @@
 name: MemCP
-version: "20261119.2.0"
+version: "20261119.2.1"
 slug: memcp
 description: Durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/memcp-core

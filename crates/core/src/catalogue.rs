@@ -166,3 +166,18 @@ pub fn vault_name(person: &str, kind: &str) -> Result<Space> {
     }
     Space::new(&format!("{who}-{kind}"))
 }
+
+/// The kind of a space a fresh memory makes under one of the usual names (`init --defaults`, `setup`): `health` is a
+/// health space, `finances` a money space, and so on, so that the toolkit of its profession works at once. Any other
+/// name is custom.
+pub fn default_kind(name: &str) -> &'static str {
+    match name {
+        "health" => "health",
+        "home" => "home",
+        "finances" | "money" => "money",
+        "hobbies" => "hobbies",
+        "work" => "work",
+        "personal" => "me",
+        _ => CUSTOM,
+    }
+}
