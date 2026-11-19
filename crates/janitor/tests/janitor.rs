@@ -935,3 +935,72 @@ fn a_recording_given_up_on_is_tagged_and_counted_apart_from_what_waits_for_the_p
     assert_eq!(waiting(&mut o)["count"], 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
+
+#[test]
+fn the_night_sweep_tags_the_signs_of_notes_written_without_them_and_only_those() {
+    let r = rig("signs");
+    let mut o = owner(&r);
+    // Notes the write-time tagger leaves as they are (a write that carries a plumbing tag), whatever they say.
+    let said = "Épuisé, fatigue mentale, céphalées et batterie sociale vide depuis des semaines.";
+    for (text, tags) in [
+        (said, vec!["proposals/test"]),
+        (
+            "Courses du samedi : pain, lait, café.",
+            vec!["proposals/test"],
+        ),
+        (
+            "Raw dump of an app: fatigue épuisement migraine.",
+            vec!["proposals/test", "sources/someapp"],
+        ),
+    ] {
+        o.call(
+            "remember",
+            json!({"space": "sam-health", "text": text, "tags": tags}),
+        )
+        .expect("a note written without the signs");
+    }
+    let signed = |o: &mut Client, query: &str| -> Vec<String> {
+        let hits = o
+            .call(
+                "recall",
+                json!({"space": "sam-health", "query": query, "limit": 5}),
+            )
+            .expect("recall");
+        hits["results"][0]["tags"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(|t| t.as_str().map(String::from))
+            .collect()
+    };
+    assert!(
+        !signed(&mut o, "batterie sociale")
+            .iter()
+            .any(|t| t.starts_with("signe/")),
+        "the note starts without signs"
+    );
+    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    let report = j.run_night();
+    assert_eq!(report.signs_tagged, 1, "{report:?}");
+    let tags = signed(&mut o, "batterie sociale");
+    assert!(tags.contains(&"signe/fatigue".to_string()), "{tags:?}");
+    assert!(
+        tags.contains(&"signe/social_battery_empty".to_string()),
+        "{tags:?}"
+    );
+    assert!(
+        !signed(&mut o, "Courses")
+            .iter()
+            .any(|t| t.starts_with("signe/")),
+        "a note that says nothing of a sign gets none"
+    );
+    assert!(
+        !signed(&mut o, "Raw dump")
+            .iter()
+            .any(|t| t.starts_with("signe/")),
+        "the raw layer of an app is left alone"
+    );
+    // A second night has nothing left to do.
+    assert_eq!(j.run_night().signs_tagged, 0);
+    let _ = std::fs::remove_dir_all(&r.dir);
+}

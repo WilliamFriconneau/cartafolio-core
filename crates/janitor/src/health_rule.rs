@@ -20,11 +20,32 @@ pub const WAKE_UNKNOWN_HOUR: u32 = 5;
 /// The most tags the rule adds from what the note says.
 const MAX_DETECTED: usize = 12;
 
+/// The language the referential reads a note in: French when it looks French (an accent, or a few common French words),
+/// so that a French word that is also an English sign (`pain`, bread) is not read as one. Anything else is read in
+/// both languages.
+fn language_of(text: &str) -> memcp_health::Lang {
+    const FRENCH: [&str; 16] = [
+        "le", "la", "les", "un", "une", "des", "du", "de", "et", "je", "j'ai", "pas", "est", "mon",
+        "ma", "avec",
+    ];
+    let lower = text.to_lowercase();
+    let accents = lower.chars().any(|c| "àâçéèêëîïôùûüœ".contains(c));
+    let words = lower
+        .split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .filter(|w| FRENCH.contains(w))
+        .count();
+    if accents || words >= 2 {
+        memcp_health::Lang::Fr
+    } else {
+        memcp_health::Lang::Auto
+    }
+}
+
 /// The tags the health referential finds in the note, as the node's own tagger names them: `alerte/<id>` for a red flag
 /// (first, so the cap never drops one), `signe/<name>` for a sign, `mesure/<name>` for a measure. The note's words stay
 /// untouched; the node adds the fields (the level, the value) when it writes the note.
 pub fn detected_tags(text: &str) -> Vec<String> {
-    let found = memcp_health::detect(text, memcp_health::Lang::Auto);
+    let found = memcp_health::detect(text, language_of(text));
     let mut tags: Vec<String> = Vec::new();
     let all = found
         .red_flags
@@ -213,6 +234,22 @@ pub fn with_origin(text: &str, origin: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_french_note_does_not_read_bread_as_a_pain() {
+        assert!(detected_tags("Courses du samedi : pain, lait, café.").is_empty());
+        assert!(
+            detected_tags("My head pain since the morning")
+                .iter()
+                .any(|t| t == "signe/douleur"),
+            "an English note is still read in English"
+        );
+        assert!(
+            detected_tags("J'ai mal à la tête depuis ce matin")
+                .iter()
+                .any(|t| t.starts_with("signe/")),
+        );
+    }
     use serde_json::json;
 
     #[test]

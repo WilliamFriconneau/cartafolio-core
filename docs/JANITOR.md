@@ -96,6 +96,23 @@ the person sends a note of Inbox to a space, its words are counted for that spac
 is bounded (2000 words per space). The tool `tags_suggest` says, in `route`, where the person usually sends notes like a given
 text: the router uses it for a note it cannot place by keywords, and sends it only when one space is sure.
 
+## The signs sweep (night)
+
+The write-time tagger only sees what is written through it. Each night the janitor also goes through the notes **already in a
+health space** and gives the ones written without them the tags of the shared health referential: `signe/<sign>`,
+`mesure/<measure>`, `alerte/<red flag>`. Whatever the note's origin (a device, an assistant, an import, a sync from another node),
+it is tagged the same; the text is never changed (`tags_set` keeps the old version in the history).
+
+- It reads newest first, 600 notes tagged per pass at most, and goes on where it stopped; after a full turn it only looks at
+  what is newer. Changing `VERSION` in `signs.rs` makes it look at everything again.
+- No model: the referential alone. A note that looks French is read in French, so that `pain` (bread) is not a sign.
+- It leaves alone what is not the person's words: the raw layer of an app (`sources/<app>`), a reference document
+  (`…/Sources/…`), a mounted library, the janitor's own notes, the living boards, the rules, a note that already has its signs.
+- **The node learns the person's phrasing from it.** A short note (up to 600 characters) is tagged with `learn` on, so its
+  words lead to the tags the referential found; the next note that says it the same way is tagged when it is written.
+  A long note only gets its tags.
+- The report counts them (`signs_tagged`).
+
 ## Models
 
 The model is asked for two things only: the tags and title of a note already in its space, tagged `inbox` (1), the facts of an

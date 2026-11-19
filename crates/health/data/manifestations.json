@@ -1,6 +1,6 @@
 {
  "schema": "memcp.health.manifestations/1",
- "version": 1,
+ "version": 2,
  "provenance": "Vocabulary compiled by a private health project of the same owner and published here under this repository's licence (AGPL-3.0-or-later; the source repository is AGPL-3.0, and its referential files carry no licence line of their own). The origin of each keyword inside the source file is not recorded: unknown. Entries with origin \"added\" and every keywords_added list were written for this project.",
  "license": "AGPL-3.0-or-later",
  "categories": [
@@ -587,6 +587,13 @@
    "dimension": "physical",
    "scale": "presence",
    "tag": "eruption",
+   "origin": "added"
+  },
+  {
+   "id": "purchase_urge",
+   "category": "psychic",
+   "dimension": "mental",
+   "scale": "intensity",
    "origin": "added"
   }
  ],

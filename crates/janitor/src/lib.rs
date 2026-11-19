@@ -24,6 +24,7 @@ mod keywords;
 mod learn;
 mod models;
 mod router;
+mod signs;
 mod state;
 mod time;
 mod work_rule;
@@ -57,6 +58,8 @@ pub struct Report {
     pub key_refused: bool,
     /// Keywords and tags added to the rules of the spaces in this pass.
     pub keywords_added: u32,
+    /// Notes that got the signs, measures or red flags of the health referential as tags (see `signs.rs`).
+    pub signs_tagged: u32,
 }
 
 pub struct Janitor {
@@ -365,6 +368,9 @@ impl Janitor {
             }
         }
         self.file_notes(&triage, &vaults, &tags, night, &mut report);
+        if night {
+            self.sweep_signs(&vaults, &mut report);
+        }
         if self.claimed {
             // What was not sorted goes back to the other sorters at once.
             let _ = self.client.call("triage_release", json!({}));

@@ -32,3 +32,11 @@ AI helped build this project and you may use it too. If an assistant did a meani
 ## Pull requests
 
 Keep them small and focused, with the tests that prove them. Describe what changes for a user and what you did not verify.
+
+## Version numbers
+
+`YYYYMMDD.F.B`: the day of the release, then `F`, the count of releases of that day that bring a new function (1 for the first),
+then `B`, the count of fixes after it (0 for the release itself). A day's second new function is `YYYYMMDD.2.0`; a bug fix of
+`20261119.1.0` is `20261119.1.1`. The numbers only grow, so a node, an app or the Home Assistant app store always sees the
+newest as the newer. Until 2026-11-19 the date stayed at `20261117` and only the last number grew (`20261117.0.38`); the new
+scheme continues from it.

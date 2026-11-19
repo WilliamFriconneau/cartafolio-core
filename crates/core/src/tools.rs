@@ -1328,7 +1328,23 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 all.dedup();
                 new.tags = all;
             }
+            // Only a tag the caller gave is a correction to learn from; what the node adds below is its own.
             let retagged = !new.tags.is_empty();
+            // The node tags what is written, a corrected text included: an assistant that rewrites a note gets its
+            // signs, as one that writes it. The tags the note had stay, none is taken out.
+            if !new.text.is_empty() && new.text != old.text {
+                let mut all = if new.tags.is_empty() {
+                    old.tags.clone()
+                } else {
+                    new.tags.clone()
+                };
+                let before = all.len();
+                let text_to_tag = new.text.clone();
+                tagging::on_write(brain, caller, &space, &conn, &text_to_tag, &mut all);
+                if all.len() > before {
+                    new.tags = all;
+                }
+            }
             let f = facts::supersede(&conn, &space, author, id, new, reason)?;
             // The person changed the tags of a note: the node learns it.
             if retagged {

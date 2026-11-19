@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261119.1.0
+
+- **The janitor tags the signs and symptoms of the notes already in the memory, wherever they came from.** Each night it goes through the notes of the health spaces and adds the `signe/*`, `mesure/*` and `alerte/*` tags of the shared referential to those written without them (imports, syncs, assistants limited to paths), 600 per pass, never touching the text, the raw layer of an app or a reference document. A short note also teaches the node its phrasing. A note that looks French is read in French, so `pain` (bread) is no longer a sign. See [JANITOR.md](docs/JANITOR.md).
+- **The tagger also runs when an assistant corrects a note.** `supersede` with a new text gives the new text its signs, measures and alerts, as `remember` does; the tags the note had stay.
+- **A sign for the urge to buy.** `purchase_urge` ("Envie d'acheter", "Urge to buy") joins the health referential (manifestations, version 2), so a target such as compulsive buying has a canonical sign to carry.
+
 ## 20261117.0.37
 
 - **The Targets card is localized.** Column names, move buttons, amounts, percentages and deadlines follow the page language (`25,7 %`, `15 déc. 2026` in French); the title no longer stays French in English. A card with only a deadline no longer shows an empty amounts row.

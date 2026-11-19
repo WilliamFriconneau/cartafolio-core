@@ -1,6 +1,6 @@
 {
  "schema": "memcp.health.manifestations.text/1",
- "version": 1,
+ "version": 2,
  "language": "fr",
  "provenance": "Vocabulary compiled by a private health project of the same owner and published here under this repository's licence (AGPL-3.0-or-later; the source repository is AGPL-3.0, and its referential files carry no licence line of their own). The origin of each keyword inside the source file is not recorded: unknown.",
  "negators": [
@@ -1213,6 +1213,24 @@
     "plaques rouges",
     "rougeurs",
     "urticaire"
+   ]
+  },
+  {
+   "id": "purchase_urge",
+   "label": "Envie d'acheter",
+   "keywords": [
+    "envie d'acheter",
+    "envie d'achat",
+    "envie de commander",
+    "envie de craquer",
+    "pulsion d'achat",
+    "pulsion d'acheter",
+    "achat compulsif",
+    "achats compulsifs",
+    "craving d'achat",
+    "tenté d'acheter",
+    "besoin d'acheter",
+    "envie irrésistible d'acheter"
    ]
   }
  ]

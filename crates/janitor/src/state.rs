@@ -94,6 +94,34 @@ impl State {
         self.save();
     }
 
+    /// Where the signs sweep of a space stands: the cursor to go on from (none at the start of a turn) and the time
+    /// (seconds) its last full turn began, 0 while none is done. A different `version` starts again.
+    pub fn signs_progress(&self, space: &str, version: u64) -> (Option<String>, u64) {
+        let d = &self.data["signs"][space];
+        if d["version"].as_u64() != Some(version) {
+            return (None, 0);
+        }
+        (
+            d["cursor"].as_str().map(String::from),
+            d["full_at"].as_u64().unwrap_or(0),
+        )
+    }
+
+    pub fn set_signs_progress(
+        &mut self,
+        space: &str,
+        version: u64,
+        cursor: Option<&str>,
+        full_at: u64,
+    ) {
+        if !self.data["signs"].is_object() {
+            self.data["signs"] = json!({});
+        }
+        self.data["signs"][space] =
+            json!({ "version": version, "cursor": cursor, "full_at": full_at });
+        self.save();
+    }
+
     /// Saves what changed.
     pub fn saved(&mut self) {
         self.save();

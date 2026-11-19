@@ -746,3 +746,29 @@ fn supersede_keeps_the_kind_unless_given_and_may_change_only_the_kind_or_add_tag
     );
     Ok(())
 }
+
+#[test]
+fn a_corrected_text_is_tagged_like_a_written_one_and_keeps_its_tags() -> Res {
+    let t = Temp::new("autotag-supersede");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let f = remember(
+        &b,
+        &c,
+        "health",
+        "Journée calme, rien à signaler.",
+        &["suivi/jour"],
+    )?;
+    let id = f["id"].as_str().ok_or("id")?;
+    let r = tools::call(
+        &b,
+        &c,
+        "supersede",
+        &json!({ "id": id, "text": "Journée difficile : épuisé, fatigue mentale et envie d'acheter pour compenser." }),
+    )?;
+    assert_eq!(r["result"], "superseded", "{r}");
+    assert!(has(&r["fact"], "suivi/jour"), "the tags it had stay: {r}");
+    assert!(has(&r["fact"], "signe/fatigue"), "{r}");
+    assert!(has(&r["fact"], "signe/purchase_urge"), "{r}");
+    Ok(())
+}

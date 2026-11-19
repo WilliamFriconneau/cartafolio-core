@@ -43,7 +43,7 @@ fn every_part_has_a_version_a_licence_and_a_provenance_line() {
 fn the_source_has_eighty_three_signs_and_the_additions_are_marked() {
     let all = builtin().manifestations();
     assert_eq!(all.iter().filter(|m| !m.added).count(), 83);
-    assert_eq!(all.iter().filter(|m| m.added).count(), 2);
+    assert_eq!(all.iter().filter(|m| m.added).count(), 3);
     let ids: BTreeSet<&str> = all.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(ids.len(), all.len(), "ids are unique");
     assert!(all.iter().all(|m| m.labels.contains_key("fr")));
@@ -120,5 +120,5 @@ fn the_compact_view_gives_ids_labels_and_keywords() {
     ] {
         assert!(v.get(k).is_some(), "{k}");
     }
-    assert_eq!(v["manifestations"].as_array().expect("list").len(), 85);
+    assert_eq!(v["manifestations"].as_array().expect("list").len(), 86);
 }

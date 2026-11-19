@@ -1,6 +1,6 @@
 {
  "schema": "memcp.health.manifestations.text/1",
- "version": 1,
+ "version": 2,
  "language": "en",
  "provenance": "Written for this project (the source referential has no English vocabulary). Partial: only the signs listed here.",
  "negators": [
@@ -298,6 +298,20 @@
    "label": "Dark thoughts",
    "keywords": [
     "dark thoughts"
+   ]
+  },
+  {
+   "id": "purchase_urge",
+   "label": "Urge to buy",
+   "keywords": [
+    "urge to buy",
+    "urge to shop",
+    "urge to order",
+    "craving to buy",
+    "shopping urge",
+    "compulsive buying",
+    "impulse buying",
+    "compulsive shopping"
    ]
   }
  ]
