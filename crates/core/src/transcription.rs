@@ -727,7 +727,7 @@ struct Seen {
 
 /// The names that recur in `texts` (each with its weight), most useful first.
 ///
-/// A run of up to four capitalised words (« Quentin Martin ») is a candidate; so is a single capitalised word. A word that
+/// A run of up to four capitalised words (« Paul Martin ») is a candidate; so is a single capitalised word. A word that
 /// only starts sentences is no name; nor is a day, a month, a title, an article or a word the texts also write in lower
 /// case more often than they write it with a capital in the middle of a sentence. A candidate counts from its second
 /// occurrence.
@@ -977,11 +977,11 @@ mod tests {
     #[test]
     fn a_name_is_said_twice_and_not_only_at_the_start_of_a_sentence() {
         let n = names(&[
-            "Demain Quentin viendra. Pendant ce temps Quentin joue.",
+            "Demain Paul viendra. Pendant ce temps Paul joue.",
             "Pendant la nuit il a plu. Pendant le jour aussi.",
             "Bonjour Marie. Marie a dit bonjour. Bonjour à tous.",
         ]);
-        assert!(n.contains(&"Quentin".to_string()), "{n:?}");
+        assert!(n.contains(&"Paul".to_string()), "{n:?}");
         assert!(!n.contains(&"Pendant".to_string()), "{n:?}");
         assert!(!n.contains(&"Demain".to_string()), "{n:?}");
         assert!(!n.contains(&"Bonjour".to_string()), "{n:?}");

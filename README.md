@@ -102,7 +102,7 @@ Press **Join a MemCP network** on the page. A phone or a computer scans the QR c
 
 ## Safe by default
 
-A node listens on the loopback only. Keys are shown once and only their digest is kept. What comes back from the memory is flagged as data, never as an instruction. A first security review, with what it found and what it did not read, is in [docs/reviews/](docs/reviews/). The memory is **not encrypted at rest yet**.
+A node listens on the loopback only. Keys are shown once and only their digest is kept. What comes back from the memory is flagged as data, never as an instruction. The security notes are in [SECURITY.md](SECURITY.md). The memory is **not encrypted at rest yet**.
 
 ## Read more
 

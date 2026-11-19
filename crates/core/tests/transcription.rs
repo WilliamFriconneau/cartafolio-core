@@ -58,9 +58,9 @@ fn at(words: &[String], w: &str) -> usize {
 /// A person's notes, the kind that recur: a few names, days and months at the start of sentences.
 fn story(b: &Brain, c: &Caller) -> Res {
     for text in [
-        "Hier j'ai vu Quentin Martin au parc, avec Sophie.",
-        "Quentin Martin viendra mardi pour la fête.",
-        "On dîne chez Quentin Martin avec Sophie vendredi soir.",
+        "Hier j'ai vu Paul Martin au parc, avec Sophie.",
+        "Paul Martin viendra mardi pour la fête.",
+        "On dîne chez Paul Martin avec Sophie vendredi soir.",
         "Appeler le garage de Lisbonne demain matin.",
         "Lundi on part à Lisbonne en famille, Janvier sera froid.",
         "Pendant ce temps Lisbonne attend. Bonjour tout le monde.",
@@ -82,7 +82,7 @@ fn names_that_recur_come_first_and_sentence_starts_days_and_months_are_not_names
     let h = hints(&b, &c, &json!({}))?;
     let words = list(&h, "words");
     let names = group(&h, "names");
-    for w in ["Quentin Martin", "Sophie", "Lisbonne", "Zendure"] {
+    for w in ["Paul Martin", "Sophie", "Lisbonne", "Zendure"] {
         assert!(names.contains(&w.to_string()), "{w}: {names:?}");
     }
     for w in [
@@ -96,7 +96,7 @@ fn names_that_recur_come_first_and_sentence_starts_days_and_months_are_not_names
     // The phrase said three times before the place said four times alone? the more frequent first, the phrase wins a tie.
     assert!(at(&names, "Lisbonne") < at(&names, "Sophie"), "{names:?}");
     assert!(
-        at(&names, "Quentin Martin") < at(&names, "Zendure"),
+        at(&names, "Paul Martin") < at(&names, "Zendure"),
         "{names:?}"
     );
     Ok(())

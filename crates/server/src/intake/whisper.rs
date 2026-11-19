@@ -547,8 +547,8 @@ mod tests {
     #[test]
     fn the_prompt_is_the_lexicon_then_the_hints_once_each_and_cut_at_a_word() {
         assert_eq!(
-            join_prompt("Zendure, Tydom", "tydom, Quentin Martin, Zendure, Lisbonne"),
-            "Zendure, Tydom, Quentin Martin, Lisbonne"
+            join_prompt("Zendure, Tydom", "tydom, Paul Martin, Zendure, Lisbonne"),
+            "Zendure, Tydom, Paul Martin, Lisbonne"
         );
         assert_eq!(join_prompt("", ""), "");
         assert_eq!(join_prompt("", "a b, c d"), "a b, c d");
@@ -703,18 +703,18 @@ mod api_tests {
 
     #[test]
     fn the_words_to_expect_go_to_the_speech_service_as_its_prompt() {
-        let (url, seen) = service(200, r#"{"text":"Rendez-vous chez Quentin Martin."}"#);
+        let (url, seen) = service(200, r#"{"text":"Rendez-vous chez Paul Martin."}"#);
         let audio = recording();
         Whisper::new(&settings(&url))
             .transcribe_with(
                 &audio,
                 &std::env::temp_dir(),
-                "Quentin Martin, Lisbonne, Zendure",
+                "Paul Martin, Lisbonne, Zendure",
             )
             .expect("transcribed");
         let (_, request) = seen.join().expect("service");
         assert!(
-            request.contains("name=\"prompt\"\r\n\r\nQuentin Martin, Lisbonne, Zendure\r\n"),
+            request.contains("name=\"prompt\"\r\n\r\nPaul Martin, Lisbonne, Zendure\r\n"),
             "{request}"
         );
         let _ = std::fs::remove_file(audio);
@@ -722,7 +722,7 @@ mod api_tests {
 
     #[test]
     fn with_guided_transcription_off_or_no_words_the_service_gets_no_prompt() {
-        for (on, words) in [(false, "Quentin Martin"), (true, "")] {
+        for (on, words) in [(false, "Paul Martin"), (true, "")] {
             let (url, seen) = service(200, r#"{"text":"Bonjour à tous."}"#);
             let audio = recording();
             let mut s = settings(&url);

@@ -2,6 +2,13 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## A sign for the urge to buy, signs on corrected notes (20261119.1.0)
+
+Added; nothing is renamed. The health referential (`manifestations`, version 2) gains the sign `purchase_urge` (« Envie d'acheter »,
+« Urge to buy », keywords in French and English): the tag is `signe/purchase_urge`, and a target may list `purchase_urge` among its
+signs. `supersede` with a new text now tags that text like `remember` does (signs, measures, alerts, the fields they carry); the tags the
+note had stay. Nothing changes in the shape of an answer. The version numbers become `YYYYMMDD.F.B` (see CONTRIBUTING.md), and they only grow.
+
 ## Finance stats by month (20261117.0.36)
 
 Added; nothing is renamed. In a money space, `space_view` with `view: "stats"` adds `stats.finances.months`: an array of
@@ -180,10 +187,10 @@ The node tells the speech model what to expect. Everything below is added; nothi
 
 ```json
 {
-  "words": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "céphalée"],
-  "text": "Quentin Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, céphalée",
+  "words": ["Paul Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "céphalée"],
+  "text": "Paul Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, céphalée",
   "groups": {
-    "names": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure"],
+    "names": ["Paul Martin", "Lisbonne", "Sophie", "Zendure"],
     "keywords": ["chaudière", "devis"],
     "vocabulary": ["plombier"],
     "health": ["céphalée"]

@@ -23,4 +23,4 @@
 - [CRUD.md](CRUD.md): what can be created, read, changed and removed (spaces, nodes, connections, people, notes).
 
 **Project**
-- [CONFORMITY.md](CONFORMITY.md): how a Linux server meets these documents. [FIVE-S.md](FIVE-S.md): the 5S pass of the code, rerun before a release. [BENCH.md](BENCH.md): the bench of real nodes (swarm, load, security, crashes). [reviews/](reviews/): security and code reviews. [CHANGELOG.md](../CHANGELOG.md): what each version changed.
+- [CONFORMITY.md](CONFORMITY.md): how a Linux server meets these documents. [FIVE-S.md](FIVE-S.md): the 5S pass of the code, rerun before a release. [BENCH.md](BENCH.md): the bench of real nodes (swarm, load, security, crashes). [CHANGELOG.md](../CHANGELOG.md): what each version changed.

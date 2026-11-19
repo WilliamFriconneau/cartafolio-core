@@ -29,6 +29,17 @@ jobs:
       - run: cargo test -p memcp-health
       - run: cargo test --manifest-path vendor/tiny_http/Cargo.toml --lib
 
+  secrets:
+    # A key or a token committed by mistake, in the history as well as at the tip.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   e2e:
     # Real processes: the programs of the project talk to each other on loopback ports (scripts/e2e.sh).
     runs-on: ubuntu-latest

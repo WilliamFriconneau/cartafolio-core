@@ -63,7 +63,7 @@ How it goes:
 A speech model reads a person's words better when it knows which names and terms to expect. The node works that list out from the
 person's own memory, with no external model, and gives it to the speech model as its **initial prompt**:
 
-- **names** that recur in the notes (a run of capitalised words said at least twice: « Quentin Martin »; never a capital that only
+- **names** that recur in the notes (a run of capitalised words said at least twice: « Paul Martin »; never a capital that only
   starts a sentence, a day, a month, a title or a common word) and the tags `personnes/…`, `lieux/…`, `produits/…`,
   `organisations/…` with their counts;
 - the **keywords** of the `rules` note of each space, the most used first;

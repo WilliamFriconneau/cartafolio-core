@@ -25,7 +25,7 @@ memcp holds what you would not post anywhere: health, money, the people around y
 
 ## Status
 
-The code has automated tests and runs in daily use, and it was largely written with AI assistants (see the README). It has **not** been audited by an independent party; a first review, made with an AI assistant, is in [docs/reviews/2026-11-16-security-audit.md](docs/reviews/2026-11-16-security-audit.md), with what it found and what it did not read, and a second one on the core in [docs/reviews/2026-11-17-core-audit.md](docs/reviews/2026-11-17-core-audit.md). Dependencies are checked with `cargo audit` in CI.
+The code has automated tests and runs in daily use, and it was largely written with AI assistants (see the README). It has **not** been audited by an independent party; reviews made with an AI assistant are not a substitute for one. Dependencies are checked with `cargo audit` in CI.
 
 ## Reporting a vulnerability
 

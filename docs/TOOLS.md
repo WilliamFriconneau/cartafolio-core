@@ -1292,10 +1292,10 @@ Example call and answer:
 
 ```json
 {
-  "words": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "fuit"],
-  "text": "Quentin Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, fuit",
+  "words": ["Paul Martin", "Lisbonne", "Sophie", "Zendure", "chaudière", "devis", "plombier", "fuit"],
+  "text": "Paul Martin, Lisbonne, Sophie, Zendure, chaudière, devis, plombier, fuit",
   "groups": {
-    "names": ["Quentin Martin", "Lisbonne", "Sophie", "Zendure"],
+    "names": ["Paul Martin", "Lisbonne", "Sophie", "Zendure"],
     "keywords": ["chaudière", "devis"],
     "vocabulary": ["plombier", "fuit"],
     "health": []

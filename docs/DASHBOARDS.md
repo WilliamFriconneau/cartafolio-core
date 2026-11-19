@@ -54,7 +54,7 @@ An assistant that edits a dashboard needs to see **its definition**, not the not
 ## What ships where
 
 - **This repository** ships the format, the checker, the generic renderer (the page of a node draws any dashboard document), the plain default dashboard (the notes day by day) and a simple health space: a space and a folder, with no dashboard of its own.
-- **Specific dashboards** are presets, made by the author, and come with the MemCP app for iOS and Mac, which is sold by subscription. The first is the **health dashboard, designed by a nurse**, built around what a person follows (their targets): it counts the signs and symptoms noted in the journal, day by day and over the last weeks, and lists the targets. It interprets nothing, names no diagnosis and advises no treatment. Then, over time: money, development, hobbies, and the house (with Home Assistant first), each with its own dashboard.
+- **Specific dashboards** are presets that an app can bring (health, money, development, hobbies, the house); they are not part of this repository.
 - **How a preset reaches a node.** When the app is connected to a node, it stores the dashboard of a space there as an active fact tagged `dashboard` (replaced at each change, so the history keeps every version), and the page of the node draws it with the generic renderer. Without the app a person may write a document by hand, or ask an assistant to, within the levels above.
 - **Without any assistant**, a dashboard is local and needs no model. **With one**, if the person chooses, the same dashboard can be reshaped: new sections, other windows, a series for a measure they started to follow.
 
