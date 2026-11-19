@@ -2,7 +2,7 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
-## Crash safety of spaces (Unreleased)
+## Crash safety of spaces (20261117.0.33)
 
 - `Recovered` (what `Brain::recover()` answers) gains `spaces` (archives, restores, merges, adoptions and layout
   changes a crash cut off, finished or undone), `orphans` (files of a space a creation cut off, removed), `stray`
