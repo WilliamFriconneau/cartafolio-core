@@ -606,6 +606,125 @@ impl Ledger<'_> {
         Ok(json!({ "movements": out }))
     }
 
+    /// The money register for the space view contract (`memcp.view/1`): movements with a stable id,
+    /// a cursor and their provenance. It is the projection the core cannot compute, since the bank
+    /// statements live in this crate. An id comes from the whole table, so a movement keeps it
+    /// whatever window, account or page is asked for.
+    pub fn movements_page(
+        &self,
+        account: &str,
+        from: &str,
+        to: &str,
+        filter: &str,
+        limit: i64,
+        cursor: &str,
+    ) -> Result<Value, ToolError> {
+        let c = self.conn()?;
+        let numbers = Self::matching_accounts(&c, account)?;
+        let limit = limit.clamp(1, 200) as usize;
+        if numbers.is_empty() {
+            return Ok(page(
+                self,
+                (from, to, account, filter),
+                limit,
+                vec![],
+                false,
+            ));
+        }
+        let wanted: std::collections::HashSet<&String> = numbers.iter().collect();
+        let text = filter.to_lowercase();
+        let (lo, hi) = (
+            if from.is_empty() { "0000-00-00" } else { from },
+            if to.is_empty() { "9999-99-99" } else { to },
+        );
+        let mut all: Vec<(String, String, f64, String, i64)> = Vec::new();
+        let mut st = c
+            .prepare(
+                "SELECT number, date, amount, label, rowid FROM fin_moves \
+                 ORDER BY number, date, label, amount, rowid",
+            )
+            .map_err(db)?;
+        let rows = st
+            .query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, f64>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })
+            .map_err(db)?;
+        all.extend(rows.filter_map(Result::ok));
+        let mut seen: std::collections::HashMap<String, u32> = Default::default();
+        let mut ids: std::collections::HashMap<i64, String> = Default::default();
+        for (number, date, amount, label, rowid) in &all {
+            let key = format!("{number}|{date}|{amount}|{label}");
+            let n = *seen.entry(key.clone()).or_insert(0);
+            seen.insert(key.clone(), n + 1);
+            ids.insert(
+                *rowid,
+                format!(
+                    "mv_{:016x}",
+                    fnv1a(format!("{}|{}|{n}", self.space.as_str(), key).as_bytes())
+                ),
+            );
+        }
+        let mut items = Vec::new();
+        for (number, date, amount, label, rowid) in &all {
+            if !wanted.contains(number) || date.as_str() < lo || date.as_str() > hi {
+                continue;
+            }
+            if !text.is_empty() && !label.to_lowercase().contains(&text) {
+                continue;
+            }
+            let Some(id) = ids.get(rowid) else {
+                continue;
+            };
+            items.push(json!({
+                "id": id,
+                "type": "movement",
+                "space": self.space.as_str(),
+                "at": date,
+                "date": date,
+                "text": label,
+                "title": label,
+                "amount": amount,
+                "currency": Value::Null,
+                "account": Self::account_label(&c, number),
+                "tags": [],
+                "fields": {},
+                "provenance": {
+                    "kind": "statement",
+                    "source": "bank export",
+                    "account": Self::account_label(&c, number),
+                    "author": Value::Null,
+                },
+            }));
+        }
+        items.sort_by(|a, b| {
+            b["date"]
+                .as_str()
+                .cmp(&a["date"].as_str())
+                .then(b["id"].as_str().cmp(&a["id"].as_str()))
+        });
+        if !cursor.is_empty() {
+            match items.iter().position(|i| i["id"].as_str() == Some(cursor)) {
+                Some(at) => {
+                    items.drain(..=at);
+                }
+                None => {
+                    return Err(ToolError::Invalid(
+                        "cursor: take `page.next_cursor` from the answer".into(),
+                    ));
+                }
+            }
+        }
+        let more = items.len() > limit;
+        items.truncate(limit);
+        Ok(page(self, (from, to, account, filter), limit, items, more))
+    }
+
     /// The statement of a month: income, outflow, the person's rules, overdrawn days, fees.
     pub fn monthly(&self, month: &str, now: i64) -> Result<Value, ToolError> {
         let (y, m, d, ..) = civil(now);
@@ -858,6 +977,46 @@ impl Ledger<'_> {
 
 fn db(e: rusqlite::Error) -> ToolError {
     ToolError::Internal(e.to_string())
+}
+
+/// A 64-bit FNV-1a hash, for a movement's stable id. No model, no dependency, the same on every node.
+fn fnv1a(bytes: &[u8]) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in bytes {
+        h ^= u64::from(*b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+/// The contract envelope of a money register page.
+fn page(
+    ledger: &Ledger<'_>,
+    (from, to, account, filter): (&str, &str, &str, &str),
+    limit: usize,
+    items: Vec<Value>,
+    more: bool,
+) -> Value {
+    let next = more
+        .then(|| {
+            items
+                .last()
+                .and_then(|i| i["id"].as_str())
+                .map(String::from)
+        })
+        .flatten();
+    json!({
+        "contract": memcp_core::view::CONTRACT,
+        "contract_version": memcp_core::view::CONTRACT_VERSION,
+        "space": ledger.space.as_str(),
+        "kind": "money",
+        "view": "register",
+        "filters": { "from": from, "to": to, "type": "movement", "account": account, "filter": filter },
+        "items": items,
+        "page": { "limit": limit, "has_more": more, "next_cursor": next },
+        "provenance": { "kind": "statement", "source": "bank export" },
+        "notice": memcp_core::tools::NOTICE,
+    })
 }
 
 #[cfg(test)]

@@ -12,11 +12,12 @@ use memcp_core::users::OWNER;
 use memcp_core::{Brain, util};
 use serde_json::{Value, json};
 
-const READ: [&str; 16] = [
+const READ: [&str; 17] = [
     "triage_waiting",
     "tags_suggest",
     "health_referential",
     "living_get",
+    "space_view",
     "peers",
     "rules_get",
     "library_search",
@@ -244,6 +245,7 @@ fn args_for(w: &World, tool: &str, space: &str, fact: &str) -> Value {
         "triage_send" => json!({"id": "nothing", "to": space}),
         "transcription_failed" => json!({"id": "nothing"}),
         "living_get" => json!({"space": space, "page": "next"}),
+        "space_view" => json!({"space": space, "view": "register", "limit": 2}),
         "living_set" => {
             json!({"space": space, "page": "next", "add": [{"column": "now", "text": "Call"}]})
         }
@@ -322,6 +324,7 @@ fn reads_answer_on_a_granted_space_and_refuse_every_other_in_the_same_words() ->
     let read_with_space = [
         "recall",
         "living_get",
+        "space_view",
         "rules_get",
         "library_search",
         "folder_get",

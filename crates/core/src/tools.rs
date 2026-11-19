@@ -28,7 +28,7 @@ pub(crate) static LEASES: std::sync::LazyLock<
 mod disputes;
 mod folder;
 mod health;
-mod living;
+pub(crate) mod living;
 mod overview;
 mod sorting;
 mod tagging;
@@ -53,7 +53,7 @@ const WRITE_TOOLS: [&str; 17] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 19] = [
+const READ_TOOLS: [&str; 20] = [
     "disputes",
     "triage_waiting",
     "tags_suggest",
@@ -61,6 +61,7 @@ const READ_TOOLS: [&str; 19] = [
     "health_referential",
     "vocabulary_terms",
     "living_get",
+    "space_view",
     "peers",
     "rules_get",
     "library_search",
@@ -141,6 +142,12 @@ fn space_prop(spaces: &[Space], what: &str) -> Value {
     json!({ "type": "string", "enum": names, "description": what })
 }
 
+/// The names of the tools this connection sees, in the order they are offered. Used by the space
+/// view contract to say which tools a client may actually call.
+pub(crate) fn available_names(caller: &Caller) -> Vec<&'static str> {
+    definitions(caller).into_iter().map(|d| d.name).collect()
+}
+
 /// The tools this connection sees, filtered by its rights: nothing needing write is listed for a read-only
 /// connection, and a connection with no readable space gets none. [`call`] refuses a tool that is not in this
 /// list exactly as if it did not exist ([`ToolError::Unknown`]). Pure: no file is opened and nothing is written.
@@ -200,6 +207,28 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "limit": { "type": "integer", "minimum": 1, "maximum": 200 } }, "required": ["space", "page"] }),
         });
         out.push(ToolDef {
+            name: "space_view",
+            description: "The read model of one space, as a versioned contract (`memcp.view/1`): `view` is `capabilities` (what the space offers: dashboard, targets, timestamped register, item types, filters, pagination), `dashboard` (the stored dashboard or the plain default), `targets` (the living board `targets`, with the signs each target groups), or `register` (notes and files, newest first). `from` and `to` bound the register in time (YYYY-MM-DD, the whole day for `to`, or ISO 8601); `type` is note, file, target, dashboard, sign, measure or movement; `tag` keeps one path; `limit` is 1 to 200 (default 50) and a page carries `page.next_cursor`, passed back as `cursor`. Every item has a stable `id` (the fact id), a `type`, its `at` and its `provenance` (`source`, `author`, `app`, `layer`). Read-only: the tools that write keep their own names. A key limited to paths, or a space the caller does not read whole, gets `denied`.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "space": space_prop(&readable, "The space to read."),
+                    "view": { "type": "string", "enum": ["capabilities", "targets", "chronology", "stats", "files", "tasks", "dashboard", "register"], "description": "Default: capabilities; targets is the space's home." },
+                    "from": { "type": "string", "description": "The register starts at this day or time (YYYY-MM-DD or ISO 8601)." },
+                    "to": { "type": "string", "description": "The register ends at this day (the whole day) or time." },
+                    "type": { "type": "string", "enum": ["all", "note", "file", "target", "dashboard", "sign", "measure", "movement"], "description": "The kind of entry; chronology defaults to all. sign and measure are health spaces; movement comes from the money projection." },
+                    "tag": { "type": "string", "description": "Only the items under this tag path." },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Page size; default 50." },
+                    "cursor": { "type": "string", "description": "Opaque: `page.next_cursor` of the previous page." },
+                    "account": { "type": "string", "description": "Money spaces only: part of an account name or its last four digits." },
+                    "filter": { "type": "string", "description": "Money spaces only: a word of a movement label." },
+                    "q": { "type": "string", "description": "Words in the entry (chronology) or in the file name and note." },
+                    "mime": { "type": "string", "description": "Files: a MIME prefix, such as image/." }
+                },
+                "required": ["space"]
+            }),
+        });
+        out.push(ToolDef {
             name: "vocabulary_terms",
             description: "The terms of the vocabularies a person imported into a space (lists of signs, symptoms, project words) that the router reads after the `rules` note: `{space, limit?}` gives the distinct terms, lower case, and the vocabularies with their source.".into(),
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "limit": { "type": "integer" } }, "required": ["space"] }),
@@ -257,7 +286,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         out.push(ToolDef {
             name: "living_set",
             description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
-            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array" }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array", "description": "Cards: {text, column, signs?, fields?}. `fields` are the target's figures (due, target_amount, realized_amount, currency) or any other field." }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
         });
         if caller.all_spaces && !caller.read_only_forced {
             out.push(ToolDef {
@@ -1464,6 +1493,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
         }
         "health_referential" => crate::tools::health::health_referential(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
+        "space_view" => crate::view::space_view(brain, caller, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),
         "notes_move" => crate::tools::sorting::notes_move(brain, caller, name, args),
         "rules_get" | "rules_set" => crate::tools::sorting::rules(brain, caller, name, args),

@@ -182,6 +182,29 @@ details.fold[open]>summary{margin-bottom:8px}
 .tree li{margin:3px 0}.tree .n{opacity:.65;font-size:12.5px;margin-left:6px}
 .lay td{padding:4px 6px;vertical-align:middle}.lay input{width:100%;box-sizing:border-box}
 
+/* Persistent space bar, four views, and the one add button */
+.spacebar{display:flex;gap:6px;overflow-x:auto;padding:6px 0 10px;position:sticky;top:0;z-index:8;background:color-mix(in srgb,var(--bg) 92%,transparent);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);margin-bottom:10px}
+.spacebar button{border-radius:14px;padding:5px 13px;white-space:nowrap;font-size:13.5px}
+.spacebar button.on{background:var(--primary-c);color:var(--on-primary-c);border-color:transparent;font-weight:600}
+.fab{position:fixed;right:26px;bottom:26px;z-index:20;width:54px;height:54px;border-radius:50%;border:0;background:var(--primary);color:var(--on-primary);font-size:30px;line-height:1;box-shadow:var(--shadow);display:grid;place-items:center;padding:0}
+.fab:hover{background:color-mix(in srgb,var(--primary) 88%,var(--on-primary))}
+.fab-menu{position:fixed;right:26px;bottom:90px;z-index:21;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:8px;display:flex;flex-direction:column;gap:4px;box-shadow:var(--shadow);min-width:180px}
+.fab-menu button{border:0;text-align:left;border-radius:10px;padding:9px 12px}
+.quick{position:fixed;inset:0;z-index:30;background:color-mix(in srgb,var(--sc-low) 30%,transparent);display:grid;place-items:center;padding:20px}
+.quickbox{background:var(--card);border:1px solid var(--line);border-radius:20px;padding:18px;width:min(560px,96vw);box-shadow:var(--shadow);display:flex;flex-direction:column;gap:10px}
+.quickbox textarea{min-height:9em;width:100%;box-sizing:border-box}
+.metrics{margin-top:6px;display:flex;flex-direction:column;gap:3px}
+.metrics .bar{height:9px;border-radius:5px;background:var(--primary);opacity:.75}
+.metrics .mrow{display:flex;justify-content:space-between;gap:10px;font-size:12px;color:var(--mute)}
+.taskline{display:flex;align-items:flex-start;gap:9px;padding:7px 8px;border-radius:10px}
+.taskline:hover{background:var(--sc)}
+.taskline input{margin-top:2px}
+.taskline.done .tx{text-decoration:line-through;opacity:.65}
+.fileline{display:flex;gap:10px;align-items:center;padding:9px 10px;border-radius:12px}
+.fileline:hover{background:var(--sc)}
+.fileline .grow{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media (max-width:700px){.spacebar{padding-top:2px}.fab{right:16px;bottom:16px}.fab-menu{right:16px;bottom:80px}}
+
 /* The spaces as folders */
 .tree-wrap{display:grid;grid-template-columns:minmax(260px,1fr) minmax(220px,340px);gap:16px;align-items:start}
 @media (max-width:760px){.tree-wrap{grid-template-columns:1fr}}
@@ -543,6 +566,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     </div>
 
     <div id="view-space" hidden>
+      <nav class="spacebar" id="spacebar" aria-label="Spaces"></nav>
       <section>
         <nav class="crumb" id="space-crumb" aria-label="Where you are"></nav>
         <h2 id="space-title"></h2>
@@ -551,6 +575,23 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
         <div class="tabs" id="space-tabs"></div>
         <div id="space-body"></div>
       </section>
+      <button type="button" class="fab" id="fab" hidden aria-label="Add to this space">+</button>
+      <div class="fab-menu" id="fab-menu" hidden>
+        <button type="button" id="fab-note">Write a note</button>
+        <button type="button" id="fab-file">Photo or file</button>
+      </div>
+      <input type="file" id="fab-input" hidden multiple accept="image/*,audio/*,.m4a,.caf,application/pdf,text/plain,text/markdown,.xlsx">
+    </div>
+
+    <div id="quick" class="quick" hidden>
+      <div class="quickbox">
+        <h3>Write a note</h3>
+        <textarea id="quick-text" placeholder="A note for this space. #hashtags file it where it belongs."></textarea>
+        <div class="row">
+          <button type="button" class="primary" id="quick-save">Add to this space</button>
+          <button type="button" class="link" id="quick-close">Cancel</button>
+        </div>
+      </div>
     </div>
 
     <div id="view-global" hidden>
@@ -938,6 +979,17 @@ const FR = {
   "Activity": "Activité",
   "The latest events about your connections and what you changed. Never a key, never memory content.": "Les derniers événements sur vos connexions et ce que vous avez changé. Jamais une clé, jamais le contenu de la mémoire.",
   "Files": "Fichiers",
+  "Inventory": "Inventaire",
+  "Signs": "Signes",
+  "Measures": "Mesures",
+  "Movements": "Mouvements",
+  "Tasks": "Tâches",
+  "Write a note": "Écrire une note",
+  "Photo or file": "Photo ou fichier",
+  "Add to this space": "Ajouter à cet espace",
+  "Filter": "Filtrer",
+  "Older entries": "Entrées plus anciennes",
+  "Older files": "Fichiers plus anciens",
   "Photos and documents kept in a space (4 MB at most). Assistants find them by their note.": "Photos et documents gardés dans un espace (4 Mo au plus). Les assistants les trouvent par leur note.",
   "Keep": "Garder",
   "in": "dans",
@@ -954,6 +1006,7 @@ const FR = {
   "read-only": "lecture seule",
   "Create key": "Créer la clé",
   "Journal": "Journal",
+  "Register": "Registre",
   "Dashboard": "Tableau de bord",
   "Notes": "Notes",
   "Folder on this node": "Dossier sur ce nœud",
@@ -1606,6 +1659,34 @@ $("#tl-scale").addEventListener("change", loadTimeline);
 try { const sv = localStorage.getItem("memcp-tl-scale"); if (sv && [...$("#tl-scale").options].some(o => o.value === sv)) $("#tl-scale").value = sv; } catch (_) {}
 setInterval(() => { if (!document.hidden && $("#app") && !$("#app").hidden) loadTimeline(); }, 60000);
 
+// The one add button: a note, a photo or a file, on every view of a space that allows writing.
+$("#fab").addEventListener("click", e => { e.stopPropagation(); $("#fab-menu").hidden = !$("#fab-menu").hidden; });
+$("#fab-note").addEventListener("click", () => { $("#fab-menu").hidden = true; $("#quick").hidden = false; $("#quick-text").value = ""; $("#quick-text").focus(); });
+$("#fab-file").addEventListener("click", () => { $("#fab-menu").hidden = true; $("#fab-input").click(); });
+$("#fab-input").addEventListener("change", async () => {
+  const input = $("#fab-input");
+  try {
+    for (const f of [...input.files]) await uploadFile(f, [], "");
+    input.value = "";
+    toast("Added");
+    const tab = SP.tab; await loadSpace(SP.name); SP.tab = tab; renderSpace();
+  } catch (x) { fail(x); }
+});
+$("#quick-close").addEventListener("click", () => { $("#quick").hidden = true; });
+$("#quick-save").addEventListener("click", async () => {
+  const text = $("#quick-text").value.trim();
+  if (!text) return;
+  try {
+    await api("fact/add", { space: SP.name, text, tags: [] });
+    $("#quick").hidden = true;
+    const tab = SP.tab; await loadSpace(SP.name); SP.tab = tab; renderSpace();
+  } catch (x) { fail(x); }
+});
+document.addEventListener("click", e => {
+  if (!$("#fab-menu").hidden && !e.target.closest("#fab-menu") && !e.target.closest("#fab")) $("#fab-menu").hidden = true;
+});
+document.addEventListener("keydown", e => { if (e.key === "Escape") { $("#fab-menu").hidden = true; $("#quick").hidden = true; } });
+
 async function load() {
   S = await api("state");
   const isInternal = c => c.internal || /^janitor(-|$)/.test(c.agent);
@@ -1662,15 +1743,33 @@ const q = encodeURIComponent;
 function fail(x) { $("#err").textContent = x.message || String(x); setTimeout(() => { $("#err").textContent = ""; }, 8000); }
 async function loadSpace(name) {
   const keep = SP && SP.name === name ? SP : null;
-  SP = { name, tab: keep ? keep.tab : "journal", tag: keep ? keep.tag : "", q: keep ? keep.q : "", open: null, hash: keep ? keep.hash : "", jlimit: keep ? keep.jlimit : 100 };
-  if (PENDING && PENDING.space === name) { SP.tab = "notes"; SP.open = PENDING.id; SP.tag = ""; SP.q = ""; PENDING = null; }
+  let tab = keep ? keep.tab : "targets";
+  if (["register", "dashboard", "boards", "words", "tree", "graph", "notes"].includes(tab)) tab = "journal";
+  SP = { name, tab, tag: keep ? keep.tag : "", q: keep ? keep.q : "",
+         filters: keep ? keep.filters : { type: "all", q: "", from: "", to: "", tag: "" },
+         open: null, hash: keep ? keep.hash : "", jlimit: keep ? keep.jlimit : 100, cap: null };
+  if (PENDING && PENDING.space === name) { SP.tab = "journal"; SP.open = PENDING.id; PENDING = null; }
   try { SP.ov = await api("space?space=" + q(name)); } catch (x) { return fail(x); }
+  try { SP.cap = await api("space/view?space=" + q(name) + "&view=capabilities"); } catch (_) { SP.cap = null; }
   renderSpace();
+}
+// The persistent bar of spaces: the top-level ones, and the current one when it lives inside another.
+function renderSpaceBar() {
+  if (!SP) return;
+  const top = (FT.l || []).filter(s => !s.parent);
+  const current = (FT.l || []).find(s => s.space === SP.name);
+  const rows = [...top];
+  if (current && !rows.some(s => s.space === current.space)) rows.push(current);
+  if (!rows.length) rows.push({ space: SP.name, label: spaceLabel(SP.name) });
+  $("#spacebar").replaceChildren(...rows.map(s => el("button", {
+    type: "button", class: s.space === SP.name ? "on" : "", "aria-current": s.space === SP.name ? "page" : null,
+    onclick: () => { location.hash = "#space/" + s.space; },
+  }, s.label)));
 }
 // What files notes into this space (its tags and keywords), or the spaces inside it: shown under the title, on every tab.
 function renderRuleLine(ov) {
   const r = ov.rules || {}, kw = r.keywords || [], rt = r.tags || [], inner = kids(ov.space);
-  const toNotes = (tag, word) => () => { SP.tab = "notes"; SP.tag = tag; SP.q = word; SP.hash = ""; renderSpace(); };
+  const toNotes = (tag, word) => () => { SP.filters.tag = tag || ""; SP.filters.q = word || ""; SP.tab = "journal"; renderSpace(); };
   const out = [];
   if (inner.length) out.push(el("span", { class: "mute" }, "Spaces inside:"), ...inner.map(c => el("button", { type: "button", class: "chip", onclick: () => { location.hash = "#space/" + c.space; } }, c.label)));
   if (inner.length && (kw.length || rt.length)) out.push(el("span", { style: "flex-basis:100%" }));
@@ -1689,27 +1788,28 @@ function renderSpace() {
   const note = location.hash === "#note";
   $("#space-crumb").hidden = $("#space-sub").hidden = $("#space-tabs").hidden = note;
   $("#space-rules").hidden = note;
+  $("#spacebar").hidden = note;
+  $("#fab").hidden = note || !(SP.cap && SP.cap.writable);
+  $("#fab-menu").hidden = true;
   if (note) {
     $("#space-title").textContent = "Trace or drop";
     SP.tab = "journal";
     journalView($("#space-body"));
     return;
   }
+  renderSpaceBar();
   $("#space-title").textContent = spaceLabel(ov.space);
   crumbs($("#space-crumb"), ancestors(ov.space), null);
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
   $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes");
   renderRuleLine(ov);
-  $("#space-tabs").replaceChildren(...[["journal", "Journal"], ["boards", "Boards"], ["words", "Keywords and targets"], ["dashboard", "Dashboard"], ["notes", "Notes"], ["tree", "Tree"], ["graph", "Graph"]].map(([k, t]) =>
-    el("button", { type: "button", class: SP.tab === k ? "on" : "", onclick: () => { SP.tab = k; renderSpace(); } }, t)));
+  $("#space-tabs").replaceChildren(...[["targets", "Targets"], ["journal", "Journal"], ["stats", "Stats"], ["files", "Inventory"]].map(([k, t]) =>
+    el("button", { type: "button", class: SP.tab === k ? "on" : "", "aria-current": SP.tab === k ? "page" : null, onclick: () => { SP.tab = k; SP.open = null; renderSpace(); } }, t)));
   const body = $("#space-body");
-  if (SP.tab === "journal") journalView(body);
-  else if (SP.tab === "boards") boardsView(body);
-  else if (SP.tab === "words") wordsView(body);
-  else if (SP.tab === "dashboard") body.replaceChildren(...dashboardView(ov.dashboard));
-  else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
-  else if (SP.tab === "graph") graphView(body, { space: ov.space });
-  else notesView(body);
+  if (SP.tab === "targets") targetsView(body);
+  else if (SP.tab === "stats") statsTab(body);
+  else if (SP.tab === "files") filesTab(body);
+  else journalView(body);
 }
 
 // ---- The journal: every space reads as a journal, day by day ----
@@ -1731,12 +1831,14 @@ function dayTitle(d) {
   if (same(d, y)) return "Yesterday";
   return d.toLocaleDateString(loc(), { weekday: "long", day: "numeric", month: "long", year: d.getFullYear() === today.getFullYear() ? undefined : "numeric" });
 }
-// A list of notes by day, newest first: one row each, with the tags it carries (and its space, in the journal of everything).
+// A list of entries by day, newest first: one row each, with its type, its provenance, its tags and
+// (in the journal of everything) its space.
 const HIDDEN_TAGS = new Set(["dashboard", "rules", "living", "living-meta", "index", "guide", "inbox", "sources"]);
+const atOf = f => f.created_at ? f.created_at * 1000 : (f.at ? Date.parse(f.at) : Date.now());
 function noteRows(facts, o) {
   const days = new Map();
   for (const f of facts) {
-    const d = new Date(f.created_at * 1000), key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
+    const d = new Date(atOf(f)), key = d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate();
     if (!days.has(key)) days.set(key, { d, items: [] });
     days.get(key).items.push(f);
   }
@@ -1744,46 +1846,209 @@ function noteRows(facts, o) {
   for (const { d, items } of days.values()) {
     rows.push(el("h3", { style: "margin:18px 0 4px" }, dayTitle(d)));
     for (const f of items) {
-      const hm = new Date(f.created_at * 1000).toLocaleTimeString(loc(), { hour: "2-digit", minute: "2-digit" });
+      const hm = new Date(atOf(f)).toLocaleTimeString(loc(), { hour: "2-digit", minute: "2-digit" });
       const tags = (f.tags || []).filter(t => !HIDDEN_TAGS.has(t.split("/")[0]));
+      const kind = f.type && f.type !== "note" ? el("span", { class: "chip" }, f.type) : null;
+      const prov = f.provenance && (f.provenance.app || f.provenance.author) ? el("span", { class: "mute", style: "font-size:11.5px" }, " · " + (f.provenance.app || f.provenance.author)) : null;
+      const amount = f.type === "movement" ? el("div", { class: "mute small" }, (Number(f.amount) > 0 ? "+" : "") + Number(f.amount).toFixed(2) + " · " + (f.account || "")) : null;
       rows.push(el("div", { class: "note", onclick: () => o.open(f) },
-        el("div", { class: "meta" }, hm, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
+        el("div", { class: "meta" }, hm, kind, prov, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
         el("div", { class: "tx" },
           ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file, f.voice) : null]),
+          amount,
           tags.length ? el("div", { class: "tg" }, ...tags.map(t => el("button", { type: "button", class: "chip", onclick: e => { e.stopPropagation(); o.onTag(t); } }, t))) : null)));
     }
   }
   return rows;
 }
 async function journalView(body) {
-  const text = el("textarea", { placeholder: "Write a note. #hashtags file it where it belongs." });
-  const add = async () => {
-    if (!text.value.trim()) return;
-    try { await api("fact/add", { space: SP.name, text: text.value, tags: [] }); text.value = ""; await loadSpace(SP.name); } catch (x) {
-      if (/close notes exist/.test(x.message)) fail(new Error("A very close note exists already: open the Notes tab to correct it or to add this one anyway.")); else fail(x);
-    }
-  };
-  const attachInput = el("input", { type: "file", multiple: true, hidden: true, accept: "image/*,audio/*,.m4a,.caf,application/pdf,text/plain,text/markdown,.xlsx" });
-  attachInput.addEventListener("change", async () => {
-    try { for (const f of [...attachInput.files]) await uploadFile(f, [], ""); attachInput.value = ""; toast("Attached"); await loadSpace(SP.name); } catch (x) { fail(x); }
-  });
-  const recBtn = el("button", { type: "button", onclick: () => toggleRecord(recBtn, body) }, REC ? "■ Stop" : "● Record");
-  const compose = el("div", { class: "editor" }, attachInput, text,
-    el("div", { class: "row" }, el("button", { type: "button", class: "primary", onclick: add }, "Add to the journal"),
-      el("button", { type: "button", onclick: () => attachInput.click() }, "Attach files"), recBtn));
+  const type = el("select", {}, ...[["all", "Everything"], ["note", "Notes"], ["file", "Files"], ["sign", "Signs"], ["measure", "Measures"], ["movement", "Movements"]].map(([v, t]) => el("option", { value: v }, t)));
+  type.value = SP.filters.type || "all";
+  const words = el("input", { type: "search", placeholder: "search the chronology", value: SP.filters.q || "", size: 26 });
+  const from = el("input", { type: "date", value: SP.filters.from || "", "aria-label": "from" });
+  const to = el("input", { type: "date", value: SP.filters.to || "", "aria-label": "to" });
+  const apply = () => { SP.filters.type = type.value; SP.filters.q = words.value.trim(); SP.filters.from = from.value; SP.filters.to = to.value; journalView(body); };
+  type.addEventListener("change", apply);
+  words.addEventListener("keydown", e => { if (e.key === "Enter") apply(); });
+  from.addEventListener("change", apply); to.addEventListener("change", apply);
   const list = el("div", {}, el("p", { class: "mute" }, "…"));
-  const filter = SP.hash ? el("p", { class: "mute small" }, "Notes with ", el("b", {}, SP.hash), " ", el("button", { type: "button", class: "link", onclick: () => { SP.hash = ""; journalView(body); } }, "✕ show all")) : null;
-  body.replaceChildren(compose, ...(filter ? [filter] : []), list);
-  let facts;
-  try { facts = (await api("facts?space=" + q(SP.name) + "&limit=" + SP.jlimit)).facts; } catch (x) { return fail(x); }
-  if (SP.hash) facts = facts.filter(f => (f.text.match(HASHTAG) || []).some(h => h.toLowerCase() === SP.hash.toLowerCase()));
-  const rows = noteRows(facts, {
-    open: f => { SP.tab = "notes"; SP.open = f.id; renderSpace(); },
-    onTag: t => { SP.tab = "notes"; SP.tag = t; SP.q = ""; renderSpace(); },
-    onHash: h => { SP.hash = h; journalView(body); },
-  });
-  if (facts.length >= SP.jlimit && !SP.hash) rows.push(el("p", {}, el("button", { type: "button", onclick: () => { SP.jlimit += 100; journalView(body); } }, "Older notes")));
-  list.replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, SP.hash ? "No note with this hashtag in the latest ones." : "Nothing yet: write the first note above.")]));
+  const tagChip = SP.filters.tag ? el("span", { class: "mute small" }, "tag ", el("b", {}, SP.filters.tag), " ",
+    el("button", { type: "button", class: "link", onclick: () => { SP.filters.tag = ""; journalView(body); } }, "✕")) : null;
+  body.replaceChildren(el("div", { class: "row", style: "flex-wrap:wrap;gap:8px;align-items:center" }, type, words,
+    el("button", { type: "button", onclick: apply }, "Filter"), from, to, tagChip), list);
+  const params = new URLSearchParams({ space: SP.name, view: "chronology", limit: String(Math.min(SP.jlimit, 200)), type: SP.filters.type || "all" });
+  if (SP.filters.q) params.set("q", SP.filters.q);
+  if (SP.filters.from) params.set("from", SP.filters.from);
+  if (SP.filters.to) params.set("to", SP.filters.to);
+  if (SP.filters.tag) params.set("tag", SP.filters.tag);
+  let first;
+  try { first = await api("space/view?" + params.toString()); } catch (x) { return fail(x); }
+  let items = first.items || [], next = first.page && first.page.next_cursor;
+  const show = () => {
+    const rows = noteRows(items, {
+      open: f => openNote(body, f.id),
+      onTag: t => { SP.filters.tag = t; journalView(body); },
+      onHash: h => { SP.filters.q = h; journalView(body); },
+    });
+    if (next) rows.push(el("p", {}, el("button", { type: "button", onclick: async () => {
+      try {
+        const p = new URLSearchParams(params);
+        p.set("cursor", next);
+        const more = await api("space/view?" + p.toString());
+        next = more.page && more.page.next_cursor;
+        items = items.concat(more.items || []);
+        show();
+      } catch (x) { fail(x); }
+    } }, "Older entries")));
+    list.replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, "Nothing in this window.")]));
+  };
+  show();
+}
+
+async function dashboardTab(body) {
+  body.replaceChildren(el("p", { class: "mute" }, "…"));
+  try {
+    const v = await api("space/view?space=" + q(SP.name) + "&view=dashboard");
+    body.replaceChildren(...dashboardView(v.dashboard || {}));
+  } catch (x) { fail(x); }
+}
+async function targetsView(body) {
+  body.replaceChildren(el("p", { class: "mute" }, "…"));
+  let v;
+  try { v = await api("space/view?space=" + q(SP.name) + "&view=targets"); } catch (x) { return fail(x); }
+  const kind = (SP.cap && SP.cap.kind) || SP.ov.kind;
+  let tasks = [];
+  if (kind === "home" || kind === "hobbies") {
+    try { const t = await api("space/view?space=" + q(SP.name) + "&view=tasks"); tasks = t.items || []; } catch (_) {}
+  }
+  const cols = v.columns || ["open", "reached"], items = v.items || [];
+  const when = v.last_pass && v.last_pass.at ? "last pass " + ago(v.last_pass.at) + (v.last_pass.by ? " by " + v.last_pass.by : "") : "no pass yet";
+  const metric = card => {
+    const m = card.metrics || {};
+    if (m.target_amount == null && m.realized_amount == null && !m.due) return null;
+    const pct = m.progress_percent == null ? null : Math.max(0, Math.min(100, m.progress_percent));
+    return el("div", { class: "metrics" },
+      el("div", { class: "mrow" }, el("span", {}, m.realized_amount == null ? "—" : m.realized_amount + (m.currency ? " " + m.currency : "")),
+        el("span", {}, m.target_amount == null ? "" : "of " + m.target_amount + (m.currency ? " " + m.currency : ""))),
+      pct == null ? null : el("div", { class: "bar", style: "width:" + pct + "%" }),
+      el("div", { class: "mrow" }, el("span", {}, pct == null ? "" : pct + "%"), el("span", {}, m.due ? "due " + m.due : "")));
+  };
+  const board = el("div", { class: "board" }, ...cols.map(col => el("div", { class: "col" },
+    el("div", { class: "col-title" }, (COLUMN[col] || col) + " · " + items.filter(i => i.column === col).length),
+    ...items.filter(i => i.column === col).map(card => el("div", { class: "card" },
+      el("div", {}, card.text),
+      metric(card),
+      ...((card.signs || []).length ? [el("div", {}, ...card.signs.map(s => el("span", { class: "chip" }, s)))] : []),
+      el("div", { class: "moves" }, ...cols.filter(c => c !== col).map(c =>
+        el("button", { type: "button", class: "mini link", onclick: async () => {
+          try { await api("living", { space: SP.name, page: "targets", move: [{ id: card.fact_id || card.id, column: c }] }); targetsView(body); } catch (x) { fail(x); }
+        } }, "→ " + (COLUMN[c] || c)))))))));
+  const input = el("input", { placeholder: kind === "money" ? "a financial goal" : "A long-term problem or risk", size: 36, id: "tgt-add" });
+  const due = el("input", { type: "date", "aria-label": "deadline" });
+  const target = el("input", { type: "number", step: "0.01", placeholder: "target", "aria-label": "target amount", style: "width:100px" });
+  const realized = el("input", { type: "number", step: "0.01", placeholder: "realized", "aria-label": "realized amount", style: "width:100px" });
+  const currency = el("input", { placeholder: "EUR", size: 4, "aria-label": "currency" });
+  const add = async () => {
+    const text = input.value.trim(); if (!text) return;
+    const card = { text, column: "open" };
+    if (kind === "money") {
+      const fields = {};
+      if (due.value) fields.due = due.value;
+      if (target.value) fields.target_amount = Number(target.value);
+      if (realized.value) fields.realized_amount = Number(realized.value);
+      if (currency.value.trim()) fields.currency = currency.value.trim();
+      if (Object.keys(fields).length) card.fields = fields;
+    }
+    try { await api("living", { space: SP.name, page: "targets", add: [card] }); targetsView(body); } catch (x) { fail(x); }
+  };
+  input.addEventListener("keydown", e => { if (e.key === "Enter") add(); });
+  const addRow = el("div", { class: "row", style: "flex-wrap:wrap;gap:8px" }, input,
+    kind === "money" ? due : null, kind === "money" ? target : null, kind === "money" ? realized : null, kind === "money" ? currency : null,
+    el("button", { type: "button", onclick: add }, "Add"));
+  const taskBox = tasks.length ? el("section", {}, el("h3", {}, "Tasks"),
+    ...tasks.map(task => el("label", { class: "taskline" + (task.done ? " done" : "") },
+      el("input", { type: "checkbox", checked: task.done, onchange: async e => {
+        try { await api("living", { space: SP.name, page: "next", move: [{ id: task.fact_id || task.id, column: e.target.checked ? "done" : "now" }] }); targetsView(body); } catch (x) { fail(x); }
+      } }),
+      el("span", { class: "tx" }, task.text),
+      el("span", { class: "mute small" }, task.column)))) : null;
+  body.replaceChildren(
+    el("div", { class: "board-head" }, el("h3", {}, "Cibles"), el("span", { class: "mute small" }, when)),
+    board,
+    addRow,
+    taskBox,
+    el("p", { class: "mute small" }, "Read through the space view contract (memcp.view/1). A target groups the signs and symptoms it names; a financial goal carries a deadline, a target amount and a realized amount."));
+}
+
+async function statsTab(body) {
+  body.replaceChildren(el("p", { class: "mute" }, "…"));
+  let v;
+  try { v = await api("space/view?space=" + q(SP.name) + "&view=stats"); } catch (x) { return fail(x); }
+  const st = v.stats || {};
+  const total = Number(st.total || 0);
+  const types = st.by_type || {};
+  const byType = el("div", { class: "row", style: "flex-wrap:wrap;gap:8px" },
+    ...Object.entries(types).filter(([, n]) => Number(n) > 0).map(([k, n]) => el("span", { class: "chip" }, k + " · " + n)));
+  const days = st.by_day || [];
+  const byDay = new Map(days.map(x => [x.day, x.count]));
+  const cells = [];
+  for (let i = 29; i >= 0; i--) {
+    const day = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10);
+    cells.push([day, byDay.get(day) || 0]);
+  }
+  const max = Math.max(1, ...cells.map(c => c[1]));
+  const bars = el("div", { class: "bars" }, ...cells.map(([day, n]) => el("div", { class: "b" + (n ? "" : " zero"), title: day + ": " + n, style: n ? "height:" + Math.round(100 * n / max) + "%" : "" })));
+  const tags = st.by_tag || [], tmax = Math.max(1, ...tags.map(t => t.count));
+  const tagRows = tags.length ? tags.map(t => el("div", { class: "sign" }, el("span", {}, t.tag),
+    el("span", {}, el("div", { class: "bar", style: "width:" + Math.round(100 * t.count / tmax) + "%" })), el("span", { class: "mute" }, t.count))) : [el("p", { class: "mute" }, "No tag in this window.")];
+  const sources = st.sources || [];
+  body.replaceChildren(
+    el("div", { class: "board-head" }, el("h3", {}, "Stats"), el("span", { class: "mute small" }, total.toLocaleString(loc()) + (total === 1 ? " entry" : " entries"))),
+    byType,
+    el("h3", {}, "Day by day"), bars,
+    el("h3", {}, "Targets and tasks"), el("p", {}, "Targets: " + (st.targets ? st.targets.open + " open · " + st.targets.reached + " reached" : "—") + " · Tasks: " + (st.tasks ? st.tasks.open + " open · " + st.tasks.done + " done" : "—")),
+    el("h3", {}, "Tags"), ...tagRows,
+    sources.length ? el("h3", {}, "Sources") : null,
+    ...sources.map(s => el("div", { class: "mute small" }, s.layer + " · " + s.app + " · " + s.count)),
+    st.finances && st.finances.accounts && st.finances.accounts.length ? el("h3", {}, "Accounts") : null,
+    ...((st.finances && st.finances.accounts) || []).map(a => el("div", { class: "mute small" }, a.account + " · " + (a.balance == null ? "—" : Number(a.balance).toFixed(2)) + (a.as_of ? " · " + a.as_of : ""))));
+}
+async function filesTab(body) {
+  const search = el("input", { type: "search", placeholder: "search the files", value: SP.filters.fileQ || "", size: 28 });
+  const go = () => { SP.filters.fileQ = search.value.trim(); filesTab(body); };
+  search.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
+  const list = el("div", {}, el("p", { class: "mute" }, "…"));
+  body.replaceChildren(el("div", { class: "row" }, search, el("button", { type: "button", onclick: go }, "Search")), list);
+  const params = new URLSearchParams({ space: SP.name, view: "files", limit: "100" });
+  if (SP.filters.fileQ) params.set("q", SP.filters.fileQ);
+  let page;
+  try { page = await api("space/view?" + params.toString()); } catch (x) { return fail(x); }
+  let items = page.items || [], next = page.page && page.page.next_cursor;
+  const show = () => {
+    const rows = items.map(f => {
+      const open = el("button", { type: "button", class: "link", onclick: async () => {
+        try {
+          const url = await fileBlobUrl({ id: f.id, name: f.name, mime: f.mime });
+          if ((f.mime || "").startsWith("audio/")) window.open(url, "_blank", "noopener"); else window.open(url, "_blank", "noopener");
+        } catch (x) { fail(x); }
+      } }, "Open");
+      return el("div", { class: "fileline" },
+        el("span", { class: "grow" }, f.name + (f.note ? " · " + f.note : "")),
+        el("span", { class: "mute small" }, (f.mime || "") + " · " + sizeOf(f.size || 0) + " · " + (f.at || "").slice(0, 10)),
+        open);
+    });
+    if (next) rows.push(el("p", {}, el("button", { type: "button", onclick: async () => {
+      try {
+        const p = new URLSearchParams(params); p.set("cursor", next);
+        const more = await api("space/view?" + p.toString());
+        next = more.page && more.page.next_cursor;
+        items = items.concat(more.items || []);
+        show();
+      } catch (x) { fail(x); }
+    } }, "Older files")));
+    list.replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, "No file in this space.")]));
+  };
+  show();
 }
 function dashboardView(d) {
   const out = [];
@@ -1923,7 +2188,7 @@ function thread(facts, open) {
 
 // ---- Living boards: what's next, ideas, targets. Cards in columns, moved with one click; a target shows the signs it
 // groups. The same tools an assistant uses (living_get, living_set), with the person's own rights. ----
-const BOARDS = [["next", "What's next"], ["ideas", "Ideas"], ["targets", "Targets"]];
+const BOARDS = [["next", "What's next"], ["ideas", "Ideas"]];
 const COLUMN = { now: "Now", next: "Next", later: "Later", done: "Done", new: "New", kept: "Kept", open: "Open", reached: "Reached" };
 async function boardsView(body) {
   body.replaceChildren(el("p", { class: "mute" }, "…"));
@@ -2028,7 +2293,7 @@ function newNote(body) {
   const save = async (distinct) => {
     try {
       await api("fact/add", { space: SP.name, text: f.text.value, tags: f.tagList(), distinct_from: distinct || [] });
-      await loadSpace(SP.name); SP.tab = "notes"; renderSpace();
+      await loadSpace(SP.name); SP.tab = "journal"; renderSpace();
     } catch (x) {
       if (/close notes exist/.test(x.message)) {
         const r = await fetch(base + "admin/api/fact/add", { method: "POST", headers: { "X-Requested-With": "memcp", "Content-Type": "application/json", ...(token ? { Authorization: "Bearer " + token } : {}) }, credentials: "same-origin", body: JSON.stringify({ space: SP.name, text: f.text.value, tags: f.tagList() }) });
@@ -2043,7 +2308,7 @@ function newNote(body) {
   $$(".editor", body).forEach(e => e.remove());
   body.insertBefore(el("div", { class: "editor" }, el("strong", {}, "New note"), f.text, f.tags, msg,
     el("div", { class: "row" }, el("button", { type: "button", class: "primary", onclick: () => save() }, "Add"),
-      el("button", { type: "button", class: "link", onclick: () => notesView(body) }, "Cancel"))), body.children[1]);
+      el("button", { type: "button", class: "link", onclick: () => { SP.tab = "journal"; renderSpace(); } }, "Cancel"))), body.children[1]);
 }
 async function openNote(body, id) {
   let r;
@@ -2059,13 +2324,13 @@ async function openNote(body, id) {
     f.text, f.tags, active ? reason : null,
     el("div", { class: "row" },
       active ? el("button", { type: "button", class: "primary", onclick: async () => {
-        try { await api("fact/supersede", { space: SP.name, id, text: f.text.value, tags: f.tagList(), reason: reason.value || undefined }); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Save the correction") : null,
+        try { await api("fact/supersede", { space: SP.name, id, text: f.text.value, tags: f.tagList(), reason: reason.value || undefined }); await loadSpace(SP.name); SP.tab = "journal"; renderSpace(); } catch (x) { fail(x); } } }, "Save the correction") : null,
       active ? el("button", { type: "button", class: "link danger", onclick: async () => {
         if (!reason.value.trim()) { reason.focus(); return fail(new Error("Say why you remove it: a note is never erased, but the reason stays.")); }
-        try { await api("fact/retire", { space: SP.name, id, reason: reason.value }); await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Remove") : null,
+        try { await api("fact/retire", { space: SP.name, id, reason: reason.value }); await loadSpace(SP.name); SP.tab = "journal"; renderSpace(); } catch (x) { fail(x); } } }, "Remove") : null,
       r.fact.status === "retired" ? el("button", { type: "button", class: "primary", onclick: async () => {
-        try { await api("fact/restore", { space: SP.name, id }); toast("Brought back"); SP.removed = false; await loadSpace(SP.name); SP.tab = "notes"; renderSpace(); } catch (x) { fail(x); } } }, "Bring back") : null,
-      el("button", { type: "button", class: "link", onclick: () => notesView(body) }, "Close")),
+        try { await api("fact/restore", { space: SP.name, id }); toast("Brought back"); SP.removed = false; await loadSpace(SP.name); SP.tab = "journal"; renderSpace(); } catch (x) { fail(x); } } }, "Bring back") : null,
+      el("button", { type: "button", class: "link", onclick: () => { SP.tab = "journal"; renderSpace(); } }, "Close")),
     hist.length ? el("details", {}, el("summary", {}, "History (" + hist.length + ")"),
       ...hist.map(h => el("div", { class: "note" }, el("div", { class: "tx" }, h.extract), el("div", { class: "meta" }, (h.created || "").slice(0, 10) + " · " + h.status)))) : null), body.children[1]);
 }

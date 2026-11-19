@@ -2,6 +2,40 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Space views: Targets as home, one chronology, Stats, Inventory (20261117.0.35)
+
+Everything below is added; nothing is renamed. The rules and examples are in [CONTRACT.md](CONTRACT.md).
+
+- **MCP `space_view`** `{space, view?, from?, to?, type?, tag?, q?, limit?, cursor?, account?, filter?, mime?}`:
+  `view` is `capabilities` (default), `targets` (the space's home), `chronology`, `stats`, `files` or `tasks`;
+  `dashboard` and `register` stay callable but are no longer advertised. A space read whole only: a key limited
+  to paths does not see the tool, and a space the caller does not read answers `denied`.
+- **`capabilities`** carries `home: "targets"`, `views` (id, title, `home`, tool, arguments, returns, filters,
+  pagination, typed `schema`), `item_types`, `schemas` (envelope, pagination, provenance, item types,
+  `target_metrics`, actions), `tools` (the tool names this connection may actually call), `writable`, `sensitive`
+  and `provenance`. A money space adds `extensions.finances`.
+- **`targets`** is the home page: each item carries `column`, `signs` and `metrics` (`due`, `target_amount`,
+  `realized_amount`, `progress_percent`, `currency`). A financial goal sets them with `living_set` `add` →
+  `fields`; a move keeps them. Home and Hobbies add the `tasks` view (`type: "task"`, `done`), checked with
+  `living_set` (move to `done`).
+- **`chronology`** merges notes, files, signs, measures and, in a money space, bank movements into one page,
+  newest first. Filters: `from`, `to`, `type` (`all` by default, `note`, `file`, `sign`, `measure`, `movement`),
+  `tag`, `q`; `limit` 1–200 and `page.next_cursor`. A money node without the ledger leaves movements out, never
+  an error.
+- **`stats`** `{from?, to?}`: `total`, `by_type`, `by_day`, `by_tag`, `sources`, `targets` (open/reached),
+  `tasks` (open/done), `first_at`, `last_at`.
+- **`files`** `{from?, to?, q?, mime?, limit?, cursor?}`: active files, newest first, with `name`, `mime`, `size`,
+  the note that describes it, its provenance and a cursor. `file_get` gives the bytes when the rights allow it.
+- **`GET /admin/api/space/view?space=&view=&…`**: the same answer for the signed-in person. 403 for a space they
+  do not read, 400 for a bad view or type.
+- **The node page** (Windows, Linux, Home Assistant) is the default desktop surface: a persistent space bar, the
+  four views **Targets, Journal, Stats, Inventory**, and one + button (note, photo, file) on every view when the
+  space is writable. There is no Dashboard or Register page in duplicate.
+- **Discovery**: MCP `serverInfo.viewContract` is `"memcp.view/1"`, and `GET /.well-known/memcp` carries
+  `"view_contract": "memcp.view/1"`.
+- **The existing tools do not change**, except an additive `fields` on a `living_set` card. An older node answers
+  `unknown tool` to `space_view`. The peer protocol is unchanged.
+
 ## Crash safety of spaces (20261117.0.33)
 
 - `Recovered` (what `Brain::recover()` answers) gains `spaces` (archives, restores, merges, adoptions and layout

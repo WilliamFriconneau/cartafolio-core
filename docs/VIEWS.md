@@ -1,6 +1,6 @@
 # Views: a space reads itself
 
-Status: design. The journal of the health app becomes the **health view** of every interface.
+Status: the read model is served by the space view contract `memcp.view/1` (`space_view`, [CONTRACT.md](CONTRACT.md)); the node page and the native renderers migrate onto it. The journal of the health app becomes the **health view** of every interface.
 
 A **view** is how a space is read by a person (not by an assistant: assistants have tools). Each kind of space has one, chosen automatically, and every interface offers it: iOS, macOS, Windows, Linux, and the web page of a node.
 
@@ -35,6 +35,13 @@ Where its data comes from: the app deposits what it records under its own path o
 | home | the house: latest notes by tag, decisions, open to-dos |
 | work, hobbies, people, me | the generic view, with the to-do and decision tags in front |
 | any custom space | the generic view |
+
+## The contract
+
+The three things a space exposes to a person and to a client are its **dashboard**, its **targets** and its
+**timestamped register**. They are served as data by `space_view` (`memcp.view/1`): see [CONTRACT.md](CONTRACT.md)
+for the fields, the filters, the pages, the stable ids and the provenance. The node page reads them through
+`GET /admin/api/space/view`; the native renderers read the same shape from the core.
 
 ## On the node page
 

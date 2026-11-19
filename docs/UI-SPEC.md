@@ -58,10 +58,12 @@ makes a PDF of one space, with its dates.
 
 ### 3. Spaces
 
-The tree of spaces (folders open in place, drag and drop, labels never technical names). A space opens on **its
-boards**: What's next, Ideas, Targets (with their signs), and its lists (shopping…), each card ticked or moved in one
-tap, each board saying its last pass and how many notes came since. Then its notes, its tags, its keywords (the
-words that file a note there), and its **graph**: spaces, tags and keywords linked, a click filters the notes.
+The tree of spaces (folders open in place, drag and drop, labels never technical names). A space opens on
+**Targets**, its home: the targets with their signs, their figures and their progress; in Home and Hobbies, the
+tasks to tick. Then **Journal** (one filterable chronology of notes and structured entries, with their time and
+provenance), **Stats** and the **Inventory** of files. One **+** button, bottom right of every view, writes a note
+or imports a photo or a file when the space is writable. The node page (Windows, Linux, Home Assistant) is the
+desktop surface and reads the same contract (`memcp.view/1`).
 A space also says **where it lives on this machine**: « Folder on this node », the path (by default the node's own storage
 folder), a mode (notes and files both ways, or read only for search), the last pass and « Sync now ». A folder held by a
 cloud service (iCloud Drive, Google Drive, OneDrive, Dropbox) is allowed and flagged with the node's advice to keep it on the
@@ -143,6 +145,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 | This node (id, link, QR), add a node | `GET /admin/api/node`, `POST /admin/api/nodes/add`, `POST /admin/api/nodes/invite`, `POST /admin/api/nodes/via`; the request: `GET /admin/api/join-memory?id=` |
 | Pending requests | `GET /admin/api/join/pending` (also those of the peers), `POST /admin/api/join/approve`, `POST /admin/api/join/deny` |
 | Space tree | MCP `spaces` |
+| Dashboard, Targets, timestamped register | MCP `space_view` (`memcp.view/1`, [CONTRACT.md](CONTRACT.md)); `GET /admin/api/space/view`; `living_set` for a card move |
 | Boards and lists | MCP `living_get`, `living_set` |
 | Journal | `GET /admin/api/journal`; on a device, the local copy (`node_recent`) and `living_get` on `index` |
 | Graph | `GET /admin/api/links[?space=]` |

@@ -2,8 +2,70 @@
 
 use super::*;
 
+/// The stable id of a card: the `living-card/<id>` tag it was born with, or, for a card made before
+/// that tag, the oldest fact of its replace chain. Moving a card supersedes it, so its fact id
+/// changes; this id does not.
+fn card_id_of(conn: &rusqlite::Connection, fact: &crate::facts::Fact) -> String {
+    if let Some(id) = fact
+        .tags
+        .iter()
+        .find_map(|t| t.strip_prefix("living-card/"))
+    {
+        return id.to_string();
+    }
+    let mut root = fact.id.clone();
+    let mut cur = fact.id.clone();
+    for _ in 0..100 {
+        let Some(prev) = facts::read_fact(conn, &cur)
+            .ok()
+            .flatten()
+            .and_then(|f| f.replaces)
+        else {
+            break;
+        };
+        root = prev.clone();
+        cur = prev;
+    }
+    root
+}
+
+/// The current fact of a card, from its stable id or from its current fact id.
+fn resolve_card(conn: &rusqlite::Connection, page: &str, id: &str) -> Option<crate::facts::Fact> {
+    if let Some(f) = facts::read_fact(conn, id).ok().flatten()
+        && f.status == "active"
+        && f.tags
+            .iter()
+            .any(|t| t.starts_with(&format!("living/{page}/")))
+    {
+        return Some(f);
+    }
+    let mut st = conn
+        .prepare(
+            "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
+             (SELECT fact_id FROM fact_tags WHERE tag = ?1 OR tag LIKE ?2) ORDER BY f.created_at DESC LIMIT 500",
+        )
+        .ok()?;
+    let wanted = format!("living-card/{id}");
+    let ids: Vec<String> = st
+        .query_map(rusqlite::params![wanted, format!("living/{page}/%")], |r| {
+            r.get(0)
+        })
+        .ok()?
+        .flatten()
+        .collect();
+    for fid in ids {
+        let Some(f) = facts::read_fact(conn, &fid).ok().flatten() else {
+            continue;
+        };
+        if card_id_of(conn, &f) == id {
+            return Some(f);
+        }
+    }
+    None
+}
+
 #[allow(unused_variables)]
-pub(super) fn living(
+pub(crate) fn living(
     brain: &Brain,
     caller: &Caller,
     name: &str,
@@ -75,6 +137,27 @@ pub(super) fn living(
             .filter_map(|id| facts::normalize_tag(&format!("sign/{id}")).ok())
             .collect::<Vec<_>>()
     };
+    let field_tags = |fields: &Value| {
+        fields
+            .as_object()
+            .map(|o| {
+                o.iter()
+                    .filter_map(|(k, v)| {
+                        let value = match v {
+                            Value::String(s) => s.clone(),
+                            Value::Number(n) => n.to_string(),
+                            Value::Bool(b) => b.to_string(),
+                            _ => return None,
+                        };
+                        if value.trim().is_empty() {
+                            return None;
+                        }
+                        facts::normalize_tag(&format!("field/{k}/{value}")).ok()
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default()
+    };
     let meta_tag = format!("living-meta/{page}");
     let conn = brain.open_space(&space)?;
     let meta: Option<(String, Value)> = conn
@@ -113,34 +196,34 @@ pub(super) fn living(
                         )
                         .map_err(|e| ToolError::Invalid(e.to_string()))?;
             let mut cards: Vec<Value> = st
-                        .query_map([format!("living/{page}/{col}")], |r| {
-                            Ok(json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
-                                       "created": crate::util::iso(r.get::<_, i64>(2)?), "author": r.get::<_, String>(3)? }))
-                        })
-                        .map_err(|e| ToolError::Invalid(e.to_string()))?
-                        .flatten()
-                        .collect();
-            // A target's signs and symptoms: its `sign/<name>` tags.
+                .query_map([format!("living/{page}/{col}")], |r| {
+                    let at = r.get::<_, i64>(2)?;
+                    Ok(
+                        json!({ "id": r.get::<_, String>(0)?, "text": r.get::<_, String>(1)?,
+                                       "created": crate::util::iso(at), "created_at": at,
+                                       "author": r.get::<_, String>(3)? }),
+                    )
+                })
+                .map_err(|e| ToolError::Invalid(e.to_string()))?
+                .flatten()
+                .collect();
+            // A target's signs and symptoms: its `sign/<name>` tags. The card keeps a stable id
+            // (`card_id`) across a move; `fact_id` is the version to move or drop.
             for card in &mut cards {
-                let id = card["id"].as_str().unwrap_or("").to_string();
-                let signs: Vec<String> = facts::read_fact(&conn, &id)
-                    .ok()
-                    .flatten()
-                    .map(|f| {
-                        f.tags
-                            .iter()
-                            .filter_map(|t| t.strip_prefix("sign/").and_then(sign_id))
-                            .collect()
-                    })
-                    .unwrap_or_default();
+                let fact_id = card["id"].as_str().unwrap_or("").to_string();
+                let Some(fact) = facts::read_fact(&conn, &fact_id).ok().flatten() else {
+                    continue;
+                };
+                let signs: Vec<String> = fact
+                    .tags
+                    .iter()
+                    .filter_map(|t| t.strip_prefix("sign/").and_then(sign_id))
+                    .collect();
                 card["signs"] = json!(signs);
-                let tags = facts::read_fact(&conn, &id)
-                    .ok()
-                    .flatten()
-                    .map(|f| f.tags)
-                    .unwrap_or_default();
-                card["fields"] = crate::autotag::fields_json(&tags);
-                card["tags"] = json!(tags);
+                card["card_id"] = json!(card_id_of(&conn, &fact));
+                card["fact_id"] = json!(fact_id);
+                card["fields"] = crate::autotag::fields_json(&fact.tags);
+                card["tags"] = json!(fact.tags);
             }
             board.insert((*col).to_string(), Value::Array(cards));
         }
@@ -198,12 +281,22 @@ pub(super) fn living(
     let write_card = |text: &str,
                       col: &str,
                       replacing: Option<&str>,
-                      signs: &[String]|
+                      signs: &[String],
+                      fields: &Value|
      -> Result<String, ToolError> {
         let mut new = NewFact::agent(text, &caller.agent);
-        new.tags = vec![format!("living/{page}/{col}")];
+        let card_id = replacing
+            .and_then(|old| facts::read_fact(&conn, old).ok().flatten())
+            .map(|f| card_id_of(&conn, &f))
+            .unwrap_or_else(|| crate::util::random_base32(8));
+        new.tags = vec![
+            format!("living/{page}/{col}"),
+            format!("living-card/{card_id}"),
+        ];
         // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
         new.tags.extend(sign_tags(signs));
+        // The figures of a target (a deadline, a target amount, a realized amount) are fields.
+        new.tags.extend(field_tags(fields));
         if let Some(old) = replacing {
             return Ok(facts::supersede(
                 &conn,
@@ -266,7 +359,7 @@ pub(super) fn living(
             .filter_map(Value::as_str)
             .map(String::from)
             .collect();
-        added.push(write_card(&text, &col, None, &signs)?);
+        added.push(write_card(&text, &col, None, &signs, &card["fields"])?);
     }
     let mut moved = 0;
     for m in args
@@ -279,10 +372,16 @@ pub(super) fn living(
             continue;
         };
         valid(col)?;
+        let Some(card) = resolve_card(&conn, &page, id) else {
+            continue;
+        };
+        let id = card.id.as_str();
         if let Some((text, now_in)) = card_column(id)
             && now_in != col
         {
-            let signs: Vec<String> = facts::read_fact(&conn, id)?
+            let old = facts::read_fact(&conn, id)?;
+            let signs: Vec<String> = old
+                .as_ref()
                 .map(|f| {
                     f.tags
                         .iter()
@@ -290,7 +389,11 @@ pub(super) fn living(
                         .collect()
                 })
                 .unwrap_or_default();
-            write_card(&text, col, Some(id), &signs)?;
+            let fields: Value = old
+                .as_ref()
+                .map(|f| crate::autotag::fields_json(&f.tags))
+                .unwrap_or(Value::Null);
+            write_card(&text, col, Some(id), &signs, &fields)?;
             moved += 1;
         }
     }
@@ -302,8 +405,11 @@ pub(super) fn living(
         .flatten()
         .filter_map(Value::as_str)
     {
-        if card_column(id).is_some() {
-            facts::retire(&conn, &caller.agent, id, "dropped from the board")?;
+        let target = resolve_card(&conn, &page, id)
+            .map(|f| f.id)
+            .unwrap_or_else(|| id.to_string());
+        if card_column(&target).is_some() {
+            facts::retire(&conn, &caller.agent, &target, "dropped from the board")?;
             dropped += 1;
         }
     }

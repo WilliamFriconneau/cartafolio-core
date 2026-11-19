@@ -27,3 +27,4 @@ pub mod setup;
 pub mod stdio;
 pub mod sync_http;
 pub mod tar;
+pub(crate) mod view;

@@ -1,0 +1,180 @@
+{
+  "capabilities": {
+    "contract": "memcp.view/1",
+    "contract_version": 1,
+    "space": "work",
+    "kind": "work",
+    "label": "Work",
+    "writable": true,
+    "sensitive": false,
+    "views": [
+      {
+        "id": "targets",
+        "home": true,
+        "returns": [
+          "target"
+        ],
+        "filters": [],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "target[]"
+        }
+      },
+      {
+        "id": "chronology",
+        "returns": [
+          "note",
+          "file",
+          "sign",
+          "measure"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "type",
+          "tag",
+          "q"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "item[]"
+        }
+      },
+      {
+        "id": "stats",
+        "returns": [
+          "stats"
+        ],
+        "filters": [
+          "from",
+          "to"
+        ],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "object"
+        }
+      },
+      {
+        "id": "files",
+        "returns": [
+          "file"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "q",
+          "mime"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "file[]"
+        }
+      }
+    ],
+    "item_types": {
+      "note": {
+        "id": "the fact id"
+      },
+      "file": {
+        "id": "the fact id"
+      },
+      "target": {
+        "id": "the fact id"
+      },
+      "dashboard": {
+        "id": "the fact id"
+      }
+    },
+    "home": "targets",
+    "schemas": {
+      "target_metrics": {
+        "due": "date|null",
+        "target_amount": "number|null",
+        "realized_amount": "number|null",
+        "progress_percent": "number|null",
+        "currency": "string|null"
+      }
+    }
+  },
+  "register": {
+    "contract": "memcp.view/1",
+    "contract_version": 1,
+    "space": "work",
+    "kind": "work",
+    "view": "register",
+    "items": [
+      {
+        "id": "f_demo_note",
+        "type": "note",
+        "space": "work",
+        "text": "2026-11-18, the Alpha report is due on Friday.",
+        "at": "2026-11-18T09:00:00+00:00",
+        "created_at": 1794992400,
+        "tags": [
+          "work",
+          "work/alpha"
+        ],
+        "fields": {},
+        "author": "laptop",
+        "provenance": {
+          "kind": "memory",
+          "app": null,
+          "layer": null,
+          "author": "laptop"
+        }
+      },
+      {
+        "id": "f_demo_file",
+        "type": "file",
+        "space": "work",
+        "text": "The signed quote.",
+        "at": "2026-11-17T18:30:00+00:00",
+        "created_at": 1794988200,
+        "tags": [
+          "work",
+          "work/quotes",
+          "sources/scanner"
+        ],
+        "fields": {},
+        "author": "scanner",
+        "provenance": {
+          "kind": "app",
+          "app": "scanner",
+          "layer": "sources",
+          "author": "scanner"
+        }
+      }
+    ],
+    "page": {
+      "limit": 2,
+      "has_more": true,
+      "next_cursor": "1794988200:f_demo_file"
+    }
+  }
+}

@@ -333,6 +333,88 @@ impl App {
             })
     }
 
+    /// `space_view`: the core's read model, plus the money projection when the space is the one
+    /// this caller reaches and the view asks for it. The core has already checked the rights and
+    /// written the audit row; a node without the finance ledger simply answers the core's view.
+    pub(crate) fn space_view(
+        &self,
+        caller: &Caller,
+        args: &Value,
+        _now: i64,
+    ) -> Result<Value, ToolError> {
+        let view = args
+            .get("view")
+            .and_then(Value::as_str)
+            .unwrap_or("capabilities");
+        let typ = args.get("type").and_then(Value::as_str).unwrap_or("note");
+        let space = args.get("space").and_then(Value::as_str);
+        // A chronology cursor for a money space is `sort_at|source|id`; give the core the fact part
+        // only, and let the merge below order the facts and the ledger's movements together.
+        let mut core_args = args.clone();
+        if view == "chronology" {
+            core_args["limit"] = json!(200);
+        }
+        if view == "chronology"
+            && let Some(cursor) = args.get("cursor").and_then(Value::as_str)
+            && let Some((at, source, id)) = cursor
+                .split_once('|')
+                .and_then(|(a, rest)| rest.split_once('|').map(|(s, i)| (a, s, i)))
+        {
+            // The core keeps the facts up to the cursor's day; the merge below removes the cursor
+            // itself and everything newer. No epoch conversion, and the movement cursor is the
+            // ledger's own id.
+            let _ = (source, id);
+            core_args.as_object_mut().map(|o| o.remove("cursor"));
+            if let Some(day) = at.get(..10) {
+                core_args["to"] = json!(day);
+            }
+        }
+        let mut base = tools::call(&self.brain, caller, "space_view", &core_args)?;
+        let Some(ledger) = self.ledger_for(caller) else {
+            return Ok(base);
+        };
+        if space != Some(ledger.space.as_str()) {
+            return Ok(base);
+        }
+        if view == "chronology" {
+            if typ == "movement" {
+                let s = |k: &str| args.get(k).and_then(Value::as_str).unwrap_or("");
+                let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(50);
+                let mut page = ledger.movements_page(
+                    s("account"),
+                    s("from"),
+                    s("to"),
+                    s("filter"),
+                    limit,
+                    s("cursor"),
+                )?;
+                page["view"] = json!("chronology");
+                return Ok(page);
+            }
+            if typ == "all" || args.get("type").is_none() {
+                return crate::view::merge_chronology(&ledger, base, args);
+            }
+        }
+        if view == "register" && typ == "movement" {
+            let s = |k: &str| args.get(k).and_then(Value::as_str).unwrap_or("");
+            let limit = args.get("limit").and_then(Value::as_i64).unwrap_or(50);
+            return ledger.movements_page(
+                s("account"),
+                s("from"),
+                s("to"),
+                s("filter"),
+                limit,
+                s("cursor"),
+            );
+        }
+        if view == "capabilities" {
+            base = crate::view::augment(&ledger, base);
+        } else if view == "stats" {
+            base = crate::view::augment_stats(&ledger, base)?;
+        }
+        Ok(base)
+    }
+
     fn tool_defs(&self, caller: &Caller) -> Vec<ToolDef> {
         let mut defs = tools::definitions(caller);
         if let Some(l) = self.ledger_for(caller) {
@@ -447,7 +529,8 @@ impl App {
         params: &Value,
         now: i64,
     ) -> (u16, Value) {
-        let server_info = json!({ "name": NAME, "version": VERSION });
+        let server_info =
+            json!({ "name": NAME, "version": VERSION, "viewContract": memcp_core::view::CONTRACT });
         // What this connection is told: the general rules, the guides of what it reaches, and
         // the indexes of those vaults (see the `guide` module).
         let instructions = || {
@@ -516,6 +599,7 @@ impl App {
         }
         let result = match self.ledger_for(caller) {
             Some(l) if name.starts_with("finances_") => l.call(caller, name, &args, now),
+            _ if name == "space_view" => self.space_view(caller, &args, now),
             _ => tools::call(&self.brain, caller, name, &args),
         };
         match result {

@@ -243,6 +243,7 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         return match path {
             "/state" => state(app, &ctl, &me),
             "/space" => crate::explore::overview(app, &ctl, &me, req, now),
+            "/space/view" => crate::explore::view(app, &ctl, &me, req, now),
             "/facts" => crate::explore::list(app, &ctl, &me, req, now),
             "/living" => {
                 let args = serde_json::json!({
@@ -417,17 +418,14 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
     }
 }
 
-/// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
-/// the person acts with their own rights (the spaces they own), as the connection `page`.
-pub(crate) fn living(
-    app: &App,
+/// The caller of the signed-in person on their own page: their spaces, no path limit, the tools of
+/// the page and of the space view contract, under the name `page`.
+pub(crate) fn page_caller(
     ctl: &Connection,
     me: &User,
-    tool: &str,
-    args: &Value,
-) -> Result<Value, Response> {
+) -> Result<memcp_core::access::Caller, Response> {
     let grants = memcp_core::users::access_of(ctl, &me.id).map_err(|e| err(500, &e.to_string()))?;
-    let caller = memcp_core::access::Caller {
+    Ok(memcp_core::access::Caller {
         id: "page".into(),
         agent: "page".into(),
         user_id: me.id.clone(),
@@ -441,7 +439,19 @@ pub(crate) fn living(
         max_text: memcp_core::access::DEFAULT_MAX_TEXT,
         kind: memcp_core::access::Kind::Console,
         local: false,
-    };
+    })
+}
+
+/// The living boards of the person's own spaces, read and changed on the page with the same tools an assistant uses:
+/// the person acts with their own rights (the spaces they own), as the connection `page`.
+pub(crate) fn living(
+    app: &App,
+    ctl: &Connection,
+    me: &User,
+    tool: &str,
+    args: &Value,
+) -> Result<Value, Response> {
+    let caller = page_caller(ctl, me)?;
     memcp_core::tools::call(&app.brain, &caller, tool, args).map_err(|e| err(400, &e.to_string()))
 }
 

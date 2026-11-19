@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261117.0.35
+
+- **The cockpit opens on Targets, with one chronology, Stats and an Inventory.** `space_view` (`memcp.view/1`) now serves a space's home (`targets`, with figures and progress), a merged journal/register chronology, `stats`, the file inventory and, in Home and Hobbies, checkable tasks. Financial goals carry a deadline, a target amount and a realized amount; a card's figures are set with `living_set` and survive a move. The node page (Windows, Linux, Home Assistant) has a persistent space bar, the four views and one + button for a note, a photo or a file; no Dashboard or Register page is duplicated. The same typed contract and the tools actually available are announced to the Apple apps, the desktop clients and the assistants over MCP.
+
 ## 20261117.0.34
 
 - Health targets accept only signs and symptoms from the shared referential.

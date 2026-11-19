@@ -1,6 +1,6 @@
 # Dashboards: a space shows itself, and an assistant may shape it
 
-Status: design. The first part is built on the node page (the notes per day, and for a health space the count of signs and symptoms and the targets); the declarative format below is what the apps and the assistants will share.
+Status: built on the node page and served as data by the space view contract (`space_view`, `view: "dashboard"`, [CONTRACT.md](CONTRACT.md)); every section now carries an `id`. The declarative format below is what the apps and the assistants share.
 
 ## The idea
 
@@ -63,4 +63,4 @@ An assistant that edits a dashboard needs to see **its definition**, not the not
 1. Built: the sections `daily`, `counts` (from the named source `journal-manifestations`), `targets`, `list` and `text`, read from the stored document and computed on the node page.
 2. The format, its validator and its golden files in the shared core; the dashboard of a space stored and versioned.
 3. Native renderers from the same document (iOS, macOS, Windows, Linux).
-4. The tool `dashboard` for assistants, with its levels.
+4. Built: the tool `space_view` (`view: "dashboard"`) for clients and assistants; the levels above stay the rule for a write.

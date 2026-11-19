@@ -22,7 +22,7 @@ I am a nurse. I am a much better nurse than developer, so this project is **buil
 ## What it does today
 
 - **Spaces.** What you keep is organised in spaces (health, home, work, anything you create), as folders you can nest, rename and drag around. An assistant opened on one space cannot reach another.
-- **A page for you.** Open any space on a dashboard, a day-by-day journal, a tree of tags and its notes. Correct a note and the old text stays in its history; nothing is overwritten.
+- **A web cockpit for you.** Open any space on its **Targets** (figures, progress, and the tasks to tick in Home and Hobbies), its **Journal** (one filterable chronology of notes and structured entries, with their provenance and time), its **Stats** and its **File inventory**. One + button adds a note, a photo or a file. Correct a note and the old text stays in its history; nothing is overwritten.
 - **Voice notes and attachments** on that page, the same everywhere: record in the browser, attach photos and PDFs. A recording becomes text through a speech model on one of your computers, or a speech service you choose.
 - **Assistants.** Each one gets an address and a key of its own, with rights on the spaces you tick, nothing more.
 - **Joining without typing.** A node shows a QR code; a phone or a computer scans it, or finds the node on your network and asks to join, and you answer with one tap after comparing three words.
@@ -44,6 +44,23 @@ These hold for every part of MemCP: the node, the apps, the tools. The screens o
 - **Health is the one paid part, set up by a nurse.** The free app does everything above. *MemCP Health* adds a health space already organised by a registered nurse: Apple Health synchronised, notes tagged by themselves, targets to follow, conditions followed over time, and the dashboards a nurse would read. The help screen, the red-flag checks and the export for a health professional (a PDF laid out as nurses hand over, SBAR) stay free.
 
 Built: nodes that synchronise as peers (a phone holds a window of thirty days), living boards in every space, a deterministic router whose keywords the janitor improves, the map of every peer and how it is reached. Planned, with a design written for each in [docs/](docs/): locking a space with a passphrase or a key ([ENCRYPTION.md](docs/ENCRYPTION.md)), and signed sync events ([FEDERATION.md](docs/FEDERATION.md)).
+
+## The web cockpit (Windows, Linux, Home Assistant)
+
+The node's page is the default desktop surface on Windows, Linux and Home Assistant. Open `/admin` on the node
+(Home Assistant opens it from the **Memory** sidebar): a persistent bar of spaces, then four views for the space
+you select.
+
+- **Targets** opens first: the space's targets, with figures, progress and, in Home and Hobbies, the tasks to tick.
+- **Journal**: one chronology of notes and structured entries (signs, measures, bank movements), filterable by
+  type, words, tag and date; every entry keeps its time and its provenance.
+- **Stats**: totals, days, tags and sources.
+- **File inventory**: the files still kept in the space, with their note; a file opens when your rights allow it.
+
+The + button, bottom right of every view, writes a note or imports a photo or a file (the browser's file sheet on a
+phone). It appears only when the space is writable. The page reads the same versioned contract as the Apple apps and
+the assistants over MCP (`memcp.view/1`, [docs/CONTRACT.md](docs/CONTRACT.md)); the access rights are enforced in
+the core, per space.
 
 ## Install
 

@@ -85,6 +85,7 @@ pub mod triage;
 pub mod users;
 /// Clock, random bytes and small helpers shared by the other modules.
 pub mod util;
+pub mod view;
 pub mod vocabulary;
 
 pub use brain::{Brain, default_config};

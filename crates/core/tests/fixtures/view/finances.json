@@ -1,0 +1,217 @@
+{
+  "capabilities": {
+    "contract": "memcp.view/1",
+    "contract_version": 1,
+    "space": "finances",
+    "kind": "money",
+    "label": "Money",
+    "writable": true,
+    "sensitive": true,
+    "views": [
+      {
+        "id": "targets",
+        "home": true,
+        "returns": [
+          "target"
+        ],
+        "filters": [],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "target[]"
+        }
+      },
+      {
+        "id": "chronology",
+        "returns": [
+          "note",
+          "file",
+          "sign",
+          "measure",
+          "movement"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "type",
+          "tag",
+          "q"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "item[]"
+        }
+      },
+      {
+        "id": "stats",
+        "returns": [
+          "stats"
+        ],
+        "filters": [
+          "from",
+          "to"
+        ],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "object"
+        }
+      },
+      {
+        "id": "files",
+        "returns": [
+          "file"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "q",
+          "mime"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "file[]"
+        }
+      }
+    ],
+    "item_types": {
+      "note": {
+        "id": "the fact id"
+      },
+      "file": {
+        "id": "the fact id"
+      },
+      "target": {
+        "id": "the fact id"
+      },
+      "dashboard": {
+        "id": "the fact id"
+      },
+      "movement": {
+        "id": "the fact id"
+      }
+    },
+    "extensions": [
+      {
+        "id": "finances",
+        "contract": "memcp.view/finances/1",
+        "version": 1,
+        "views": [
+          {
+            "id": "register",
+            "type": "movement",
+            "filters": [
+              "from",
+              "to",
+              "account",
+              "filter"
+            ],
+            "pagination": {
+              "kind": "cursor",
+              "limit": {
+                "min": 1,
+                "max": 200,
+                "default": 50
+              }
+            }
+          }
+        ],
+        "tools": [
+          "finances_balances",
+          "finances_movements",
+          "finances_monthly",
+          "finances_rules",
+          "finances_import"
+        ]
+      }
+    ],
+    "home": "targets",
+    "schemas": {
+      "target_metrics": {
+        "due": "date|null",
+        "target_amount": "number|null",
+        "realized_amount": "number|null",
+        "progress_percent": "number|null",
+        "currency": "string|null"
+      }
+    }
+  },
+  "register": {
+    "contract": "memcp.view/1",
+    "contract_version": 1,
+    "space": "finances",
+    "kind": "money",
+    "view": "register",
+    "items": [
+      {
+        "id": "mv_1a2b3c4d5e6f7081",
+        "type": "movement",
+        "space": "finances",
+        "at": "2026-09-30",
+        "date": "2026-09-30",
+        "text": "CAFE DU COIN",
+        "title": "CAFE DU COIN",
+        "amount": -3.5,
+        "currency": null,
+        "account": "Everyday account …3344",
+        "tags": [],
+        "fields": {},
+        "provenance": {
+          "kind": "statement",
+          "source": "bank export",
+          "account": "Everyday account …3344",
+          "author": null
+        }
+      },
+      {
+        "id": "mv_8091f7e6d5c4b3a2",
+        "type": "movement",
+        "space": "finances",
+        "at": "2026-09-29",
+        "date": "2026-09-29",
+        "text": "SALARY",
+        "title": "SALARY",
+        "amount": 2100.0,
+        "currency": null,
+        "account": "Everyday account …3344",
+        "tags": [],
+        "fields": {},
+        "provenance": {
+          "kind": "statement",
+          "source": "bank export",
+          "account": "Everyday account …3344",
+          "author": null
+        }
+      }
+    ],
+    "page": {
+      "limit": 2,
+      "has_more": false,
+      "next_cursor": null
+    }
+  }
+}

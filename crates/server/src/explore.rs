@@ -15,8 +15,6 @@ use serde_json::{Value, json};
 use crate::app::App;
 use crate::http::{Request, Response};
 
-const DAY: i64 = 86_400;
-const WINDOW_DAYS: i64 = 30;
 const PAGE_MAX: usize = 100;
 
 /// SQL: what counts as a note of the person. The page's own furniture (filing rules, dashboard, living pages) does
@@ -136,6 +134,32 @@ fn voice_state(conn: &Connection, f: &facts::Fact) -> Option<Value> {
     })
 }
 
+/// `GET /space/view?space=NAME&view=…`: the space view contract (`memcp.view/1`) for the signed-in
+/// person, the same answer an assistant gets from `space_view`: capabilities, dashboard, targets or
+/// the timestamped register, money movements included.
+pub fn view(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
+    let mut args = json!({});
+    for k in [
+        "space", "view", "from", "to", "type", "tag", "cursor", "account", "filter",
+    ] {
+        if let Some(v) = req.query.get(k).filter(|v| !v.is_empty()) {
+            args[k] = json!(v);
+        }
+    }
+    if let Some(n) = req.query.get("limit").and_then(|v| v.parse::<u64>().ok()) {
+        args["limit"] = json!(n);
+    }
+    let caller = match crate::admin::page_caller(ctl, me) {
+        Ok(c) => c,
+        Err(r) => return r,
+    };
+    match app.space_view(&caller, &args, now) {
+        Ok(v) => Response::json(200, &v),
+        Err(memcp_core::tools::ToolError::Denied(m)) => err(403, &m),
+        Err(e) => err(400, &e.to_string()),
+    }
+}
+
 /// `GET /space?space=NAME`: the kind, the place in the tree, the counts, the tree of tags and the
 /// dashboard of the space.
 pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
@@ -168,7 +192,7 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
         .into_iter()
         .map(|(t, n)| json!({ "tag": t, "count": n }))
         .collect();
-    let dashboard = dashboard(&conn, &kind, now);
+    let dashboard = memcp_core::view::dashboard(&conn, &kind, now);
     Response::json(
         200,
         &json!({
@@ -243,310 +267,6 @@ fn rules_history(conn: &Connection) -> Vec<Value> {
     out.reverse();
     out.truncate(30);
     out
-}
-
-/// The dashboard of a space, with no model: a JSON document (DASHBOARDS.md) kept in the space as an
-/// active fact tagged `dashboard`, or, when there is none, the plain default (the notes day by day).
-/// Each section is computed here from the facts of the space; a section the catalogue does not know
-/// is shown as an error and nothing else, and a document is never run, only read.
-fn dashboard(conn: &Connection, _kind: &str, now: i64) -> Value {
-    let (doc, source) = match stored_dashboard(conn) {
-        Some(d) => (d, "stored"),
-        None => (
-            json!({ "version": 1, "sections": [
-                { "type": "daily", "title": "Notes day by day", "window_days": WINDOW_DAYS }
-            ]}),
-            "default",
-        ),
-    };
-    let title = doc
-        .get("title")
-        .and_then(Value::as_str)
-        .map(|t| extract(t, 80));
-    let sections: Vec<Value> = doc
-        .get("sections")
-        .and_then(Value::as_array)
-        .map(|a| {
-            a.iter()
-                .take(MAX_SECTIONS)
-                .map(|s| section(conn, s, now))
-                .collect()
-        })
-        .unwrap_or_default();
-    json!({ "source": source, "title": title, "sections": sections })
-}
-
-const MAX_SECTIONS: usize = 20;
-
-/// The newest active fact tagged `dashboard` that reads as a version 1 document.
-fn stored_dashboard(conn: &Connection) -> Option<Value> {
-    let mut st = conn
-        .prepare(
-            "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
-             (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%') ORDER BY f.created_at DESC LIMIT 5",
-        )
-        .ok()?;
-    let ids: Vec<String> = st.query_map([], |r| r.get(0)).ok()?.flatten().collect();
-    ids.iter().find_map(|id| {
-        let f = facts::read_fact(conn, id).ok().flatten()?;
-        let doc: Value = serde_json::from_str(f.text.trim()).ok()?;
-        (doc.get("version").and_then(Value::as_i64) == Some(1)).then_some(doc)
-    })
-}
-
-fn days_of(s: &Value, default: i64) -> i64 {
-    s.get("window_days")
-        .and_then(Value::as_i64)
-        .unwrap_or(default)
-        .clamp(1, 365)
-}
-
-fn tag_of(s: &Value, default: &str) -> String {
-    let raw = s.get("tag").and_then(Value::as_str).unwrap_or(default);
-    facts::normalize_tag(raw).unwrap_or_else(|_| default.to_string())
-}
-
-/// One section of a dashboard, with its data.
-fn section(conn: &Connection, s: &Value, now: i64) -> Value {
-    let kind = s.get("type").and_then(Value::as_str).unwrap_or("");
-    let title = s
-        .get("title")
-        .and_then(Value::as_str)
-        .map(|t| extract(t, 80));
-    let mut out = json!({ "type": kind, "title": title });
-    match kind {
-        "daily" => {
-            let days = days_of(s, WINDOW_DAYS);
-            out["window_days"] = json!(days);
-            out["days"] = per_day(conn, now, days);
-        }
-        "counts" => {
-            let days = days_of(s, WINDOW_DAYS);
-            let top = s
-                .get("top")
-                .and_then(Value::as_i64)
-                .unwrap_or(12)
-                .clamp(1, 50) as usize;
-            match s.get("from").and_then(Value::as_str) {
-                Some("journal-manifestations") => {
-                    out["window_days"] = json!(days);
-                    let c = signs(conn, now, days, top);
-                    out["days_with_entries"] = c["days_with_entries"].clone();
-                    out["top"] = c["top"].clone();
-                }
-                Some("keywords") => {
-                    out["window_days"] = json!(days);
-                    let terms: Vec<String> = s
-                        .get("terms")
-                        .and_then(Value::as_array)
-                        .map(|a| {
-                            a.iter()
-                                .filter_map(Value::as_str)
-                                .map(|t| t.trim().to_lowercase())
-                                .filter(|t| !t.is_empty() && t.chars().count() <= 40)
-                                .take(30)
-                                .collect()
-                        })
-                        .unwrap_or_default();
-                    out["top"] = mentions(conn, now, days, &terms, top);
-                }
-                Some("tags") => {
-                    out["window_days"] = json!(days);
-                    out["top"] = child_tags(conn, now, days, &tag_of(s, ""), top);
-                }
-                _ => out["error"] = json!("unknown source for counts"),
-            }
-        }
-        "targets" => out["items"] = by_tag(conn, &tag_of(s, "cibles"), 12),
-        "list" => {
-            let limit = s
-                .get("limit")
-                .and_then(Value::as_i64)
-                .unwrap_or(8)
-                .clamp(1, 50) as usize;
-            out["items"] = by_tag(conn, &tag_of(s, "inbox"), limit);
-        }
-        "text" => {
-            out["body"] = json!(extract(
-                s.get("body").and_then(Value::as_str).unwrap_or(""),
-                2000
-            ));
-        }
-        _ => out["error"] = json!("unknown section type"),
-    }
-    out
-}
-
-/// How many notes of the window cite each term (a project, a person, a sign): the keyword model of a
-/// space, used to count rather than to file. Case is ignored.
-fn mentions(conn: &Connection, now: i64, days: i64, terms: &[String], top_n: usize) -> Value {
-    let since = now - days * DAY;
-    let mut counts: Vec<(String, i64)> = terms.iter().map(|t| (t.clone(), 0)).collect();
-    if let Ok(mut st) = conn.prepare(
-        "SELECT text FROM facts WHERE status = 'active' AND created_at >= ?1
-         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
-         ORDER BY created_at DESC LIMIT 5000",
-    ) && let Ok(rows) = st.query_map([since], |r| r.get::<_, String>(0))
-    {
-        for text in rows.flatten() {
-            let low = text.to_lowercase();
-            for (t, n) in counts.iter_mut() {
-                if low.contains(t.as_str()) {
-                    *n += 1;
-                }
-            }
-        }
-    }
-    counts.retain(|(_, n)| *n > 0);
-    counts.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    counts.truncate(top_n);
-    Value::Array(
-        counts
-            .into_iter()
-            .map(|(c, n)| json!({ "code": c, "count": n }))
-            .collect(),
-    )
-}
-
-/// How many notes of the window sit under each direct child of a tag (the projects under `work/projects`).
-fn child_tags(conn: &Connection, now: i64, days: i64, base: &str, top_n: usize) -> Value {
-    let since = now - days * DAY;
-    let prefix = if base.is_empty() {
-        String::new()
-    } else {
-        format!("{base}/")
-    };
-    let mut counts: std::collections::BTreeMap<String, std::collections::BTreeSet<String>> =
-        Default::default();
-    if let Ok(mut st) = conn.prepare(
-        "SELECT t.tag, t.fact_id FROM fact_tags t JOIN facts f ON f.id = t.fact_id
-         WHERE f.status = 'active' AND f.created_at >= ?1 AND substr(t.tag, 1, 1) <> '@'
-         AND t.fact_id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')",
-    ) && let Ok(rows) = st.query_map([since], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
-    }) {
-        for (tag, id) in rows.flatten() {
-            let Some(rest) = tag.strip_prefix(prefix.as_str()) else {
-                continue;
-            };
-            let child = rest.split('/').next().unwrap_or("");
-            if !child.is_empty() {
-                counts.entry(child.to_string()).or_default().insert(id);
-            }
-        }
-    }
-    let mut top: Vec<(String, i64)> = counts
-        .into_iter()
-        .map(|(c, ids)| (c, ids.len() as i64))
-        .collect();
-    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    top.truncate(top_n);
-    Value::Array(
-        top.into_iter()
-            .map(|(c, n)| json!({ "code": c, "count": n }))
-            .collect(),
-    )
-}
-
-/// Notes written per day over a window, as `[{day, count}]`.
-fn per_day(conn: &Connection, now: i64, days: i64) -> Value {
-    let since = now - days * DAY;
-    let mut out: Vec<Value> = Vec::new();
-    if let Ok(mut st) = conn.prepare(
-        "SELECT date(created_at, 'unixepoch'), count(*) FROM facts
-         WHERE status = 'active' AND created_at >= ?1
-         AND id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
-         GROUP BY 1 ORDER BY 1",
-    ) && let Ok(rows) = st.query_map([since], |r| {
-        Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?))
-    }) {
-        for (d, n) in rows.flatten() {
-            out.push(json!({ "day": d, "count": n }));
-        }
-    }
-    Value::Array(out)
-}
-
-/// Counts the manifestations (signs and symptoms) of the journal days over a window. The health app
-/// deposits one fact per day, `[app] day YYYY-MM-DD: {json}`, under a `dossier/…` path.
-fn signs(conn: &Connection, now: i64, days_window: i64, top_n: usize) -> Value {
-    let from_day = iso(now - days_window * DAY);
-    let from_day = from_day.get(..10).unwrap_or("").to_string();
-    let mut counts: std::collections::BTreeMap<String, i64> = Default::default();
-    let mut days = 0i64;
-    let Ok(mut st) = conn.prepare(
-        "SELECT f.text FROM facts f
-         WHERE f.status = 'active' AND f.id IN
-           (SELECT fact_id FROM fact_tags WHERE tag = 'dossier' OR tag LIKE 'dossier/%')
-         ORDER BY f.created_at DESC LIMIT 2000",
-    ) else {
-        return json!({ "days_with_entries": 0, "top": [] });
-    };
-    let Ok(rows) = st.query_map([], |r| r.get::<_, String>(0)) else {
-        return json!({ "days_with_entries": 0, "top": [] });
-    };
-    for text in rows.flatten() {
-        let Some(at) = text.find("] day ") else {
-            continue;
-        };
-        let rest = &text[at + 6..];
-        let (Some(date), Some(json_at)) = (rest.get(..10), rest.find(": ")) else {
-            continue;
-        };
-        if date < from_day.as_str() {
-            continue;
-        }
-        let Ok(day) = serde_json::from_str::<Value>(&rest[json_at + 2..]) else {
-            continue;
-        };
-        days += 1;
-        for note in day
-            .get("notes")
-            .and_then(Value::as_array)
-            .into_iter()
-            .flatten()
-        {
-            for m in note
-                .get("manifestations")
-                .and_then(Value::as_array)
-                .into_iter()
-                .flatten()
-            {
-                if let Some(code) = m.get("code").and_then(Value::as_str) {
-                    *counts.entry(code.to_string()).or_insert(0) += 1;
-                }
-            }
-        }
-    }
-    let mut top: Vec<(String, i64)> = counts.into_iter().collect();
-    top.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
-    top.truncate(top_n);
-    json!({
-        "days_with_entries": days,
-        "top": top.into_iter().map(|(c, n)| json!({ "code": c, "count": n })).collect::<Vec<_>>(),
-    })
-}
-
-/// The active facts filed under a tag path, newest first.
-fn by_tag(conn: &Connection, tag: &str, limit: usize) -> Value {
-    let like = format!("{tag}/%");
-    let Ok(mut st) = conn.prepare(
-        "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.id IN
-           (SELECT fact_id FROM fact_tags WHERE tag = ?2 OR tag LIKE ?3)
-         ORDER BY f.created_at DESC LIMIT ?1",
-    ) else {
-        return json!([]);
-    };
-    let ids: Vec<String> = st
-        .query_map(rusqlite::params![limit as i64, tag, like], |r| r.get(0))
-        .map(|rows| rows.flatten().collect())
-        .unwrap_or_default();
-    Value::Array(
-        ids.iter()
-            .filter_map(|id| facts::read_fact(conn, id).ok().flatten())
-            .map(|f| fact_row(&f))
-            .collect(),
-    )
 }
 
 /// `GET /facts?space=NAME[&tag=PATH][&q=WORDS][&limit=N]`: notes, newest first, or the best matches.

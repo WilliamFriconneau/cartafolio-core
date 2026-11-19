@@ -1,0 +1,213 @@
+{
+  "capabilities": {
+    "contract": "memcp.view/1",
+    "contract_version": 1,
+    "space": "health",
+    "kind": "health",
+    "label": "Health",
+    "writable": true,
+    "sensitive": true,
+    "views": [
+      {
+        "id": "targets",
+        "home": true,
+        "returns": [
+          "target"
+        ],
+        "filters": [],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "target[]"
+        }
+      },
+      {
+        "id": "chronology",
+        "returns": [
+          "note",
+          "file",
+          "sign",
+          "measure"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "type",
+          "tag",
+          "q"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "item[]"
+        }
+      },
+      {
+        "id": "stats",
+        "returns": [
+          "stats"
+        ],
+        "filters": [
+          "from",
+          "to"
+        ],
+        "pagination": null,
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "object"
+        }
+      },
+      {
+        "id": "files",
+        "returns": [
+          "file"
+        ],
+        "filters": [
+          "from",
+          "to",
+          "q",
+          "mime"
+        ],
+        "pagination": {
+          "kind": "cursor",
+          "limit": {
+            "min": 1,
+            "max": 200,
+            "default": 50
+          }
+        },
+        "schema": {
+          "arguments": {
+            "space": "string"
+          },
+          "returns": "file[]"
+        }
+      }
+    ],
+    "item_types": {
+      "note": {
+        "id": "the fact id"
+      },
+      "file": {
+        "id": "the fact id"
+      },
+      "target": {
+        "id": "the fact id"
+      },
+      "dashboard": {
+        "id": "the fact id"
+      },
+      "sign": {
+        "id": "the fact id"
+      },
+      "measure": {
+        "id": "the fact id"
+      }
+    },
+    "home": "targets",
+    "schemas": {
+      "target_metrics": {
+        "due": "date|null",
+        "target_amount": "number|null",
+        "realized_amount": "number|null",
+        "progress_percent": "number|null",
+        "currency": "string|null"
+      }
+    }
+  },
+  "targets": {
+    "contract": "memcp.view/1",
+    "space": "health",
+    "kind": "health",
+    "view": "targets",
+    "columns": [
+      "open",
+      "reached"
+    ],
+    "items": [
+      {
+        "id": "f_demo_target",
+        "type": "target",
+        "space": "health",
+        "column": "open",
+        "text": "Migraine (f_demo_source)",
+        "signs": [
+          "cephalee"
+        ],
+        "provenance": {
+          "kind": "memory",
+          "author": "phone"
+        }
+      }
+    ]
+  },
+  "register": {
+    "contract": "memcp.view/1",
+    "space": "health",
+    "kind": "health",
+    "view": "register",
+    "items": [
+      {
+        "id": "f_demo_sign",
+        "type": "sign",
+        "space": "health",
+        "text": "Mal de tête depuis ce matin, 6/10.",
+        "at": "2026-11-19T07:30:00+00:00",
+        "tags": [
+          "health",
+          "signe/cephalee",
+          "field/level/6/10"
+        ],
+        "sign": "cephalee",
+        "level": "6/10",
+        "label": "Céphalée",
+        "provenance": {
+          "kind": "memory",
+          "app": null,
+          "layer": null,
+          "author": "phone"
+        }
+      },
+      {
+        "id": "f_demo_measure",
+        "type": "measure",
+        "space": "health",
+        "text": "Tension 12/8 en sortant du cabinet.",
+        "at": "2026-11-19T17:10:00+00:00",
+        "tags": [
+          "health",
+          "mesure/tension",
+          "field/tension/12/8"
+        ],
+        "measure": "tension",
+        "value": "12/8",
+        "unit": "mmHg",
+        "label": "Tension artérielle",
+        "provenance": {
+          "kind": "memory",
+          "app": null,
+          "layer": null,
+          "author": "phone"
+        }
+      }
+    ],
+    "page": {
+      "limit": 2,
+      "has_more": false,
+      "next_cursor": null
+    }
+  }
+}
