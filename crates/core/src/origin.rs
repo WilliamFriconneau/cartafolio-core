@@ -322,7 +322,7 @@ pub fn deposit(
         new.tags.push(code_tag);
     }
     new.tags = facts::normalize_tags(&new.tags)?;
-    facts::check_kind(&new.kind)?;
+    facts::check_kind(new.kind.as_deref())?;
     let text = facts::check_text(&new.text)?;
     facts::check_size(&text)?;
     if let Some(old) = held(conn, o)? {

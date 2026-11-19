@@ -333,19 +333,23 @@ fn a_transcribed_recording_is_erased_once_its_text_exists_with_a_trace() -> Res 
         |r| r.get(0),
     )?;
     assert_eq!(kept, "active");
-    // Twice is an error, not a second erasure.
-    assert!(
-        files::erase_at(
-            &b,
-            &personal,
-            "dictee",
-            &memo.id,
-            &personal,
-            &transcript,
-            then + 8 * DAY
-        )
-        .is_err()
-    );
+    // Twice is done once (an answer that never came, asked again): the same record, no second erasure.
+    let again = files::erase_at(
+        &b,
+        &personal,
+        "dictee",
+        &memo.id,
+        &personal,
+        &transcript,
+        then + 8 * DAY,
+    )?;
+    assert_eq!(again, done);
+    let told: i64 = conn.query_row(
+        "SELECT count(*) FROM sync_log WHERE eid = ?1",
+        [format!("fr:{}", memo.id)],
+        |r| r.get(0),
+    )?;
+    assert_eq!(told, 1);
     Ok(())
 }
 

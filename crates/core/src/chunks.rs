@@ -138,6 +138,7 @@ pub fn store(brain: &Brain, space: &Space, file: &str, hash: &str, bytes: &[u8])
     if path.exists() {
         return Ok(());
     }
+    let _writing = crate::recover::writing(brain)?;
     let tmp = dir.join(format!(".{hash}.tmp"));
     let mut f = OpenOptions::new()
         .write(true)
@@ -148,6 +149,7 @@ pub fn store(brain: &Brain, space: &Space, file: &str, hash: &str, bytes: &[u8])
     f.write_all(bytes)?;
     f.sync_all()?;
     fs::rename(&tmp, &path)?;
+    crate::fsx::sync_dir(&dir)?;
     Ok(())
 }
 
@@ -229,6 +231,7 @@ pub(crate) fn assemble(
         ));
     }
     fs::rename(&tmp, &target)?;
+    crate::fsx::sync_dir(&blobs)?;
     drop_staged(brain, space, sha);
     Ok(true)
 }

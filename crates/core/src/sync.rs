@@ -495,6 +495,71 @@ pub(crate) fn ensure_log(conn: &Connection) -> Result<()> {
     }
 }
 
+/// The events of files whose record has none (an earlier version wrote the record and its event apart, and a crash
+/// could fall between): `f:<id>` for every record, then `fr:<id>` for a retired one, under the ids the file gives, so
+/// that writing them twice writes them once. A record whose describing note was left untyped by that crash is typed
+/// first, as the put would have. Answers how many events it wrote. Run when the node starts ([`Brain::recover`]).
+pub(crate) fn log_unlogged_files(conn: &Connection) -> Result<usize> {
+    let unlogged: Vec<(String, Option<String>)> = conn
+        .prepare(
+            "SELECT id, fact_id FROM files f
+             WHERE NOT EXISTS (SELECT 1 FROM sync_log WHERE eid = 'f:' || f.id) ORDER BY created_at, rowid",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    let unretired: Vec<(String, Option<String>)> = conn
+        .prepare(
+            "SELECT id, retired_reason FROM files f WHERE status = 'retired'
+             AND NOT EXISTS (SELECT 1 FROM sync_log WHERE eid = 'fr:' || f.id) ORDER BY created_at, rowid",
+        )?
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    if unlogged.is_empty() && unretired.is_empty() {
+        return Ok(0);
+    }
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let mut n = 0;
+    for (id, fact) in &unlogged {
+        if tx
+            .query_row(
+                "SELECT 1 FROM sync_log WHERE eid = ?1",
+                [format!("f:{id}")],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some()
+        {
+            continue;
+        }
+        if let Some(f) = fact {
+            tx.execute(
+                "UPDATE facts SET type = 'file', fields = ?2 WHERE id = ?1 AND type IS NULL",
+                params![f, json!({ "file_id": id }).to_string()],
+            )?;
+        }
+        record_file_put(&tx, id)?;
+        n += 1;
+    }
+    for (id, reason) in &unretired {
+        if tx
+            .query_row(
+                "SELECT 1 FROM sync_log WHERE eid = ?1",
+                [format!("fr:{id}")],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some()
+        {
+            continue;
+        }
+        let reason = reason.clone().unwrap_or_default();
+        record_file_retired(&tx, id, &reason, crate::files::is_erased_reason(&reason))?;
+        n += 1;
+    }
+    tx.commit()?;
+    Ok(n)
+}
+
 /// The layout of this space is already in its log: a space made here from a peer's word takes its layout from the
 /// peer's events, and must not record it again under a stamp of its own (that later stamp would win over a rename made
 /// meanwhile at the origin).
@@ -1210,7 +1275,7 @@ fn apply_created(conn: &Connection, space: &Space, p: &Value, via: &str) -> Outc
         return Ok(Step::Skipped);
     }
     let kind = req(p, "kind")?;
-    facts::check_kind(kind).map_err(|e| Fault::Bad(e.to_string()))?;
+    facts::check_kind(Some(kind)).map_err(|e| Fault::Bad(e.to_string()))?;
     let body = req(p, "text")?;
     if body.is_empty() {
         return Err(Fault::Bad("text is empty".into()));
@@ -1953,6 +2018,8 @@ pub fn apply_window(
     let conn = brain.open_space(space)?;
     let mut out = Applied::default();
     let mut erased: Vec<String> = Vec::new();
+    // The bytes of a received file are written before its record commits: the sweep of a starting node waits.
+    let writing = crate::recover::writing(brain)?;
     let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
     retry_deferred(brain, space, &tx, &mut erased)?;
     for ev in events {
@@ -2094,6 +2161,8 @@ pub fn apply_window(
         }
     }
     tx.commit()?;
+    drop(writing);
+    crate::failpoint::hit(crate::failpoint::at::SYNC_APPLY_BYTES)?;
     remove_erased(brain, space, &conn, &erased)?;
     Ok(out)
 }
@@ -2163,18 +2232,10 @@ fn retry_deferred(
 }
 
 /// The bytes of recordings erased at their origin go here too, once the change is committed, unless another record of
-/// the space still holds them.
+/// the space still holds them. A crash before leaves them to the sweep of the next start (`crate::recover`).
 fn remove_erased(brain: &Brain, space: &Space, conn: &Connection, shas: &[String]) -> Result<()> {
     for sha in shas {
-        let held: bool = conn.query_row(
-            "SELECT count(*) > 0 FROM files WHERE sha256 = ?1
-             AND NOT (status = 'retired' AND retired_reason LIKE 'erased: %')",
-            [sha],
-            |r| r.get(0),
-        )?;
-        if !held {
-            crate::files::remove_blob(brain, space, sha)?;
-        }
+        crate::recover::drop_unless_held(brain, space, conn, sha)?;
     }
     Ok(())
 }
@@ -2561,16 +2622,26 @@ pub fn note_withheld(brain: &Brain, space: &Space, who: &str, seq: i64) -> Resul
     meta_set(&conn, &key, &earliest.to_string())
 }
 
-/// The earliest position left out for `who` (see [`note_withheld`]), forgotten as it is read: the caller goes back
-/// before it now that `who` takes chunks.
-pub fn take_withheld(brain: &Brain, space: &Space, who: &str) -> Result<Option<i64>> {
+/// The earliest position left out for `who` (see [`note_withheld`]). Read only: the mark stays until
+/// [`clear_withheld`], once what it says is durably taken care of.
+///
+/// For a node that now takes chunks, the rule is the same on both sides of an exchange: while its cursor (what it
+/// pulled, or what was pushed to it) is at or past the mark, the cursor goes back before it first, durably; once the
+/// cursor is before the mark, the exchange that follows sends what was left out, and the mark is cleared. A crash
+/// between two steps repeats a step, never skips one.
+pub fn withheld(brain: &Brain, space: &Space, who: &str) -> Result<Option<i64>> {
     let conn = brain.open_space(space)?;
-    let key = withheld_key(who);
-    let seq = meta_get(&conn, &key)?.and_then(|v| v.parse::<i64>().ok());
-    if seq.is_some() {
-        conn.execute("DELETE FROM meta WHERE k = ?1", [key])?;
-    }
-    Ok(seq)
+    Ok(meta_get(&conn, &withheld_key(who))?.and_then(|v| v.parse::<i64>().ok()))
+}
+
+/// Clears the mark of [`withheld`] if it is still `seq` (a later [`note_withheld`] of an earlier position keeps it).
+pub fn clear_withheld(brain: &Brain, space: &Space, who: &str, seq: i64) -> Result<()> {
+    let conn = brain.open_space(space)?;
+    conn.execute(
+        "DELETE FROM meta WHERE k = ?1 AND v = ?2",
+        params![withheld_key(who), seq.to_string()],
+    )?;
+    Ok(())
 }
 
 fn strings(conn: &Connection, sql: &str, arg: impl rusqlite::ToSql) -> Result<Vec<String>> {
@@ -2750,16 +2821,11 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
     }
     tx.execute("DELETE FROM meta WHERE k = 'window_pruning'", [])?;
     tx.commit()?;
-    // The bytes go unless another record of this space still holds them.
+    crate::failpoint::hit(crate::failpoint::at::SYNC_PRUNE_BYTES)?;
+    // The bytes go unless another record of this space still holds them; a crash before leaves them to the sweep of
+    // the next start (`crate::recover`).
     for sha in blobs {
-        let held: bool = conn.query_row(
-            "SELECT count(*) > 0 FROM files WHERE sha256 = ?1",
-            [&sha],
-            |r| r.get(0),
-        )?;
-        if !held {
-            crate::files::remove_blob(brain, space, &sha)?;
-        }
+        crate::recover::drop_unless_held(brain, space, &conn, &sha)?;
     }
     Ok(out)
 }

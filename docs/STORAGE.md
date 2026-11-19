@@ -13,6 +13,8 @@ The SQL (`crates/core/src/schema.rs`) is the source of truth; this is the map.
   file per chunk named by its digest, until the file is whole and checked; then they go (see
   [FEDERATION.md](FEDERATION.md#files-in-chunks-as-built)). A file the page serves from a
   link to its bytes passes through `outgoing/` and is removed once sent.
+- Crash safety: every operation ends done once or not done after a crash; the mechanisms and the operations covered are
+  in [CRASH.md](CRASH.md).
 
 ## What is held twice
 

@@ -206,7 +206,20 @@ fn a_file_of_30_mib_goes_both_ways_in_chunks_and_its_digest_matches() {
         .find(|s| s["space"] == "work")
         .and_then(|s| s["head"].as_i64())
         .unwrap();
-    let new = file_events(&addr, &key, &format!("space=work&after={head}&chunks=1"));
+    // First an empty page that sends its cursor back before what was left out, then the file.
+    let back = json(
+        &addr,
+        &key,
+        &format!("events?space=work&after={head}&chunks=1"),
+    );
+    assert_eq!(back["events"].as_array().unwrap().len(), 0);
+    let before = back["next"].as_i64().unwrap();
+    assert!(before < head);
+    let new = file_events(&addr, &key, &format!("space=work&after={before}&chunks=1"));
+    let new: Vec<Value> = new
+        .into_iter()
+        .filter(|e| e["payload"]["id"] != small.id.as_str())
+        .collect();
     assert_eq!(new.len(), 1, "{new:?}");
     assert_eq!(new[0]["payload"]["id"], theirs.id.as_str());
     assert_eq!(
@@ -390,4 +403,56 @@ fn a_big_recording_erased_at_its_origin_is_erased_on_the_peer() {
     assert!(files::erased(&b.brain, &s, &rec.id).unwrap());
     assert_eq!(held(&b, "work", &rec.id), None);
     assert!(!files::blob_path(&b.brain, &s, &rec.sha256).exists());
+}
+
+/// What a node left out for a peer that took no chunks is sent again once the peer takes them, and a lost answer loses
+/// nothing: the mark stays until the peer asks from before it.
+#[test]
+fn what_was_left_out_for_a_peer_is_served_again_even_when_an_answer_is_lost() {
+    let b = node("b", &["work"]);
+    let key = key_for_a(&b);
+    let addr = serve(&b, true);
+    let big = put(&b, "work", "lecture.wav", &wav(BIG, 9), &[]);
+    let small = put(&b, "work", "short.wav", &wav(2000, 10), &[]);
+    // The peer, of an earlier version, takes no chunks: the big file is left out, its cursor goes past it.
+    let page = json(&addr, &key, "events?space=work&after=0");
+    let ids: Vec<&str> = page["events"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|e| e["kind"] == "file_put")
+        .map(|e| e["payload"]["id"].as_str().unwrap())
+        .collect();
+    assert_eq!(ids, [small.id.as_str()]);
+    let past = page["next"].as_i64().unwrap();
+    // Updated, it asks from its cursor: sent back before the mark. The answer is lost: it asks again, same answer.
+    for _ in 0..2 {
+        let back = json(
+            &addr,
+            &key,
+            &format!("events?space=work&after={past}&chunks=1"),
+        );
+        assert_eq!(back["events"].as_array().unwrap().len(), 0);
+        assert!(back["next"].as_i64().unwrap() < past);
+        assert_eq!(back["more"], true);
+    }
+    let back = json(
+        &addr,
+        &key,
+        &format!("events?space=work&after={past}&chunks=1"),
+    );
+    let before = back["next"].as_i64().unwrap();
+    // From before the mark: the big file comes, in chunks; asked twice (a lost answer), it comes twice.
+    for _ in 0..2 {
+        let got = file_events(&addr, &key, &format!("space=work&after={before}&chunks=1"));
+        assert!(got.iter().any(|e| e["payload"]["id"] == big.id.as_str()));
+        assert!(got.iter().all(|e| e["payload"]["chunks"].is_array() || e["payload"]["id"] != big.id.as_str()));
+    }
+    // Past it now: served as usual, no more sending back.
+    let page = json(
+        &addr,
+        &key,
+        &format!("events?space=work&after={past}&chunks=1"),
+    );
+    assert_eq!(page["next"].as_i64().unwrap(), past);
 }

@@ -119,8 +119,9 @@ pub enum Source {
 /// identity and the target space come from the call.
 #[derive(Clone, Debug)]
 pub struct NewFact {
-    /// `fact`, `decision`, `context` or `passage`; anything else is refused.
-    pub kind: String,
+    /// `fact`, `decision`, `context` or `passage`; anything else is refused. `None`: `fact` for a new note, and the
+    /// kind of the replaced note for a correction ([`supersede`]).
+    pub kind: Option<String>,
     /// The statement. Not empty, no control characters; normalised when stored.
     pub text: String,
     /// Where it comes from.
@@ -136,10 +137,11 @@ pub struct NewFact {
 }
 
 impl NewFact {
-    /// A plain `fact` written by `agent`, with no tags and no dates; the other fields are changed on the value.
+    /// A note written by `agent`, with no kind given (a `fact`, or the kind of the note it corrects), no tags and no
+    /// dates; the other fields are changed on the value.
     pub fn agent(text: &str, agent: &str) -> NewFact {
         NewFact {
-            kind: "fact".into(),
+            kind: None,
             text: text.into(),
             source: Source::Agent(agent.into()),
             valid_from: None,
@@ -434,7 +436,13 @@ pub(crate) fn check_text(text: &str) -> Result<String> {
     Ok(t)
 }
 
-pub(crate) fn check_kind(kind: &str) -> Result<()> {
+/// The kind of a new note: the one given, else `fact`.
+pub(crate) fn kind_of(new: &NewFact) -> &str {
+    new.kind.as_deref().unwrap_or("fact")
+}
+
+pub(crate) fn check_kind(kind: Option<&str>) -> Result<()> {
+    let Some(kind) = kind else { return Ok(()) };
     if ["fact", "decision", "context", "passage"].contains(&kind) {
         Ok(())
     } else {
@@ -510,7 +518,7 @@ pub(crate) fn insert_unlogged(
         params![
             id,
             space.as_str(),
-            new.kind,
+            kind_of(new),
             text,
             text::text_hash(text),
             source_kind,
@@ -630,11 +638,26 @@ pub fn remember(
     conn: &Connection,
     space: &Space,
     author: &str,
+    new: NewFact,
+    distinct_from: &[String],
+) -> Result<Remembered> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let out = remember_in(&tx, space, author, new, distinct_from)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+/// [`remember`] inside the caller's write transaction, so that the note and what goes with it (a file's record and
+/// its event) are written together or not at all.
+pub(crate) fn remember_in(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
     mut new: NewFact,
     distinct_from: &[String],
 ) -> Result<Remembered> {
     new.tags = normalize_tags(&new.tags)?;
-    check_kind(&new.kind)?;
+    check_kind(new.kind.as_deref())?;
     let t = check_text(&new.text)?;
     check_size(&t)?;
     if let (Some(from), Some(to)) = (new.valid_from, new.valid_to)
@@ -642,8 +665,7 @@ pub fn remember(
     {
         return Err(Error::Invalid("valid_to is before valid_from".into()));
     }
-    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
-    if let Some(existing) = active_by_hash(&tx, &text::text_hash(&t))? {
+    if let Some(existing) = active_by_hash(conn, &text::text_hash(&t))? {
         return Ok(Remembered::Duplicate(existing));
     }
     let ignore: Vec<&str> = distinct_from.iter().map(String::as_str).collect();
@@ -651,13 +673,12 @@ pub fn remember(
     let cands = if new.tags.iter().any(|g| in_inbox(g)) {
         vec![]
     } else {
-        candidates_for(&tx, &t, &ignore)?
+        candidates_for(conn, &t, &ignore)?
     };
     if !cands.is_empty() {
         return Ok(Remembered::NeedsDecision(cands));
     }
-    let fact = insert(&tx, space, author, &new, &t, None)?;
-    tx.commit()?;
+    let fact = insert(conn, space, author, &new, &t, None)?;
     Ok(Remembered::Created(fact))
 }
 
@@ -686,7 +707,7 @@ pub(crate) fn remember_as_in(
     id: &str,
 ) -> Result<Remembered> {
     new.tags = normalize_tags(&new.tags)?;
-    check_kind(&new.kind)?;
+    check_kind(new.kind.as_deref())?;
     let t = check_text(&new.text)?;
     check_size(&t)?;
     if let Some(existing) = read_fact(conn, id)? {
@@ -820,7 +841,7 @@ pub(crate) fn supersede_as(
     reason: Option<&str>,
     action: &str,
 ) -> Result<Fact> {
-    check_kind(&new.kind)?;
+    check_kind(new.kind.as_deref())?;
     let t = check_text(&new.text)?;
     check_size(&t)?;
     let given_tags = normalize_tags(&new.tags)?;
@@ -832,6 +853,7 @@ pub(crate) fn supersede_as(
             old.status
         )));
     }
+    refuse_while_moving(&tx, old_id)?;
     let hash = text::text_hash(&t);
     // The same text is a change only when it is filed elsewhere (sorting a note of the inbox under its real tags) or
     // when its kind changes (a fact that turns out to be a decision).
@@ -842,7 +864,7 @@ pub(crate) fn supersede_as(
         let mut old_sorted = old.tags.clone();
         old_sorted.sort();
         let same_tags = given_tags.is_empty() || given_sorted == old_sorted;
-        if same_tags && new.kind == old.kind {
+        if same_tags && new.kind.as_ref().is_none_or(|k| *k == old.kind) {
             return Err(Error::Invalid(
                 "the new text, kind and tags are identical to the old ones".into(),
             ));
@@ -857,6 +879,8 @@ pub(crate) fn supersede_as(
     // The source reference is unique among active facts: the new one only takes it
     // once the old one is marked as replaced.
     let mut staged = new.clone();
+    // A correction keeps the kind of what it corrects, unless it brings its own.
+    staged.kind = Some(new.kind.unwrap_or_else(|| old.kind.clone()));
     // A correction keeps the tags of what it corrects, unless it brings its own.
     staged.tags = if given_tags.is_empty() {
         old.tags.clone()
@@ -906,6 +930,17 @@ pub(crate) fn supersede_as(
     read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
 }
 
+/// A note a move has begun to take to another space is left to the move (see `crate::moves`): replaced or retired
+/// meanwhile, it could end active in both spaces.
+fn refuse_while_moving(conn: &Connection, id: &str) -> Result<()> {
+    match crate::moves::pending_move(conn, id)? {
+        Some(to) => Err(Error::Invalid(format!(
+            "fact {id} is being moved to {to}: the move ends at the next notes_move or when the node starts; correct it there once it has moved"
+        ))),
+        None => Ok(()),
+    }
+}
+
 /// Retires an `active` or `proposed` fact: it leaves default searches but its text stays and can
 /// be read by id and in [`history`]. Retiring is how a wrong or obsolete fact is removed; nothing is
 /// ever erased.
@@ -940,6 +975,7 @@ pub(crate) fn retire_as(
             f.status
         )));
     }
+    refuse_while_moving(&tx, id)?;
     tx.execute(
         "UPDATE facts SET status = 'retired', status_at = ?2, status_by = ?3, status_reason = ?4 WHERE id = ?1",
         params![id, util::now(), author, reason],
@@ -998,7 +1034,7 @@ pub fn restore(
         )));
     }
     let mut new = NewFact::agent(&old.text, author);
-    new.kind = old.kind.clone();
+    new.kind = Some(old.kind.clone());
     new.tags = old.tags.clone();
     new.valid_from = Some(old.valid_from);
     new.valid_to = old.valid_to;
@@ -1244,7 +1280,7 @@ pub(crate) fn create_passage(
         return Ok(None);
     }
     let new = NewFact {
-        kind: "passage".into(),
+        kind: Some("passage".into()),
         text: t.clone(),
         source,
         valid_from,

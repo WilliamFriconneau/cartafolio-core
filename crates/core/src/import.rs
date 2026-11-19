@@ -890,7 +890,7 @@ fn import_note(
             report.replaced += 1;
             if !dry {
                 let new = NewFact {
-                    kind: "passage".into(),
+                    kind: Some("passage".into()),
                     text: b.text.clone(),
                     source,
                     valid_from: date_from_name(rel),

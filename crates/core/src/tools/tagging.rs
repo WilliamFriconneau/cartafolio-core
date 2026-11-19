@@ -176,7 +176,7 @@ pub(super) fn tags_set(
         .and_then(Value::as_str)
         .map_or_else(|| format!("tags set by {}", caller.agent), String::from);
     let mut new = NewFact::agent(&old.text, &format!("agent:{}", caller.agent));
-    new.kind = old.kind.clone();
+    new.kind = Some(old.kind.clone());
     new.valid_from = Some(old.valid_from);
     new.valid_to = old.valid_to;
     new.tags = tags.clone();

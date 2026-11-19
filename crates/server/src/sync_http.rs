@@ -230,7 +230,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             if !side(&ctl, &caller, &space).gives() {
                 return refused(403, APART);
             }
-            let mut after = req
+            let after = req
                 .query
                 .get("after")
                 .and_then(|v| v.parse::<i64>().ok())
@@ -238,10 +238,26 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                 .max(0);
             let chunks =
                 app.file_chunks && req.query.get("chunks").map(String::as_str) == Some("1");
-            // A machine that took no chunks before and takes them now gets back what was left out for it.
+            // A machine that took no chunks before and takes them now gets back what was left out for it: while its
+            // cursor is at or past the mark, an empty page sends it back before the mark (its cursor moves there,
+            // durably, on its side); once it asks from before the mark, the mark goes and the pages that follow carry
+            // what was left out. A lost answer is asked again, nothing is skipped (see `sync::withheld`).
             let served = format!("served:{}", caller.agent);
-            if chunks && let Ok(Some(seq)) = sync::take_withheld(brain, &space, &served) {
-                after = after.min(seq - 1).max(0);
+            if chunks && let Ok(Some(seq)) = sync::withheld(brain, &space, &served) {
+                if after >= seq {
+                    let head = sync::head(brain, &space).unwrap_or(after);
+                    return Response::json(
+                        200,
+                        &json!({
+                            "space": space.as_str(),
+                            "events": [],
+                            "next": (seq - 1).max(0),
+                            "head": head,
+                            "more": true,
+                        }),
+                    );
+                }
+                let _ = sync::clear_withheld(brain, &space, &served, seq);
             }
             let limit = req
                 .query

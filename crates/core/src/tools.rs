@@ -894,7 +894,7 @@ fn new_fact(caller: &Caller, args: &Value) -> Result<NewFact, ToolError> {
     check_len(caller, text)?;
     let mut n = NewFact::agent(text, &format!("agent:{}", caller.agent));
     if let Some(k) = args.get("kind").and_then(Value::as_str) {
-        n.kind = k.to_string();
+        n.kind = Some(k.to_string());
     }
     if let Some(v) = args.get("valid_from") {
         n.valid_from = Some(parse_date(v)?);
@@ -1283,11 +1283,9 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 return Err(ToolError::Invalid("unknown fact".into()));
             };
             let reason = args.get("reason").and_then(Value::as_str);
+            // Left out, the kind is the replaced fact's (the core keeps it, as it keeps the tags): a corrected decision
+            // stays a decision.
             let mut new = new_fact(caller, args)?;
-            // Left out, the kind is the replaced fact's, as the tags are: a corrected decision stays a decision.
-            if args.get("kind").is_none_or(Value::is_null) {
-                new.kind = old.kind.clone();
-            }
             // `add_tags` completes the tags (those given in `tags`, else the replaced fact's) instead of replacing them.
             let added = tags_arg_named(args, "add_tags")?;
             if !added.is_empty() {

@@ -1181,7 +1181,7 @@ impl Pass<'_> {
             self.write_note(&rel, &head)
         } else {
             let mut new = NewFact::agent(&text, &format!("agent:{AUTHOR}"));
-            new.kind = head.kind.clone();
+            new.kind = Some(head.kind.clone());
             new.valid_from = Some(head.valid_from);
             new.valid_to = head.valid_to;
             new.tags = tags.unwrap_or_default();

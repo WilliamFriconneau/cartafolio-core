@@ -2,6 +2,23 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Crash safety of files (Unreleased)
+
+- The node runs `Brain::recover()` (new, returns `Recovered`) at start, before serving; it replaces the call to
+  `Brain::finish_moves()`, which it includes. An app that embeds the core calls it when it opens the data directory.
+  See [CRASH.md](CRASH.md).
+- `file_put`, `file_retire`, `file_erase` write the record, its note and its event in one transaction. `file_erase` of a
+  recording already erased answers it (it was refused as `already retired`).
+- `supersede` and `retire` of a note a move has begun to take elsewhere are refused (`invalid`, `fact … is being moved
+  to …`) until the move ends (at the next `notes_move`, or when the node starts).
+- `GET /mcp/<connection>/sync/events?chunks=1` (and the client's push): what was left out for a machine that took no chunks is sent again
+  without loss. While the asker's `after` is at or past the earliest position left out, the answer is an empty page whose
+  `next` is just before it (`more: true`): the asker's cursor goes back there and the next page carries what was left
+  out. `sync::take_withheld` is gone: `sync::withheld` reads the mark, `sync::clear_withheld` clears it.
+- Rust: `NewFact::kind` is `Option<String>`; `None` is `fact` for a new note and the replaced note's kind for a
+  correction (`facts::supersede`), so every path keeps the kind when none is given (the page's fact edit reset it).
+- A data directory gets `files.lock` (the lock of the bytes).
+
 ## Big moves of notes, `supersede` keeps the kind (20261117.0.29)
 
 - **`notes_move`** takes `limit` (1 to 5000, default 1000) and stops after about 20 s: call again until `remaining` is 0. The answer adds `already` (notes moved before by another call or a call cut off; never an error), `resumed` (notes of an interrupted move finished first), `failures` (`[{id, reason}]`, the first 10) and `remaining`. `matched`, `moved`, `left`, `failed`, `sample` keep their meaning, except that `failed` notes are no longer « a near duplicate »: a move copy is never held back by its neighbours, and a refusal now carries its reason. The copy of a note gets an id derived from the note and the target (the one `triage_send` gives), so a note moved twice, or by two nodes, is one note. A move is crash-safe: see TOOLS.md, `notes_move`. `POST /admin/api/space/move-tag` answers the same fields (plus `from`, `to`, `tag`); the page repeats the call until `remaining` is 0.

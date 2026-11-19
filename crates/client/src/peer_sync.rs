@@ -601,15 +601,17 @@ impl Peer {
     fn push(&self, brain: &Brain, p: &Pair, now: i64, pass: &mut Pass) -> Result<(), String> {
         let (space, remote) = (&p.here, p.there.as_str());
         let fail = |e: memcp_core::Error| e.to_string();
-        // The peer takes chunks now: what was left out for it when it did not goes again.
+        // The peer takes chunks now: what was left out for it when it did not goes again. The cursor goes back
+        // before the mark first, durably; only then is the mark cleared (a crash between repeats the first step).
         if p.chunks
-            && let Some(seq) = sync::take_withheld(brain, space, &self.name).map_err(fail)?
+            && let Some(seq) = sync::withheld(brain, space, &self.name).map_err(fail)?
         {
             let (_, pushed) = sync::cursors(brain, &self.name, space).map_err(fail)?;
             if seq - 1 < pushed {
                 sync::set_cursor(brain, &self.name, space, Cursor::Pushed, (seq - 1).max(0))
                     .map_err(fail)?;
             }
+            sync::clear_withheld(brain, space, &self.name, seq).map_err(fail)?;
         }
         let mut sent: Option<String> = None;
         loop {

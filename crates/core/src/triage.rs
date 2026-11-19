@@ -204,7 +204,7 @@ pub fn send(
         .filter(|f| f.status == "active" && f.typ.as_deref() != Some("file"))
         .ok_or_else(|| Error::Invalid("nothing waits under this id".into()))?;
     let mut new = NewFact::agent(&fact.text, author);
-    new.kind = fact.kind.clone();
+    new.kind = Some(fact.kind.clone());
     new.valid_from = Some(fact.valid_from);
     new.valid_to = fact.valid_to;
     new.tags = if fact

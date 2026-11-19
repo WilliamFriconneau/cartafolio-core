@@ -108,3 +108,18 @@ pub fn canonical(path: &Path) -> io::Result<std::path::PathBuf> {
     }
     Ok(p)
 }
+
+/// Makes the entries of a folder durable: after a file is renamed into it (or removed), so that a power loss cannot
+/// leave the new name unwritten while the database that names it is (Unix; a no-op elsewhere, where a rename is
+/// journaled by the file system).
+pub fn sync_dir(path: &Path) -> io::Result<()> {
+    #[cfg(unix)]
+    {
+        fs::File::open(path)?.sync_all()
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = path;
+        Ok(())
+    }
+}

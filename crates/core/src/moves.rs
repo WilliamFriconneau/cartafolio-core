@@ -19,12 +19,12 @@
 //!
 //! The source and the target are two SQLite files: no transaction spans both. The journal closes the gap. A crash
 //! (or `kill -9`) after step 1 or 2 leaves intents behind; [`Brain::finish_moves`] completes them (the copy is written
-//! if it is missing, then the source is retired). It runs when the node starts and before every move. Every note
-//! therefore ends active exactly once, in the source or in the target: never in both, never in neither. The copy and
+//! if it is missing, then the source is retired). It runs when the node starts ([`Brain::recover`]) and before every
+//! move; meanwhile no one else replaces or retires the note (`supersede` and `retire` refuse it). Every note therefore
+//! ends active exactly once, in the source or in the target: never in both, never in neither. The copy and
 //! its entry in the peers' log are written in one transaction, the retirement and its entry in another, so the log
 //! tells each of them once.
 
-use std::cell::Cell;
 use std::time::{Duration, Instant};
 
 use rusqlite::{Connection, OptionalExtension, params};
@@ -98,21 +98,13 @@ pub enum Step {
     AfterCopies,
 }
 
-thread_local! {
-    static FAIL_AT: Cell<Option<Step>> = const { Cell::new(None) };
-}
-
-/// For the tests: the moves of this thread fail after `step` (`None` to stop).
+/// For the tests: the moves of this thread fail after `step` (`None` to stop). See [`crate::failpoint`].
 #[doc(hidden)]
 pub fn fail_at(step: Option<Step>) {
-    FAIL_AT.with(|f| f.set(step));
-}
-
-fn failpoint(step: Step) -> Result<()> {
-    if FAIL_AT.with(Cell::get) == Some(step) {
-        return Err(Error::Invalid(format!("move stopped at {step:?} (test)")));
-    }
-    Ok(())
+    crate::failpoint::arm(step.map(|s| match s {
+        Step::AfterJournal => crate::failpoint::at::MOVE_JOURNAL,
+        Step::AfterCopies => crate::failpoint::at::MOVE_COPIES,
+    }));
 }
 
 fn extract(text: &str, n: usize) -> String {
@@ -151,6 +143,22 @@ fn begin(conn: &Connection) -> Result<rusqlite::Transaction<'_>> {
     )?)
 }
 
+/// The space a note is being moved to, when a move recorded its intent and has not ended (see the module
+/// documentation). A note in this state is neither replaced nor retired by anyone but the move: its copy may already
+/// be in the target, and a second version in the source would leave it active twice.
+pub(crate) fn pending_move(conn: &Connection, id: &str) -> Result<Option<String>> {
+    if !has_journal(conn)? {
+        return Ok(None);
+    }
+    Ok(conn
+        .query_row(
+            "SELECT target_space FROM move_pending WHERE source = ?1",
+            [id],
+            |r| r.get(0),
+        )
+        .optional()?)
+}
+
 /// What one chunk did.
 #[derive(Default)]
 struct Done {
@@ -163,7 +171,7 @@ struct Done {
 fn copy_of(f: &Fact) -> NewFact {
     let agent = f.source_agent.clone().unwrap_or_else(|| f.author.clone());
     let mut new = NewFact::agent(&f.text, &agent);
-    new.kind = f.kind.clone();
+    new.kind = Some(f.kind.clone());
     new.valid_from = Some(f.valid_from);
     new.valid_to = f.valid_to;
     new.tags = f.tags.clone();
@@ -208,7 +216,7 @@ fn complete(
         tx.execute_batch("RELEASE copy")?;
     }
     tx.commit()?;
-    failpoint(Step::AfterCopies)?;
+    crate::failpoint::hit(crate::failpoint::at::MOVE_COPIES)?;
     let reason = format!("moved to {to}");
     let tx = begin(src)?;
     for (f, c) in notes.iter().zip(&copied) {
@@ -318,28 +326,31 @@ impl Brain {
         let mut next = 0;
         while next < cap && start.elapsed() < limits.budget {
             let end = (next + CHUNK).min(cap);
+            // The intents are recorded for the notes still active when the write lock is held: a note replaced or
+            // retired meanwhile is not moved, and once its intent is recorded nothing else replaces or retires it
+            // (see `pending_move`) until the move ends.
             let mut notes = vec![];
+            let tx = begin(&src)?;
+            let at = crate::util::now();
             for id in &ids[next..end] {
-                match facts::read_fact(&src, id)? {
-                    Some(f) if f.status == "active" => notes.push(f),
+                match facts::read_fact(&tx, id)? {
+                    Some(f) if f.status == "active" => {
+                        tx.execute(
+                            "INSERT OR IGNORE INTO move_pending (source, target_space, who, at) VALUES (?1, ?2, ?3, ?4)",
+                            params![f.id, to.as_str(), who, at],
+                        )?;
+                        notes.push(f);
+                    }
                     // Moved or retired by another call since the list was read.
                     _ => out.already += 1,
                 }
             }
+            tx.commit()?;
             next = end;
             if notes.is_empty() {
                 continue;
             }
-            let tx = begin(&src)?;
-            let at = crate::util::now();
-            for f in &notes {
-                tx.execute(
-                    "INSERT OR IGNORE INTO move_pending (source, target_space, who, at) VALUES (?1, ?2, ?3, ?4)",
-                    params![f.id, to.as_str(), who, at],
-                )?;
-            }
-            tx.commit()?;
-            failpoint(Step::AfterJournal)?;
+            crate::failpoint::hit(crate::failpoint::at::MOVE_JOURNAL)?;
             let done = complete(&src, &dst, to, who, &notes)?;
             out.moved += done.moved;
             out.already += done.already;

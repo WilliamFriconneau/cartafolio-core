@@ -417,9 +417,11 @@ pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
         )
     })?;
     let brain = open(data)?;
-    // An interrupted move of notes is finished first (nothing goes to stdout: it is the protocol's).
-    if let Err(e) = brain.finish_moves() {
-        eprintln!("moves: interrupted moves not finished yet: {e}");
+    // What a crash cut off is finished or undone first (nothing goes to stdout: it is the protocol's).
+    match brain.recover() {
+        Ok(r) if r.is_clean() && r.swept => {}
+        Ok(r) => eprintln!("{}", r.summary()),
+        Err(e) => eprintln!("recovery: not finished yet: {e}"),
     }
     let app = crate::app::App::new(brain);
     let stdin = std::io::stdin();

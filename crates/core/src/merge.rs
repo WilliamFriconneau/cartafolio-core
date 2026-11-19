@@ -36,6 +36,7 @@ use crate::error::{Error, Result};
 use crate::export;
 use crate::facts::{self, Fact, NewFact};
 use crate::fsx::PrivateDir as _;
+use crate::fsx::PrivateFile as _;
 use crate::guide;
 use crate::schema::SPACE_MIGRATIONS;
 use crate::space::Space;
@@ -851,7 +852,7 @@ fn insert_copy_unlogged(
     replaces: Option<&str>,
 ) -> Result<String> {
     let mut new = NewFact::agent(&f.text, &agent_of(f));
-    new.kind = f.kind.clone();
+    new.kind = Some(f.kind.clone());
     new.valid_from = Some(f.valid_from);
     new.valid_to = f.valid_to;
     new.tags = facts::normalize_tags(tags)?;
@@ -972,10 +973,18 @@ fn copy_file(
     let path = dir.join(&f.sha256);
     if !path.exists() {
         let tmp = dir.join(format!(".{}.tmp", f.sha256));
-        fs::write(&tmp, &bytes)?;
-        crate::fsx::set_private_file(&tmp)?;
+        let mut out = fs::OpenOptions::new()
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .private_file()
+            .open(&tmp)?;
+        std::io::Write::write_all(&mut out, &bytes)?;
+        out.sync_all()?;
+        drop(out);
         undo.files.push(path.clone());
         fs::rename(&tmp, &path)?;
+        crate::fsx::sync_dir(&dir)?;
     }
     let described = match &f.fact_id {
         Some(id) => facts::read_fact(src, id)?,
@@ -1005,7 +1014,7 @@ fn copy_file(
     }
     let id = format!("file_{}", util::random_base32(10));
     let mut new = NewFact::agent(&text, "agent:merge");
-    new.kind = "context".into();
+    new.kind = Some("context".into());
     new.tags = facts::normalize_tags(&tags)?;
     let checked = facts::check_text(&text)?;
     let fact = facts::insert_unlogged(dst, space, &author, &new, &checked, None, None)?;
@@ -1147,6 +1156,8 @@ fn run(
     opts: &Options,
     undo: &mut Undo,
 ) -> Result<Report> {
+    // The bytes copied are named by records only at the commit: the sweep of a node that starts waits.
+    let _writing = crate::recover::writing(brain)?;
     // New spaces first: they are registered, and undone if anything fails.
     for r in resolved.iter().filter(|r| r.create) {
         brain.add_space_for(&r.dest, &user.id)?;

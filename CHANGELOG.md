@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A crash loses nothing and doubles nothing.** A file put, retired or erased when the machine stops is either fully done or not done; an erased recording's audio goes from every machine even if the node was killed mid-way; big files left out for an older machine are sent once it updates, even after a crash; leftovers are cleaned at start.
+
 ## 20261117.0.29
 
 - **Moving a big tag no longer stalls or locks.** `notes_move` goes by batches of 1000 notes (call again until nothing remains), a cut-off or doubled call never fails or duplicates a note, a crash mid-move is finished at the next start, and refusals say why; `supersede` keeps the kind of a note and can add tags.

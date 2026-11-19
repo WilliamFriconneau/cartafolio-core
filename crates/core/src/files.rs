@@ -240,6 +240,7 @@ pub(crate) fn store_blob(brain: &Brain, space: &Space, sha: &str, bytes: &[u8]) 
         f.write_all(bytes)?;
         f.sync_all()?;
         fs::rename(&tmp, &path)?;
+        crate::fsx::sync_dir(&dir)?;
     }
     Ok(())
 }
@@ -349,9 +350,12 @@ pub fn put_tagged(
     if let Some(same) = same_file(brain, space, &sha, &name)? {
         return Ok(same);
     }
-    // The bytes: written once per content, private.
+    // The bytes: written once per content, private, and named by a record before the sweep of a node that starts
+    // may look at them.
+    let writing = crate::recover::writing(brain)?;
     store_blob(brain, space, &sha, bytes)?;
     keep(
+        &writing,
         brain,
         space,
         author,
@@ -371,16 +375,19 @@ fn not_kept() -> Error {
     )
 }
 
-/// The same file under the same name is one file: its record, when it is already here.
-fn same_file(brain: &Brain, space: &Space, sha: &str, name: &str) -> Result<Option<FileInfo>> {
-    let conn = brain.open_space(space)?;
-    let same: Option<String> = conn
+fn same_id(conn: &rusqlite::Connection, sha: &str, name: &str) -> Result<Option<String>> {
+    Ok(conn
         .query_row(
             "SELECT id FROM files WHERE sha256 = ?1 AND name = ?2 AND status = 'active' LIMIT 1",
             params![sha, name],
             |r| r.get(0),
         )
-        .optional()?;
+        .optional()?)
+}
+
+/// The same file under the same name is one file: its record, when it is already here.
+fn same_file(brain: &Brain, space: &Space, sha: &str, name: &str) -> Result<Option<FileInfo>> {
+    let same = same_id(&brain.open_space(space)?, sha, name)?;
     match same {
         Some(id) => {
             Ok(Some(info(brain, space, &id)?.ok_or_else(|| {
@@ -442,6 +449,7 @@ pub fn put_path(
     head.truncate(got);
     let mime = sniff_head(&head, &name).ok_or_else(not_kept)?;
     // Copied beside the files of the space, the digest computed on the way.
+    let writing = crate::recover::writing(brain)?;
     let dir = blob_dir(brain, space);
     DirBuilder::new()
         .recursive(true)
@@ -493,13 +501,19 @@ pub fn put_path(
         let _ = fs::remove_file(&tmp);
     } else {
         fs::rename(&tmp, &target)?;
+        crate::fsx::sync_dir(&dir)?;
     }
-    keep(brain, space, author, &name, note, mime, &sha, size, tags)
+    keep(
+        &writing, brain, space, author, &name, note, mime, &sha, size, tags,
+    )
 }
 
-/// The record of a file whose bytes are kept: its describing fact, its row and its event.
+/// The record of a file whose bytes are kept: its describing fact, its row and its event, in one transaction, so that
+/// a crash leaves the file kept and told to the peers, or not kept at all (its bytes, named by nothing, go at the next
+/// start). The caller holds `writing` from the first byte written.
 #[allow(clippy::too_many_arguments)]
 fn keep(
+    _writing: &crate::recover::Writing,
     brain: &Brain,
     space: &Space,
     author: &str,
@@ -510,6 +524,7 @@ fn keep(
     size: u64,
     tags: &[String],
 ) -> Result<FileInfo> {
+    crate::failpoint::hit(crate::failpoint::at::FILE_PUT_BYTES)?;
     let note = text::normalize(
         &note
             .chars()
@@ -517,7 +532,21 @@ fn keep(
             .take(1000)
             .collect::<String>(),
     );
+    // A file too big to travel whole travels in chunks: their digests are in its event from the start. Read before
+    // the write lock is taken.
+    let list = if size > MAX_INLINE as u64 {
+        Some(crate::chunks::hashes_of(&blob_path(brain, space, sha))?)
+    } else {
+        None
+    };
     let conn = brain.open_space(space)?;
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    // Put twice at once, or again after an answer that never came: one record.
+    if let Some(id) = same_id(&tx, sha, name)? {
+        drop(tx);
+        return info(brain, space, &id)?
+            .ok_or_else(|| Error::Schema("file not found after reading".into()));
+    }
 
     // A fact that makes it findable; it stands alone, distinct from close notes.
     let text = if note.is_empty() {
@@ -526,12 +555,12 @@ fn keep(
         format!("File: {name} — {note}")
     };
     let mut fact = NewFact::agent(&text, &format!("agent:{author}"));
-    fact.kind = "context".into();
+    fact.kind = Some("context".into());
     fact.tags = tags.to_vec();
     let mut decided: Vec<String> = vec![];
     let mut fingerprinted = false;
     let fact_id = loop {
-        match facts::remember(&conn, space, author, fact.clone(), &decided)? {
+        match facts::remember_in(&tx, space, author, fact.clone(), &decided)? {
             Remembered::Created(f) => break Some(f.id),
             // A note of the same words is already there: another file of this name, or a note someone wrote. It is
             // never taken over (its file link and its tags stay its own): this file gets its own note, told apart by
@@ -549,7 +578,7 @@ fn keep(
         }
     };
     let id = format!("file_{}", util::random_base32(10));
-    conn.execute(
+    tx.execute(
         "INSERT INTO files (id, name, mime, size, sha256, note, fact_id, author, created_at)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
         params![
@@ -565,18 +594,14 @@ fn keep(
         ],
     )?;
     if let Some(f) = &fact_id {
-        conn.execute(
+        tx.execute(
             "UPDATE facts SET type = 'file', fields = ?2 WHERE id = ?1",
             params![f, json!({ "file_id": id }).to_string()],
         )?;
     }
-    // A file too big to travel whole travels in chunks: their digests are in its event from the start.
-    let list = if size > MAX_INLINE as u64 {
-        Some(crate::chunks::hashes_of(&blob_path(brain, space, sha))?)
-    } else {
-        None
-    };
-    crate::sync::record_file_put_with(&conn, &id, list.as_deref())?;
+    crate::sync::record_file_put_with(&tx, &id, list.as_deref())?;
+    crate::failpoint::hit(crate::failpoint::at::FILE_PUT_COMMIT)?;
+    tx.commit()?;
     info(brain, space, &id)?.ok_or_else(|| Error::Schema("file not found after writing".into()))
 }
 
@@ -670,14 +695,19 @@ pub fn retire(
     }
     let conn = brain.open_space(space)?;
     let f = info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))?;
-    conn.execute(
+    // The record, its note and its event together: a crash leaves the file retired everywhere, or not at all.
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    tx.execute(
         "UPDATE files SET status = 'retired', retired_reason = ?2 WHERE id = ?1",
         params![id, reason],
     )?;
     if let Some(fact) = &f.fact_id {
-        let _ = facts::retire(&conn, author, fact, &format!("file retired: {reason}"));
+        facts::retire_if_active(&tx, author, fact, &format!("file retired: {reason}"))?;
     }
-    crate::sync::record_file_retired(&conn, id, reason, false)?;
+    crate::sync::record_file_retired(&tx, id, reason, false)?;
+    crate::sync::settle_disputes(&tx)?;
+    crate::failpoint::hit(crate::failpoint::at::FILE_RETIRE_COMMIT)?;
+    tx.commit()?;
     info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))
 }
 
@@ -802,6 +832,11 @@ pub fn erase_at(
 ) -> Result<FileInfo> {
     let conn = brain.open_space(space)?;
     let f = info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))?;
+    if erased(brain, space, id)? {
+        // Erased already (an answer that never came, a retry): done once. Its bytes go if a crash kept them.
+        crate::recover::drop_unless_held(brain, space, &conn, &f.sha256)?;
+        return Ok(f);
+    }
     if f.status != "active" {
         return Err(Error::Invalid("this file is already retired".into()));
     }
@@ -855,28 +890,27 @@ pub fn erase_at(
         ));
     }
     let reason = format!("{ERASED}transcribed in {transcript}, recording erased by {author}");
-    conn.execute(
-        "UPDATE files SET status = 'retired', retired_reason = ?2 WHERE id = ?1",
+    // The record, its note and the event that tells every node to erase it too, in one transaction: a crash leaves
+    // the recording erased and told, or untouched.
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    let changed = tx.execute(
+        "UPDATE files SET status = 'retired', retired_reason = ?2 WHERE id = ?1 AND status = 'active'",
         params![id, reason],
     )?;
+    if changed != 1 {
+        return Err(Error::Invalid(
+            "this file was just retired by another call".into(),
+        ));
+    }
     if let Some(fact) = &f.fact_id {
-        let _ = facts::retire(&conn, author, fact, &format!("file {reason}"));
+        facts::retire_if_active(&tx, author, fact, &format!("file {reason}"))?;
     }
-    crate::sync::record_file_retired(&conn, id, &reason, true)?;
-    // The bytes go with the last record that holds them.
-    let others: i64 = conn.query_row(
-        "SELECT count(*) FROM files WHERE sha256 = ?1 AND id <> ?2
-         AND NOT (status = 'retired' AND retired_reason LIKE 'erased: %')",
-        params![f.sha256, id],
-        |r| r.get(0),
-    )?;
-    if others == 0 {
-        crate::chunks::drop_staged(brain, space, &f.sha256);
-        match fs::remove_file(blob_dir(brain, space).join(&f.sha256)) {
-            Ok(()) => {}
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e.into()),
-        }
-    }
+    crate::sync::record_file_retired(&tx, id, &reason, true)?;
+    crate::sync::settle_disputes(&tx)?;
+    crate::failpoint::hit(crate::failpoint::at::FILE_ERASE_COMMIT)?;
+    tx.commit()?;
+    crate::failpoint::hit(crate::failpoint::at::FILE_ERASE_BYTES)?;
+    // The bytes go with the last record that holds them; a crash before leaves them to the next start's sweep.
+    crate::recover::drop_unless_held(brain, space, &conn, &f.sha256)?;
     info(brain, space, id)?.ok_or_else(|| Error::Invalid("unknown file".into()))
 }
