@@ -2,7 +2,7 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
-## Crash safety of files (Unreleased)
+## Crash safety of files (20261117.0.30)
 
 - The node runs `Brain::recover()` (new, returns `Recovered`) at start, before serving; it replaces the call to
   `Brain::finish_moves()`, which it includes. An app that embeds the core calls it when it opens the data directory.

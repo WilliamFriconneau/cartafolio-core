@@ -4,7 +4,7 @@ members = ["crates/core", "crates/finances", "crates/server", "crates/manager", 
 exclude = ["vendor/tiny_http"]
 
 [workspace.package]
-version = "20261117.0.29"
+version = "20261117.0.30"
 edition = "2024"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/WilliamFriconneau/memcp-core"
