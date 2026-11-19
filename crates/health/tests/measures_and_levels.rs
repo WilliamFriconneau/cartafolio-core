@@ -415,3 +415,24 @@ fn a_level_between_two_signs_goes_to_the_first() {
     assert_eq!(levels("Douleur à 4 sur 10 et fatigue"), vec![lv("pain", 4)]);
     assert!(levels("fatigue et douleur à 4 sur 10").is_empty());
 }
+
+#[test]
+fn french_blood_pressure_accepts_dotted_pa_and_a_spoken_diastolic() {
+    for (text, systolic, diastolic) in [
+        ("P.A 172 86", 172.0, 86.0),
+        ("P.A. 172 86", 172.0, 86.0),
+        ("J’ai une tension de 17 neuf", 170.0, 90.0),
+    ] {
+        let found = detect(text, Lang::Fr).measures;
+        assert_eq!(found.len(), 1, "{text}");
+        assert_eq!(found[0].id, "blood_pressure");
+        assert_eq!(found[0].value, systolic);
+        assert_eq!(found[0].second, Some(diastolic));
+        assert_eq!(found[0].unit, "mmHg");
+    }
+    assert!(
+        detect("Article P.A. 17/11/2026", Lang::Fr)
+            .measures
+            .is_empty()
+    );
+}

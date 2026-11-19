@@ -48,6 +48,33 @@ pub(super) fn living(
     if !allowed || caller.read_paths(&space).is_some() {
         return Err(ToolError::Invalid(format!("no access to {space_name}")));
     }
+    let health_targets =
+        page == "targets" && brain.space_kind(&space).is_ok_and(|kind| kind == "health");
+    let sign_id = |name: &str| -> Option<String> {
+        let slug = sign_slug(name);
+        if !health_targets {
+            return Some(slug);
+        }
+        let slug = memcp_health::text::fold(&slug);
+        memcp_health::builtin()
+            .manifestations()
+            .iter()
+            .find(|m| {
+                slug == sign_slug(&m.id)
+                    || slug == sign_slug(&m.tag)
+                    || m.labels
+                        .values()
+                        .any(|label| slug == sign_slug(&memcp_health::text::fold(label)))
+            })
+            .map(|m| m.id.clone())
+    };
+    let sign_tags = |signs: &[String]| {
+        signs
+            .iter()
+            .filter_map(|s| sign_id(s))
+            .filter_map(|id| facts::normalize_tag(&format!("sign/{id}")).ok())
+            .collect::<Vec<_>>()
+    };
     let meta_tag = format!("living-meta/{page}");
     let conn = brain.open_space(&space)?;
     let meta: Option<(String, Value)> = conn
@@ -102,7 +129,7 @@ pub(super) fn living(
                     .map(|f| {
                         f.tags
                             .iter()
-                            .filter_map(|t| t.strip_prefix("sign/").map(String::from))
+                            .filter_map(|t| t.strip_prefix("sign/").and_then(sign_id))
                             .collect()
                     })
                     .unwrap_or_default();
@@ -168,50 +195,43 @@ pub(super) fn living(
             "behind": behind, "first_pass": since == 0, "delta": delta,
         }));
     }
-    let write_card =
-        |text: &str,
-         col: &str,
-         replacing: Option<&str>,
-         signs: &[String]|
-         -> Result<String, ToolError> {
-            let mut new = NewFact::agent(text, &caller.agent);
-            new.tags = vec![format!("living/{page}/{col}")];
-            // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
-            new.tags.extend(
-                signs
-                    .iter()
-                    .filter_map(|s| facts::normalize_tag(&format!("sign/{}", sign_slug(s))).ok()),
-            );
-            if let Some(old) = replacing {
-                return Ok(facts::supersede(
-                    &conn,
-                    &space,
-                    &caller.agent,
-                    old,
-                    new,
-                    Some(&format!("moved to {col}")),
-                )?
-                .id);
-            }
-            // A card is its own note, even next to a similar one.
-            match facts::remember(&conn, &space, &caller.agent, new, &[])? {
-                facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
-                facts::Remembered::NeedsDecision(c) => {
-                    let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
-                    let mut again = NewFact::agent(text, &caller.agent);
-                    again.tags = vec![format!("living/{page}/{col}")];
-                    again.tags.extend(signs.iter().filter_map(|s| {
-                        facts::normalize_tag(&format!("sign/{}", sign_slug(s))).ok()
-                    }));
-                    match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
-                        facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
-                        facts::Remembered::NeedsDecision(_) => {
-                            Err(ToolError::Invalid("the card could not be written".into()))
-                        }
+    let write_card = |text: &str,
+                      col: &str,
+                      replacing: Option<&str>,
+                      signs: &[String]|
+     -> Result<String, ToolError> {
+        let mut new = NewFact::agent(text, &caller.agent);
+        new.tags = vec![format!("living/{page}/{col}")];
+        // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
+        new.tags.extend(sign_tags(signs));
+        if let Some(old) = replacing {
+            return Ok(facts::supersede(
+                &conn,
+                &space,
+                &caller.agent,
+                old,
+                new,
+                Some(&format!("moved to {col}")),
+            )?
+            .id);
+        }
+        // A card is its own note, even next to a similar one.
+        match facts::remember(&conn, &space, &caller.agent, new, &[])? {
+            facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
+            facts::Remembered::NeedsDecision(c) => {
+                let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
+                let mut again = NewFact::agent(text, &caller.agent);
+                again.tags = vec![format!("living/{page}/{col}")];
+                again.tags.extend(sign_tags(signs));
+                match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
+                    facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
+                    facts::Remembered::NeedsDecision(_) => {
+                        Err(ToolError::Invalid("the card could not be written".into()))
                     }
                 }
             }
-        };
+        }
+    };
     let valid = |col: &str| -> Result<(), ToolError> {
         if columns.contains(&col) {
             Ok(())

@@ -132,3 +132,36 @@ fn a_named_list_holds_what_to_buy_from_notes_of_any_space() -> Res {
     );
     Ok(())
 }
+
+#[test]
+fn health_targets_only_return_referential_signs() -> Res {
+    let t = Temp::new("living-health");
+    let b = brain(&t)?;
+    let space = memcp_core::Space::new("health")?;
+    b.open_space(&space)?;
+    b.set_space_kind(&space, "health")?;
+    let ctl = b.open_control()?;
+    let rights = Rights::parse("health:rw")?;
+    let tok = access::connect_for(&ctl, OWNER, "assistant", &rights, None, false, false)?;
+    let c = access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?;
+    tools::call(
+        &b,
+        &c,
+        "living_set",
+        &json!({
+            "space": "health", "page": "targets",
+            "add": [{"text": "Suivi", "signs": ["Anxiété", "mal de tête", "après une longue journée"]}]
+        }),
+    )?;
+    let read = tools::call(
+        &b,
+        &c,
+        "living_get",
+        &json!({"space": "health", "page": "targets"}),
+    )?;
+    assert_eq!(
+        read["board"]["open"][0]["signs"],
+        json!(["anxiety", "headache"])
+    );
+    Ok(())
+}

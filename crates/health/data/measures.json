@@ -1,6 +1,6 @@
 {
  "schema": "memcp.health.measures/1",
- "version": 1,
+ "version": 2,
  "license": "AGPL-3.0-or-later",
  "provenance": "Written for this project. The keywords, the units and the plausible ranges follow what the first tagger of this project and the note reader of the health referential of a private project of the same owner (AGPL-3.0-or-later) already accepted; where a range differs the wider one is kept. The source has no measures file of this kind (its measures file lists questionnaires): unknown for the ranges, which are physiological bounds, not clinical limits.",
  "measures": [
@@ -10,7 +10,7 @@
    "kind": "pair",
    "unit": "mmHg",
    "labels": { "fr": "Tension artérielle", "en": "Blood pressure", "es": "Presión arterial" },
-   "keywords": { "fr": ["tension", "pression arterielle", "ta"], "en": ["blood pressure", "bp"] },
+   "keywords": { "fr": ["tension", "pression arterielle", "ta", "pa"], "en": ["blood pressure", "bp"] },
    "units": [
     { "id": "mmhg", "label": "mmHg", "words": ["mmhg"], "systolic": [60, 260], "diastolic": [30, 160] },
     { "id": "cmhg", "label": "cmHg", "words": ["cmhg"], "systolic": [5, 30], "diastolic": [3, 20], "factor": 10 }

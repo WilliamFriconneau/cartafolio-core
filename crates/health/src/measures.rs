@@ -28,9 +28,9 @@ pub struct Measure {
     pub tag: String,
 }
 
-const FILLER: [&str; 22] = [
-    "est", "de", "d", "du", "a", "au", "aux", "of", "is", "at", "was", "etait", "vaut", "autour",
-    "environ", "about", "around", "ce", "level", "niveau", "avec", "with",
+const FILLER: [&str; 23] = [
+    "est", "de", "d", "une", "du", "a", "au", "aux", "of", "is", "at", "was", "etait", "vaut",
+    "autour", "environ", "about", "around", "ce", "level", "niveau", "avec", "with",
 ];
 
 const DURATION_FILLER: [&str; 10] = [
@@ -181,6 +181,15 @@ fn read_pair(def: &MeasureDef, toks: &[Tok], k: usize) -> Option<Measure> {
                     pair: None,
                     int: true,
                 } => (s, t2.parse::<u32>().ok()?, j, format!("{s}/{t2}")),
+                Tok::Word(word) if (5..=30).contains(&s) => {
+                    let d = [
+                        "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
+                    ]
+                    .iter()
+                    .position(|&w| w == word)? as u32
+                        + 3;
+                    (s, d, j, format!("{s}/{d}"))
+                }
                 _ => return None,
             }
         }
@@ -255,17 +264,29 @@ fn read_at(def: &MeasureDef, toks: &[Tok], k: usize) -> Option<Measure> {
 
 impl MeasureDef {
     fn read(&self, toks: &[Tok], lang: Lang) -> Option<Measure> {
+        // A dotted French abbreviation is kept local to blood-pressure detection.
+        let pa = [String::from("p"), String::from("a")];
         let keys = lang
             .tables()
             .iter()
             .flat_map(|t| self.keywords[*t].iter())
             .collect::<Vec<_>>();
         for i in 0..toks.len() {
-            for key in &keys {
-                if !phrase_at(toks, i, key) {
-                    continue;
-                }
-                let after = i + key.len();
+            let dotted_pa = self.id == "blood_pressure"
+                && matches!(lang, Lang::Fr | Lang::Auto)
+                && is_word(toks.get(i), &pa[0])
+                && matches!(toks.get(i + 1), Some(Tok::Sym('.')))
+                && is_word(toks.get(i + 2), &pa[1]);
+            for (key, after) in keys
+                .iter()
+                .filter(|key| phrase_at(toks, i, key))
+                .map(|key| (key.as_slice(), i + key.len()))
+                .chain(dotted_pa.then(|| {
+                    let end = i + 3;
+                    let after = end + usize::from(matches!(toks.get(end), Some(Tok::Sym('.'))));
+                    (pa.as_slice(), after)
+                }))
+            {
                 let found = match self.kind {
                     Kind::Duration => {
                         let denied = i > 0
