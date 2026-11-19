@@ -1744,7 +1744,7 @@ function fail(x) { $("#err").textContent = x.message || String(x); setTimeout(()
 async function loadSpace(name) {
   const keep = SP && SP.name === name ? SP : null;
   let tab = keep ? keep.tab : "targets";
-  if (["register", "dashboard", "boards", "words", "tree", "graph", "notes"].includes(tab)) tab = "journal";
+  if (["register", "dashboard"].includes(tab)) tab = "journal";
   SP = { name, tab, tag: keep ? keep.tag : "", q: keep ? keep.q : "",
          filters: keep ? keep.filters : { type: "all", q: "", from: "", to: "", tag: "" },
          open: null, hash: keep ? keep.hash : "", jlimit: keep ? keep.jlimit : 100, cap: null };
@@ -1803,12 +1803,18 @@ function renderSpace() {
   const kl = (S.catalogue || []).find(x => x.key === ov.kind);
   $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes");
   renderRuleLine(ov);
-  $("#space-tabs").replaceChildren(...[["targets", "Targets"], ["journal", "Journal"], ["stats", "Stats"], ["files", "Inventory"]].map(([k, t]) =>
+  $("#space-tabs").replaceChildren(...[["targets", "Targets"], ["journal", "Journal"], ["stats", "Stats"], ["files", "Inventory"],
+    ["boards", "Boards"], ["notes", "Notes"], ["words", "Keywords and targets"], ["tree", "Tree"], ["graph", "Graph"]].map(([k, t]) =>
     el("button", { type: "button", class: SP.tab === k ? "on" : "", "aria-current": SP.tab === k ? "page" : null, onclick: () => { SP.tab = k; SP.open = null; renderSpace(); } }, t)));
   const body = $("#space-body");
   if (SP.tab === "targets") targetsView(body);
   else if (SP.tab === "stats") statsTab(body);
   else if (SP.tab === "files") filesTab(body);
+  else if (SP.tab === "boards") boardsView(body);
+  else if (SP.tab === "notes") notesView(body);
+  else if (SP.tab === "words") wordsView(body);
+  else if (SP.tab === "tree") body.replaceChildren(...treeView(ov.tags));
+  else if (SP.tab === "graph") graphView(body, { space: ov.space });
   else journalView(body);
 }
 
