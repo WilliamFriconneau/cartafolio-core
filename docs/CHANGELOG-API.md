@@ -2,6 +2,12 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Finance stats by month (20261117.0.36)
+
+Added; nothing is renamed. In a money space, `space_view` with `view: "stats"` adds `stats.finances.months`: an array of
+`{month: "YYYY-MM", income, outflow, net}` for the current month and the five before, all accounts together. A merged
+`chronology` page says `page.has_more: true` whenever the notes or the movements were cut at their own page size.
+
 ## Space views: Targets as home, one chronology, Stats, Inventory (20261117.0.35)
 
 Everything below is added; nothing is renamed. The rules and examples are in [CONTRACT.md](CONTRACT.md).
