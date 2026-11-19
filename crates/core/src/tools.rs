@@ -273,8 +273,8 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         }
         out.push(ToolDef {
             name: "notes_move",
-            description: "Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. Write access on both spaces is needed.".into(),
-            schema: json!({ "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "tag": { "type": "string" }, "dry_run": { "type": "boolean", "description": "Default true: preview only." } }, "required": ["from", "to", "tag"] }),
+            description: "Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. One call moves at most `limit` notes (default 1000) in about 20 s: call again until `remaining` is 0. A call cut off, or two at once, is safe: a note is moved once, and one already moved is counted in `already`. `failures` gives the reason of the first refusals. Write access on both spaces is needed.".into(),
+            schema: json!({ "type": "object", "properties": { "from": { "type": "string" }, "to": { "type": "string" }, "tag": { "type": "string" }, "dry_run": { "type": "boolean", "description": "Default true: preview only." }, "limit": { "type": "integer", "minimum": 1, "maximum": 5000, "description": "The most notes this call moves; default 1000." } }, "required": ["from", "to", "tag"] }),
         });
         out.push(ToolDef {
             name: "rules_set",
@@ -391,15 +391,16 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         }
         out.push(ToolDef {
             name: "supersede",
-            description: "Replaces an active fact with a corrected version. The old one stays readable in the history.".into(),
+            description: "Replaces an active fact with a corrected version. The old one stays readable in the history. Left out, `kind` and `tags` are those of the replaced fact; `tags` replaces them all, `add_tags` adds to them. The same text is accepted when the kind or the tags change.".into(),
             schema: json!({
                 "type": "object",
                 "properties": {
                     "id": { "type": "string", "description": "The fact to replace." },
                     "text": { "type": "string" },
                     "reason": { "type": "string" },
-                    "kind": { "type": "string", "enum": ["fact", "decision", "context", "passage"] },
-                    "tags": { "type": "array", "items": { "type": "string" }, "description": "The new tags; left out, the correction keeps the tags of the fact it replaces." },
+                    "kind": { "type": "string", "enum": ["fact", "decision", "context", "passage"], "description": "Left out, the correction keeps the kind of the fact it replaces." },
+                    "tags": { "type": "array", "items": { "type": "string" }, "description": "The new tags, replacing all of them; left out, the correction keeps the tags of the fact it replaces." },
+                    "add_tags": { "type": "array", "items": { "type": "string" }, "description": "Tags added to the kept tags (or to `tags` when given), none removed." },
                     "valid_from": { "type": "string" },
                     "valid_to": { "type": "string" }
                 },
@@ -871,18 +872,19 @@ fn check_len(caller: &Caller, text: &str) -> Result<(), ToolError> {
 
 /// The `tags` argument: a list of strings, checked and normalised (an error says what is accepted).
 fn tags_arg(args: &Value) -> Result<Vec<String>, ToolError> {
-    let Some(v) = args.get("tags") else {
+    tags_arg_named(args, "tags")
+}
+
+fn tags_arg_named(args: &Value, key: &str) -> Result<Vec<String>, ToolError> {
+    let Some(v) = args.get(key) else {
         return Ok(vec![]);
     };
+    let bad = || ToolError::Invalid(format!("{key:?} must be a list of text"));
     let list: Vec<String> = v
         .as_array()
-        .ok_or_else(|| ToolError::Invalid("\"tags\" must be a list of text".into()))?
+        .ok_or_else(bad)?
         .iter()
-        .map(|t| {
-            t.as_str()
-                .map(String::from)
-                .ok_or_else(|| ToolError::Invalid("\"tags\" must be a list of text".into()))
-        })
+        .map(|t| t.as_str().map(String::from).ok_or_else(bad))
         .collect::<Result<_, _>>()?;
     Ok(facts::normalize_tags(&list)?)
 }
@@ -1281,7 +1283,24 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 return Err(ToolError::Invalid("unknown fact".into()));
             };
             let reason = args.get("reason").and_then(Value::as_str);
-            let new = new_fact(caller, args)?;
+            let mut new = new_fact(caller, args)?;
+            // Left out, the kind is the replaced fact's, as the tags are: a corrected decision stays a decision.
+            if args.get("kind").is_none_or(Value::is_null) {
+                new.kind = old.kind.clone();
+            }
+            // `add_tags` completes the tags (those given in `tags`, else the replaced fact's) instead of replacing them.
+            let added = tags_arg_named(args, "add_tags")?;
+            if !added.is_empty() {
+                let mut all = if new.tags.is_empty() {
+                    old.tags.clone()
+                } else {
+                    new.tags.clone()
+                };
+                all.extend(added);
+                all.sort();
+                all.dedup();
+                new.tags = all;
+            }
             let retagged = !new.tags.is_empty();
             let f = facts::supersede(&conn, &space, author, id, new, reason)?;
             // The person changed the tags of a note: the node learns it.

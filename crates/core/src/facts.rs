@@ -668,6 +668,20 @@ pub(crate) fn remember_as(
     conn: &Connection,
     space: &Space,
     author: &str,
+    new: NewFact,
+    id: &str,
+) -> Result<Remembered> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let out = remember_as_in(&tx, space, author, new, id)?;
+    tx.commit()?;
+    Ok(out)
+}
+
+/// [`remember_as`] inside the caller's write transaction (a move writes a chunk of copies in one).
+pub(crate) fn remember_as_in(
+    conn: &Connection,
+    space: &Space,
+    author: &str,
     mut new: NewFact,
     id: &str,
 ) -> Result<Remembered> {
@@ -675,16 +689,14 @@ pub(crate) fn remember_as(
     check_kind(&new.kind)?;
     let t = check_text(&new.text)?;
     check_size(&t)?;
-    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
-    if let Some(existing) = read_fact(&tx, id)? {
+    if let Some(existing) = read_fact(conn, id)? {
         return Ok(Remembered::Duplicate(existing));
     }
-    if let Some(existing) = active_by_hash(&tx, &text::text_hash(&t))? {
+    if let Some(existing) = active_by_hash(conn, &text::text_hash(&t))? {
         return Ok(Remembered::Duplicate(existing));
     }
-    let fact = insert_unlogged(&tx, space, author, &new, &t, None, Some(id))?;
-    crate::sync::record_fact_created(&tx, &fact.id)?;
-    tx.commit()?;
+    let fact = insert_unlogged(conn, space, author, &new, &t, None, Some(id))?;
+    crate::sync::record_fact_created(conn, &fact.id)?;
     Ok(Remembered::Created(fact))
 }
 
@@ -776,12 +788,12 @@ pub fn tidy_after(conn: &Connection, id: &str, text: &str, now: i64) -> Result<M
 ///
 /// The old fact becomes `replaced` (never erased: its text stays readable through [`history`]) and
 /// points to the new one. The new fact keeps the old fact's tags unless `new` brings its own;
-/// the same text is accepted only when it is filed under different tags (sorting an inbox note).
+/// the same text is accepted only when it is filed under different tags (sorting an inbox note) or its kind changes.
 /// `reason` is stored in the history and the old fact's `status_reason`.
 ///
 /// # Errors
 /// [`Error::UnknownFact`] if `old_id` is not in `space`; [`Error::Invalid`] if the old fact is not
-/// `active`, the new text is identical (same tags) or already active as another fact, or `new` breaks
+/// `active`, the new text is identical (same tags, same kind) or already active as another fact, or `new` breaks
 /// the rules of [`remember`] (text, kind, tags).
 ///
 /// # Effects
@@ -821,16 +833,18 @@ pub(crate) fn supersede_as(
         )));
     }
     let hash = text::text_hash(&t);
-    // The same text is a change only when it is filed elsewhere: sorting a note of the inbox under its real tags.
+    // The same text is a change only when it is filed elsewhere (sorting a note of the inbox under its real tags) or
+    // when its kind changes (a fact that turns out to be a decision).
     let same_text = text::text_hash(&old.text) == hash;
     if same_text {
         let mut given_sorted = given_tags.clone();
         given_sorted.sort();
         let mut old_sorted = old.tags.clone();
         old_sorted.sort();
-        if given_tags.is_empty() || given_sorted == old_sorted {
+        let same_tags = given_tags.is_empty() || given_sorted == old_sorted;
+        if same_tags && new.kind == old.kind {
             return Err(Error::Invalid(
-                "the new text is identical to the old one".into(),
+                "the new text, kind and tags are identical to the old ones".into(),
             ));
         }
     }
@@ -936,6 +950,28 @@ pub(crate) fn retire_as(
     crate::sync::settle_disputes(&tx)?;
     tx.commit()?;
     read_fact(conn, id)?.ok_or_else(|| Error::UnknownFact(id.into()))
+}
+
+/// Retires `id` inside the caller's write transaction if it is still `active`, with its history event and its entry
+/// in the peers' log; answers whether it did. Nothing happens to a fact another call retired or replaced meanwhile:
+/// a move that finds its source already gone counts it, it does not fail.
+pub(crate) fn retire_if_active(
+    conn: &Connection,
+    author: &str,
+    id: &str,
+    reason: &str,
+) -> Result<bool> {
+    let changed = conn.execute(
+        "UPDATE facts SET status = 'retired', status_at = ?2, status_by = ?3, status_reason = ?4
+         WHERE id = ?1 AND status = 'active'",
+        params![id, util::now(), author, reason],
+    )?;
+    if changed == 0 {
+        return Ok(false);
+    }
+    event(conn, id, author, "retire", json!({ "reason": reason }))?;
+    crate::sync::record_fact_retired(conn, id, author, reason)?;
+    Ok(true)
 }
 
 /// Brings a retired fact back as a new version: a new active fact with the same text, tags, kind and validity, which

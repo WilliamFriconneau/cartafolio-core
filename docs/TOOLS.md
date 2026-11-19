@@ -637,28 +637,34 @@ Example call and answer:
 
 ### `notes_move`
 
-Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. Write access on both spaces is needed.
+Moves the notes that carry a tag (the tag and the tags under it) from one space to another, the way the page's « move this tag » does: each note is copied to the target with its tags and the original is retired with the reason « moved to … » (nothing is erased). Files, imported passages and the notes of the plumbing (`rules`, `dashboard`, `index`, `guide`) stay. `dry_run` (default true) only counts and shows a sample. One call moves at most `limit` notes (default 1000) in about 20 s: call again until `remaining` is 0. A call cut off, or two at once, is safe: a note is moved once, and one already moved is counted in `already`. `failures` gives the reason of the first refusals. Write access on both spaces is needed.
 
 - **Seen with:** write access on at least one space; not offered to a key limited to paths.
-- **Answer:** `{ from, to, tag, dry_run, matched, moved, left, failed, sample }`.
-- **Errors:** `invalid` for the same space on both sides or a bad tag; `denied` without write access on both.
-- **Effects:** with `dry_run: false`, writes the copies in the target and retires the originals.
+- **Answer:** `{ from, to, tag, dry_run, matched, moved, already, resumed, left, failed, failures, remaining, sample }`.
+  - `matched`: notes that carry the tag, `left` of them stay (files, imported passages).
+  - `moved`: notes this call copied and retired. `already`: notes another call, or a call cut off, had moved (or retired) before this one got to them; never an error. `resumed`: notes of an interrupted move that this call finished first.
+  - `failed`: notes the target refused; they stay in the source. `failures`: the first 10, `[{ id, reason }]`.
+  - `remaining`: notes still to move. **Call again until it is 0.** A refused note is not counted in it: it is tried again by the next call, which still ends.
+- **Errors:** `invalid` for the same space on both sides, a bad tag, or a `limit` outside 1..5000; `denied` without write access on both.
+- **Effects:** with `dry_run: false`, writes the copies in the target and retires the originals, by chunks of 200 notes in short transactions (other writers wait milliseconds, not the whole move).
+- **Crash safety:** the source and the target are two databases, so a move is journaled. For each chunk, the source first records the intent (note, target, who), then the target writes the copies under an id derived from the note and the target (written twice, it is one note; no closeness check), then the source retires the notes and clears their intents in one transaction. After a crash or a killed process at any point, the intents left are finished when the node starts and before every move: the copy is written if missing, then the source retired. Every note ends active exactly once, in the source or the target; the peers' log tells each copy and each retirement once.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `dry_run` | boolean | no | default true |
 | `from` | string | yes | - |
+| `limit` | integer | no | 1 to 5000, default 1000 |
 | `tag` | string | yes | - |
 | `to` | string | yes | - |
 
 Example call and answer:
 
 ```json
-{ "name": "notes_move", "arguments": { "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": true } }
+{ "name": "notes_move", "arguments": { "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": false, "limit": 1000 } }
 ```
 
 ```json
-{ "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": true, "matched": 12, "moved": 0, "left": 0, "failed": 0, "sample": [] }
+{ "from": "hobbies", "to": "firefighting", "tag": "pompiers", "dry_run": false, "matched": 6800, "moved": 1000, "already": 0, "resumed": 0, "left": 0, "failed": 0, "failures": [], "remaining": 5800, "sample": ["2026-11-17, first fire drill report"] }
 ```
 
 ### `rules_set`
@@ -1074,15 +1080,17 @@ Example call and answer:
 
 ### `supersede`
 
-Replaces an active fact with a corrected version. The old one stays readable in the history.
+Replaces an active fact with a corrected version. The old one stays readable in the history. Left out, `kind` and `tags` are those of the replaced fact; `tags` replaces them all, `add_tags` adds to them. The same text is accepted when the kind or the tags change.
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it).
 - **Answer:** `{ result: "superseded", fact }` (the new fact).
-- **Errors:** `invalid` (`unknown fact`, fact not active, same text, bad tag); `denied`; `limited`.
+- **Kind and tags:** left out, `kind` and `tags` are those of the replaced fact (a corrected decision stays a decision). `tags` replaces all the tags; `add_tags` adds to them (to `tags` when both are given) and removes none. The same text is accepted when the kind or the tags change; it is refused only when text, kind and tags are all the same.
+- **Errors:** `invalid` (`unknown fact`, fact not active, same text with the same kind and tags, bad tag); `denied`; `limited`.
 - **Effects:** The old fact becomes `replaced`, a new one is written, history and sync log updated. Nothing is erased.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
+| `add_tags` | array of string | no | - |
 | `id` | string | yes | - |
 | `kind` | string | no | one of fact, decision, context, passage |
 | `reason` | string | no | - |

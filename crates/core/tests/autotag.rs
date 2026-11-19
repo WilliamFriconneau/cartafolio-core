@@ -680,3 +680,69 @@ fn notes_move_previews_then_moves_the_notes_of_a_tag_and_keeps_the_originals() -
     );
     Ok(())
 }
+
+#[test]
+fn supersede_keeps_the_kind_unless_given_and_may_change_only_the_kind_or_add_tags() -> Res {
+    let t = Temp::new("supersede-kind");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let r = tools::call(
+        &b,
+        &c,
+        "remember",
+        &json!({ "space": "work", "text": "2026-11-19, the release goes out on Friday", "kind": "decision", "tags": ["release"] }),
+    )?;
+    let id = r["fact"]["id"].as_str().ok_or("id")?.to_string();
+    // A corrected text without `kind` stays a decision.
+    let v2 = tools::call(
+        &b,
+        &c,
+        "supersede",
+        &json!({ "id": id, "text": "2026-11-19, the release goes out on Monday" }),
+    )?;
+    assert_eq!(v2["fact"]["kind"], "decision", "{v2}");
+    let id2 = v2["fact"]["id"].as_str().ok_or("id")?.to_string();
+    // Only the kind changes: accepted.
+    let v3 = tools::call(
+        &b,
+        &c,
+        "supersede",
+        &json!({ "id": id2, "text": "2026-11-19, the release goes out on Monday", "kind": "context" }),
+    )?;
+    assert_eq!(v3["fact"]["kind"], "context", "{v3}");
+    let id3 = v3["fact"]["id"].as_str().ok_or("id")?.to_string();
+    // Nothing changes at all: refused.
+    assert!(
+        tools::call(
+            &b,
+            &c,
+            "supersede",
+            &json!({ "id": id3, "text": "2026-11-19, the release goes out on Monday" }),
+        )
+        .is_err()
+    );
+    // `add_tags` completes the tags, `tags` replaces them.
+    let v4 = tools::call(
+        &b,
+        &c,
+        "supersede",
+        &json!({ "id": id3, "text": "2026-11-19, the release goes out on Monday", "add_tags": ["planning"] }),
+    )?;
+    assert!(
+        has(&v4["fact"], "release") && has(&v4["fact"], "planning"),
+        "{v4}"
+    );
+    assert_eq!(v4["fact"]["kind"], "context", "{v4}");
+    let id4 = v4["fact"]["id"].as_str().ok_or("id")?.to_string();
+    let v5 = tools::call(
+        &b,
+        &c,
+        "supersede",
+        &json!({ "id": id4, "text": "2026-11-19, the release goes out on Monday", "tags": ["planning/q4"] }),
+    )?;
+    assert!(
+        has(&v5["fact"], "planning/q4") && !has(&v5["fact"], "release"),
+        "{v5}"
+    );
+    Ok(())
+}

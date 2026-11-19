@@ -290,10 +290,23 @@ pub(super) fn notes_move(
         }
     }
     let dry = args.get("dry_run").and_then(Value::as_bool).unwrap_or(true);
-    let moved = brain.move_by_tag(&from, &to, tag, &caller.agent, dry)?;
-    Ok(json!({
-        "from": from.as_str(), "to": to.as_str(), "tag": tag, "dry_run": dry,
-        "matched": moved.matched, "moved": moved.moved, "left": moved.left,
-        "failed": moved.failed, "sample": moved.sample,
-    }))
+    let limit = match args.get("limit") {
+        None | Some(Value::Null) => crate::moves::DEFAULT_LIMIT,
+        Some(v) => v
+            .as_u64()
+            .and_then(|n| usize::try_from(n).ok())
+            .filter(|n| (1..=crate::moves::MAX_LIMIT).contains(n))
+            .ok_or_else(|| {
+                ToolError::Invalid(format!(
+                    "limit: a whole number from 1 to {}",
+                    crate::moves::MAX_LIMIT
+                ))
+            })?,
+    };
+    let limits = crate::moves::Limits {
+        limit,
+        ..Default::default()
+    };
+    let moved = brain.move_by_tag_within(&from, &to, tag, &caller.agent, dry, &limits)?;
+    Ok(moved.to_json(&from, &to, tag, dry))
 }

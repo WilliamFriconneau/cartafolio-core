@@ -1237,7 +1237,7 @@ pub fn space_write(
                 .brain
                 .move_by_tag(&from, &to, tag, &who, dry)
                 .map_err(fail)?;
-            if !dry && moved.moved > 0 {
+            if !dry && moved.moved + moved.already + moved.resumed > 0 {
                 // What was moved is now the target's: a note with this tag is filed there from now on.
                 let (_, old) = read_rules(&to_conn);
                 let mut tags = clean_list(old.get("tags"), 100, true);
@@ -1249,14 +1249,7 @@ pub fn space_write(
                 let keywords = clean_list(old.get("keywords"), 100, false);
                 write_rules(&to_conn, &to, &who, tags, keywords)?;
             }
-            Ok(json!({
-                "dry_run": dry,
-                "matched": moved.matched,
-                "moved": moved.moved,
-                "left": moved.left,
-                "failed": moved.failed,
-                "sample": moved.sample,
-            }))
+            Ok(moved.to_json(&from, &to, tag, dry))
         }
         _ => Err(err(404, "not found")),
     }

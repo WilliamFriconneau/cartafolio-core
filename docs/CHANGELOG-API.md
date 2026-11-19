@@ -2,6 +2,12 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Big moves of notes, `supersede` keeps the kind (Unreleased)
+
+- **`notes_move`** takes `limit` (1 to 5000, default 1000) and stops after about 20 s: call again until `remaining` is 0. The answer adds `already` (notes moved before by another call or a call cut off; never an error), `resumed` (notes of an interrupted move finished first), `failures` (`[{id, reason}]`, the first 10) and `remaining`. `matched`, `moved`, `left`, `failed`, `sample` keep their meaning, except that `failed` notes are no longer « a near duplicate »: a move copy is never held back by its neighbours, and a refusal now carries its reason. The copy of a note gets an id derived from the note and the target (the one `triage_send` gives), so a note moved twice, or by two nodes, is one note. A move is crash-safe: see TOOLS.md, `notes_move`. `POST /admin/api/space/move-tag` answers the same fields (plus `from`, `to`, `tag`); the page repeats the call until `remaining` is 0.
+- **`supersede`** without `kind` keeps the kind of the replaced fact (it was reset to `fact`). The same text with another kind is accepted (it was refused as identical). New optional `add_tags`: tags added to the kept ones; `tags` still replaces them all.
+- A space database gets a table `move_pending` the first time it moves notes (no schema version change: older programs ignore it).
+
 ## Journal handoff reminder (20261117.0.28)
 
 Reads by assistants can include an `assistant_instructions` string at the top level of the tool payload, separate from stored records. It lists the whole, non-Inbox spaces involved in the read, with the connection's write rights. It asks for one dated handoff per substantive topic, covering the reasoning across multiple messages. Clients can ignore the new field without losing any data.

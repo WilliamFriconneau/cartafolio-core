@@ -136,6 +136,12 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
     }
     let brain = Brain::open(data).map_err(cli::fail)?;
     text::set_language(brain.language().map_err(cli::fail)?);
+    // Moves of notes that a crash cut off are finished before anything else is served (see core moves.rs).
+    match brain.finish_moves() {
+        Ok(0) => {}
+        Ok(n) => eprintln!("moves: {n} notes of an interrupted move finished"),
+        Err(e) => eprintln!("moves: interrupted moves not finished yet: {e}"),
+    }
     let mut app = app::App::new(brain);
     app.allowed_origins.extend(list(flag("--allow-origin")));
     // The admin page on this listener (console token): by default only on the loopback.
