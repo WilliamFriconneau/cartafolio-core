@@ -401,7 +401,11 @@ fn target_metrics(fields: &Value) -> Value {
         (Some(t), Some(r)) if t > 0.0 => Some((r / t * 1000.0).round() / 10.0),
         _ => None,
     };
-    let currency = get(&["currency", "devise"]);
+    // ISO 4217 codes are upper case; the fields travel as tags, which are lower-cased.
+    let currency = get(&["currency", "devise"]).map(|v| match v {
+        Value::String(s) => Value::String(s.to_uppercase()),
+        other => other,
+    });
     json!({
         "due": due,
         "target_amount": target,

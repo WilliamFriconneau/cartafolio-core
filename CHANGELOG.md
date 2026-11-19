@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261117.0.37
+
+- **The Targets card is localized.** Column names, move buttons, amounts, percentages and deadlines follow the page language (`25,7 %`, `15 déc. 2026` in French); the title no longer stays French in English. A card with only a deadline no longer shows an empty amounts row.
+- `metrics.currency` of a target is upper case (ISO 4217), whatever the case it was written in.
+
 ## 20261117.0.36
 
 - **The space page keeps every view.** Boards, Notes, Keywords, Tree and Graph are back beside Targets, Journal, Stats and Inventory; the Tree and Targets pages no longer print a stray `null`.

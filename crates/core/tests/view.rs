@@ -283,7 +283,7 @@ fn targets_are_the_living_board() -> Res {
         "living_set",
         &json!({ "space": "health", "page": "targets",
                  "add": [{ "text": "Migraine (f_source)", "column": "open", "signs": ["cephalee"],
-                           "fields": { "due": "2026-12-31", "target_amount": 10, "realized_amount": 4, "currency": "EUR" } }] }),
+                           "fields": { "due": "2026-12-31", "target_amount": 10, "realized_amount": 4, "currency": "eur" } }] }),
     )?;
     let id = added["added"][0].as_str().ok_or("card")?;
     let v = call(&b, &c, json!({ "space": "health", "view": "targets" }))?;
@@ -301,6 +301,10 @@ fn targets_are_the_living_board() -> Res {
     assert_eq!(target["metrics"]["target_amount"], 10.0);
     assert_eq!(target["metrics"]["realized_amount"], 4.0);
     assert_eq!(target["metrics"]["progress_percent"], 40.0);
+    assert_eq!(
+        target["metrics"]["currency"], "EUR",
+        "ISO codes are upper case"
+    );
     let card_id = target["id"].as_str().ok_or("card id")?.to_string();
     tools::call(
         &b,

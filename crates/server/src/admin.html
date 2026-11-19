@@ -981,6 +981,9 @@ const FR = {
   "Files": "Fichiers",
   "Inventory": "Inventaire",
   "Months": "Mois",
+  "of": "sur",
+  "due": "échéance",
+  "Read through the space view contract (memcp.view/1). A target groups the signs and symptoms it names; a financial goal carries a deadline, a target amount and a realized amount.": "Lu par le contrat de vues des espaces (memcp.view/1). Une cible regroupe les signes et symptômes qu’elle nomme ; un objectif financier porte une échéance, un montant cible et un montant réalisé.",
   "Signs": "Signes",
   "Measures": "Mesures",
   "Movements": "Mouvements",
@@ -1407,6 +1410,8 @@ const FR = {
   "Kept. Every machine follows at its next exchange.": "Gardée. Chaque machine suit à son prochain échange."
 };
 const FRX = [
+  [/^(Open|Reached) · (\d+)$/, (c, n) => (c === "Open" ? "En cours" : "Atteintes") + " · " + n],
+  [/^→ (Open|Reached)$/, c => "→ " + (c === "Open" ? "En cours" : "Atteinte")],
   [/^Last scan (.+) · (\d+) notes and files$/, (d, n) => "Dernier passage " + d + " · " + n + " notes et fichiers"],
   [/^This folder is held by (.+)\. Keep it on the device .*$/, a => "Ce dossier est tenu par " + a + ". Gardez-le sur l’appareil (toujours disponible hors ligne) : un fichier que le nuage n’a pas téléchargé ne peut pas être lu, et deux programmes qui écrivent les mêmes fichiers font des copies et des conflits. Cela fonctionne, mais un dossier qui reste sur l’appareil est plus fiable."],
   [/^(.+) becomes the folder of (.+) on this node, only read and indexed for search; nothing is written in it$/, (a, b) => a + " devient le dossier de " + b + " sur ce nœud, seulement lu et indexé pour la recherche ; rien n’y est écrit"],
@@ -1930,15 +1935,23 @@ async function targetsView(body) {
   }
   const cols = v.columns || ["open", "reached"], items = v.items || [];
   const when = v.last_pass && v.last_pass.at ? "last pass " + ago(v.last_pass.at) + (v.last_pass.by ? " by " + v.last_pass.by : "") : "no pass yet";
+  const money = (n, cur) => Number(n).toLocaleString(loc(), { maximumFractionDigits: 2 }) + (cur ? " " + String(cur).toUpperCase() : "");
+  const day = d => {
+    const t = /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? new Date(d + "T00:00:00") : null;
+    return t && !isNaN(t) ? t.toLocaleDateString(loc(), { day: "numeric", month: "short", year: "numeric" }) : String(d);
+  };
   const metric = card => {
     const m = card.metrics || {};
     if (m.target_amount == null && m.realized_amount == null && !m.due) return null;
     const pct = m.progress_percent == null ? null : Math.max(0, Math.min(100, m.progress_percent));
+    const hasAmount = m.target_amount != null || m.realized_amount != null;
     return el("div", { class: "metrics" },
-      el("div", { class: "mrow" }, el("span", {}, m.realized_amount == null ? "—" : m.realized_amount + (m.currency ? " " + m.currency : "")),
-        el("span", {}, m.target_amount == null ? "" : "of " + m.target_amount + (m.currency ? " " + m.currency : ""))),
+      hasAmount ? el("div", { class: "mrow" }, el("span", {}, m.realized_amount == null ? "—" : money(m.realized_amount, m.currency)),
+        el("span", {}, m.target_amount == null ? "" : ["of", " " + money(m.target_amount, m.currency)])) : null,
       pct == null ? null : el("div", { class: "bar", style: "width:" + pct + "%" }),
-      el("div", { class: "mrow" }, el("span", {}, pct == null ? "" : pct + "%"), el("span", {}, m.due ? "due " + m.due : "")));
+      pct == null && !m.due ? null : el("div", { class: "mrow" },
+        el("span", {}, pct == null ? "" : new Intl.NumberFormat(loc(), { style: "percent", maximumFractionDigits: 1 }).format(pct / 100)),
+        el("span", {}, m.due ? ["due", " " + day(m.due)] : "")));
   };
   const board = el("div", { class: "board" }, ...cols.map(col => el("div", { class: "col" },
     el("div", { class: "col-title" }, (COLUMN[col] || col) + " · " + items.filter(i => i.column === col).length),
@@ -1980,7 +1993,7 @@ async function targetsView(body) {
       el("span", { class: "tx" }, task.text),
       el("span", { class: "mute small" }, task.column)))) : null;
   body.replaceChildren(...[
-    el("div", { class: "board-head" }, el("h3", {}, "Cibles"), el("span", { class: "mute small" }, when)),
+    el("div", { class: "board-head" }, el("h3", {}, "Targets"), el("span", { class: "mute small" }, when)),
     board,
     addRow,
     taskBox,
