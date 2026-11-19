@@ -15,6 +15,8 @@ Keeping it simple is the point: a drive, folders, a page to look inside. Add-ons
 
 It is also a manager for your notes and files: your Markdown, your photos, your voice notes, organised into one memory you can browse yourself and your assistants can read.
 
+A public page presents it and its installation: **[williamfriconneau.github.io/memcp-core](https://williamfriconneau.github.io/memcp-core/)**, with a step-by-step guide in French at [/wiki/](https://williamfriconneau.github.io/memcp-core/wiki/). The pages are written from `site/`.
+
 ## Who made this, and how
 
 I am a nurse. I am a much better nurse than developer, so this project is **built with AI** (Claude, from Anthropic, in 2026). It is not a weekend of prompts: it is hours and hours of work with the AI, thousands of lines of tests, and four complete refactors since the first day, each one because the last idea was not good enough. I decide what it should do and why, I run it for real on my own home and my own health, and I read what ships. The code has automated tests and runs in daily use. It has **not** been audited by an independent party: read [SECURITY.md](SECURITY.md) before you put anything sensitive in it.

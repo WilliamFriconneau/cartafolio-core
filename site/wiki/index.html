@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Le guide de MemCP</title>
+<meta name="description" content="Installer MemCP, brancher un assistant, comprendre les espaces et l'Inbox. Le guide, page par page.">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<a class="skip" href="#contenu">Aller au contenu</a>
+<header class="nav">
+  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="../index.html#installer">Installer</a>
+    <a href="../index.html#fait">Ce qu'il fait</a>
+    <a href="../index.html#captures">Captures</a>
+    <a href="../index.html#prix">Gratuit ou payant</a>
+    <a href="index.html" aria-current="page">Guide</a>
+    <a class="nav-github" href="https://github.com/WilliamFriconneau/memcp-core">GitHub</a>
+  </nav>
+</header>
+
+<main id="contenu">
+  <div class="doc">
+    <aside class="doc-side">
+      <p>Le guide</p>
+      <a href="index.html" aria-current="page">Par où commencer</a>
+      <a href="installer-home-assistant.html">Installer sur Home Assistant</a>
+      <a href="installer-linux.html">Installer sur Linux</a>
+      <a href="mac-iphone-ipad.html">Le Mac, l'iPhone, l'iPad</a>
+      <a href="brancher-un-assistant.html">Brancher un assistant</a>
+      <a href="espaces-et-inbox.html">Espaces, Inbox et rangement</a>
+      <a href="sauvegarde.html">Vos autres machines, la sauvegarde</a>
+      <a href="sante-et-abonnement.html">La santé et l'abonnement</a>
+      <a href="securite.html">Sécurité et limites</a>
+      <a href="depannage.html">Dépannage</a>
+    </aside>
+
+    <article class="doc-body">
+      <p class="eyebrow">Le guide</p>
+      <h1>Par où commencer</h1>
+      <p>MemCP est une mémoire que vous hébergez. Un petit programme, appelé un nœud, garde vos notes, vos documents et vos espaces sur une machine que vous contrôlez. Vos assistants s'y connectent, lisent ce que vous les autorisez à lire, et écrivent ce que vous leur laissez écrire.</p>
+      <p>Comptez dix minutes pour la première installation. Le plus long, c'est de décider sur quelle machine la mémoire va vivre.</p>
+
+      <h2>Les trois étapes</h2>
+      <ol>
+        <li><strong>Installer le nœud.</strong> Sur un Home Assistant, un Linux ou un Mac. Il crée vos premiers espaces et affiche l'adresse de sa page dans votre navigateur.</li>
+        <li><strong>Dicter une note.</strong> Depuis la page, ou depuis l'app sur votre téléphone. Elle arrive dans l'Inbox, et le rangement l'envoie dans l'espace dont elle parle.</li>
+        <li><strong>Brancher un assistant.</strong> La page vous donne une adresse et une clé, et la ligne à coller dans Claude Code, OpenCode ou un autre client MCP.</li>
+      </ol>
+
+      <div class="note">
+        <p>Rien n'est envoyé à un service extérieur tant que vous ne branchez pas un assistant qui utilise un modèle en ligne. Le nœud, lui, reste chez vous et n'écoute que sur la machine.</p>
+      </div>
+
+      <h2>Quelle machine choisir</h2>
+      <table>
+        <thead><tr><th>Vous avez</th><th>Ce qu'on conseille</th></tr></thead>
+        <tbody>
+          <tr><td>Un Home Assistant qui tourne déjà</td><td>L'application MemCP, installée depuis son magasin. Le plus simple, et le nœud redémarre avec la maison.</td></tr>
+          <tr><td>Un serveur Linux ou une petite machine</td><td>Le script d'installation, puis le service de votre compte. La machine ne sert qu'à ça.</td></tr>
+          <tr><td>Un Mac allumé la journée</td><td>L'app MemCP : elle fait tourner le nœud, garde les clés dans le trousseau et transcrit la dictée sur place.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Ce que le nœud n'est pas</h2>
+      <p>Ce n'est pas un compte chez un hébergeur, ni un service qu'on peut couper. C'est un programme avec un dossier de données. Vous pouvez l'arrêter, copier le dossier, l'emporter sur une autre machine.</p>
+      <p>Et ce n'est pas un chat : MemCP ne répond pas à votre place. Il tient la mémoire, et l'assistant que vous aimez s'en sert.</p>
+
+      <div class="doc-next">
+        <a class="btn btn-primary" href="installer-home-assistant.html">Installer sur Home Assistant</a>
+        <a class="btn btn-quiet" href="installer-linux.html">Installer sur Linux</a>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></div>
+  <nav class="footer-links" aria-label="Liens">
+    <a href="https://github.com/WilliamFriconneau/memcp-core">Dépôt</a>
+    <a href="index.html">Guide</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/SECURITY.md">Sécurité</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/LICENSE">Licence AGPL</a>
+  </nav>
+</footer>
+</body>
+</html>

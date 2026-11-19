@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sécurité et limites — MemCP</title>
+<meta name="description" content="Ce que MemCP protège par défaut, ce qu'il ne protège pas encore, et ce qu'il faut savoir avant d'y mettre des données sensibles.">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<a class="skip" href="#contenu">Aller au contenu</a>
+<header class="nav">
+  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="../index.html#installer">Installer</a>
+    <a href="../index.html#fait">Ce qu'il fait</a>
+    <a href="../index.html#captures">Captures</a>
+    <a href="../index.html#prix">Gratuit ou payant</a>
+    <a href="index.html" aria-current="page">Guide</a>
+    <a class="nav-github" href="https://github.com/WilliamFriconneau/memcp-core">GitHub</a>
+  </nav>
+</header>
+
+<main id="contenu">
+  <div class="doc">
+    <aside class="doc-side">
+      <p>Le guide</p>
+      <a href="index.html">Par où commencer</a>
+      <a href="installer-home-assistant.html">Installer sur Home Assistant</a>
+      <a href="installer-linux.html">Installer sur Linux</a>
+      <a href="mac-iphone-ipad.html">Le Mac, l'iPhone, l'iPad</a>
+      <a href="brancher-un-assistant.html">Brancher un assistant</a>
+      <a href="espaces-et-inbox.html">Espaces, Inbox et rangement</a>
+      <a href="sauvegarde.html">Vos autres machines, la sauvegarde</a>
+      <a href="sante-et-abonnement.html">La santé et l'abonnement</a>
+      <a href="securite.html" aria-current="page">Sécurité et limites</a>
+      <a href="depannage.html">Dépannage</a>
+    </aside>
+
+    <article class="doc-body">
+      <p class="eyebrow">Vie privée</p>
+      <h1>Sécurité et limites</h1>
+      <p>Le projet est honnête sur ce qu'il fait et sur ce qu'il ne fait pas encore. Lisez cette page avant d'y mettre des données de santé ou celles d'autres personnes.</p>
+
+      <h2>Ce qui est protégé par défaut</h2>
+      <ul>
+        <li>Le nœud n'écoute que la boucle locale. Rien n'est ouvert sur le réseau tant que vous ne l'ouvrez pas.</li>
+        <li>Chaque assistant a sa propre clé, montrée une fois ; seule son empreinte est gardée. Une clé perdue se remplace, une connexion se révoque.</li>
+        <li>Les droits se donnent espace par espace. Un assistant sur Maison ne voit pas Travail, et un espace sensible n'est pas atteint à travers son parent.</li>
+        <li>Ce qui revient de la mémoire est étiqueté comme donnée, jamais comme consigne : une note ne peut pas commander à l'assistant.</li>
+        <li>Rien n'est effacé : une correction garde l'ancien texte dans l'historique, une suppression laisse une pierre tombale.</li>
+        <li>La synchronisation entre machines est chiffrée, et passe par votre tailnet si vous en avez un.</li>
+      </ul>
+
+      <h2>Ce qui n'est pas encore fait</h2>
+      <ul>
+        <li><strong>La mémoire n'est pas chiffrée au repos.</strong> Le disque de la machine peut l'être, ce n'est pas la même chose. Le chiffrement d'un espace par phrase secrète ou par clé est conçu, pas livré.</li>
+        <li><strong>Aucun audit indépendant.</strong> Une première revue de sécurité est publiée dans <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/reviews/">docs/reviews</a>, avec ce qu'elle a lu et ce qu'elle n'a pas lu. Lisez-la.</li>
+        <li><strong>Le port 8791 de l'application Home Assistant n'est pas chiffré.</strong> Il attend Tailscale ou un proxy TLS devant lui.</li>
+        <li><strong>Pas de signature des événements de synchronisation</strong> : c'est écrit dans <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/FEDERATION.md">docs/FEDERATION.md</a>.</li>
+      </ul>
+
+      <h2>Le code est écrit avec l'IA</h2>
+      <p>L'auteur est infirmier. Il décide de ce que le programme doit faire, il lit ce qui sort, il l'utilise tous les jours sur sa propre maison et sa propre santé. Le code a des tests automatiques, et il n'a pas été audité. Ce n'est pas une garantie, c'est une méthode, dite clairement.</p>
+
+      <h2>La licence</h2>
+      <p>AGPL-3.0-or-later. Vous pouvez l'utiliser, l'étudier, le modifier et le partager, y compris au travail. Si vous en faites un service fermé pour d'autres, il faut une licence commerciale. Les versions 0.23.1 et antérieures restent sous Apache-2.0.</p>
+
+      <h2>Et vos assistants</h2>
+      <p>Chaque assistant envoie à son fournisseur ce qu'il lit pour répondre. Un modèle local, ou la fonction d'Apple sur l'appareil, évite cet envoi. Le choix vous appartient, et il se fait connexion par connexion.</p>
+
+      <div class="note">
+        <p>Des données de santé de tiers, dans un cadre professionnel, demandent plus que ce que MemCP offre aujourd'hui : un hébergement certifié HDS, une analyse d'impact, un chiffrement. Ne l'utilisez pas pour ça en production.</p>
+      </div>
+
+      <div class="doc-next">
+        <a class="btn btn-primary" href="depannage.html">Dépannage</a>
+        <a class="btn btn-quiet" href="https://github.com/WilliamFriconneau/memcp-core/blob/main/SECURITY.md">Le document de sécurité</a>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></div>
+  <nav class="footer-links" aria-label="Liens">
+    <a href="https://github.com/WilliamFriconneau/memcp-core">Dépôt</a>
+    <a href="index.html">Guide</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/SECURITY.md">Sécurité</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/LICENSE">Licence AGPL</a>
+  </nav>
+</footer>
+</body>
+</html>

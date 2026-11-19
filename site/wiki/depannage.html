@@ -1,0 +1,106 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dépannage — MemCP</title>
+<meta name="description" content="Les pannes courantes de MemCP et quoi faire : nœud injoignable, clé refusée, note qui reste dans l'Inbox, transcription en échec.">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<a class="skip" href="#contenu">Aller au contenu</a>
+<header class="nav">
+  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="../index.html#installer">Installer</a>
+    <a href="../index.html#fait">Ce qu'il fait</a>
+    <a href="../index.html#captures">Captures</a>
+    <a href="../index.html#prix">Gratuit ou payant</a>
+    <a href="index.html" aria-current="page">Guide</a>
+    <a class="nav-github" href="https://github.com/WilliamFriconneau/memcp-core">GitHub</a>
+  </nav>
+</header>
+
+<main id="contenu">
+  <div class="doc">
+    <aside class="doc-side">
+      <p>Le guide</p>
+      <a href="index.html">Par où commencer</a>
+      <a href="installer-home-assistant.html">Installer sur Home Assistant</a>
+      <a href="installer-linux.html">Installer sur Linux</a>
+      <a href="mac-iphone-ipad.html">Le Mac, l'iPhone, l'iPad</a>
+      <a href="brancher-un-assistant.html">Brancher un assistant</a>
+      <a href="espaces-et-inbox.html">Espaces, Inbox et rangement</a>
+      <a href="sauvegarde.html">Vos autres machines, la sauvegarde</a>
+      <a href="sante-et-abonnement.html">La santé et l'abonnement</a>
+      <a href="securite.html">Sécurité et limites</a>
+      <a href="depannage.html" aria-current="page">Dépannage</a>
+    </aside>
+
+    <article class="doc-body">
+      <p class="eyebrow">Quand ça coince</p>
+      <h1>Dépannage</h1>
+      <p>Presque tout se règle avec deux réflexes : le nœud tourne-t-il, et la clé est-elle la bonne. Commencez par là.</p>
+
+      <h2>Le premier outil : <code>memcp doctor</code></h2>
+      <p>Il vérifie le dossier de données, les droits des fichiers, les connexions, les pairs et ce qui attend. Sa sortie dit quoi corriger, sans jargon. Dans l'application Home Assistant, lancez-le dans le conteneur ; ailleurs, dans un terminal.</p>
+
+      <h2>Le nœud ne répond pas</h2>
+      <ul>
+        <li>Sur Home Assistant : l'application est-elle démarrée ? Les journaux sont dans son onglet <strong>Journal</strong>.</li>
+        <li>Sur Linux : <code>systemctl --user status memcp</code>, puis le journal du service.</li>
+        <li>Sur un Mac : l'app doit être ouverte, ou le service lancé. Une fenêtre fermée ne suffit pas à arrêter le nœud, l'icône de la barre des menus dit s'il tourne.</li>
+      </ul>
+
+      <h2>L'assistant reçoit « clé refusée »</h2>
+      <p>Code 3 côté commande : la clé est inconnue, révoquée ou expirée. Code 4 : la clé est bonne, mais elle n'a pas le droit demandé. Dans les deux cas, ouvrez la page, regardez les connexions, et donnez à l'assistant une clé neuve avec les bons espaces. Une clé ne se réaffiche jamais : si vous ne l'avez plus, révoquez la connexion et créez-en une autre.</p>
+
+      <h2>L'assistant ne voit pas un espace</h2>
+      <p>Un espace doit être coché sur la connexion. Et les droits ne descendent pas : si vous avez coché <em>Perso</em>, l'assistant ne lit pas <em>Perso/Santé</em> pour autant. C'est voulu.</p>
+
+      <h2>Une note reste dans l'Inbox</h2>
+      <p>Deux raisons s'affichent à côté d'elle : aucun mot-clé ne correspond, ou deux espaces se disputent la note. Ouvrez l'espace concerné, ajoutez le mot qui manque dans ses mots-clés, ou envoyez la note d'un geste. La fois suivante, elle ira toute seule.</p>
+
+      <h2>Un enregistrement n'est pas transcrit</h2>
+      <p>La transcription est une option du nœud : vérifiez qu'elle est active et que le modèle répond. Un enregistrement qui échoue trois fois porte une marque et reste visible ; la page propose de réessayer. L'audio n'est effacé qu'une semaine après que son texte a été rangé.</p>
+
+      <h2>Deux machines ne se parlent plus</h2>
+      <p>Elles doivent se joindre : même réseau, ou même tailnet. <code>memcp peers</code> liste les pairs connus et leur dernière nouvelle. Un pair absent se réveille au prochain contact ; rien n'est perdu, la mémoire attend.</p>
+
+      <h2>Où chercher plus loin</h2>
+      <table>
+        <thead><tr><th>Document</th><th>Ce qu'il couvre</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/CLI.md">docs/CLI.md</a></td><td>Toutes les commandes, les codes de sortie, ce qu'elles impriment.</td></tr>
+          <tr><td><a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/REFERENCE.md">docs/REFERENCE.md</a></td><td>Le manuel complet : routes, connexions, sauvegarde, assistants.</td></tr>
+          <tr><td><a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/TOOLS.md">docs/TOOLS.md</a></td><td>Chaque outil MCP, avec ses paramètres et ce qu'il renvoie.</td></tr>
+          <tr><td><a href="https://github.com/WilliamFriconneau/memcp-core/issues">Les tickets</a></td><td>Un bogue à signaler, une question à poser. Dites la version, la plateforme et ce que vous faisiez.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <p>Avant d'ouvrir un ticket, joignez la sortie de <code>memcp doctor</code> : elle évite trois échanges. Ne collez jamais une clé dans un ticket.</p>
+      </div>
+
+      <div class="doc-next">
+        <a class="btn btn-primary" href="index.html">Retour au guide</a>
+        <a class="btn btn-quiet" href="https://github.com/WilliamFriconneau/memcp-core/issues">Ouvrir un ticket</a>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></div>
+  <nav class="footer-links" aria-label="Liens">
+    <a href="https://github.com/WilliamFriconneau/memcp-core">Dépôt</a>
+    <a href="index.html">Guide</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/SECURITY.md">Sécurité</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/LICENSE">Licence AGPL</a>
+  </nav>
+</footer>
+</body>
+</html>

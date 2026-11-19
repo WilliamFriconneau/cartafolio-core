@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Installer sur Linux — MemCP</title>
+<meta name="description" content="Installer MemCP sur Debian, Ubuntu ou Arch : le script, la configuration, le service, la sauvegarde et le TLS.">
+<meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0c0d" media="(prefers-color-scheme: dark)">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<a class="skip" href="#contenu">Aller au contenu</a>
+<header class="nav">
+  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="../index.html#installer">Installer</a>
+    <a href="../index.html#fait">Ce qu'il fait</a>
+    <a href="../index.html#captures">Captures</a>
+    <a href="../index.html#prix">Gratuit ou payant</a>
+    <a href="index.html" aria-current="page">Guide</a>
+    <a class="nav-github" href="https://github.com/WilliamFriconneau/memcp-core">GitHub</a>
+  </nav>
+</header>
+
+<main id="contenu">
+  <div class="doc">
+    <aside class="doc-side">
+      <p>Le guide</p>
+      <a href="index.html">Par où commencer</a>
+      <a href="installer-home-assistant.html">Installer sur Home Assistant</a>
+      <a href="installer-linux.html" aria-current="page">Installer sur Linux</a>
+      <a href="mac-iphone-ipad.html">Le Mac, l'iPhone, l'iPad</a>
+      <a href="brancher-un-assistant.html">Brancher un assistant</a>
+      <a href="espaces-et-inbox.html">Espaces, Inbox et rangement</a>
+      <a href="sauvegarde.html">Vos autres machines, la sauvegarde</a>
+      <a href="sante-et-abonnement.html">La santé et l'abonnement</a>
+      <a href="securite.html">Sécurité et limites</a>
+      <a href="depannage.html">Dépannage</a>
+    </aside>
+
+    <article class="doc-body">
+      <p class="eyebrow">Installation</p>
+      <h1>Sur Linux</h1>
+      <p>Une commande, un dossier de données, une page. Le programme est un binaire : pas de conteneur obligatoire, pas de base à préparer.</p>
+
+      <h2>Le script</h2>
+      <pre><code>curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh</code></pre>
+      <p>Il demande où doit vivre la mémoire, télécharge le binaire, vérifie son empreinte contre le fichier <code>SHA256SUMS</code> publié avec la version, puis lance <code>memcp setup</code> : un dossier privé, vos premiers espaces, un fichier <code>memcp.toml</code>.</p>
+      <p>Il peut ensuite lancer le nœud comme service de votre compte, qui n'écoute que la boucle locale, et il affiche deux choses à garder : l'adresse de la page, et une adresse avec une clé pour un assistant.</p>
+      <p>Lisez le script avant de le lancer, c'est un fichier texte. <code>--help</code> liste les options.</p>
+
+      <h2>Ce que vous obtenez</h2>
+      <table>
+        <thead><tr><th>Quoi</th><th>Où</th></tr></thead>
+        <tbody>
+          <tr><td>Les données</td><td>Un dossier de votre choix, lisible par votre compte seulement.</td></tr>
+          <tr><td>La page</td><td><code>http://127.0.0.1:8791</code> sur la machine, ou l'adresse de votre tailnet.</td></tr>
+          <tr><td>Le service</td><td>Une unité systemd de votre utilisateur, ou un conteneur si vous préférez.</td></tr>
+        </tbody>
+      </table>
+
+      <h2>Le service, la sauvegarde, le TLS</h2>
+      <p><a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/docs/LINUX.md">docs/LINUX.md</a> donne les unités systemd durcies, les paquets Debian et Arch, une sauvegarde nocturne, les règles de pare-feu et deux recettes TLS. C'est le document à suivre si la machine est un vrai serveur.</p>
+      <p>La sauvegarde tient en une commande : <code>memcp export --to /chemin/du/sauvegardes</code>. Elle produit une archive avec les empreintes, qu'une autre installation sait reprendre.</p>
+
+      <h2>Mettre à jour</h2>
+      <p>Relancez le script d'installation : il remplace le binaire, garde le dossier de données. Le journal des versions est dans <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/CHANGELOG.md">CHANGELOG.md</a>.</p>
+
+      <div class="note">
+        <p>Une machine suffit pour commencer. Si vous en avez deux, la seconde rejoint la mémoire et en garde une copie : voir <a href="sauvegarde.html">vos autres machines</a>.</p>
+      </div>
+
+      <div class="doc-next">
+        <a class="btn btn-primary" href="brancher-un-assistant.html">Brancher un assistant</a>
+        <a class="btn btn-quiet" href="sauvegarde.html">Sauvegarde et autres machines</a>
+      </div>
+    </article>
+  </div>
+</main>
+
+<footer class="footer">
+  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>MemCP</span></div>
+  <nav class="footer-links" aria-label="Liens">
+    <a href="https://github.com/WilliamFriconneau/memcp-core">Dépôt</a>
+    <a href="index.html">Guide</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/SECURITY.md">Sécurité</a>
+    <a href="https://github.com/WilliamFriconneau/memcp-core/blob/main/LICENSE">Licence AGPL</a>
+  </nav>
+</footer>
+</body>
+</html>
