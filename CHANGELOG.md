@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261117.0.31
 
 - **The memories of a Home Assistant installation are repaired at start too.** The manager, `memcp-sync` and the apps' own node now run the start-up repair pass on every memory they open, as the server did: a crash there is finished or undone before anything is served.
 
