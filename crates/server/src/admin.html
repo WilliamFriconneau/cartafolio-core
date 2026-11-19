@@ -2272,7 +2272,16 @@ async function moveTags(from, to, tag) {
   const dlg = $("#move-dlg"); $("#move-body").replaceChildren(body);
   $("#move-go").onclick = async () => {
     dlg.close();
-    try { const r = await api("space/move-tag", { from, to, tag, dry_run: false }); toast(r.moved + " notes moved" + (r.failed ? ", " + r.failed + " need your decision" : "")); } catch (x) { fail(x); }
+    // A big tag goes in several calls: each one moves a bounded batch and says how many remain.
+    let moved = 0, failed = 0;
+    try {
+      for (let r = { remaining: 1 }; r.remaining > 0;) {
+        r = await api("space/move-tag", { from, to, tag, dry_run: false });
+        moved += r.moved + r.already + r.resumed; failed = r.failed;
+        if (r.remaining > 0) toast(moved + " notes moved, " + r.remaining + " to go…");
+      }
+      toast(moved + " notes moved" + (failed ? ", " + failed + " could not move" : ""));
+    } catch (x) { fail(x); }
     renderLayout(); load();
   };
   dlg.showModal();

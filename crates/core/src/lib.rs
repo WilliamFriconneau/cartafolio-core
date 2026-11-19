@@ -62,7 +62,7 @@ pub mod lifecycle;
 pub mod merge;
 #[cfg(test)]
 mod migration_tests;
-mod moves;
+pub mod moves;
 pub mod origin;
 pub mod pairing;
 pub mod peers;
