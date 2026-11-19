@@ -147,6 +147,13 @@ impl Manager {
     fn configure(app: &mut App, opts: &Options) {
         if let Some(u) = &opts.public_url {
             app.public_url = u.trim_end_matches('/').to_string();
+        } else if let Some(u) = opts
+            .listen
+            .as_deref()
+            .and_then(memcp_server::app::listened_url)
+        {
+            // No address given: the one it listens on.
+            app.public_url = u;
         }
         app.allowed_origins.clone_from(&opts.allowed_origins);
         app.login_url = opts

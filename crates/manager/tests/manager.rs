@@ -899,3 +899,21 @@ fn the_manager_repairs_what_a_crash_cut_off_in_a_persons_memory() -> Res {
     assert_eq!(logged, 1, "the file event is written");
     Ok(())
 }
+
+/// Without `--public-url`, the address handed out is the one the manager listens on; a given one still wins.
+#[test]
+fn without_a_public_address_the_manager_names_the_port_it_listens_on() -> Res {
+    let d = Dir::new("listened");
+    let mut o = options();
+    o.public_url = None;
+    o.listen = Some("0.0.0.0:8799".into());
+    let m = Manager::open(d.path(), o).map_err(|e| e.1)?;
+    assert_eq!(m.registry().public_url, "http://127.0.0.1:8799");
+    drop(m);
+    let d = Dir::new("listened-given");
+    let mut o = options();
+    o.listen = Some("0.0.0.0:8799".into());
+    let m = Manager::open(d.path(), o).map_err(|e| e.1)?;
+    assert_eq!(m.registry().public_url, "https://memory.example.net");
+    Ok(())
+}

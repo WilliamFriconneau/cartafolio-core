@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **A connection made on a node served on another port works.** Without `--public-url`, the server and the manager hand out the address they listen on (a wildcard host becomes 127.0.0.1), not port 8791: the Mac app, which serves on 8799, no longer throws its connection away.
+
 ## 20261117.0.31
 
 - **The memories of a Home Assistant installation are repaired at start too.** The manager, `memcp-sync` and the apps' own node now run the start-up repair pass on every memory they open, as the server did: a crash there is finished or undone before anything is served.

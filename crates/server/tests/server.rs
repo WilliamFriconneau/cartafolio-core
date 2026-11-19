@@ -1886,3 +1886,61 @@ fn an_endless_request_line_or_header_is_cut_short() -> Res {
     assert!(head.starts_with("HTTP/1.1 200"), "{head}");
     Ok(())
 }
+
+/// Served on a port of its own without `--public-url`, the node names that port in what it hands out: the address of a
+/// new connection and the server a device pairs with (they named port 8791 whatever the listener, and the app that
+/// made the connection threw it away).
+#[test]
+fn without_a_public_address_the_node_names_the_port_it_listens_on() -> Res {
+    use std::io::{BufRead, BufReader};
+    let dir = temp("listened");
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let init = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args(["init", "--spaces", "personal"])
+        .output()?;
+    assert!(init.status.success(), "{init:?}");
+    let console = access::console_token(&Brain::open(&dir)?.open_control()?, "owner")?;
+    // A port of its own, not the default one.
+    let port = std::net::TcpListener::bind("127.0.0.1:0")?
+        .local_addr()?
+        .port();
+    let listen = format!("127.0.0.1:{port}");
+    let mut child = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args(["serve", "--listen", &listen])
+        .stderr(std::process::Stdio::piped())
+        .spawn()?;
+    let mut reader = BufReader::new(child.stderr.take().ok_or("no stderr")?);
+    let mut line = String::new();
+    while !line.contains("listening on") {
+        line.clear();
+        if reader.read_line(&mut line)? == 0 {
+            return Err("the server stopped".into());
+        }
+    }
+    std::thread::spawn(move || for _ in reader.lines() {});
+    let _srv = Child(child, dir.clone());
+    let post = |path: &str, body: &str| -> Result<Value, Box<dyn Error>> {
+        let (head, b) = http(
+            port,
+            &format!(
+                "POST {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {console}\r\nX-Requested-With: memcp\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+                body.len()
+            ),
+        )?;
+        assert!(head.starts_with("HTTP/1.1 200"), "{path}: {head}\n{b}");
+        Ok(serde_json::from_str(&b)?)
+    };
+    let made = post(
+        "/admin/api/connections",
+        &json!({ "agent": "mac-app", "rights": "all" }).to_string(),
+    )?;
+    let url = format!("http://127.0.0.1:{port}");
+    assert_eq!(made["mcp_url"], format!("{url}/mcp/mac-app"), "{made}");
+    let pairing = post("/admin/api/pairing", "{}")?;
+    assert_eq!(pairing["server"], url, "{pairing}");
+    Ok(())
+}

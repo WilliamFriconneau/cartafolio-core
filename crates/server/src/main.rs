@@ -161,6 +161,9 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok())
     {
         app.public_url = u.trim_end_matches('/').to_string();
+    } else if let Some(u) = app::listened_url(listen) {
+        // No address given: the one it listens on (the connections it makes name it).
+        app.public_url = u;
     }
     app.node_name = flag("--node-name").unwrap_or("MemCP").to_string();
     // The name the node goes by in the peer directory: the one given, else the one it made for itself once.

@@ -96,6 +96,28 @@ fn loopback_origin(origin: &str) -> bool {
     .any(|p| origin == *p || origin.starts_with(&format!("{p}:")))
 }
 
+/// The address a node is reached at when no `--public-url` says it: the one it listens on, over http (a wildcard host
+/// is reached on 127.0.0.1). `None` for a port the system picks (`:0`) or an address that is not one.
+pub fn listened_url(listen: &str) -> Option<String> {
+    if let Ok(a) = listen.parse::<std::net::SocketAddr>() {
+        if a.port() == 0 {
+            return None;
+        }
+        let host = match a.ip() {
+            ip if ip.is_unspecified() => "127.0.0.1".to_string(),
+            std::net::IpAddr::V4(v4) => v4.to_string(),
+            std::net::IpAddr::V6(v6) => format!("[{v6}]"),
+        };
+        return Some(format!("http://{host}:{}", a.port()));
+    }
+    let (host, port) = listen.rsplit_once(':')?;
+    let port: u16 = port.parse().ok().filter(|p| *p != 0)?;
+    if host.is_empty() || host.contains(['/', ' ']) {
+        return None;
+    }
+    Some(format!("http://{host}:{port}"))
+}
+
 impl App {
     pub fn new(brain: Brain) -> App {
         App {
@@ -674,4 +696,35 @@ pub fn large_body_allowed(
 fn address_segment(raw: &str) -> Option<&str> {
     let a = raw.trim_end_matches('/');
     (Space::new(a).is_ok() || access::valid_agent(a)).then_some(a)
+}
+
+#[cfg(test)]
+mod listened {
+    use super::listened_url;
+
+    #[test]
+    fn the_default_address_follows_the_listener() {
+        assert_eq!(
+            listened_url("127.0.0.1:8799").as_deref(),
+            Some("http://127.0.0.1:8799")
+        );
+        assert_eq!(
+            listened_url("0.0.0.0:8800").as_deref(),
+            Some("http://127.0.0.1:8800")
+        );
+        assert_eq!(
+            listened_url("[::]:8801").as_deref(),
+            Some("http://127.0.0.1:8801")
+        );
+        assert_eq!(
+            listened_url("[::1]:8802").as_deref(),
+            Some("http://[::1]:8802")
+        );
+        assert_eq!(
+            listened_url("localhost:8803").as_deref(),
+            Some("http://localhost:8803")
+        );
+        assert_eq!(listened_url("127.0.0.1:0"), None);
+        assert_eq!(listened_url("nonsense"), None);
+    }
 }
