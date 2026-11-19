@@ -42,6 +42,12 @@ if ("IntersectionObserver" in window && !reduce) {
     { rootMargin: "0px 0px -12% 0px", threshold: 0.08 }
   );
   revealTargets.forEach((el) => io.observe(el));
+  // What is already on screen when the page loads shows at once, without waiting for a scroll.
+  requestAnimationFrame(() => {
+    revealTargets.forEach((el) => {
+      if (el.getBoundingClientRect().top < window.innerHeight * 0.95) el.classList.add("in");
+    });
+  });
 } else {
   revealTargets.forEach((el) => el.classList.add("in"));
 }
