@@ -11,11 +11,16 @@ use serde_json::{Value, json};
 
 /// Adds the finance indicators to a money space's `stats` answer: the balances read in the last
 /// bank export, with its date. The statement itself stays in `finances_balances`.
-pub(crate) fn augment_stats(ledger: &Ledger<'_>, mut base: Value) -> Result<Value, ToolError> {
+pub(crate) fn augment_stats(
+    ledger: &Ledger<'_>,
+    mut base: Value,
+    now: i64,
+) -> Result<Value, ToolError> {
     let balances = ledger.balances()?;
     base["stats"]["finances"] = json!({
         "accounts": balances["accounts"],
         "last_import": balances["last_import"],
+        "months": ledger.monthly_totals(now, 6)?,
         "source": "bank export",
     });
     Ok(base)
@@ -146,7 +151,11 @@ pub(crate) fn merge_chronology(
         items.retain(|(key, _)| key.as_str() < after.as_str());
     }
     items.sort_by(|a, b| b.0.cmp(&a.0));
-    let more = items.len() > limit;
+    // A source that was cut at its own page size may hold more than what was merged here: the
+    // page then says so, and the next cursor resumes after the last item shown.
+    let source_has_more = base["page"]["has_more"].as_bool().unwrap_or(false)
+        || movements["page"]["has_more"].as_bool().unwrap_or(false);
+    let more = items.len() > limit || (source_has_more && !items.is_empty());
     items.truncate(limit);
     let next = more.then(|| items.last().map(|(key, _)| key.clone()).unwrap_or_default());
     let items: Vec<Value> = items.into_iter().map(|(_, item)| item).collect();

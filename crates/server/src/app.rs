@@ -410,7 +410,7 @@ impl App {
         if view == "capabilities" {
             base = crate::view::augment(&ledger, base);
         } else if view == "stats" {
-            base = crate::view::augment_stats(&ledger, base)?;
+            base = crate::view::augment_stats(&ledger, base, util::now())?;
         }
         Ok(base)
     }

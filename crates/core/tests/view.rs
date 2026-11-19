@@ -301,6 +301,26 @@ fn targets_are_the_living_board() -> Res {
     assert_eq!(target["metrics"]["target_amount"], 10.0);
     assert_eq!(target["metrics"]["realized_amount"], 4.0);
     assert_eq!(target["metrics"]["progress_percent"], 40.0);
+    let card_id = target["id"].as_str().ok_or("card id")?.to_string();
+    tools::call(
+        &b,
+        &full,
+        "living_set",
+        &json!({ "space": "health", "page": "targets", "move": [{ "id": id, "column": "reached" }] }),
+    )?;
+    let moved = call(&b, &c, json!({ "space": "health", "view": "targets" }))?;
+    let target = moved["items"]
+        .as_array()
+        .ok_or("items")?
+        .iter()
+        .find(|i| i["text"].as_str().is_some_and(|t| t.contains("Migraine")))
+        .ok_or("target missing after move")?;
+    assert_eq!(target["column"], "reached");
+    assert_eq!(target["id"], card_id, "a moved target keeps its stable id");
+    assert_eq!(
+        target["metrics"]["target_amount"], 10.0,
+        "the amounts survive the move"
+    );
     Ok(())
 }
 

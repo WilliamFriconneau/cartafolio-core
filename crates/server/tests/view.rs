@@ -160,6 +160,23 @@ fn a_money_space_publishes_the_finance_extension_and_pages_its_movements() -> Re
     assert!(tools.contains(&"finances_movements") && tools.contains(&"finances_balances"));
     assert!(cap["item_types"]["movement"].is_object());
 
+    let stats = text_of(&call(
+        &e,
+        &fin,
+        "space_view",
+        json!({ "space": "finances", "view": "stats" }),
+    ));
+    let months = stats["stats"]["finances"]["months"]
+        .as_array()
+        .ok_or("no monthly totals in the finance stats")?;
+    assert_eq!(months.len(), 6, "{stats}");
+    assert!(
+        months
+            .iter()
+            .all(|m| m["income"].is_number() && m["outflow"].is_number() && m["net"].is_number()),
+        "{stats}"
+    );
+
     let first = text_of(&call(
         &e,
         &fin,

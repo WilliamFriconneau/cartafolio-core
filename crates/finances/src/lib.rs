@@ -725,6 +725,30 @@ impl Ledger<'_> {
         Ok(page(self, (from, to, account, filter), limit, items, more))
     }
 
+    /// Income, outflow and net of the last `count` months (the current one first), all accounts
+    /// together: the bank movements the `stats` view draws beside the balances.
+    pub fn monthly_totals(&self, now: i64, count: usize) -> Result<Value, ToolError> {
+        let (y, m, ..) = civil(now);
+        let mut month = format!("{y:04}-{m:02}");
+        let mut out = vec![];
+        for i in 0..count.clamp(1, 24) {
+            if i > 0 {
+                month = previous_month(&format!("{month}-01"));
+            }
+            let statement = self.monthly(&month, now)?;
+            let (mut income, mut outflow) = (0.0, 0.0);
+            for a in statement["accounts"].as_array().into_iter().flatten() {
+                income += a["income"].as_f64().unwrap_or(0.0);
+                outflow += a["outflow"].as_f64().unwrap_or(0.0);
+            }
+            out.push(json!({
+                "month": month,
+                "income": round2(income), "outflow": round2(outflow), "net": round2(income + outflow),
+            }));
+        }
+        Ok(json!(out))
+    }
+
     /// The statement of a month: income, outflow, the person's rules, overdrawn days, fees.
     pub fn monthly(&self, month: &str, now: i64) -> Result<Value, ToolError> {
         let (y, m, d, ..) = civil(now);

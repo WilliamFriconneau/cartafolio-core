@@ -980,6 +980,7 @@ const FR = {
   "The latest events about your connections and what you changed. Never a key, never memory content.": "Les derniers événements sur vos connexions et ce que vous avez changé. Jamais une clé, jamais le contenu de la mémoire.",
   "Files": "Fichiers",
   "Inventory": "Inventaire",
+  "Months": "Mois",
   "Signs": "Signes",
   "Measures": "Mesures",
   "Movements": "Mouvements",
@@ -1813,7 +1814,7 @@ function renderSpace() {
   else if (SP.tab === "boards") boardsView(body);
   else if (SP.tab === "notes") notesView(body);
   else if (SP.tab === "words") wordsView(body);
-  else if (SP.tab === "tree") body.replaceChildren(...treeView(ov.tags));
+  else if (SP.tab === "tree") body.replaceChildren(treeView(ov.tags));
   else if (SP.tab === "graph") graphView(body, { space: ov.space });
   else journalView(body);
 }
@@ -1978,12 +1979,12 @@ async function targetsView(body) {
       } }),
       el("span", { class: "tx" }, task.text),
       el("span", { class: "mute small" }, task.column)))) : null;
-  body.replaceChildren(
+  body.replaceChildren(...[
     el("div", { class: "board-head" }, el("h3", {}, "Cibles"), el("span", { class: "mute small" }, when)),
     board,
     addRow,
     taskBox,
-    el("p", { class: "mute small" }, "Read through the space view contract (memcp.view/1). A target groups the signs and symptoms it names; a financial goal carries a deadline, a target amount and a realized amount."));
+    el("p", { class: "mute small" }, "Read through the space view contract (memcp.view/1). A target groups the signs and symptoms it names; a financial goal carries a deadline, a target amount and a realized amount.")].filter(Boolean));
 }
 
 async function statsTab(body) {
@@ -2008,7 +2009,7 @@ async function statsTab(body) {
   const tagRows = tags.length ? tags.map(t => el("div", { class: "sign" }, el("span", {}, t.tag),
     el("span", {}, el("div", { class: "bar", style: "width:" + Math.round(100 * t.count / tmax) + "%" })), el("span", { class: "mute" }, t.count))) : [el("p", { class: "mute" }, "No tag in this window.")];
   const sources = st.sources || [];
-  body.replaceChildren(
+  body.replaceChildren(...[
     el("div", { class: "board-head" }, el("h3", {}, "Stats"), el("span", { class: "mute small" }, total.toLocaleString(loc()) + (total === 1 ? " entry" : " entries"))),
     byType,
     el("h3", {}, "Day by day"), bars,
@@ -2017,7 +2018,9 @@ async function statsTab(body) {
     sources.length ? el("h3", {}, "Sources") : null,
     ...sources.map(s => el("div", { class: "mute small" }, s.layer + " · " + s.app + " · " + s.count)),
     st.finances && st.finances.accounts && st.finances.accounts.length ? el("h3", {}, "Accounts") : null,
-    ...((st.finances && st.finances.accounts) || []).map(a => el("div", { class: "mute small" }, a.account + " · " + (a.balance == null ? "—" : Number(a.balance).toFixed(2)) + (a.as_of ? " · " + a.as_of : ""))));
+    ...((st.finances && st.finances.accounts) || []).map(a => el("div", { class: "mute small" }, a.account + " · " + (a.balance == null ? "—" : Number(a.balance).toFixed(2)) + (a.as_of ? " · " + a.as_of : ""))),
+    st.finances && st.finances.months && st.finances.months.length ? el("h3", {}, "Months") : null,
+    ...((st.finances && st.finances.months) || []).map(m => el("div", { class: "mute small" }, m.month + " · +" + Number(m.income).toFixed(2) + " / " + Number(m.outflow).toFixed(2) + " · " + Number(m.net).toFixed(2)))].filter(Boolean));
 }
 async function filesTab(body) {
   const search = el("input", { type: "search", placeholder: "search the files", value: SP.filters.fileQ || "", size: 28 });
