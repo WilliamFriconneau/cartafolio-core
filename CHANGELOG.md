@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261117.0.32
 
 - **A connection made on a node served on another port works.** Without `--public-url`, the server and the manager hand out the address they listen on (a wildcard host becomes 127.0.0.1), not port 8791: the Mac app, which serves on 8799, no longer throws its connection away.
 
