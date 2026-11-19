@@ -809,7 +809,7 @@ fn copy_atomic(from: &Path, path: &Path) -> Result<Seen> {
         .unwrap_or_default();
     let tmp = dir.join(format!(".{name}.memcp-tmp"));
     fs::copy(from, &tmp)?;
-    fs::File::open(&tmp)?.sync_all()?;
+    fs::File::options().write(true).open(&tmp)?.sync_all()?;
     fs::rename(&tmp, path)?;
     let meta = fs::metadata(path)?;
     Ok(Seen {

@@ -651,7 +651,7 @@ pub fn adopt(
                 )
             };
             // Closed: the file is the whole database. Linked in under its name, never over another file.
-            fs::File::open(&tmp)?.sync_all()?;
+            fs::File::options().write(true).open(&tmp)?.sync_all()?;
             let final_path = brain.dir().join(p.target.file_name());
             fs::hard_link(&tmp, &final_path).map_err(|e| {
                 if e.kind() == std::io::ErrorKind::AlreadyExists {
@@ -676,7 +676,7 @@ pub fn adopt(
                         let part = to.join(format!(".{name}.tmp"));
                         fs::copy(&path, &part)?;
                         crate::fsx::set_private_file(&part)?;
-                        fs::File::open(&part)?.sync_all()?;
+                        fs::File::options().write(true).open(&part)?.sync_all()?;
                         fs::rename(&part, to.join(name))?;
                     }
                 }

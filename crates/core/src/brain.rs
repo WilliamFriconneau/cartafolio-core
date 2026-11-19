@@ -318,7 +318,7 @@ impl Brain {
                     conn.query_row("PRAGMA wal_checkpoint(TRUNCATE)", [], |r| r.get(1));
             }
             // Closed: its log is folded in; the file is the whole database.
-            fs::File::open(&tmp)?.sync_all()?;
+            fs::File::options().write(true).open(&tmp)?.sync_all()?;
             match fs::hard_link(&tmp, path) {
                 Ok(()) => Ok(()),
                 Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
