@@ -55,7 +55,7 @@ This repository is an app store for Home Assistant.
 2. In the menu **⋮**, choose **Repositories** and add `https://github.com/WilliamFriconneau/memcp-core` ([one click with My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fmemcp-core)).
 3. Install **MemCP**, start it, and open **Memory** from the sidebar.
 
-The first Home Assistant login becomes the administrator and gets a memory of its own. Port 8791 is not encrypted: read [docs/TAILSCALE.md](docs/TAILSCALE.md) before you connect an assistant from outside. Coming from the private version? See [docs/MIGRATING.md](docs/MIGRATING.md).
+The first Home Assistant login becomes the administrator and gets a memory of its own. Port 8791 is not encrypted: read [docs/TAILSCALE.md](docs/TAILSCALE.md) before you connect an assistant from outside.
 
 ### One command (Linux)
 
