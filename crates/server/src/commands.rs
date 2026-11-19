@@ -76,6 +76,8 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          its files, a readable Markdown version), their instructions, a
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
+  skills-export DIR [--data DIR]         writes the professions of the spaces as Claude skills, a plugin marketplace (no --data needed)
+  professions [accept|reject KIND/ID]    lists the professions the person added and those an assistant proposed; accepts or drops a proposal
   adopt DIR [--user PERSON] [--prefix P] takes the spaces of an export into this node
   merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
                                          reads another memory (an export) and writes a plan: for each of its spaces,
@@ -349,6 +351,31 @@ pub fn dispatch(
             crate::setup::prepare(kind, &data, settings, Path::new(need("--out")?))
         }
         ("catalogue", _) => cli::catalogue_list(&data),
+        ("professions", None) => {
+            for p in memcp_core::profession::pending(&data) {
+                println!("proposed  {}/{}  {}", p["kind"].as_str().unwrap_or(""), p["id"].as_str().unwrap_or(""), p["title"].as_str().unwrap_or(""));
+            }
+            let file = data.join(memcp_core::profession::FILE);
+            println!(
+                "the person's own profiles are in {} ({})",
+                file.display(),
+                if file.exists() { "present" } else { "none yet" }
+            );
+            Ok(())
+        }
+        ("professions", Some(verb @ ("accept" | "reject"))) => {
+            let what = arg(2, "KIND/ID")?;
+            let (kind, id) = what
+                .split_once('/')
+                .ok_or_else(|| cli::bad("KIND/ID, for example hobbies/gamemaster"))?;
+            let done = memcp_core::profession::decide(&data, kind, id, verb == "accept").map_err(|e| (1, e))?;
+            if done {
+                println!("{} {what}", if verb == "accept" { "accepted" } else { "dropped" });
+                Ok(())
+            } else {
+                Err((1, format!("no proposal {what}")))
+            }
+        }
         ("status", _) => cli::status(&data, flag("--user")),
         // What a running node holds in its memory (the requests waiting, the tickets): there is nothing to read in a directory.
         ("invite" | "join", _) => Err((

@@ -772,3 +772,38 @@ fn a_corrected_text_is_tagged_like_a_written_one_and_keeps_its_tags() -> Res {
     assert!(has(&r["fact"], "signe/purchase_urge"), "{r}");
     Ok(())
 }
+
+#[test]
+fn hashtags_are_said_on_purpose_in_any_space_and_a_note_may_carry_many() -> Res {
+    let t = Temp::new("autotag-hashtags");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    // In a space that is not health: a sign and a measure named with a # are tagged as such, with the root tag of health,
+    // and any other word is a tag of its own.
+    let f = remember(
+        &b,
+        &c,
+        "home",
+        "Journée longue chez nous #fatigue #tension #chantier-cuisine, rien d'autre.",
+        &[],
+    )?;
+    assert!(has(&f, "signe/fatigue"), "{f}");
+    assert!(has(&f, "mesure/tension"), "{f}");
+    assert!(has(&f, "sante"), "the root of health: {f}");
+    assert!(has(&f, "chantier-cuisine"), "{f}");
+    // `C#` is not a hashtag.
+    assert_eq!(
+        memcp_core::autotag::hashtags("du C# et #un #deux #un"),
+        ["un", "deux"]
+    );
+    // The explicit # is not squeezed out by the cap: ten of them, ten tags.
+    let many = (1..=10)
+        .map(|n| format!("#mot{n}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let g = remember(&b, &c, "home", &format!("Liste {many}"), &[])?;
+    for n in 1..=10 {
+        assert!(has(&g, &format!("mot{n}")), "mot{n}: {g}");
+    }
+    Ok(())
+}

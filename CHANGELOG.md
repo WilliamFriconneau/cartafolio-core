@@ -1,5 +1,14 @@
 # Changelog
 
+## 20261119.2.0
+
+- **Each space is a profession, with its toolkit.** `space_view capabilities` carries `profession`, the tool `skills` lists the professions of the spaces a key reads, and the instructions of the MCP server say in a line what each kind of space is an expert of. A kind may have several profiles (health: nurse, coach, doctor); the person adds or replaces profiles in `professions.json` beside the memory. See [PROFESSIONS.md](docs/PROFESSIONS.md).
+- **Health tools.** `target_set` sets or changes a target as a nurse writes it (the problem in one or two words, then a precision; a title that states an aim is refused; signs of the referential only), `signs_review` shows the signs put on notes with the words that brought them up, and `sign_set` corrects or removes a sign (the node learns from it). `living_set` gains `update`: a card changes in place and keeps its id and its history.
+- **Money.** `finances_overdraft_exit` estimates when an overdrawn account comes back above zero, from the average net of the last complete months.
+- **Hashtags.** A `#word` is tagged first and never squeezed out: in any space a word of the health referential is a sign or a measure and puts the root tag `sante` on the note; any other word is a tag of its own; a note may carry many.
+- **Professions of your own.** A profile may apply to named spaces, carry reference material and skills that are recipes (`steps`, `template`, `tags`), so a game master for role-playing games, say, is a profile and not code. An assistant proposes one with `profession_propose`; it does nothing until the person accepts it (`memcp professions accept KIND/ID`).
+- **The professions as Claude skills.** `memcp skills-export DIR` writes a plugin marketplace (one `SKILL.md` per profile) built from the registry.
+
 ## 20261119.1.0
 
 - **The janitor tags the signs and symptoms of the notes already in the memory, wherever they came from.** Each night it goes through the notes of the health spaces and adds the `signe/*`, `mesure/*` and `alerte/*` tags of the shared referential to those written without them (imports, syncs, assistants limited to paths), 600 per pass, never touching the text, the raw layer of an app or a reference document. A short note also teaches the node its phrasing. A note that looks French is read in French, so `pain` (bread) is no longer a sign. See [JANITOR.md](docs/JANITOR.md).

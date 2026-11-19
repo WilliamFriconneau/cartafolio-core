@@ -13,7 +13,7 @@ The tools of this page and their fields are checked against `tools::definitions`
 | write on a space | `living_set`, `rules_set`, `tags_set`, `triage_claim`, `triage_release`, `triage_send`, `transcription_failed`, `tidy`, `remember`, `library_raise`, `folder_set`, `supersede`, `retire`, `deposit`, `file_put`, `file_retire`, `file_erase`, `dispute_resolve` (never a machine of the person; an assistant only on the person's word) |
 | other | `library_search`, `links`, `guide_propose`, `guide_set` |
 | a key limited to paths inside a space | `recall`, `remember`, `deposit`, `retire`, `file_put`, `stats`, `guide_propose` only |
-| a money space (bank statements) | `finances_balances`, `finances_movements`, `finances_monthly`, `finances_rules` (read), `finances_import` (write): see the end |
+| a money space (bank statements) | `finances_balances`, `finances_movements`, `finances_monthly`, `finances_overdraft_exit`, `finances_rules` (read), `finances_import` (write): see the end |
 
 ## Reference
 
@@ -627,7 +627,7 @@ Example call and answer:
 
 ### `living_set`
 
-Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs, fields}`; a target lists the signs and symptoms it groups, and `fields` carries its figures — `due`, `target_amount`, `realized_amount`, `currency` for a financial goal; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history and its fields), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward); left out, the pass is taken to have read up to the moment it writes, so a board written by an app is never « behind » by notes it was given. `living_get` answers `behind` (notes created after `covers`) and `first_pass: true` while no pass was ever recorded (then `behind` is every note of the space). Records the pass. Never drop a card the person wrote.
+Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs, fields}`; a target lists the signs and symptoms it groups, and `fields` carries its figures — `due`, `target_amount`, `realized_amount`, `currency` for a financial goal; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history and its fields), `update` cards in place (`{id, text, signs, column, fields}`: what is left out stays, the card keeps its id and its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward); left out, the pass is taken to have read up to the moment it writes, so a board written by an app is never « behind » by notes it was given. `living_get` answers `behind` (notes created after `covers`) and `first_pass: true` while no pass was ever recorded (then `behind` is every note of the space). Records the pass. Never drop a card the person wrote.
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
 - **Answer:** The updated board (cards, pass recorded).
@@ -642,6 +642,7 @@ Changes a living board card by card, so several writers never overwrite each oth
 | `move` | array of any | no | - |
 | `page` | string | yes | - |
 | `space` | string | yes | - |
+| `update` | array of any | no | cards to change in place: `{id, text?, signs?, column?, fields?}` |
 
 Example call and answer:
 
@@ -1319,6 +1320,84 @@ Example call and answer:
 
 A measure is `{ id, unit, labels, keywords, units: [{ id, label }], vital }`; a vital `{ id, unit, plausible: { min, max }, labels, usual_limit? }`; a red flag `{ id, first, message, keywords }` (`first`: the number to put first, `15` or `3114`).
 
+### `skills`
+
+What an assistant can do in a space: its profession (a title, what it is an expert of, its principles) and its skills, each with the moment to use it and the tool that does it. A space has the profession of its kind; a kind may have several profiles (health: `nurse`, `coach`, `doctor`), the first being the default. The professions are code, not notes: they are the same for every assistant, and the person adds or replaces profiles in the file `professions.json` of the node's data folder (a JSON array of profiles, the shape of this answer; a malformed profile is left out). The same is in `space_view capabilities` as `profession`. See [PROFESSIONS.md](PROFESSIONS.md).
+
+- **Seen with:** read access on at least one space (not a key limited to paths).
+- **Answer:** `{ notice, spaces: [{ space, kind, profession: { default, profiles: [{ id, kind, title, brief, principles, spaces, references, source, skills: [{ id, title, when, tool?, steps?, template?, tags?, example }] }] } }], proposals_waiting? }`; a space of a kind without a profession is left out; `source` is `built-in` or `person`; `proposals_waiting` (a key that reaches every space) lists the profiles an assistant proposed that the person has not accepted.
+- **Errors:** `denied` for a space the key does not read.
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `profile` | string | no | one profile of the kind (`nurse`, `coach`, `doctor` in health) |
+| `space` | string | no | one space only; by default every space the key reads |
+
+### `profession_propose`
+
+Proposes a profession for the person to accept: a profile of skills for a kind of space, or for named spaces. `profile` is `{ id, kind, title, brief, principles?, spaces?, references?, skills }`; each skill has `id`, `title`, `when` and either a `tool` or `steps` (a recipe, in order, with the tools of the memory), and may carry a `template` (the shape of what it writes) and `tags`. A profession is an instruction, so nothing changes until the person accepts it on the machine of the node (`memcp professions accept KIND/ID`); `skills` shows the proposals that wait (`proposals_waiting`). See [PROFESSIONS.md](PROFESSIONS.md).
+
+- **Seen with:** a key that reaches every space and may write.
+- **Answer:** `{ result: "proposed", profile, next, notice }`.
+- **Errors:** `invalid` (a profile that has not the right shape, or 20 proposals already waiting); `denied`.
+- **Effects:** Writes the file of proposals beside the memory; changes nothing else.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `profile` | object | yes | the profile, in the shape `skills` answers |
+
+### `signs_review`
+
+The notes of a health space that carry signs and symptoms, newest first, with the signs they carry and the words of the note that brought each one up (`evidence`), so that what the tagger put on a note can be checked. To correct one, call `sign_set`.
+
+- **Seen with:** read access on at least one space (not a key limited to paths).
+- **Answer:** `{ notice, space, since, notes: [{ id, at, author, text, signs, evidence: [{ sign, label, words }], from_words }], how_to_correct }`.
+- **Errors:** `invalid` (not a health space, a bad date, a sign outside the referential); `denied`.
+- **Effects:** None.
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `limit` | integer | no | 1 to 200, default 50 |
+| `since` | string | no | `YYYY-MM-DD`; default 14 days back |
+| `sign` | string | no | one sign of the referential (id, tag or label) |
+| `space` | string | no | a health space; by default the first you read |
+
+### `sign_set`
+
+Corrects the signs and symptoms of a note: `add` the signs it lacks, `remove` the ones that are wrong (signs of the shared referential, by id, tag or label). The note keeps its text and its other tags, the old version stays in the history, and the node learns from the correction (its words lead to the signs added, away from the ones removed) unless `learn` is false: pass false when you are an engine proposing, not the person correcting. It is `tags_set` restricted to the signs of the referential.
+
+- **Seen with:** write access on at least one space.
+- **Answer:** as `tags_set`: `{ result: "superseded", fact }`.
+- **Errors:** `invalid` (no sign, or a sign outside the referential, with the closest ones); `denied`.
+- **Effects:** Replaces the note by itself with the new set of tags (history kept).
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `add` | array of string | no | signs of the referential |
+| `id` | string | yes | the note to correct |
+| `learn` | boolean | no | default true |
+| `reason` | string | no | - |
+| `remove` | array of string | no | signs of the referential |
+
+### `target_set`
+
+Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… », « Stop… ») is refused. `signs` are signs of the shared referential (by id, tag or label); an unknown one is refused with the closest ones. Changing a target keeps its card id and its history (it is `living_set` `update` underneath).
+
+- **Seen with:** write access on at least one space.
+- **Answer:** `{ result: "created" | "updated", space, card, text, signs: [{ id, label }], notice }`.
+- **Errors:** `invalid` (a title that states an aim, a sign outside the referential, not a health space, no such target); `denied`.
+- **Effects:** Writes a board note (history kept).
+
+| Field | Type | Required | Limits |
+|---|---|---|---|
+| `column` | string | no | `open` or `reached` |
+| `id` | string | no | the target to change (its card id or fact id); left out, a target is made |
+| `precision` | string | no | - |
+| `problem` | string | yes | five words at most, never an aim |
+| `signs` | array of string | no | signs of the referential |
+| `space` | string | no | a health space; by default the first you write |
+
 ### `tags_set`
 
 Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (a `supersede` with the same text), the reason is recorded and the history keeps the old tags. Nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`; `fields` sets named values kept as said. The node learns from the change unless `learn` is false.
@@ -1741,7 +1820,7 @@ Example call and answer:
 
 ## Bank statement tools
 
-Offered by a node on a space of the money kind (crate `memcp-finances`): `finances_balances` (no argument), `finances_movements` (`account`, `from`, `to`, `filter`, `limit` 1 to 500), `finances_monthly` (`month` as yyyy-mm), `finances_rules` (`rules` object to replace the person's rules; needs write), `finances_import` (`file_id`, required; write; idempotent). Read tools need read on the space, `finances_import` and a `rules` change need write; errors are `denied` or `invalid`.
+Offered by a node on a space of the money kind (crate `memcp-finances`): `finances_balances` (no argument), `finances_movements` (`account`, `from`, `to`, `filter`, `limit` 1 to 500), `finances_monthly` (`month` as yyyy-mm), `finances_overdraft_exit` (`months` 1 to 12, default 3: when each overdrawn account comes back above zero, an estimate from the average monthly net of the last complete months), `finances_rules` (`rules` object to replace the person's rules; needs write), `finances_import` (`file_id`, required; write; idempotent). Read tools need read on the space, `finances_import` and a `rules` change need write; errors are `denied` or `invalid`.
 
 ## Design notes
 

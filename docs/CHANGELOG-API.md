@@ -2,6 +2,10 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Professions and the toolkit of health (20261119.2.0)
+
+Added; nothing is renamed. `space_view` `capabilities` gains `profession` (`{default, profiles: [{id, kind, title, brief, principles, skills: [{id, title, when, tool, example}]}]}`, `null` for a space without one). New tools: `skills` (read), `signs_review` (read), `sign_set` and `target_set` (write), and on a money space `finances_overdraft_exit`. `living_set` gains `update` (cards changed in place, answer `updated`). A `#word` in a note is a tag, and a word of the health referential is `signe/…` or `mesure/…` plus the root tag `sante`.
+
 ## A sign for the urge to buy, signs on corrected notes (20261119.1.0)
 
 Added; nothing is renamed. The health referential (`manifestations`, version 2) gains the sign `purchase_urge` (« Envie d'acheter »,

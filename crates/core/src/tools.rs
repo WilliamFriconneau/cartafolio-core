@@ -32,9 +32,13 @@ pub(crate) mod living;
 mod overview;
 mod sorting;
 mod tagging;
+mod toolkit;
 mod transcription;
 
-const WRITE_TOOLS: [&str; 17] = [
+const WRITE_TOOLS: [&str; 20] = [
+    "profession_propose",
+    "target_set",
+    "sign_set",
     "dispute_resolve",
     "notes_move",
     "space_create",
@@ -53,7 +57,9 @@ const WRITE_TOOLS: [&str; 17] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 20] = [
+const READ_TOOLS: [&str; 22] = [
+    "skills",
+    "signs_review",
     "disputes",
     "triage_waiting",
     "tags_suggest",
@@ -285,8 +291,8 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
     if caller.can_write_anywhere() && !caller.is_scoped() {
         out.push(ToolDef {
             name: "living_set",
-            description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
-            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array", "description": "Cards: {text, column, signs?, fields?}. `fields` are the target's figures (due, target_amount, realized_amount, currency) or any other field." }, "move": { "type": "array" }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
+            description: "Changes a living board card by card, so several writers never overwrite each other: `add` cards (`{text, column, signs}`; a target lists the signs and symptoms it groups; the text short, one idea, ending with the id of the note it comes from), `move` cards (`{id, column}`; the card keeps its history), `update` cards in place (`{id, text, signs, column, fields}`), `drop` the ids of cards no longer true (kept in the history), and `covers`: the creation time of the last note of the delta you read (it only moves forward). Records the pass. Never drop a card the person wrote.".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "page": { "type": "string", "description": "next, ideas, targets, index, or a named list such as list-shopping" }, "add": { "type": "array", "description": "Cards: {text, column, signs?, fields?}. `fields` are the target's figures (due, target_amount, realized_amount, currency) or any other field." }, "move": { "type": "array" }, "update": { "type": "array", "description": "Cards to change in place: {id, text?, signs?, column?, fields?}. The card keeps its id and its history." }, "drop": { "type": "array", "items": { "type": "string" } }, "covers": { "type": ["integer", "string"] } }, "required": ["space", "page"] }),
         });
         if caller.all_spaces && !caller.read_only_forced {
             out.push(ToolDef {
@@ -605,6 +611,72 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "query": { "type": "string" },
                     "lang": { "type": "string", "enum": ["auto", "fr", "en", "es"] }
                 }
+            }),
+        });
+        if caller.all_spaces && !caller.read_only_forced {
+            out.push(ToolDef {
+                name: "profession_propose",
+                description: "Proposes a profession (a profile of skills for a kind of space, or for named spaces) for the person to accept: `profile` is `{ id, kind, title, brief, principles, spaces?, references?, skills }`, each skill with `id`, `title`, `when` and either a `tool` or `steps` (a recipe, in order, with the tools of the memory), and optionally a `template` and `tags`. A profession is an instruction, so nothing changes until the person accepts it on the machine of the node (`memcp professions accept KIND/ID`). Use it when the person asks for a new profession, for example a game master for a space of role-playing games.".into(),
+                schema: json!({
+                    "type": "object",
+                    "properties": { "profile": { "type": "object", "description": "The profile, in the shape `skills` answers." } },
+                    "required": ["profile"]
+                }),
+            });
+        }
+        out.push(ToolDef {
+            name: "skills",
+            description: "What an assistant can do in a space: its profession (a title, what it is an expert of, its principles) and its skills, each with the moment to use it and the tool that does it. A space has the profession of its kind, and a kind may have several profiles (health: nurse, coach, doctor): the first is the default, `profile` keeps one. The same is in `space_view capabilities` (`profession`). Read it before working in a space you do not know.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "space": space_prop(&readable, "One space only; by default every space you can read."),
+                    "profile": { "type": "string", "description": "One profile of the kind (`nurse`, `coach`, `doctor` in health)." }
+                }
+            }),
+        });
+        out.push(ToolDef {
+            name: "signs_review",
+            description: "The notes of a health space that carry signs and symptoms, newest first, with the signs they carry and the words of the note that brought each one up (`evidence`), so that what the tagger put can be checked. `since` (YYYY-MM-DD, default 14 days back), `sign` keeps one sign, `limit` (default 50, 200 at most). To correct a note, call `sign_set`.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "space": space_prop(&readable, "A health space; by default the first you read."),
+                    "since": { "type": "string", "description": "YYYY-MM-DD" },
+                    "sign": { "type": "string", "description": "A sign of the referential (id, tag or label)." },
+                    "limit": { "type": "integer", "minimum": 1, "maximum": 200 }
+                }
+            }),
+        });
+        out.push(ToolDef {
+            name: "sign_set",
+            description: "Corrects the signs and symptoms of a note: `add` the signs it lacks, `remove` the ones that are wrong (signs of the shared referential, by id, tag or label). The note keeps its text and its other tags, the old version stays in the history, and the node learns from the correction (its words lead to the signs added, away from the ones removed) unless `learn` is false: pass false when you are an engine proposing, not the person correcting.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "id": { "type": "string", "description": "The note to correct." },
+                    "add": { "type": "array", "items": { "type": "string" } },
+                    "remove": { "type": "array", "items": { "type": "string" } },
+                    "reason": { "type": "string" },
+                    "learn": { "type": "boolean", "description": "Default true." }
+                },
+                "required": ["id"]
+            }),
+        });
+        out.push(ToolDef {
+            name: "target_set",
+            description: "Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… ») is refused. `signs` are signs of the shared referential (by id, tag or label); an unknown one is refused with the closest ones. Changing a target keeps its card id and its history.".into(),
+            schema: json!({
+                "type": "object",
+                "properties": {
+                    "space": space_prop(&readable, "A health space; by default the first you write."),
+                    "problem": { "type": "string" },
+                    "precision": { "type": "string" },
+                    "signs": { "type": "array", "items": { "type": "string" } },
+                    "column": { "type": "string", "enum": ["open", "reached"] },
+                    "id": { "type": "string", "description": "The target to change (its card id or fact id); left out, a target is made." }
+                },
+                "required": ["problem"]
             }),
         });
         out.push(ToolDef {
@@ -1508,6 +1580,13 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             crate::tools::transcription::transcription_hints(brain, caller, name, args)
         }
         "health_referential" => crate::tools::health::health_referential(brain, caller, name, args),
+        "skills" => crate::tools::toolkit::skills(brain, caller, name, args),
+        "profession_propose" => {
+            crate::tools::toolkit::profession_propose(brain, caller, name, args)
+        }
+        "target_set" => crate::tools::toolkit::target_set(brain, caller, name, args),
+        "signs_review" => crate::tools::toolkit::signs_review(brain, caller, name, args),
+        "sign_set" => crate::tools::toolkit::sign_set(brain, caller, name, args),
         "living_get" | "living_set" => crate::tools::living::living(brain, caller, name, args),
         "space_view" => crate::view::space_view(brain, caller, args),
         "vocabulary_terms" => crate::tools::sorting::vocabulary_terms(brain, caller, name, args),

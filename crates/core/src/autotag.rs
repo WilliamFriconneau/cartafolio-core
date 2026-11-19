@@ -262,6 +262,66 @@ fn slug(raw: &str) -> Option<String> {
     crate::facts::normalize_tag(&w.join("-")).ok()
 }
 
+/// The `#words` a text carries, each once, in the order written: a `#` that starts a word (not `C#`), then letters, digits,
+/// `-` and `_`. A note may carry any number of them.
+pub fn hashtags(text: &str) -> Vec<String> {
+    let chars: Vec<char> = text.chars().collect();
+    let mut out: Vec<String> = vec![];
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] == '#' && (i == 0 || !chars[i - 1].is_alphanumeric()) {
+            let word: String = chars[i + 1..]
+                .iter()
+                .take_while(|c| c.is_alphanumeric() || **c == '-' || **c == '_')
+                .collect();
+            let n = word.chars().count();
+            if n > 0 && n <= 40 {
+                let w = word.to_lowercase();
+                if !out.contains(&w) && out.len() < 32 {
+                    out.push(w);
+                }
+            }
+            i += n + 1;
+        } else {
+            i += 1;
+        }
+    }
+    out
+}
+
+/// The tag a `#word` names in the health referential: `signe/<tag>` for a sign (by its id, its tag, a label or a keyword,
+/// in French or English), `mesure/<tag>` for a measure. `#stress`, `#fatigue`, `#tension`.
+pub fn health_hashtag(word: &str) -> Option<String> {
+    let want = words(&word.replace(['_', '-'], " ")).join(" ");
+    if want.is_empty() {
+        return None;
+    }
+    let same = |t: &str| words(t).join(" ") == want;
+    let r = memcp_health::builtin();
+    for m in r.manifestations() {
+        if same(&m.id)
+            || same(&m.tag)
+            || m.labels.values().any(|l| same(l))
+            || m.keywords.values().flatten().any(|k| same(k))
+        {
+            return Some(format!("signe/{}", m.tag));
+        }
+    }
+    for d in r.measure_defs() {
+        if same(&d.id)
+            || same(&d.tag)
+            || d.labels.values().any(|l| same(l))
+            || d.keywords.iter().flatten().any(|k| k.join(" ") == want)
+        {
+            return Some(format!("mesure/{}", d.tag));
+        }
+    }
+    None
+}
+
+/// The root tag of health: what a sign or a measure named in a note of any space also puts on it.
+pub const HEALTH_ROOT: &str = "sante";
+
 /// The deterministic tagger. `vocab` is the terms of the space's vocabularies found in the text (or all of them: only
 /// those the text holds count). Pure.
 pub fn suggest(space: &SpaceInfo, rules: &Rules, vocab: &[String], text: &str) -> Suggestion {
@@ -270,7 +330,7 @@ pub fn suggest(space: &SpaceInfo, rules: &Rules, vocab: &[String], text: &str) -
     if let Some(t) = &space_tag {
         out.tags.push(t.clone());
     }
-    let room = MAX_SUGGESTED + usize::from(space_tag.is_some());
+    let room = MAX_SUGGESTED + usize::from(space_tag.is_some()) + 2 * hashtags(text).len();
     let push = |tags: &mut Vec<String>, t: Option<String>| {
         if let Some(t) = t
             && !tags.contains(&t)
@@ -280,6 +340,25 @@ pub fn suggest(space: &SpaceInfo, rules: &Rules, vocab: &[String], text: &str) -
         }
     };
     let text_words = words(text);
+    // What the person (or an assistant) wrote with a `#` is said on purpose: it comes first and is never squeezed out by
+    // the cap. A word of the health referential is a sign or a measure (`#stress` gives `signe/stress`) in any space, and
+    // puts the root tag of health on the note too; any other word is a tag of its own.
+    for h in hashtags(text) {
+        let tag = match health_hashtag(&h) {
+            Some(t) => {
+                if !out.tags.iter().any(|x| x == HEALTH_ROOT) {
+                    out.tags.push(HEALTH_ROOT.to_string());
+                }
+                Some(t)
+            }
+            None => slug(&h),
+        };
+        if let Some(t) = tag.and_then(|t| crate::facts::normalize_tag(&t).ok())
+            && !out.tags.contains(&t)
+        {
+            out.tags.push(t);
+        }
+    }
     // The keywords and tags the space lists.
     for k in &rules.keywords {
         if holds(&text_words, &phrase_words(k), false) {

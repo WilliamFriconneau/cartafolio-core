@@ -173,3 +173,11 @@ A fact, anywhere it is returned: `{ …, "tags": ["health", "mesure/tension", "f
 
 An app that wants its own tags passes `tags` as before: they are kept, and the node adds the space's. An engine on the device
 (Apple Intelligence through MCP) calls `tags_suggest` to preview, then `tags_set` with `learn: false` to complete a note.
+
+## Hashtags
+
+A `#word` in the text is tagged first and is never squeezed out by the cap: a note may carry any number of them (32 at most).
+In any space, a word of the health referential (its id, tag, label or a keyword, French or English) is a sign or a measure
+(`#fatigue` gives `signe/fatigue`, `#tension` gives `mesure/tension`) and also puts the root tag of health, `sante`, on the note;
+any other word is a tag of its own (`#chantier-cuisine`). `C#` is not a hashtag. The same resolution runs when a note is written,
+when an assistant corrects it (`supersede`) and in `tags_suggest`.

@@ -749,6 +749,81 @@ impl Ledger<'_> {
         Ok(json!(out))
     }
 
+    /// When each overdrawn account comes back above zero, as an estimate: the balance of the last export divided by the
+    /// average monthly net of the last `months` complete months (income and outflow of that account, transfers between
+    /// the person's own accounts included, as the statement counts them). An account whose average net is not positive has
+    /// no exit at the current rate; an account above zero is not listed as overdrawn.
+    pub fn overdraft_exit(&self, now: i64, months: usize) -> Result<Value, ToolError> {
+        let (y, m, ..) = civil(now);
+        let mut month = format!("{y:04}-{m:02}");
+        let mut used: Vec<String> = vec![];
+        let mut per_account: std::collections::BTreeMap<String, Vec<f64>> =
+            std::collections::BTreeMap::new();
+        for _ in 0..months.clamp(1, 12) {
+            month = previous_month(&format!("{month}-01"));
+            let st = self.monthly(&month, now)?;
+            let accounts = st["accounts"].as_array().cloned().unwrap_or_default();
+            if accounts.is_empty() {
+                continue;
+            }
+            used.push(month.clone());
+            for a in accounts {
+                if let (Some(name), Some(net)) = (a["account"].as_str(), a["net"].as_f64()) {
+                    per_account.entry(name.to_string()).or_default().push(net);
+                }
+            }
+        }
+        let balances = self.balances()?;
+        let mut out = vec![];
+        for acc in balances["accounts"].as_array().into_iter().flatten() {
+            let (Some(name), Some(balance)) = (acc["account"].as_str(), acc["balance"].as_f64())
+            else {
+                continue;
+            };
+            if balance >= 0.0 {
+                continue;
+            }
+            let nets = per_account.get(name).cloned().unwrap_or_default();
+            let avg = if nets.is_empty() {
+                None
+            } else {
+                Some(round2(nets.iter().sum::<f64>() / nets.len() as f64))
+            };
+            let (exit, note) = match avg {
+                None => (None, "no movement in the months considered".to_string()),
+                Some(a) if a <= 0.0 => (
+                    None,
+                    "the average month does not bring the balance up: no exit at the current rate"
+                        .to_string(),
+                ),
+                Some(a) => {
+                    let needed = (-balance / a).ceil().max(1.0);
+                    let (ey, em, ..) = civil(now);
+                    let total = ey * 12 + i64::from(em) - 1 + needed as i64;
+                    (
+                        Some(format!(
+                            "{:04}-{:02}",
+                            total.div_euclid(12),
+                            total.rem_euclid(12) + 1
+                        )),
+                        format!("about {needed:.0} month(s) at the average net"),
+                    )
+                }
+            };
+            out.push(json!({
+                "account": name, "balance": balance, "balance_on": acc["balance_on"],
+                "average_monthly_net": avg, "months_considered": nets.len(),
+                "exit_estimate": exit, "note": note,
+            }));
+        }
+        Ok(json!({
+            "estimate": true,
+            "based_on": used,
+            "accounts": out,
+            "notice": "An estimate from past months, not a promise: one big expense moves it. Statement figures, as read in the last bank export.",
+        }))
+    }
+
     /// The statement of a month: income, outflow, the person's rules, overdrawn days, fees.
     pub fn monthly(&self, month: &str, now: i64) -> Result<Value, ToolError> {
         let (y, m, d, ..) = civil(now);
@@ -939,6 +1014,11 @@ impl Ledger<'_> {
             schema: json!({ "type": "object", "properties": { "month": { "type": "string", "description": "yyyy-mm" } } }),
         });
         out.push(ToolDef {
+            name: "finances_overdraft_exit",
+            description: "When each overdrawn account comes back above zero, as an estimate: the balance of the last export divided by the average monthly net (income minus outflow) of the last `months` complete months (default 3). Says so when the average month does not bring the balance up. An estimate from statement figures, never a promise.".into(),
+            schema: json!({ "type": "object", "properties": { "months": { "type": "integer", "minimum": 1, "maximum": 12, "description": "Complete months the average is made over; default 3." } } }),
+        });
+        out.push(ToolDef {
             name: "finances_rules",
             description: "The person's own rules for the monthly statement: caps (a merchant and a monthly limit), merchants to watch (with exceptions), words that mark bank fees and internal transfers. Pass `rules` to replace them (needs write access).".into(),
             schema: json!({ "type": "object", "properties": { "rules": { "type": "object", "properties": {
@@ -976,6 +1056,10 @@ impl Ledger<'_> {
                 self.movements(s("account"), s("from"), s("to"), s("filter"), limit)
             }
             "finances_monthly" => self.monthly(s("month"), now),
+            "finances_overdraft_exit" => {
+                let months = args.get("months").and_then(Value::as_u64).unwrap_or(3) as usize;
+                self.overdraft_exit(now, months)
+            }
             "finances_rules" => {
                 let c = self.conn()?;
                 if let Some(new) = args.get("rules") {

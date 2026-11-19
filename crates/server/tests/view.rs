@@ -170,6 +170,18 @@ fn a_money_space_publishes_the_finance_extension_and_pages_its_movements() -> Re
         .as_array()
         .ok_or("no monthly totals in the finance stats")?;
     assert_eq!(months.len(), 6, "{stats}");
+    // The overdraft exit is an estimate from past months, and says so.
+    let exit = text_of(&call(
+        &e,
+        &fin,
+        "finances_overdraft_exit",
+        json!({ "months": 3 }),
+    ));
+    assert_eq!(exit["estimate"], true, "{exit}");
+    assert!(
+        exit["accounts"].is_array() && exit["based_on"].is_array(),
+        "{exit}"
+    );
     assert!(
         months
             .iter()

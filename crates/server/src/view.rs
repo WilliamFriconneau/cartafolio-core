@@ -63,6 +63,7 @@ pub(crate) fn augment(ledger: &Ledger<'_>, mut base: Value) -> Value {
             { "name": "finances_balances", "description": "Balance of each account as read in the last bank export." },
             { "name": "finances_movements", "description": "Account movements from the bank exports, newest first." },
             { "name": "finances_monthly", "description": "Statement of a month, per account." },
+            { "name": "finances_overdraft_exit", "description": "When each overdrawn account comes back above zero (an estimate)." },
             { "name": "finances_rules", "description": "The person's own rules for the monthly statement." },
             { "name": "finances_import", "description": "Imports a bank export already stored in the space (write access)." },
         ],
@@ -72,6 +73,7 @@ pub(crate) fn augment(ledger: &Ledger<'_>, mut base: Value) -> Value {
             "finances_balances",
             "finances_movements",
             "finances_monthly",
+            "finances_overdraft_exit",
             "finances_rules",
             "finances_import",
         ] {

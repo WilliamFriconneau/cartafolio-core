@@ -397,6 +397,52 @@ pub(crate) fn living(
             moved += 1;
         }
     }
+    let mut updated = 0;
+    for u in args
+        .get("update")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default()
+    {
+        let Some(id) = u["id"].as_str() else {
+            continue;
+        };
+        let Some(card) = resolve_card(&conn, &page, id) else {
+            continue;
+        };
+        let Some((old_text, old_col)) = card_column(&card.id) else {
+            continue;
+        };
+        let text = u["text"]
+            .as_str()
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(String::from)
+            .unwrap_or(old_text);
+        let col = u["column"].as_str().unwrap_or(&old_col).to_string();
+        valid(&col)?;
+        let signs: Vec<String> = match u["signs"].as_array() {
+            Some(a) => a
+                .iter()
+                .filter_map(Value::as_str)
+                .map(String::from)
+                .collect(),
+            None => card
+                .tags
+                .iter()
+                .filter_map(|t| t.strip_prefix("sign/").map(String::from))
+                .collect(),
+        };
+        // The figures it had stay unless the call gives them again.
+        let mut fields = crate::autotag::fields_json(&card.tags);
+        if let (Some(f), Some(new)) = (fields.as_object_mut(), u["fields"].as_object()) {
+            for (k, v) in new {
+                f.insert(k.clone(), v.clone());
+            }
+        }
+        write_card(&text, &col, Some(&card.id), &signs, &fields)?;
+        updated += 1;
+    }
     let mut dropped = 0;
     for id in args
         .get("drop")
@@ -450,6 +496,6 @@ pub(crate) fn living(
         }
     }
     Ok(
-        json!({ "space": space_name, "page": page, "added": added, "moved": moved, "dropped": dropped, "covers": covers }),
+        json!({ "space": space_name, "page": page, "added": added, "moved": moved, "updated": updated, "dropped": dropped, "covers": covers }),
     )
 }

@@ -231,6 +231,22 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
             }
         }
     }
+    // The professions of the spaces this connection reads whole: what each space is an expert of, so that an assistant
+    // knows at once what it can do there (the tool `skills` has the detail).
+    let mut kinds: Vec<String> = vec![];
+    for s in spaces.iter().filter(|s| caller.read_paths(s).is_none()) {
+        if let Ok(k) = brain.space_kind(s)
+            && !k.is_empty()
+            && !kinds.contains(&k)
+        {
+            kinds.push(k);
+        }
+    }
+    let professions = crate::profession::instructions_for(Some(brain.dir()), &kinds);
+    if !professions.is_empty() {
+        out.push_str("\n\n");
+        out.push_str(&professions);
+    }
     // A vault reached only by paths (an app's layer, an inbox) is told nothing of what lies outside them:
     // not its guides, not its index, not its counters. The person's own guide goes only to a connection
     // that reaches at least one vault whole.

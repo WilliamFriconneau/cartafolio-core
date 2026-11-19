@@ -91,6 +91,30 @@ pub const COMMANDS: &[Entry] = &[
         false,
     ),
     e(
+        "skills-export",
+        "writes the professions as Claude skills (a plugin marketplace)",
+        Remote::Local("writes a folder of this machine from the built-in professions"),
+        false,
+    ),
+    e(
+        "professions",
+        "lists the professions the person added and the proposals",
+        Remote::Local("reads the professions file in the data folder of this machine"),
+        false,
+    ),
+    e(
+        "professions accept",
+        "accepts an assistant's proposed profession",
+        Remote::Local("moves a proposal inside the data folder of this machine"),
+        false,
+    ),
+    e(
+        "professions reject",
+        "drops an assistant's proposed profession",
+        Remote::Local("edits the proposals file in the data folder of this machine"),
+        false,
+    ),
+    e(
         "verify-export",
         "checks an export folder",
         Remote::Local("checks a folder of this machine and needs no node"),
