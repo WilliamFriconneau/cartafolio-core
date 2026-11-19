@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261117.0.28
 
 - **Moving a big tag no longer stalls or locks.** `notes_move` goes by batches of 1000 notes (call again until nothing remains), a cut-off or doubled call never fails or duplicates a note, a crash mid-move is finished at the next start, and refusals say why; `supersede` keeps the kind of a note and can add tags.
 
