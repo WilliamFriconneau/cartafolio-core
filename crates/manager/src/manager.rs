@@ -90,6 +90,17 @@ fn is_personal_registry_path(path: &str) -> bool {
     )
 }
 
+/// Runs the start-up pass of a memory (see core `recover.rs`): the moves a crash cut off are finished, the file events
+/// left out are written, the bytes no record holds are swept. Its summary goes to the log when it did anything; a
+/// failure is logged and the memory is served all the same (the pass runs again at the next start).
+fn recover(brain: &Brain, who: &str) {
+    match brain.recover() {
+        Ok(r) if r.is_clean() && r.swept => {}
+        Ok(r) => eprintln!("{who}: {}", r.summary()),
+        Err(e) => eprintln!("{who}: recovery: not finished yet: {e}"),
+    }
+}
+
 /// Paths of the page's API that are about the installation (its people), not about one person.
 fn is_installation_path(path: &str) -> bool {
     matches!(
@@ -115,6 +126,7 @@ impl Manager {
         } else {
             Brain::init(&registry_dir, &[], language).map_err(fail)?
         };
+        recover(&brain, "registry");
         text::set_language(brain.language().map_err(fail)?);
         let mut app = App::new(brain);
         Self::configure(&mut app, &opts);
@@ -229,6 +241,8 @@ impl Manager {
         } else {
             Brain::open(&dir).map_err(fail)?
         };
+        // What a crash cut off in this person's memory is finished or undone before anything of it is served.
+        recover(&brain, &u.name);
         if fresh {
             // The bootstrap user of a new directory becomes the person. No vault is made for
             // them: they make the ones they want, from the catalogue, on their page.

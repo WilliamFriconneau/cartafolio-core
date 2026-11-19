@@ -263,6 +263,13 @@ fn main() -> ExitCode {
             return ExitCode::from(2);
         }
     };
+    // What a crash cut off is finished or undone before events are exchanged (see core recover.rs); the lock of the
+    // bytes keeps this pass and a server's on the same folder from sweeping under each other.
+    match brain.recover() {
+        Ok(r) if r.is_clean() && r.swept => {}
+        Ok(r) => eprintln!("memcp-sync: {}", r.summary()),
+        Err(e) => eprintln!("memcp-sync: recovery: not finished yet: {e}"),
+    }
     // `--node-name NAME`: the name this node goes by in the peer directory (else one it made for itself, kept).
     if let Some(n) = value("--node-name")
         && let Err(e) = memcp_core::directory::set_own_name(&brain, &n)

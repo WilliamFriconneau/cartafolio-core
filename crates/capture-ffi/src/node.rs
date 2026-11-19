@@ -229,6 +229,9 @@ impl NodeIntake {
         let brain = Brain::open(&data).map_err(|e| NodeIntakeError::Invalid {
             message: format!("{data_dir}: {e}"),
         })?;
+        // What a crash or a killed app cut off is finished or undone before the node works (see core recover.rs). A
+        // failure is not fatal: the pass runs again at the next start.
+        let _ = brain.recover();
         text::set_language(brain.language().map_err(failed)?);
         let settings = settings_of(&data, &settings, decoder);
         let by_hand = Intake::new(&brain, settings.clone()).map_err(failed)?;

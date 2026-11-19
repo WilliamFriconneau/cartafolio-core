@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The memories of a Home Assistant installation are repaired at start too.** The manager, `memcp-sync` and the apps' own node now run the start-up repair pass on every memory they open, as the server did: a crash there is finished or undone before anything is served.
+
 ## 20261117.0.30
 
 - **A crash loses nothing and doubles nothing.** A file put, retired or erased when the machine stops is either fully done or not done; an erased recording's audio goes from every machine even if the node was killed mid-way; big files left out for an older machine are sent once it updates, even after a crash; leftovers are cleaned at start.

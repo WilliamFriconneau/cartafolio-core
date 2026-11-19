@@ -838,3 +838,64 @@ fn a_peer_sees_a_device_asking_to_join_and_allows_it() -> Res {
     assert_eq!(refused.status, 403);
     Ok(())
 }
+
+/// What a crash cut off in a person's memory is repaired when the manager opens it: a move of notes left half-done is
+/// finished, and a file whose event the peers' log lacks gets it.
+#[test]
+fn the_manager_repairs_what_a_crash_cut_off_in_a_persons_memory() -> Res {
+    use memcp_core::facts::{self, NewFact};
+    use memcp_core::moves::{self, Step};
+    use memcp_core::{Brain, Space, files};
+    let d = Dir::new("recover");
+    drop(two_people(&d)?);
+    let b = Brain::open(&d.path().join("people/alice"))?;
+    let owner: String =
+        b.open_control()?
+            .query_row("SELECT id FROM users ORDER BY id LIMIT 1", [], |r| r.get(0))?;
+    let (from, to) = (Space::new("notes")?, Space::new("cars")?);
+    b.add_space_for(&from, &owner)?;
+    b.add_space_for(&to, &owner)?;
+    let conn = b.open_space(&from)?;
+    let mut n = NewFact::agent("2026-11-19, the car is serviced in May.", "agent:t");
+    n.tags = vec!["car".into()];
+    facts::remember(&conn, &from, "me", n, &[])?;
+    moves::fail_at(Some(Step::AfterCopies));
+    let cut = b.move_by_tag(&from, &to, "car", "me", false);
+    moves::fail_at(None);
+    assert!(cut.is_err(), "the move went through its failpoint");
+    // A record an earlier version wrote without its event (the log is append-only: written as that version did).
+    let bytes = b"a short text";
+    let blobs = b.dir().join("files").join("notes");
+    fs::create_dir_all(&blobs)?;
+    let sha = memcp_core::chunks::digest(bytes);
+    fs::write(blobs.join(&sha), bytes)?;
+    conn.execute(
+        "INSERT INTO files (id, name, mime, size, sha256, note, fact_id, author, created_at)
+         VALUES ('file_old', 'memo.txt', 'text/plain', 12, ?1, '', NULL, 'device', 1)",
+        [&sha],
+    )?;
+    drop(conn);
+    // The manager starts again.
+    let _m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
+    let conn = b.open_space(&from)?;
+    let active: i64 = conn.query_row(
+        "SELECT count(*) FROM facts WHERE status = 'active' AND text LIKE '%car is serviced%'",
+        [],
+        |r| r.get(0),
+    )?;
+    let pending: i64 = conn.query_row("SELECT count(*) FROM move_pending", [], |r| r.get(0))?;
+    let there: i64 = b.open_space(&to)?.query_row(
+        "SELECT count(*) FROM facts WHERE status = 'active' AND text LIKE '%car is serviced%'",
+        [],
+        |r| r.get(0),
+    )?;
+    assert_eq!((active, pending, there), (0, 0, 1), "the move is finished");
+    let logged: i64 = conn.query_row(
+        "SELECT count(*) FROM sync_log WHERE eid = ?1",
+        ["f:file_old"],
+        |r| r.get(0),
+    )?;
+    assert!(files::info(&b, &from, "file_old")?.is_some());
+    assert_eq!(logged, 1, "the file event is written");
+    Ok(())
+}

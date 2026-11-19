@@ -15,8 +15,9 @@ again, each operation has ended **done once** or **not done**: never half-done, 
 - **Bytes after the commit.** Bytes a record will name are written (with `fsync`, then the folder synced after the
   rename) before the record commits; bytes a record lets go are removed after it commits. A crash in between leaves
   bytes no record needs, which the start-up pass removes.
-- **The start-up pass** (`Brain::recover`, `crates/core/src/recover.rs`), run by the server (HTTP and stdio) before it
-  serves: it finishes the moves cut off, writes the file events an earlier version left out, and sweeps the folders of
+- **The start-up pass** (`Brain::recover`, `crates/core/src/recover.rs`), run before anything is served by every
+  long-running program that opens a memory: the server (HTTP and stdio), the manager (the registry and each person's
+  memory, when it is first opened), `memcp-sync`, and the apps' own node (`capture-ffi`): it finishes the moves cut off, writes the file events an earlier version left out, and sweeps the folders of
   bytes (bytes no record needs, `.in-*.tmp`, `.<sha>.tmp`, `.<sha>.assembling`, chunks kept aside for a file whose bytes
   are whole or erased). It is idempotent and reads each space once.
 - **The lock of the bytes** (`files.lock` in the data directory): a writer of bytes holds it shared until its record
