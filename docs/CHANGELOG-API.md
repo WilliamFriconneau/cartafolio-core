@@ -2,6 +2,10 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## Short texts in a list (20261120.5.0)
+
+Added; nothing is renamed. `space_view` accepts `text_limit` (integer, at least 1) for `chronology` and `register`: each item's `text` is cut to that many characters, with `text_truncated: true` on the items that were cut. Left out, the whole text, as before.
+
 ## Several measures in one item (20261120.2.0)
 
 Added; nothing is renamed. In a health space an item of type `measure` (chronology, register) gains `measures`: `[{measure, value, unit, label}]`, one per `mesure/*` tag of the note, in the order of its tags; `measure`, `value`, `unit` and `label` stay the first one. `label` is found by the tag as well as by the id, and is the readable key for a measure outside the referential.

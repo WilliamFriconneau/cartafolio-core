@@ -31,7 +31,7 @@ const WINDOW_DAYS: i64 = 30;
 const MAX_SECTIONS: usize = 20;
 
 /// The notes of the person, without the page's own furniture (rules, dashboard, living boards).
-const FURNITURE: &str = "id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules','index','guide') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')";
+const FURNITURE: &str = "id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules','index','guide') OR (tag >= 'living/' AND tag < 'living0') OR (tag >= 'living-meta/' AND tag < 'living-meta0'))";
 
 fn arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
     args.get(key)
@@ -485,10 +485,10 @@ fn register(
             sql.push_str(" AND id IN (SELECT fact_id FROM fact_tags WHERE tag = 'dashboard')")
         }
         "sign" => sql.push_str(&format!(
-            " AND {FURNITURE} AND id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'signe/%' OR tag LIKE 'sign/%' OR tag LIKE 'field/level/%')"
+            " AND {FURNITURE} AND id IN (SELECT fact_id FROM fact_tags WHERE (tag >= 'signe/' AND tag < 'signe0') OR (tag >= 'sign/' AND tag < 'sign0') OR (tag >= 'field/level/' AND tag < 'field/level0'))"
         )),
         "measure" => sql.push_str(&format!(
-            " AND {FURNITURE} AND id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'mesure/%')"
+            " AND {FURNITURE} AND id IN (SELECT fact_id FROM fact_tags WHERE tag >= 'mesure/' AND tag < 'mesure0')"
         )),
         other => {
             return Err(ToolError::Invalid(format!(
@@ -539,6 +539,20 @@ fn register(
             })
             .unwrap_or_default()
     });
+    // A client that only draws a list asks for short texts (`text_limit`): a page of long notes is hundreds of kilobytes.
+    if let Some(n) = args.get("text_limit").and_then(Value::as_u64) {
+        let n = usize::try_from(n).unwrap_or(usize::MAX).max(1);
+        for it in &mut items {
+            let long = it["text"]
+                .as_str()
+                .filter(|t| t.chars().count() > n)
+                .map(|t| extract(t, n));
+            if let Some(short) = long {
+                it["text"] = json!(short);
+                it["text_truncated"] = json!(true);
+            }
+        }
+    }
     Ok(json!({
         "contract": CONTRACT,
         "contract_version": CONTRACT_VERSION,
@@ -742,9 +756,11 @@ fn stats_view(
     let total = count("");
     let files = count("AND type = 'file'");
     let signs = count(
-        "AND id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'signe/%' OR tag LIKE 'sign/%' OR tag LIKE 'field/level/%')",
+        "AND id IN (SELECT fact_id FROM fact_tags WHERE (tag >= 'signe/' AND tag < 'signe0') OR (tag >= 'sign/' AND tag < 'sign0') OR (tag >= 'field/level/' AND tag < 'field/level0'))",
     );
-    let measures = count("AND id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'mesure/%')");
+    let measures = count(
+        "AND id IN (SELECT fact_id FROM fact_tags WHERE tag >= 'mesure/' AND tag < 'mesure0')",
+    );
     let notes = total
         .saturating_sub(files)
         .saturating_sub(signs)
@@ -763,7 +779,7 @@ fn stats_view(
     if let Ok(mut st) = conn.prepare(
         "SELECT t.tag, count(DISTINCT t.fact_id) FROM fact_tags t JOIN facts f ON f.id = t.fact_id
          WHERE f.status = 'active' AND f.created_at >= ?1 AND f.created_at <= ?2
-         AND f.id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules','index','guide') OR tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
+         AND f.id NOT IN (SELECT fact_id FROM fact_tags WHERE tag IN ('dashboard','rules','index','guide') OR (tag >= 'living/' AND tag < 'living0') OR (tag >= 'living-meta/' AND tag < 'living-meta0'))
          AND substr(t.tag, 1, 1) <> '@'
          GROUP BY t.tag ORDER BY 2 DESC, 1 ASC LIMIT 20"
     ) && let Ok(rows) = st.query_map([from, to], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
@@ -775,7 +791,7 @@ fn stats_view(
     let mut sources: std::collections::BTreeMap<(String, String), i64> = Default::default();
     if let Ok(mut st) = conn.prepare(&format!(
         "SELECT tag, count(*) FROM fact_tags WHERE fact_id IN (SELECT id FROM facts WHERE {base})
-         AND (tag LIKE 'sources/%' OR tag LIKE 'dossier/%') GROUP BY tag"
+         AND ((tag >= 'sources/' AND tag < 'sources0') OR (tag >= 'dossier/' AND tag < 'dossier0')) GROUP BY tag"
     )) && let Ok(rows) = st.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?)))
     {
         for (tag, n) in rows.flatten() {

@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261120.5.0
+
+- **`space_view` takes `text_limit`** (register and chronology): each item's `text` is cut to that many characters and `text_truncated` says so. A page of 50 notes was 353 KB; a list that only draws titles can ask for 160.
+- **The stats of a space are twice as fast** (`stats` view of a 11 000 note health space: 188 ms to 94 ms): the counts by sign, measure, board and source read the index of tags by range instead of matching every tag with `LIKE`.
+- **The sign « envie d'acheter » no longer matches `besoin d'acheter`** (an ordinary shopping need).
+
 ## 20261120.4.0
 
 - **A PDF in a library is read.** When `MEMCP_PDF_TEXT_COMMAND` names a program (a program and its arguments, `{}` where the file goes: `pdftotext -layout {} -`, or an OCR such as `ocrmypdf --sidecar - {} /dev/null` for a scanned book), the text of each PDF is indexed like a text file and found by `library_search`. It runs with no shell, for 120 seconds at most per file. The Home Assistant app ships `pdftotext` and sets it.

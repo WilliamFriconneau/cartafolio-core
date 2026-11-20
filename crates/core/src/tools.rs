@@ -225,6 +225,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "type": { "type": "string", "enum": ["all", "note", "file", "target", "dashboard", "sign", "measure", "movement"], "description": "The kind of entry; chronology defaults to all. sign and measure are health spaces; movement comes from the money projection." },
                     "tag": { "type": "string", "description": "Only the items under this tag path." },
                     "limit": { "type": "integer", "minimum": 1, "maximum": 200, "description": "Page size; default 50." },
+                    "text_limit": { "type": "integer", "minimum": 1, "description": "Register and chronology: cut each item's `text` to this many characters (`text_truncated` says it was); left out, the whole text." },
                     "cursor": { "type": "string", "description": "Opaque: `page.next_cursor` of the previous page." },
                     "account": { "type": "string", "description": "Money spaces only: part of an account name or its last four digits." },
                     "filter": { "type": "string", "description": "Money spaces only: a word of a movement label." },

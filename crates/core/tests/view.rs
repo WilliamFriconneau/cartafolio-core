@@ -624,3 +624,32 @@ fn a_note_with_several_measures_shows_all_of_them_and_names_them_by_tag() -> Res
     );
     Ok(())
 }
+
+#[test]
+fn a_client_that_draws_a_list_can_ask_for_short_texts() -> Res {
+    let (_t, b, c) = world()?;
+    let full = caller(&b, "writer", "all", false)?;
+    let long = "Une note longue. ".repeat(60);
+    tools::call(
+        &b,
+        &full,
+        "remember",
+        &json!({ "space": "health", "text": long }),
+    )?;
+    let whole = call(&b, &c, json!({ "space": "health", "view": "chronology" }))?;
+    let short = call(
+        &b,
+        &c,
+        json!({ "space": "health", "view": "chronology", "text_limit": 80 }),
+    )?;
+    let size = |v: &Value| {
+        v["items"][0]["text"]
+            .as_str()
+            .map_or(0, |t| t.chars().count())
+    };
+    assert!(size(&whole) > 900, "{}", size(&whole));
+    assert!(size(&short) <= 81, "{}", size(&short));
+    assert_eq!(short["items"][0]["text_truncated"], true);
+    assert_eq!(whole["items"][0]["text_truncated"], Value::Null);
+    Ok(())
+}

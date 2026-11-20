@@ -411,6 +411,7 @@ callable for older clients but are no longer advertised.
 | `account` | string | no | money spaces: part of an account name or its last four digits |
 | `filter` | string | no | money spaces: a word of a movement label |
 | `mime` | string | no | files: a MIME prefix, such as `image/` |
+| `text_limit` | integer | no | register and chronology: cut each item's `text` to this many characters (`text_truncated` says it was); minimum 1 |
 
 Example calls and answers (fictitious data):
 

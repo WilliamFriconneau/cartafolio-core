@@ -336,3 +336,22 @@ fn english_signs_and_a_language_the_referential_lacks() {
     assert_eq!(d.signs[0].label, "Headache");
     assert_eq!(d.signs[1].label, "Fatigue");
 }
+
+#[test]
+fn an_ordinary_shopping_need_is_not_an_urge_to_buy() {
+    let ids = |text: &str| -> Vec<String> {
+        builtin()
+            .detect(text, Lang::Fr)
+            .signs
+            .iter()
+            .map(|s| s.id.clone())
+            .collect()
+    };
+    assert!(
+        !ids("J'ai besoin d'acheter du lait et du pain").contains(&"purchase_urge".to_string())
+    );
+    assert!(
+        ids("Grosse envie d'acheter une montre ce soir").contains(&"purchase_urge".to_string())
+    );
+    assert!(ids("Achat compulsif hier soir").contains(&"purchase_urge".to_string()));
+}
