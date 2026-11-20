@@ -901,3 +901,25 @@ pub fn purge(
     }
     Ok(())
 }
+
+/// `repair provenance`: puts back the provenance a retag lost (see `memcp_core::sync::repair_provenance`).
+pub fn repair_provenance(
+    data: &Path,
+    space: &str,
+    reason_prefix: &str,
+    apply: bool,
+) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    let r =
+        memcp_core::sync::repair_provenance(&brain, &space, reason_prefix, apply).map_err(fail)?;
+    sayln!(
+        "{} {}: {} notes {} their creation date, author and source back, {} of them their origin",
+        if apply { "repaired" } else { "dry run" },
+        r.space,
+        r.notes,
+        if apply { "got" } else { "would get" },
+        r.origins
+    );
+    Ok(())
+}

@@ -181,6 +181,9 @@ pub(super) fn tags_set(
     new.valid_to = old.valid_to;
     new.tags = tags.clone();
     let f = facts::supersede(&conn, &space, &caller.agent, id, new, Some(&reason))?;
+    // The same note with other tags: it keeps its date, its source and its origin.
+    facts::carry_provenance(&conn, id, &f.id)?;
+    let f = facts::read_fact(&conn, &f.id)?.unwrap_or(f);
     let learn = args.get("learn").and_then(Value::as_bool).unwrap_or(true);
     let learned =
         learn && learn_change(brain, &caller.agent, &space, &old.text, &old.tags, &f.tags);

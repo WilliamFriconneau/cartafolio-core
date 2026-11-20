@@ -3121,6 +3121,68 @@ pub fn purge_facts(
     Ok(out)
 }
 
+/// What a provenance repair did, or would do.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Repaired {
+    /// Space repaired.
+    pub space: String,
+    /// Notes whose provenance was put back (or would be).
+    pub notes: usize,
+    /// Of those, notes that also got their origin (`fact_origin`) back.
+    pub origins: usize,
+}
+
+/// A retag that went through `tags_set` before it kept provenance gave the note a new id, the date of the retag and none of
+/// the path, reference or origin it was written with. This puts them back on the current version from the version it
+/// replaced: the creation date, the validity, the author and the source of the note, and its origin row, for every note
+/// whose previous version was replaced for a reason that starts with `reason_prefix`. Nothing else changes. `apply` false
+/// only counts.
+pub fn repair_provenance(
+    brain: &Brain,
+    space: &Space,
+    reason_prefix: &str,
+    apply: bool,
+) -> Result<Repaired> {
+    let conn = brain.open_space(space)?;
+    let mut out = Repaired {
+        space: space.as_str().to_string(),
+        ..Repaired::default()
+    };
+    let pairs: Vec<(String, String)> = conn
+        .prepare(
+            "SELECT o.id, o.replaced_by FROM facts o JOIN facts n ON n.id = o.replaced_by
+             WHERE o.status = 'replaced' AND o.status_reason LIKE ?1 || '%'
+               AND (n.created_at <> o.created_at OR n.valid_from <> o.valid_from OR n.author <> o.author
+                    OR n.source_kind <> o.source_kind OR COALESCE(n.source_path, '') <> COALESCE(o.source_path, '')
+                    OR COALESCE(n.source_ref, '') <> COALESCE(o.source_ref, '')
+                    OR EXISTS (SELECT 1 FROM fact_origin x WHERE x.fact_id = o.id))
+               AND n.status = 'active'",
+        )?
+        .query_map([reason_prefix], |r| Ok((r.get(0)?, r.get(1)?)))?
+        .collect::<rusqlite::Result<_>>()?;
+    out.notes = pairs.len();
+    out.origins = pairs
+        .iter()
+        .filter(|(old, _)| {
+            conn.query_row(
+                "SELECT 1 FROM fact_origin WHERE fact_id = ?1",
+                [old],
+                |_| Ok(()),
+            )
+            .is_ok()
+        })
+        .count();
+    if !apply || pairs.is_empty() {
+        return Ok(out);
+    }
+    let tx = rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+    for (old, new) in &pairs {
+        facts::carry_provenance(&tx, old, new)?;
+    }
+    tx.commit()?;
+    Ok(out)
+}
+
 /// What the last pruning of this replica did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LastPrune {

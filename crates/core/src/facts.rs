@@ -1320,3 +1320,30 @@ pub(crate) fn repoint(conn: &Connection, actor: &str, id: &str, source: &Source)
     tx.commit()?;
     Ok(())
 }
+
+/// A retag replaces a note by itself with other tags: the new version is the same note, so it keeps the creation date, the
+/// validity, the author, the source (path, reference, range) and the origin of the one it replaces, instead of the date of
+/// the retag and an agent's source. Called by the tools that retag (`tags_set`, `sign_set`).
+pub fn carry_provenance(conn: &Connection, old: &str, new: &str) -> Result<()> {
+    conn.execute(
+        "UPDATE facts SET
+           created_at = (SELECT created_at FROM facts WHERE id = ?1),
+           valid_from = (SELECT valid_from FROM facts WHERE id = ?1),
+           valid_to = (SELECT valid_to FROM facts WHERE id = ?1),
+           author = (SELECT author FROM facts WHERE id = ?1),
+           source_kind = (SELECT source_kind FROM facts WHERE id = ?1),
+           source_path = (SELECT source_path FROM facts WHERE id = ?1),
+           source_hash = (SELECT source_hash FROM facts WHERE id = ?1),
+           source_range = (SELECT source_range FROM facts WHERE id = ?1),
+           source_ref = (SELECT source_ref FROM facts WHERE id = ?1),
+           source_agent = (SELECT source_agent FROM facts WHERE id = ?1)
+         WHERE id = ?2",
+        [old, new],
+    )?;
+    conn.execute("DELETE FROM fact_origin WHERE fact_id = ?1", [new])?;
+    conn.execute(
+        "UPDATE fact_origin SET fact_id = ?2 WHERE fact_id = ?1",
+        [old, new],
+    )?;
+    Ok(())
+}

@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261120.1.1
+
+- **A retag keeps the note.** `tags_set` and `sign_set` replaced a note by a copy with a new date and an agent's source: it lost the date, the author, the path and reference it was imported with, and its origin. The new version now keeps them all.
+- `memcp repair provenance --space S --reason PREFIX` puts back what an older retag lost, from the version each note replaced; it counts first and writes with `--yes`.
+
 ## 20261120.1.0
 
 - **The janitor's signs sweep is off unless asked for** (`signs_sweep = on`). It rewrote notes with `tags_set`, which gave them a new id and the date of the pass and dropped the path and reference they were imported with; a review found it. It must keep the identity and the provenance of a note before it runs again.
