@@ -150,7 +150,7 @@ fn capabilities(
         );
         item_types.insert(
             "measure".into(),
-            json!({ "id": "the fact id", "fields": ["measure", "value", "unit", "label"], "description": "A note that states a measure from the health referential." }),
+            json!({ "id": "the fact id", "fields": ["measure", "value", "unit", "label", "measures"], "description": "A note that states measures from the health referential; `measure`, `value`, `unit` and `label` are the first, `measures` lists all of them." }),
         );
     }
     if kind == "money" {
@@ -611,22 +611,25 @@ fn item(conn: &Connection, fact: &Fact, space_kind: &str) -> Value {
 fn classify(fact: &Fact, space_kind: &str) -> (String, Value) {
     let fields = crate::autotag::fields_json(&fact.tags);
     if space_kind == "health" {
-        let measure = fact.tags.iter().find_map(|t| t.strip_prefix("mesure/"));
-        if let Some(id) = measure {
-            let value = fields.get(id).cloned().unwrap_or(Value::Null);
-            let unit = fields
-                .get(format!("{id}_unit"))
-                .cloned()
-                .unwrap_or(Value::Null);
-            return (
-                "measure".into(),
+        // Every measure of the note, in the order of its tags: a day of readings (blood pressure, pulse, saturation) is one
+        // note with several. The first stays in the item's own fields, for the clients that read one.
+        let measures: Vec<Value> = fact
+            .tags
+            .iter()
+            .filter_map(|t| t.strip_prefix("mesure/"))
+            .map(|id| {
                 json!({
                     "measure": id,
-                    "value": value,
-                    "unit": unit,
+                    "value": fields.get(id).cloned().unwrap_or(Value::Null),
+                    "unit": fields.get(format!("{id}_unit")).cloned().unwrap_or(Value::Null),
                     "label": measure_label(id),
-                }),
-            );
+                })
+            })
+            .collect();
+        if let Some(first) = measures.first() {
+            let mut item = first.clone();
+            item["measures"] = json!(measures);
+            return ("measure".into(), item);
         }
         let sign = fact
             .tags
@@ -663,12 +666,20 @@ fn sign_label(id: &str) -> Option<String> {
         .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned())
 }
 
+/// The label of a measure, by its id or by its tag (`heart_rate` and `pouls`); a measure the referential does not know
+/// is named by its key, readable (`hrv_sdnn_ms` gives `Hrv sdnn ms`).
 fn measure_label(id: &str) -> Option<String> {
-    memcp_health::builtin()
+    let known = memcp_health::builtin()
         .measure_defs()
         .iter()
-        .find(|m| m.id == id)
-        .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned())
+        .find(|m| m.id == id || m.tag == id)
+        .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned());
+    known.or_else(|| {
+        let words = id.replace(['_', '-'], " ");
+        let mut c = words.trim().chars();
+        c.next()
+            .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+    })
 }
 
 fn provenance(fact: &Fact) -> Value {

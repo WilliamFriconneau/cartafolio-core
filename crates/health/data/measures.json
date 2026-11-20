@@ -95,7 +95,7 @@
    "kind": "duration",
    "unit": "h",
    "labels": { "fr": "Sommeil", "en": "Sleep", "es": "Sueño" },
-   "keywords": { "fr": ["dormi"], "en": ["slept"] },
+   "keywords": { "fr": ["dormi", "sommeil"], "en": ["slept", "sleep"] },
    "units": [
     { "id": "h", "label": "h", "words": ["h", "heure", "heures", "hour", "hours", "hr", "hrs"], "range": [0, 16] }
    ],

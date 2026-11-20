@@ -436,3 +436,23 @@ fn french_blood_pressure_accepts_dotted_pa_and_a_spoken_diastolic() {
             .is_empty()
     );
 }
+
+#[test]
+fn a_health_app_line_is_read_like_a_note() {
+    // « Constantes du … : Tension 125/80 mmHg · Pouls 63 bpm · Saturation 96,8 % · Dormi 7,2 h · Sommeil 7 h 11 »
+    let got = one("Tension 125/80 mmHg · Pouls 63 bpm · Saturation 96,8 % · Dormi 7,2 h");
+    assert!(
+        got.contains(&(id("blood_pressure"), 125.0, Some(80.0))),
+        "{got:?}"
+    );
+    assert!(got.contains(&(id("heart_rate"), 63.0, None)), "{got:?}");
+    assert!(
+        got.contains(&(id("saturation"), 96.8, None)),
+        "the % unit of the saturation: {got:?}"
+    );
+    assert!(got.contains(&(id("sleep"), 7.2, None)), "{got:?}");
+    assert_eq!(one("sommeil 7,2 h"), vec![(id("sleep"), 7.2, None)]);
+    let h11 = one("sommeil 7 h 11");
+    assert_eq!(h11.len(), 1, "{h11:?}");
+    assert!((h11[0].1 - (7.0 + 11.0 / 60.0)).abs() < 0.01, "{h11:?}");
+}

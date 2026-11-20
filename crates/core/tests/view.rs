@@ -592,3 +592,35 @@ fn fixtures_are_well_formed_examples_for_generic_health_and_finances() -> Res {
     }
     Ok(())
 }
+
+#[test]
+fn a_note_with_several_measures_shows_all_of_them_and_names_them_by_tag() -> Res {
+    let (_t, b, c) = world()?;
+    let full = caller(&b, "writer", "all", false)?;
+    tools::call(
+        &b,
+        &full,
+        "remember",
+        &json!({ "space": "health", "text": "Constantes du 2026-11-18 : Tension 125/80 mmHg · Pouls 63 bpm · Saturation 96,8 % · Dormi 7,2 h" }),
+    )?;
+    let v = call(
+        &b,
+        &c,
+        json!({ "space": "health", "view": "chronology", "type": "measure" }),
+    )?;
+    let item = v["items"]
+        .as_array()
+        .ok_or("items")?
+        .first()
+        .ok_or("a measure note")?;
+    let list = item["measures"].as_array().ok_or("measures")?;
+    assert!(list.len() >= 4, "every measure of the note: {item}");
+    let labels: Vec<&str> = list.iter().filter_map(|m| m["label"].as_str()).collect();
+    assert!(labels.iter().all(|l| !l.is_empty()), "{labels:?}");
+    assert!(
+        list.iter()
+            .any(|m| m["measure"] == "pouls" && m["label"].is_string()),
+        "named by tag: {item}"
+    );
+    Ok(())
+}

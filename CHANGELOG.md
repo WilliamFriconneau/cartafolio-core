@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261120.2.0
+
+- **A note with several measures shows all of them.** In the `chronology` of a health space an item of type `measure` carries `measures` (`[{measure, value, unit, label}]`) with every `mesure/*` tag of the note; the first stays in `measure`, `value`, `unit` and `label`.
+- **A measure is named by its tag as well as by its id** (`pouls` and `heart_rate`), and a measure the referential does not know is named by its key, readable.
+- **The referential reads `sommeil`** (`sommeil 7,2 h`, `sommeil 7 h 11`) and `sleep`, besides `dormi` and `slept`; the `%` of the saturation is kept as its unit.
+
 ## 20261120.1.1
 
 - **A retag keeps the note.** `tags_set` and `sign_set` replaced a note by a copy with a new date and an agent's source: it lost the date, the author, the path and reference it was imported with, and its origin. The new version now keeps them all.
