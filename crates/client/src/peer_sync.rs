@@ -290,7 +290,7 @@ impl Peer {
             let they_give = their_side.is_none_or(Policy::gives);
             // An older peer does not say when its copy began: it counts as made now.
             let since = s["since"].as_i64();
-            if memcp_core::catalogue::is_inbox_kind(&kind) {
+            if memcp_core::catalogue::is_inbox_kind(kind) {
                 if theirs.as_deref() != Some(name) {
                     continue;
                 }
