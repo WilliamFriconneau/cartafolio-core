@@ -135,7 +135,7 @@ Status: **done** (code and a test), **partial** (code, or part of the rule), **m
 | Rights | The address of a connection stays its name | done | `server/tests/server.rs::the_address_of_a_connection_is_its_name_and_lets_in_only_its_own_key` |
 | Existing connections | Migrated, not deleted; one that cannot be mapped is listed under "Needs a look" | partial | `core/tests/users.rs`, `core/tests/catalogue.rs` (upgrades keep connections); `admin.html` "Needs a look" lists what deserves one: `admin.rs::only_what_deserves_a_look_is_listed_and_refused_keys_are_for_administrators` |
 | Libraries | Mounted read-only; originals never changed; hidden folders and symbolic links left alone | done | `core/tests/library.rs` |
-| Libraries | Indexes path, title, dates, the first MiB of `.md` and `.txt`, `[[links]]`; `.docx` and `.pdf` by name only | done | `core/tests/library.rs` |
+| Libraries | Indexes path, title, dates, the first MiB of `.md` and `.txt`, `[[links]]`; `.docx` by name only, `.pdf` by name or, with `MEMCP_PDF_TEXT_COMMAND`, by its text | done | `core/tests/library.rs` |
 | Libraries | The janitor never reaches the index; a fact tagged `library` is left alone | done | `crates/janitor/tests/janitor.rs`, `core/src/library.rs` |
 | `library_search` | Offered only to a connection that reads a space whole | done | `core/tests/library.rs` |
 | `library_raise` | Summary at most 1200 characters; writes a fact with `library/raised`; needs write rights | done | `core/tests/library.rs::links_draws_spaces_tags_library_folders_and_what_was_raised` |

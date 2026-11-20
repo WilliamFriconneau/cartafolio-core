@@ -65,10 +65,11 @@ Example, in a space `jdr` of kind `hobbies`:
 ```
 
 **The books.** The rulebooks are a **library** mounted on the space (`memcp library add PATH --space jdr`: the node indexes the
-folder and never changes it); `library_search` reads it. Markdown and text files are searched by their words. **A PDF is
-indexed by its name and dates only until the node reads PDFs** (see the note in `library.rs`): for now, an assistant that can
-read a PDF raises the useful pages into the memory with `library_raise` (a short summary and the path of the original), or the
-book is kept as text beside the PDF.
+folder and never changes it); `library_search` reads it. Markdown and text files are searched by their words. **A PDF is read by a program of the node**: with
+`MEMCP_PDF_TEXT_COMMAND` (the Home Assistant app sets `pdftotext -layout {} -`) the text of each PDF is indexed and searched by
+its words; a scanned book needs an OCR in that command (`ocrmypdf --sidecar - {} /dev/null`). Without it a PDF is found by its
+name only, and an assistant that can read a PDF raises the useful pages into the memory with `library_raise` (a short summary
+and the path of the original).
 
 **Who writes a profession.** A profession is an instruction, so no assistant puts one in force by itself. Either you write the
 file `professions.json` in the node's data folder, or you ask an assistant, which calls `profession_propose`: the profile waits

@@ -297,3 +297,20 @@ fn links_shows_only_what_the_caller_can_read() -> Res {
     assert_eq!(none["results"].as_array().map(Vec::len), Some(0));
     Ok(())
 }
+
+#[test]
+fn a_pdf_is_read_by_the_program_the_person_names() -> Res {
+    // The program is `cat` here: it prints the file, which stands for the text of a PDF.
+    let t = Temp::new("library-pdf");
+    let file = t.path().join("rules.pdf");
+    fs::write(&file, "The warrior rolls twice for initiative.\n")?;
+    let text = library::text_by_command("cat {}", &file);
+    assert!(text.contains("initiative"), "{text:?}");
+    // A program that does not exist, or fails, gives nothing and breaks nothing.
+    assert_eq!(
+        library::text_by_command("no-such-program-here {}", &file),
+        ""
+    );
+    assert_eq!(library::text_by_command("", &file), "");
+    Ok(())
+}

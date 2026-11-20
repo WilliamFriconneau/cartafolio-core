@@ -9,9 +9,10 @@
 //! (the janitor) reaches it. A person, or an assistant for them, *raises* an original: a normal fact is written in
 //! the space, with a short summary, tags, and the path of the original; the original stays where it is.
 //!
-//! TODO: `.docx` and `.pdf` are indexed by name and dates only. Their text sits in compressed streams (deflate, and
-//! for a PDF fonts and encodings), which cannot be read without a library; none is added, to keep the node small
-//! and the supply chain short. Extract their text here when a dependency is accepted.
+//! `.docx` is indexed by name and dates only. A `.pdf` is too, unless the person names a program that reads PDFs
+//! (`MEMCP_PDF_TEXT_COMMAND`, see below): its text sits in compressed streams with fonts and encodings, which a
+//! library would have to read, and none is added, to keep the node small and the supply chain short. The Home Assistant
+//! app ships `pdftotext` for this.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
@@ -285,9 +286,80 @@ fn stem_of(rel: &str) -> &str {
     name.rsplit_once('.').map_or(name, |(s, _)| s)
 }
 
-/// The text of a file, for the types whose text is read (`md`, `txt`); nothing for the others (see the TODO above).
-/// Opens the file for reading only.
+/// The program that reads a PDF, when the person has one: `MEMCP_PDF_TEXT_COMMAND`, a program and its arguments with `{}`
+/// where the file goes (`pdftotext -layout {} -`; an OCR for scanned books, such as `ocrmypdf --sidecar - {} /dev/null`).
+/// It is run with no shell, with the file as one argument, and given [`PDF_SECONDS`] seconds. Nothing is added to the node
+/// itself: the program is the person's.
+const PDF_COMMAND: &str = "MEMCP_PDF_TEXT_COMMAND";
+/// How long the program may take for one file.
+const PDF_SECONDS: u64 = 120;
+
+fn pdf_text(path: &Path) -> String {
+    match std::env::var(PDF_COMMAND) {
+        Ok(command) => text_by_command(&command, path),
+        Err(_) => String::new(),
+    }
+}
+
+/// The text a program (`command`, with `{}` for the file) prints for `path`; empty when it fails or takes too long.
+pub fn text_by_command(command: &str, path: &Path) -> String {
+    let mut words = command.split_whitespace();
+    let Some(program) = words.next() else {
+        return String::new();
+    };
+    let file = path.to_string_lossy().into_owned();
+    let args: Vec<String> = words
+        .map(|w| {
+            if w == "{}" {
+                file.clone()
+            } else {
+                w.to_string()
+            }
+        })
+        .collect();
+    let Ok(mut child) = std::process::Command::new(program)
+        .args(&args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::piped())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+    else {
+        return String::new();
+    };
+    let Some(out) = child.stdout.take() else {
+        return String::new();
+    };
+    // The output is read on its own thread so that a program that fills its pipe does not wait for us; the program is
+    // killed when it takes too long.
+    let reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = out.take(MAX_READ).read_to_end(&mut buf);
+        buf
+    });
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(PDF_SECONDS);
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => break,
+            Ok(None) if std::time::Instant::now() < end => {
+                std::thread::sleep(std::time::Duration::from_millis(50));
+            }
+            _ => {
+                let _ = child.kill();
+                let _ = child.wait();
+                break;
+            }
+        }
+    }
+    let buf = reader.join().unwrap_or_default();
+    String::from_utf8_lossy(&buf).replace('\0', "")
+}
+
+/// The text of a file, for the types whose text is read (`md`, `txt`, and `pdf` when [`PDF_COMMAND`] names a program);
+/// nothing for the others (see the TODO above). Opens the file for reading only.
 fn read_text(f: &Found) -> String {
+    if f.ext == "pdf" {
+        return pdf_text(&f.path);
+    }
     if f.ext != "md" && f.ext != "txt" {
         return String::new();
     }

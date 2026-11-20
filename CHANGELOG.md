@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.4.0
+
+- **A PDF in a library is read.** When `MEMCP_PDF_TEXT_COMMAND` names a program (a program and its arguments, `{}` where the file goes: `pdftotext -layout {} -`, or an OCR such as `ocrmypdf --sidecar - {} /dev/null` for a scanned book), the text of each PDF is indexed like a text file and found by `library_search`. It runs with no shell, for 120 seconds at most per file. The Home Assistant app ships `pdftotext` and sets it.
+
 ## 20261120.3.0
 
 - **The keys and numbers of a JSON dump are no longer tagged.** A note that is a JSON object after a short label (`[Kalios] charge 2025-12-10: {...}`, a day dump) is tagged from the sentences inside it only; the keys, numbers and booleans made tags such as `acwr`, `true` and `warming`. The words of a day dump (a dictated line) are still read.
