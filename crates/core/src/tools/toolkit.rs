@@ -297,7 +297,7 @@ pub(super) fn signs_review(
     let mut st = conn
         .prepare(
             "SELECT f.id FROM facts f WHERE f.status = 'active' AND f.created_at >= ?1
-             AND f.id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'signe/%')
+             AND f.id IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'signe/%' OR tag LIKE 'signe-refuse/%')
              AND f.id NOT IN (SELECT fact_id FROM fact_tags WHERE tag LIKE 'living/%' OR tag LIKE 'living-meta/%')
              ORDER BY f.created_at DESC, f.id DESC LIMIT ?2",
         )
@@ -313,10 +313,17 @@ pub(super) fn signs_review(
             continue;
         };
         let tags: Vec<&String> = f.tags.iter().filter(|t| t.starts_with("signe/")).collect();
+        // What the person took off this note: the sweep leaves those signs alone, and `sign_set` puts one back.
+        let refused: Vec<&str> = f
+            .tags
+            .iter()
+            .filter_map(|t| t.strip_prefix(memcp_health::REFUSED_SIGN_PREFIX))
+            .collect();
         if let Some(m) = only
             && !tags
                 .iter()
                 .any(|t| t.as_str() == format!("signe/{}", m.tag))
+            && !refused.iter().any(|t| *t == m.tag)
         {
             continue;
         }
@@ -337,6 +344,7 @@ pub(super) fn signs_review(
             "author": f.author,
             "text": f.text.chars().take(280).collect::<String>(),
             "signs": tags.iter().filter_map(|t| t.strip_prefix("signe/")).collect::<Vec<_>>(),
+            "refused": refused,
             "evidence": evidence,
             "from_words": !evidence.is_empty(),
         }));

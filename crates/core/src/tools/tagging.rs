@@ -115,13 +115,33 @@ pub(super) fn tags_set(
         }
     };
     let mut tags = list("tags")?.unwrap_or_else(|| old.tags.clone());
-    for t in list("add")?.unwrap_or_default() {
-        if !tags.contains(&t) {
-            tags.push(t);
+    let add = list("add")?.unwrap_or_default();
+    for t in &add {
+        if !tags.contains(t) {
+            tags.push(t.clone());
         }
     }
     let remove = list("remove")?.unwrap_or_default();
     tags.retain(|t| !remove.contains(t));
+    let learn = args.get("learn").and_then(Value::as_bool).unwrap_or(true);
+    // A sign the person takes off a note is their word: the mark `signe-refuse/<sign>` keeps the tagger of the node and
+    // the janitor's night sweep from putting it back on that note. Adding the sign again takes the mark off. What an
+    // engine does (a pass that says `learn: false`) leaves no mark and clears none.
+    if learn {
+        for t in &old.tags {
+            if remove.contains(t)
+                && let Some(mark) = memcp_health::refused_sign(t)
+                && !tags.contains(&mark)
+            {
+                tags.push(mark);
+            }
+        }
+        for t in &add {
+            if let Some(mark) = memcp_health::refused_sign(t) {
+                tags.retain(|x| *x != mark);
+            }
+        }
+    }
     // Fields: a value sets it (the old value of that field goes), null or an empty text takes it off.
     if let Some(fields) = args.get("fields") {
         let fields = fields
@@ -184,7 +204,6 @@ pub(super) fn tags_set(
     // The same note with other tags: it keeps its date, its source and its origin.
     facts::carry_provenance(&conn, id, &f.id)?;
     let f = facts::read_fact(&conn, &f.id)?.unwrap_or(f);
-    let learn = args.get("learn").and_then(Value::as_bool).unwrap_or(true);
     let learned =
         learn && learn_change(brain, &caller.agent, &space, &old.text, &old.tags, &f.tags);
     let added: Vec<&String> = f.tags.iter().filter(|t| !old.tags.contains(t)).collect();

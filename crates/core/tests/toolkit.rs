@@ -164,6 +164,65 @@ fn the_signs_of_a_note_are_reviewed_and_corrected() -> Res {
 }
 
 #[test]
+fn a_sign_the_person_took_off_a_note_is_not_put_back() -> Res {
+    let t = Temp::new("toolkit-refused");
+    let b = brain(&t)?;
+    b.set_space_kind(&sp("health"), "health")?;
+    let c = caller(&b, "assistant", "all")?;
+    let w = call(
+        &b,
+        &c,
+        "remember",
+        json!({ "space": "health", "text": "Très fatigué ce matin, mal au crâne depuis hier." }),
+    )?;
+    let id = w["fact"]["id"].as_str().ok_or("id")?.to_string();
+    // The person takes the fatigue off this note (the default: what they do is learned).
+    let off = call(
+        &b,
+        &c,
+        "sign_set",
+        json!({ "id": id, "remove": ["fatigue"] }),
+    )?;
+    let tags = off["fact"]["tags"].to_string();
+    assert!(!tags.contains("signe/fatigue"), "{tags}");
+    assert!(tags.contains("signe-refuse/fatigue"), "{tags}");
+
+    // The person corrects the text later: the tagger reads it again and leaves the refused sign alone.
+    let id = off["fact"]["id"].as_str().ok_or("id")?.to_string();
+    let again = call(
+        &b,
+        &c,
+        "supersede",
+        json!({ "id": id, "text": "Très fatigué ce matin, mal au crâne depuis hier, un peu mieux ce soir." }),
+    )?;
+    let tags = again["fact"]["tags"].to_string();
+    assert!(!tags.contains("signe/fatigue"), "{tags}");
+    assert!(tags.contains("signe-refuse/fatigue"), "{tags}");
+
+    // The review still shows it, with what the person refused, so that it can come back.
+    let review = call(&b, &c, "signs_review", json!({ "space": "health" }))?;
+    let note = review["notes"]
+        .as_array()
+        .ok_or("notes")?
+        .iter()
+        .find(|n| n["id"] == json!(again["fact"]["id"]))
+        .ok_or("note")?;
+    assert!(note["refused"].to_string().contains("fatigue"), "{note}");
+
+    // Putting the sign back takes the mark off.
+    let back = call(
+        &b,
+        &c,
+        "sign_set",
+        json!({ "id": again["fact"]["id"], "add": ["fatigue"] }),
+    )?;
+    let tags = back["fact"]["tags"].to_string();
+    assert!(tags.contains("signe/fatigue"), "{tags}");
+    assert!(!tags.contains("signe-refuse/fatigue"), "{tags}");
+    Ok(())
+}
+
+#[test]
 fn every_space_announces_its_profession_and_the_person_can_add_profiles() -> Res {
     let t = Temp::new("toolkit-skills");
     let b = brain(&t)?;

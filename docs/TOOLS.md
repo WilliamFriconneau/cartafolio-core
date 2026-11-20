@@ -1353,7 +1353,7 @@ Proposes a profession for the person to accept: a profile of skills for a kind o
 The notes of a health space that carry signs and symptoms, newest first, with the signs they carry and the words of the note that brought each one up (`evidence`), so that what the tagger put on a note can be checked. To correct one, call `sign_set`.
 
 - **Seen with:** read access on at least one space (not a key limited to paths).
-- **Answer:** `{ notice, space, since, notes: [{ id, at, author, text, signs, evidence: [{ sign, label, words }], from_words }], how_to_correct }`.
+- **Answer:** `{ notice, space, since, notes: [{ id, at, author, text, signs, refused, evidence: [{ sign, label, words }], from_words }], how_to_correct }`. `refused` lists the signs the person took off that note (the mark `signe-refuse/<sign>`), so that one can be put back.
 - **Errors:** `invalid` (not a health space, a bad date, a sign outside the referential); `denied`.
 - **Effects:** None.
 
@@ -1366,7 +1366,7 @@ The notes of a health space that carry signs and symptoms, newest first, with th
 
 ### `sign_set`
 
-Corrects the signs and symptoms of a note: `add` the signs it lacks, `remove` the ones that are wrong (signs of the shared referential, by id, tag or label). The note keeps its text and its other tags, the old version stays in the history, and the node learns from the correction (its words lead to the signs added, away from the ones removed) unless `learn` is false: pass false when you are an engine proposing, not the person correcting. It is `tags_set` restricted to the signs of the referential.
+Corrects the signs and symptoms of a note: `add` the signs it lacks, `remove` the ones that are wrong (signs of the shared referential, by id, tag or label). The note keeps its text and its other tags, the old version stays in the history, and the node learns from the correction (its words lead to the signs added, away from the ones removed) unless `learn` is false: pass false when you are an engine proposing, not the person correcting. A sign taken off this way is not put back later: the note keeps the mark `signe-refuse/<sign>`, which the tagger and the janitor's night sweep respect until the sign is added again. It is `tags_set` restricted to the signs of the referential.
 
 - **Seen with:** write access on at least one space.
 - **Answer:** as `tags_set`: `{ result: "superseded", fact }`.

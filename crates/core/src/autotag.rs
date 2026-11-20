@@ -508,6 +508,10 @@ pub fn add_to(
         if tags.len() >= crate::facts::MAX_TAGS {
             break;
         }
+        // A sign the person took off this note is their word: the tagger does not put it back (`signe-refuse/<sign>`).
+        if memcp_health::refused_sign(&t).is_some_and(|mark| tags.contains(&mark)) {
+            continue;
+        }
         // A field the caller already gave (a call's participants, say) is not given a second value by the tagger.
         let given = t
             .strip_prefix(FIELD_PREFIX)

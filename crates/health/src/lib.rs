@@ -50,6 +50,24 @@ pub struct Detection {
 
 const MEASURE_LABELS: &str = include_str!("../data/measure_labels.json");
 
+/// The tag under which a note keeps the sign its person took off: `signe-refuse/<sign>`, beside the note's other tags.
+/// The tagger of the node and the janitor's night sweep leave that sign alone on that note; adding the sign again takes
+/// the tag off. A note carries one mark per refused sign, never the sign itself.
+pub const REFUSED_SIGN_PREFIX: &str = "signe-refuse/";
+
+/// The mark of a refused sign, from the tag of the sign (`signe/fatigue` gives `signe-refuse/fatigue`).
+pub fn refused_sign(sign_tag: &str) -> Option<String> {
+    sign_tag
+        .strip_prefix("signe/")
+        .map(|s| format!("{REFUSED_SIGN_PREFIX}{s}"))
+}
+
+/// The sign a mark refuses (`signe-refuse/fatigue` gives `signe/fatigue`), `None` for a tag that is not a mark.
+pub fn sign_of_refusal(mark: &str) -> Option<String> {
+    mark.strip_prefix(REFUSED_SIGN_PREFIX)
+        .map(|s| format!("signe/{s}"))
+}
+
 /// The name and the unit of a number a health app sends that the referential has no measure for (an Apple Health constant
 /// such as `hrv_sdnn_ms`), by its key. `None` for a key it does not list.
 pub fn extra_measure(key: &str) -> Option<(String, String)> {
@@ -98,6 +116,104 @@ pub fn builtin() -> &'static Referential {
 /// The signs, measures and red flags of a text, with the shipped referential.
 pub fn detect(text: &str, lang: Lang) -> Detection {
     builtin().detect(text, lang)
+}
+
+/// The language the referential reads a text in: French when the text looks French, every language together otherwise.
+///
+/// French is read alone so that a word of both languages in one sense only (`pain`, bread in French) is not taken for the
+/// other's sign. The mark of French is an accent, or the words only French uses: one of them in a short note, two in a
+/// longer one, and never when the text looks like another language (`the`, `and`, `mi`…). It never answers English: with
+/// every language open the English signs are found too, and the red flags are read whatever the language.
+pub fn lang_of(text: &str) -> Lang {
+    /// Words that are French (and not a word an English note says all the same).
+    const FRENCH: [&str; 57] = [
+        "je",
+        "j'ai",
+        "tu",
+        "nous",
+        "vous",
+        "ils",
+        "elles",
+        "avec",
+        "pour",
+        "dans",
+        "mais",
+        "pas",
+        "très",
+        "toujours",
+        "jamais",
+        "encore",
+        "aujourd'hui",
+        "hier",
+        "demain",
+        "matin",
+        "soir",
+        "journée",
+        "ça",
+        "c'est",
+        "n'est",
+        "qu'il",
+        "qu'elle",
+        "être",
+        "avoir",
+        "fait",
+        "suis",
+        "était",
+        "depuis",
+        "sans",
+        "sous",
+        "entre",
+        "vers",
+        "chez",
+        "beaucoup",
+        "trop",
+        "peu",
+        "rien",
+        "bien",
+        "oui",
+        "non",
+        "mon",
+        "ma",
+        "mes",
+        "au",
+        "aux",
+        "du",
+        "des",
+        "une",
+        "les",
+        "et",
+        "que",
+        "qui",
+    ];
+    /// Words of another language: enough of them, and the note is not read as French.
+    const ELSEWHERE: [&str; 48] = [
+        "the", "and", "with", "my", "i'm", "i've", "this", "that", "was", "were", "been", "have",
+        "has", "is", "are", "you", "your", "they", "their", "of", "it's", "don't", "can't", "not",
+        "but", "for", "from", "still", "again", "what", "when", "where", "she", "we", "in", "at",
+        "would", "could", "should", "because", "there", "here", "el", "los", "las", "pero", "muy",
+        "sono",
+    ];
+    let lower = text.to_lowercase().replace('’', "'");
+    if lower.chars().any(|c| "àâçéèêëîïôùûœ".contains(c)) {
+        return Lang::Fr;
+    }
+    let words: Vec<&str> = lower
+        .split(|c: char| !(c.is_alphanumeric() || c == '\''))
+        .filter(|w| !w.is_empty())
+        .collect();
+    let count = |list: &[&str]| -> usize {
+        list.iter()
+            .filter(|m| words.iter().any(|w| w == *m))
+            .count()
+    };
+    let (fr, elsewhere) = (count(&FRENCH), count(&ELSEWHERE));
+    // Two French words say it; one carries a short note (a few words jotted down), unless another language shows.
+    let looks = fr >= 2 || (fr == 1 && words.len() <= 8 && elsewhere == 0);
+    if looks && fr > elsewhere {
+        Lang::Fr
+    } else {
+        Lang::Auto
+    }
 }
 
 impl Referential {

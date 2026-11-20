@@ -2,6 +2,10 @@
 
 Every new route, tool or JSON form, with the version that brings it. The apps read this file. Where a name changed, the node reads both and writes the new one, unless it says otherwise.
 
+## A sign the person refused stays off (20261120.6.0)
+
+Added; nothing is renamed. `signs_review` adds `refused` to each note: the signs the person took off it, as tags of the referential (the note's own tag is `signe-refuse/<sign>`). A note that carries a mark is still listed, so that the sign can be put back with `sign_set`. `tags_set` (and `sign_set`) with `learn: true` — the default, a correction by the person — adds the mark of every `signe/…` tag it removes and takes off the mark of every `signe/…` tag it adds; with `learn: false` it does neither. Nothing else changes in the shape of an answer.
+
 ## Short texts in a list (20261120.5.0)
 
 Added; nothing is renamed. `space_view` accepts `text_limit` (integer, at least 1) for `chronology` and `register`: each item's `text` is cut to that many characters, with `text_truncated: true` on the items that were cut. Left out, the whole text, as before.

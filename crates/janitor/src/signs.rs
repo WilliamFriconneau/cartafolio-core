@@ -54,6 +54,15 @@ pub(crate) fn leave_alone(item: &Value) -> bool {
     path.contains("/Sources/") || path.starts_with("Sources/")
 }
 
+/// The signs a note refuses (`signe-refuse/<sign>`), named as the referential names them (`signe/<sign>`): what the person
+/// took off this note, which the sweep never puts back.
+fn refused(item: &Value) -> Vec<String> {
+    tags_of(item)
+        .iter()
+        .filter_map(|t| memcp_health::sign_of_refusal(t))
+        .collect()
+}
+
 impl Janitor {
     /// One bounded turn of the sweep over every health space.
     pub(crate) fn sweep_signs(&mut self, vaults: &[String], report: &mut Report) {
@@ -125,7 +134,11 @@ impl Janitor {
                 let (Some(id), Some(text)) = (item["id"].as_str(), item["text"].as_str()) else {
                     continue;
                 };
-                let found = health_rule::detected_tags(text);
+                let refused = refused(item);
+                let found: Vec<String> = health_rule::detected_tags(text)
+                    .into_iter()
+                    .filter(|t| !refused.contains(t))
+                    .collect();
                 if found.is_empty() {
                     continue;
                 }

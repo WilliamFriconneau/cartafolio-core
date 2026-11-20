@@ -1010,5 +1010,23 @@ fn the_night_sweep_tags_the_signs_of_notes_written_without_them_and_only_those()
     );
     // A second night has nothing left to do.
     assert_eq!(j.run_night().signs_tagged, 0);
+    // A note where the person took a sign off keeps it off; the sweep still tags the signs they kept.
+    o.call(
+        "remember",
+        json!({
+            "space": "sam-health",
+            "text": "Fatigue et batterie sociale vide depuis la rentrée.",
+            "tags": ["proposals/test", "signe-refuse/fatigue"],
+        }),
+    )
+    .expect("a note that refuses one sign");
+    let report = j.run_night();
+    assert_eq!(report.signs_tagged, 1, "{report:?}");
+    let tags = signed(&mut o, "batterie sociale vide depuis la rentrée");
+    assert!(!tags.contains(&"signe/fatigue".to_string()), "{tags:?}");
+    assert!(
+        tags.contains(&"signe/social_battery_empty".to_string()),
+        "{tags:?}"
+    );
     let _ = std::fs::remove_dir_all(&r.dir);
 }

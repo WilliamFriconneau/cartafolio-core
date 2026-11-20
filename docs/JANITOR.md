@@ -107,7 +107,12 @@ it is tagged the same; the text is never changed (`tags_set` keeps the old versi
 
 - It reads newest first, 600 notes tagged per pass at most, and goes on where it stopped; after a full turn it only looks at
   what is newer. Changing `VERSION` in `signs.rs` makes it look at everything again.
-- No model: the referential alone. A note that looks French is read in French, so that `pain` (bread) is not a sign.
+- No model: the referential alone. A note that looks French is read in French, so that `pain` (bread) is not a sign;
+the mark of French is an accent or words only French uses (`memcp_health::lang_of`), and a note that shows another
+language is read in every language at once.
+- **It never puts back a sign the person took off.** Correcting a note with `sign_set` leaves the mark
+  `signe-refuse/<sign>` on it; the sweep skips that sign there, and the note is tagged with the others. Adding the sign
+  again takes the mark off. The write-time tagger follows the same rule when a corrected text is read again.
 - It leaves alone what is not the person's words: the raw layer of an app (`sources/<app>`), a reference document
   (`…/Sources/…`), a mounted library, the janitor's own notes, the living boards, the rules, a note that already has its signs.
 - It never teaches the node (`learn: false`): what an engine writes is not a correction by the person.
