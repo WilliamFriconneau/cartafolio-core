@@ -1401,7 +1401,7 @@ Sets a target of a health space as a nurse writes it, or changes one (`id`). A t
 
 ### `tags_set`
 
-Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (a `supersede` with the same text), the reason is recorded and the history keeps the old tags. Nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`; `fields` sets named values kept as said. The node learns from the change unless `learn` is false.
+Corrects or completes the tags of a note that exists: the note is replaced by itself with the new set of tags (a `supersede` with the same text), the reason is recorded and the history keeps the old tags. Nothing is erased. Give the whole set in `tags`, or change it with `add` and `remove`; `fields` sets named values kept as said. The node learns from the change unless `learn` is false. A `signe/<sign>` the note loses, by `remove` or by a whole `tags` list without it, leaves the mark `signe-refuse/<sign>`: the tagger and the janitor's night sweep keep that sign off that note until it is added again (with `learn` false, an engine's pass, no mark is left).
 
 - **Seen with:** write access on at least one space (not a key limited to paths).
 - **Answer:** `{ result: "superseded", fact, added, removed, reason, learned }`, or `{ result: "unchanged", fact }` when the set is the same.

@@ -128,8 +128,9 @@ pub(super) fn tags_set(
     // the janitor's night sweep from putting it back on that note. Adding the sign again takes the mark off. What an
     // engine does (a pass that says `learn: false`) leaves no mark and clears none.
     if learn {
+        // Every sign the note had and no longer has, whether it went through `remove` or through a whole `tags` list.
         for t in &old.tags {
-            if remove.contains(t)
+            if !tags.contains(t)
                 && let Some(mark) = memcp_health::refused_sign(t)
                 && !tags.contains(&mark)
             {

@@ -219,6 +219,25 @@ fn a_sign_the_person_took_off_a_note_is_not_put_back() -> Res {
     let tags = back["fact"]["tags"].to_string();
     assert!(tags.contains("signe/fatigue"), "{tags}");
     assert!(!tags.contains("signe-refuse/fatigue"), "{tags}");
+
+    // A whole list of tags that leaves the sign out is the same word: the mark goes on.
+    let listed: Vec<String> = back["fact"]["tags"]
+        .as_array()
+        .ok_or("tags")?
+        .iter()
+        .filter_map(Value::as_str)
+        .filter(|t| *t != "signe/fatigue")
+        .map(String::from)
+        .collect();
+    let off = call(
+        &b,
+        &c,
+        "tags_set",
+        json!({ "id": back["fact"]["id"], "tags": listed }),
+    )?;
+    let tags = off["fact"]["tags"].to_string();
+    assert!(!tags.contains("signe/fatigue"), "{tags}");
+    assert!(tags.contains("signe-refuse/fatigue"), "{tags}");
     Ok(())
 }
 

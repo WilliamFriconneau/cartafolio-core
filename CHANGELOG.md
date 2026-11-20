@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.6.1
+
+- **A sign taken off with a whole list of tags leaves the mark too.** `tags_set` with `tags` (the list that replaces all of them) marks a `signe/<sign>` it leaves out, as `remove` does: the tagger and the night sweep keep that sign off the note. An engine's pass (`learn: false`) still leaves no mark.
+
 ## 20261120.6.0
 
 - **A sign the person takes off a note stays off.** Correcting a note with `sign_set` (or `tags_set`, by default) leaves the mark `signe-refuse/<sign>` beside the note's tags: the node's tagger and the janitor's night sweep no longer put that sign back on that note, whatever the person writes there afterwards. Adding the sign again with `sign_set` takes the mark off. A pass that says `learn: false` (the sweep, an engine) leaves no mark and clears none.
