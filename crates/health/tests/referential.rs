@@ -122,3 +122,13 @@ fn the_compact_view_gives_ids_labels_and_keywords() {
     }
     assert_eq!(v["manifestations"].as_array().expect("list").len(), 86);
 }
+
+#[test]
+fn a_health_app_constant_the_referential_has_no_measure_for_has_a_name_and_a_unit() {
+    let (label, unit) = memcp_health::extra_measure("hrv_sdnn_ms").expect("listed");
+    assert_eq!(
+        (label.as_str(), unit.as_str()),
+        ("Variabilité cardiaque (VFC)", "ms")
+    );
+    assert!(memcp_health::extra_measure("not_a_constant").is_none());
+}

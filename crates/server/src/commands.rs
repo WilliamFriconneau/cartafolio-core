@@ -83,6 +83,9 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
   repair provenance --space S --reason PREFIX [--yes]
                                          puts back the date, author, source and origin that a retag lost (a note replaced for a
                                          reason that starts with PREFIX); counts first unless --yes
+  tags remove --space S --tags A,B,C [--only TAG] [--yes]
+                                         takes tags off the notes that carry them (the note keeps its date, source and origin);
+                                         counts first unless --yes
   professions [accept|reject KIND/ID]    lists the professions the person added and those an assistant proposed; accepts or drops a proposal
   adopt DIR [--user PERSON] [--prefix P] takes the spaces of an export into this node
   merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
@@ -369,6 +372,13 @@ pub fn dispatch(
         ("repair", Some("provenance")) => {
             cli::repair_provenance(&data, need("--space")?, need("--reason")?, sw("--yes"))
         }
+        ("tags", Some("remove")) => cli::tags_remove(
+            &data,
+            need("--space")?,
+            &list(flag("--tags")),
+            flag("--only"),
+            sw("--yes"),
+        ),
         ("professions", None) => {
             for p in memcp_core::profession::pending(&data) {
                 println!("proposed  {}/{}  {}", p["kind"].as_str().unwrap_or(""), p["id"].as_str().unwrap_or(""), p["title"].as_str().unwrap_or(""));

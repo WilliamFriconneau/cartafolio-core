@@ -621,7 +621,12 @@ fn classify(fact: &Fact, space_kind: &str) -> (String, Value) {
                 json!({
                     "measure": id,
                     "value": fields.get(id).cloned().unwrap_or(Value::Null),
-                    "unit": fields.get(format!("{id}_unit")).cloned().unwrap_or(Value::Null),
+                    "unit": fields.get(format!("{id}_unit")).cloned().unwrap_or_else(|| {
+                        memcp_health::extra_measure(id)
+                            .map(|(_, u)| u)
+                            .filter(|u| !u.is_empty())
+                            .map_or(Value::Null, Value::from)
+                    }),
                     "label": measure_label(id),
                 })
             })
@@ -674,12 +679,14 @@ fn measure_label(id: &str) -> Option<String> {
         .iter()
         .find(|m| m.id == id || m.tag == id)
         .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned());
-    known.or_else(|| {
-        let words = id.replace(['_', '-'], " ");
-        let mut c = words.trim().chars();
-        c.next()
-            .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
-    })
+    known
+        .or_else(|| memcp_health::extra_measure(id).map(|(label, _)| label))
+        .or_else(|| {
+            let words = id.replace(['_', '-'], " ");
+            let mut c = words.trim().chars();
+            c.next()
+                .map(|f| f.to_uppercase().collect::<String>() + c.as_str())
+        })
 }
 
 fn provenance(fact: &Fact) -> Value {

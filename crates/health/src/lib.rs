@@ -48,6 +48,34 @@ pub struct Detection {
     pub red_flags: Vec<RedFlagHit>,
 }
 
+const MEASURE_LABELS: &str = include_str!("../data/measure_labels.json");
+
+/// The name and the unit of a number a health app sends that the referential has no measure for (an Apple Health constant
+/// such as `hrv_sdnn_ms`), by its key. `None` for a key it does not list.
+pub fn extra_measure(key: &str) -> Option<(String, String)> {
+    static LABELS: OnceLock<std::collections::BTreeMap<String, (String, String)>> = OnceLock::new();
+    let map = LABELS.get_or_init(|| {
+        let v: serde_json::Value = serde_json::from_str(MEASURE_LABELS).unwrap_or_default();
+        v["labels"]
+            .as_object()
+            .map(|m| {
+                m.iter()
+                    .map(|(k, e)| {
+                        (
+                            k.clone(),
+                            (
+                                e["fr"].as_str().unwrap_or("").to_string(),
+                                e["unit"].as_str().unwrap_or("").to_string(),
+                            ),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    });
+    map.get(key).cloned()
+}
+
 /// The referential shipped with this program.
 pub fn builtin() -> &'static Referential {
     static BUILTIN: OnceLock<Result<Referential, Error>> = OnceLock::new();

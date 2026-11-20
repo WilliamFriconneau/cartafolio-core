@@ -111,6 +111,12 @@ pub const COMMANDS: &[Entry] = &[
         false,
     ),
     e(
+        "tags remove",
+        "takes tags off the notes that carry them",
+        Remote::Local("edits rows of the database of this machine, after a count"),
+        false,
+    ),
+    e(
         "professions",
         "lists the professions the person added and the proposals",
         Remote::Local("reads the professions file in the data folder of this machine"),

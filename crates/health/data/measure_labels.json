@@ -1,0 +1,114 @@
+{
+ "schema": "memcp.health.measure-labels/1",
+ "description": "Names and units of the numbers a health app sends that the referential has no measure for (Apple Health constants), by key.",
+ "labels": {
+  "respiratory_rate_per_min": {
+   "fr": "Fréquence respiratoire",
+   "unit": "/min"
+  },
+  "hrv_sdnn_ms": {
+   "fr": "Variabilité cardiaque (VFC)",
+   "unit": "ms"
+  },
+  "heart_rate": {
+   "fr": "Pouls moyen",
+   "unit": "bpm"
+  },
+  "walking_heart_rate_bpm": {
+   "fr": "Pouls à la marche",
+   "unit": "bpm"
+  },
+  "wrist_temp_c": {
+   "fr": "Température au poignet",
+   "unit": "°C"
+  },
+  "steps": {
+   "fr": "Pas",
+   "unit": ""
+  },
+  "distance_walking_running": {
+   "fr": "Distance à pied",
+   "unit": "km"
+  },
+  "exercise_min": {
+   "fr": "Exercice",
+   "unit": "min"
+  },
+  "active_kcal": {
+   "fr": "Énergie active",
+   "unit": "kcal"
+  },
+  "basal_energy_burned": {
+   "fr": "Énergie au repos",
+   "unit": "kcal"
+  },
+  "apple_stand_hour_count": {
+   "fr": "Heures debout",
+   "unit": "h"
+  },
+  "time_in_daylight": {
+   "fr": "Temps à la lumière du jour",
+   "unit": "min"
+  },
+  "sleep_deep_h": {
+   "fr": "Sommeil profond",
+   "unit": "h"
+  },
+  "sleep_rem_h": {
+   "fr": "Sommeil paradoxal",
+   "unit": "h"
+  },
+  "sleep_core_h": {
+   "fr": "Sommeil léger",
+   "unit": "h"
+  },
+  "sleep_awake_h": {
+   "fr": "Éveils la nuit",
+   "unit": "h"
+  },
+  "apple_sleeping_breathing_disturbances": {
+   "fr": "Troubles respiratoires du sommeil",
+   "unit": ""
+  },
+  "walking_speed": {
+   "fr": "Vitesse de marche",
+   "unit": "km/h"
+  },
+  "walking_step_length": {
+   "fr": "Longueur de pas",
+   "unit": "cm"
+  },
+  "walking_asymmetry_percentage": {
+   "fr": "Asymétrie de la marche",
+   "unit": "%"
+  },
+  "walking_double_support_percentage": {
+   "fr": "Double appui",
+   "unit": "%"
+  },
+  "environmental_audio_exposure": {
+   "fr": "Bruit ambiant",
+   "unit": "dB"
+  },
+  "headphone_audio_exposure": {
+   "fr": "Volume au casque",
+   "unit": "dB"
+  },
+  "physical_effort": {
+   "fr": "Effort physique",
+   "unit": "MET"
+  },
+  "workout_effort_score": {
+   "fr": "Effort des séances",
+   "unit": ""
+  },
+  "flights_climbed": {
+   "fr": "Étages montés",
+   "unit": ""
+  },
+  "mood_changes_count": {
+   "fr": "Changements d'humeur notés",
+   "unit": ""
+  }
+ }
+}

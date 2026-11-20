@@ -427,6 +427,39 @@ pub fn candidate_terms(text: &str) -> Vec<String> {
     out.into_iter().take(1500).collect()
 }
 
+/// What a note says in words: for a note that is a JSON object after a short label (`[Kalios] charge 2025-12-10: {...}`, a
+/// day dump of an app) only the sentences inside it (string values with a space in them), plus whatever follows the object;
+/// the keys, the numbers, the booleans and the label are the machine's, and a tagger that read them made tags of `acwr`,
+/// `true` and `warming`. Any other text is returned as it is.
+pub fn prose_of(text: &str) -> String {
+    fn sentences(v: &Value, out: &mut Vec<String>) {
+        match v {
+            Value::String(s) if s.contains(' ') => out.push(s.clone()),
+            Value::Array(a) => a.iter().for_each(|x| sentences(x, out)),
+            Value::Object(m) => m.values().for_each(|x| sentences(x, out)),
+            _ => {}
+        }
+    }
+    let Some(i) = text.find('{') else {
+        return text.to_string();
+    };
+    if i > 120 {
+        return text.to_string();
+    }
+    let rest = &text[i..];
+    let mut de = serde_json::Deserializer::from_str(rest).into_iter::<Value>();
+    match de.next() {
+        Some(Ok(v)) if v.is_object() => {
+            let mut parts = Vec::new();
+            sentences(&v, &mut parts);
+            parts.push(rest[de.byte_offset()..].trim().to_string());
+            parts.retain(|p| !p.is_empty());
+            parts.join(" ")
+        }
+        _ => text.to_string(),
+    }
+}
+
 /// The suggestion for a text written in `space` for the person `user_id`, as the node gives it: the tagger with the rules
 /// note, the vocabularies and the layout of the space, then what the person taught.
 pub fn for_note(
@@ -447,6 +480,8 @@ pub fn for_note(
         label,
         kind: brain.space_kind(space).unwrap_or_default(),
     };
+    let prose = prose_of(text);
+    let text = prose.as_str();
     let (_, rules) = crate::rules::read(conn);
     let vocab = crate::vocabulary::matching(conn, &candidate_terms(text)).unwrap_or_default();
     let hints = Store::open(brain.dir()).hints(space.as_str(), text);

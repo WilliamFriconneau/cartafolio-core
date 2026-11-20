@@ -110,9 +110,7 @@ it is tagged the same; the text is never changed (`tags_set` keeps the old versi
 - No model: the referential alone. A note that looks French is read in French, so that `pain` (bread) is not a sign.
 - It leaves alone what is not the person's words: the raw layer of an app (`sources/<app>`), a reference document
   (`…/Sources/…`), a mounted library, the janitor's own notes, the living boards, the rules, a note that already has its signs.
-- **The node learns the person's phrasing from it.** A short note (up to 600 characters) is tagged with `learn` on, so its
-  words lead to the tags the referential found; the next note that says it the same way is tagged when it is written.
-  A long note only gets its tags.
+- It never teaches the node (`learn: false`): what an engine writes is not a correction by the person.
 - The report counts them (`signs_tagged`).
 
 ## Models

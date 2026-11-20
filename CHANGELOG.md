@@ -1,5 +1,13 @@
 # Changelog
 
+## 20261120.3.0
+
+- **The keys and numbers of a JSON dump are no longer tagged.** A note that is a JSON object after a short label (`[Kalios] charge 2025-12-10: {...}`, a day dump) is tagged from the sentences inside it only; the keys, numbers and booleans made tags such as `acwr`, `true` and `warming`. The words of a day dump (a dictated line) are still read.
+- **`memcp tags remove --space S --tags A,B [--only TAG] [--yes]`** takes tags off the notes that carry them (each note keeps its date, source and origin); it counts first.
+- **Names and units for the numbers a health app sends that the referential has no measure for** (Apple Health constants: `hrv_sdnn_ms`, `steps`…): an item of type `measure` gets their label and unit.
+- **The chronology of a money space no longer stops early** when a day holds more movements than a page.
+- The janitor's signs sweep (still off unless asked for) dates a turn by its first page, reads at most 100 pages a pass, and never teaches the node.
+
 ## 20261120.2.0
 
 - **A note with several measures shows all of them.** In the `chronology` of a health space an item of type `measure` carries `measures` (`[{measure, value, unit, label}]`) with every `mesure/*` tag of the note; the first stays in `measure`, `value`, `unit` and `label`.

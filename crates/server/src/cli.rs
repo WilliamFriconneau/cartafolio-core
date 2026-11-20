@@ -923,3 +923,26 @@ pub fn repair_provenance(
     );
     Ok(())
 }
+
+/// `tags remove`: takes tags off the notes that carry them, on this machine (see `memcp_core::retag`).
+pub fn tags_remove(
+    data: &Path,
+    space: &str,
+    tags: &[String],
+    only: Option<&str>,
+    apply: bool,
+) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    let r = memcp_core::retag::remove_tags(&brain, &space, tags, only, apply).map_err(fail)?;
+    sayln!(
+        "{} {}: {} notes carry them; {} {}, {} left alone (no other tag)",
+        if apply { "done" } else { "dry run" },
+        r.space,
+        r.matched,
+        if apply { "changed" } else { "would change" },
+        r.changed,
+        r.kept
+    );
+    Ok(())
+}

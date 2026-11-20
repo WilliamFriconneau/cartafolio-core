@@ -137,14 +137,41 @@ pub(crate) fn merge_chronology(
         Some((_, source, id)) if source == "movement" => id.as_str(),
         _ => "",
     };
-    let movements = ledger.movements_page(account, from, move_to, filter, 200, move_cursor)?;
+    let after = cursor
+        .as_ref()
+        .map(|(at, source, id)| format!("{at}|{source}|{id}"));
+    // The movements, page after page until one is past the cursor (or they end): a day with more than a page of movements
+    // newer than the cursor would otherwise fill the whole page with lines the cursor then removes, and the chronology would
+    // stop with movements left.
+    let mut movement_items: Vec<Value> = Vec::new();
+    let mut movements = ledger.movements_page(account, from, move_to, filter, 200, move_cursor)?;
+    for _ in 0..100 {
+        let page_items = movements["items"].as_array().cloned().unwrap_or_default();
+        let past = match (&after, page_items.last()) {
+            (Some(after), Some(last)) => sort_of(last, "movement").as_str() < after.as_str(),
+            _ => true,
+        };
+        movement_items.extend(page_items);
+        let next = movements["page"]["next_cursor"].as_str().map(String::from);
+        if past || next.is_none() {
+            break;
+        }
+        movements = ledger.movements_page(
+            account,
+            from,
+            move_to,
+            filter,
+            200,
+            next.as_deref().unwrap_or(""),
+        )?;
+    }
     let facts = base["items"].as_array().cloned().unwrap_or_default();
     let mut items: Vec<(String, Value)> = Vec::new();
     for item in facts {
         let key = sort_of(&item, "fact");
         items.push((key, item));
     }
-    for item in movements["items"].as_array().cloned().unwrap_or_default() {
+    for item in movement_items {
         let key = sort_of(&item, "movement");
         items.push((key, item));
     }

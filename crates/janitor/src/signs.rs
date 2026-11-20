@@ -9,8 +9,7 @@
 //!   person's own tags already follow. The text of a note is never changed (`tags_set` keeps the old version).
 //! - It leaves alone what is not the person's words: the raw layer of an app (`sources/<app>`), a reference document
 //!   (`.../Sources/...`), a mounted library, the janitor's own notes, the living boards, the rules.
-//! - A short note (a sentence or two) also teaches the node: its words lead to the tags the referential found, so the next
-//!   note that says it the same way is tagged when it is written. A long one only gets its tags, as its words say too much.
+//! - It never teaches the node (`learn: false`): what an engine writes is not a correction by the person.
 
 use memcp_client::Error as ClientError;
 use serde_json::{Value, json};
@@ -23,8 +22,8 @@ const VERSION: u64 = 1;
 const PER_PASS: u32 = 600;
 /// The size of a page read.
 const PAGE: u64 = 200;
-/// Up to this many characters a note is also a lesson for the node.
-const SHORT_NOTE: usize = 600;
+/// Pages read in one pass at most, tagged or not, so that a first turn over a large memory spreads over the nights.
+const PAGES_PER_PASS: u32 = 100;
 
 /// Tags that say a note is not the person's own words, or is not the janitor's to touch.
 fn is_plumbing(tag: &str) -> bool {
@@ -88,8 +87,12 @@ impl Janitor {
         budget: &mut u32,
         report: &mut Report,
     ) -> Result<(), ()> {
-        let started = now().max(0).unsigned_abs();
-        let (mut cursor, full_at) = self.state.signs_progress(vault, VERSION);
+        let (mut cursor, full_at, mut turn_start) = self.state.signs_progress(vault, VERSION);
+        // A turn is dated by its first page: a note written while it goes on is newer than that and is seen by the next one.
+        if cursor.is_none() || turn_start == 0 {
+            turn_start = now().max(0).unsigned_abs();
+        }
+        let mut pages = 0;
         let incremental = full_at > 0;
         loop {
             let mut args =
@@ -132,7 +135,7 @@ impl Janitor {
                         "id": id,
                         "add": found,
                         "reason": "janitor: signs and measures of the health referential",
-                        "learn": text.chars().count() <= SHORT_NOTE,
+                        "learn": false,
                     }),
                 );
                 match done {
@@ -150,8 +153,13 @@ impl Janitor {
                 }
                 if *budget == 0 {
                     // Where this page started: what was tagged here is skipped when the next pass comes back to it.
-                    self.state
-                        .set_signs_progress(vault, VERSION, cursor.as_deref(), full_at);
+                    self.state.set_signs_progress(
+                        vault,
+                        VERSION,
+                        cursor.as_deref(),
+                        full_at,
+                        turn_start,
+                    );
                     return Ok(());
                 }
             }
@@ -159,12 +167,17 @@ impl Janitor {
             if reached_old || next.is_none() || !page["page"]["has_more"].as_bool().unwrap_or(false)
             {
                 // A full turn is done: from now on only what is newer than this turn's start is looked at.
-                self.state.set_signs_progress(vault, VERSION, None, started);
+                self.state
+                    .set_signs_progress(vault, VERSION, None, turn_start, 0);
                 return Ok(());
             }
             cursor = next;
+            pages += 1;
             self.state
-                .set_signs_progress(vault, VERSION, cursor.as_deref(), full_at);
+                .set_signs_progress(vault, VERSION, cursor.as_deref(), full_at, turn_start);
+            if pages >= PAGES_PER_PASS {
+                return Ok(());
+            }
         }
     }
 }

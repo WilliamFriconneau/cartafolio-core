@@ -807,3 +807,47 @@ fn hashtags_are_said_on_purpose_in_any_space_and_a_note_may_carry_many() -> Res 
     }
     Ok(())
 }
+
+#[test]
+fn the_keys_and_numbers_of_a_json_dump_are_not_tagged_but_its_sentences_are() -> Res {
+    let t = Temp::new("autotag-json");
+    let b = brain(&t)?;
+    let c = caller(&b, "app", "all")?;
+    let metrics = remember(
+        &b,
+        &c,
+        "health",
+        r#"[Kalios] charge 2025-12-10: {"acwr":2.33,"load":72.8,"method":"trimp","strain":269.1,"warming_up":true}"#,
+        &[],
+    )?;
+    let tags: Vec<String> = metrics["tags"]
+        .as_array()
+        .ok_or("tags")?
+        .iter()
+        .filter_map(|t| t.as_str().map(String::from))
+        .collect();
+    for junk in [
+        "acwr", "load", "method", "strain", "trimp", "true", "warming", "charge", "kalios",
+    ] {
+        assert!(
+            !tags.iter().any(|t| t == junk),
+            "{junk} is a key or a number of a dump: {tags:?}"
+        );
+    }
+    let day = remember(
+        &b,
+        &c,
+        "health",
+        r#"[Kalios] day 2026-11-13: {"date":"2026-11-13","notes":[{"at":"2026-11-13T08:53:01+01:00","text":"Très fatigué ce matin, mal au crâne"}]}"#,
+        &[],
+    )?;
+    assert!(
+        has(&day, "signe/fatigue"),
+        "the words inside the dump are read: {day}"
+    );
+    assert_eq!(
+        memcp_core::autotag::prose_of("pas de json ici"),
+        "pas de json ici"
+    );
+    Ok(())
+}
