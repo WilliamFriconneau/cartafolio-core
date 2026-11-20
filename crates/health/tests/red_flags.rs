@@ -498,3 +498,24 @@ fn an_invalid_referential_is_rejected() {
         .is_ok()
     );
 }
+
+#[test]
+fn a_denial_reported_by_a_verb_or_an_absence_is_not_an_alert() {
+    for denied in [
+        "Le 19/11 il niait les idées suicidaires actuelles.",
+        "Elle nie toute idée suicidaire.",
+        "Absence d'idées suicidaires.",
+        "Pas d'idées suicidaires.",
+    ] {
+        assert!(
+            !ids(denied).contains(&"suicidal_ideation".to_string()),
+            "{denied}: {:?}",
+            ids(denied)
+        );
+    }
+    // In doubt it still fires.
+    assert!(
+        ids("Il a des idées suicidaires depuis hier.").contains(&"suicidal_ideation".to_string())
+    );
+    assert!(ids("J'ai envie de mourir.").contains(&"suicidal_ideation".to_string()));
+}

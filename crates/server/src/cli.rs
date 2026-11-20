@@ -862,6 +862,7 @@ pub fn purge(
     space: &str,
     ids_file: &Path,
     protect: &[String],
+    allow: &[String],
     apply: bool,
     vacuum: bool,
 ) -> Result<(), Failure> {
@@ -875,7 +876,8 @@ pub fn purge(
         .filter(|l| !l.is_empty())
         .map(String::from)
         .collect();
-    let r = memcp_core::sync::purge_facts(&brain, &space, &ids, protect, apply).map_err(fail)?;
+    let r =
+        memcp_core::sync::purge_facts(&brain, &space, &ids, protect, allow, apply).map_err(fail)?;
     sayln!(
         "{} {}: asked {}, not here {}, protected {} (kept), with a stored file {} (kept); {} {} notes with their versions, {} tag rows, {} log rows",
         if apply { "purged" } else { "dry run" },

@@ -223,9 +223,16 @@ impl RedFlags {
     /// True when the words right before position `i` really deny the sign. // law: doubt fires
     fn denies(&self, toks: &[String], i: usize) -> bool {
         let before = &toks[..i];
+        // Up to two words of the article kind may stand between the negator and the sign (« nie toute idée suicidaire »).
         let mut ends = vec![before.len()];
-        if before.last().is_some_and(|t| self.articles.contains(t)) {
-            ends.push(before.len() - 1);
+        let mut end = before.len();
+        for _ in 0..2 {
+            if end > 0 && self.articles.contains(&before[end - 1]) {
+                end -= 1;
+                ends.push(end);
+            } else {
+                break;
+            }
         }
         ends.into_iter().any(|end| {
             let b = &before[..end];

@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261120.7.0
+
+- **A denial told by a verb or an absence is not a red flag.** « il niait les idées suicidaires », « elle nie toute idée suicidaire », « absence d'idées suicidaires », « pas d'idée suicidaire » no longer raise `alerte/suicidal_ideation`; up to two article words (`les`, `toute`, `idée`…) may stand between the negation and the sign. In doubt it still fires.
+- **`memcp purge --allow TAG`** lifts the protection of the named tags for one purge (a referential filed under `journal` by mistake, say).
+
 ## 20261120.6.1
 
 - **A sign taken off with a whole list of tags leaves the mark too.** `tags_set` with `tags` (the list that replaces all of them) marks a `signe/<sign>` it leaves out, as `remove` does: the tagger and the night sweep keep that sign off the note. An engine's pass (`learn: false`) still leaves no mark.

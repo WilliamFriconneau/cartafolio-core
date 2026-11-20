@@ -2922,25 +2922,30 @@ pub const PURGE_PROTECTED: [&str; 10] = [
     "cibles",
 ];
 
-fn protected(tag: &str, extra: &[String]) -> bool {
+fn protected(tag: &str, extra: &[String], allow: &[String]) -> bool {
+    let under = |p: &str| tag == p || tag.starts_with(&format!("{p}/"));
+    if allow.iter().any(|a| under(a)) {
+        return false;
+    }
     PURGE_PROTECTED
         .iter()
         .map(|p| p.to_string())
         .chain(extra.iter().cloned())
-        .any(|p| tag == p || tag.starts_with(&format!("{p}/")))
+        .any(|p| under(&p))
 }
 
 /// Removes notes of `space` from this replica for good, by id, with every old version of each, their tags, history, index
 /// rows, origin and the copies kept in the log for the other machines, and remembers their ids so that a machine that still
 /// has them does not bring them back (the same ground the pruning of a window walks on). Only on the machine of the
-/// node, on the person's order: it is no tool. A note with a protected tag (`PURGE_PROTECTED` and `protect`) or a stored
-/// file on any version stays and is counted. `apply` false only counts. Nothing is written to the other machines; they keep
+/// node, on the person's order: it is no tool. A note with a protected tag (`PURGE_PROTECTED` and `protect`, less the tags the
+/// person names in `allow`) or a stored file on any version stays and is counted. `apply` false only counts. Nothing is written to the other machines; they keep
 /// what they hold.
 pub fn purge_facts(
     brain: &Brain,
     space: &Space,
     ids: &[String],
     protect: &[String],
+    allow: &[String],
     apply: bool,
 ) -> Result<Purged> {
     let conn = brain.open_space(space)?;
@@ -3003,7 +3008,7 @@ pub fn purge_facts(
             let tags: Vec<String> = tag_stmt
                 .query_map([m], |r| r.get(0))?
                 .collect::<rusqlite::Result<_>>()?;
-            if tags.iter().any(|t| protected(t, protect)) {
+            if tags.iter().any(|t| protected(t, protect, allow)) {
                 blocked_tag = true;
             }
             if with_files.contains(m) {

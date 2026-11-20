@@ -14,7 +14,16 @@
   "jamais de",
   "jamais d",
   "jamais",
-  "ni"
+  "ni",
+  "nie",
+  "nies",
+  "niait",
+  "niaient",
+  "nient",
+  "nier",
+  "niant",
+  "absence de",
+  "absence d"
  ],
  "negation_articles": [
   "un",
@@ -22,7 +31,12 @@
   "des",
   "du",
   "de",
-  "d"
+  "d",
+  "les",
+  "toute",
+  "tout",
+  "idee",
+  "idees"
  ],
  "negators_after_ne": [
   "plus de",

@@ -79,7 +79,7 @@ fn a_purge_removes_the_notes_their_versions_and_their_traces_and_spares_the_rest
         "f_unknown".to_string(),
     ];
     // A count first: nothing changes.
-    let dry = purge_facts(&b, &sp("home"), &ids, &[], false)?;
+    let dry = purge_facts(&b, &sp("home"), &ids, &[], &[], false)?;
     assert_eq!(
         (dry.facts, dry.skipped_protected, dry.missing),
         (3, 1, 1),
@@ -91,7 +91,7 @@ fn a_purge_removes_the_notes_their_versions_and_their_traces_and_spares_the_rest
         "the count removed nothing"
     );
 
-    let done = purge_facts(&b, &sp("home"), &ids, &[], true)?;
+    let done = purge_facts(&b, &sp("home"), &ids, &[], &[], true)?;
     assert_eq!(done.facts, 3, "{done:?}");
     // Gone from the facts, the search index, the tags, the history and the log of the other machines.
     assert_eq!(
@@ -154,7 +154,7 @@ fn a_purge_removes_the_notes_their_versions_and_their_traces_and_spares_the_rest
         1
     );
     // Again: nothing left to do.
-    let again = purge_facts(&b, &sp("home"), &ids, &[], true)?;
+    let again = purge_facts(&b, &sp("home"), &ids, &[], &[], true)?;
     assert_eq!(again.facts, 0, "{again:?}");
     Ok(())
 }
@@ -230,5 +230,23 @@ fn a_retag_that_lost_the_provenance_gets_it_back() -> Res {
         repair_provenance(&b, &sp("home"), "janitor: signs", true)?.notes,
         0
     );
+    Ok(())
+}
+
+#[test]
+fn a_protected_tag_can_be_lifted_by_name_for_one_purge() -> Res {
+    let t = Temp::new("purge-allow");
+    let b = brain(&t)?;
+    let c = caller(&b)?;
+    let id = put(
+        &b,
+        &c,
+        "Référentiel rangé avec une étiquette protégée par erreur",
+        &["journal", "lot/ref"],
+    )?;
+    let kept = purge_facts(&b, &sp("home"), std::slice::from_ref(&id), &[], &[], true)?;
+    assert_eq!((kept.facts, kept.skipped_protected), (0, 1), "{kept:?}");
+    let done = purge_facts(&b, &sp("home"), &[id], &[], &["journal".to_string()], true)?;
+    assert_eq!(done.facts, 1, "{done:?}");
     Ok(())
 }

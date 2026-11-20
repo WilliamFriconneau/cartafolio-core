@@ -77,7 +77,7 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
   skills-export DIR [--data DIR]         writes the professions of the spaces as Claude skills, a plugin marketplace (no --data needed)
-  purge --space S --ids FILE [--protect TAG,TAG] [--yes] [--vacuum]
+  purge --space S --ids FILE [--protect TAG,TAG] [--allow TAG,TAG] [--yes] [--vacuum]
                                          removes notes for good, by id (one per line), every version and every trace, on this
                                          machine only; counts first unless --yes; journals, boards, rules and dossier/kalios stay
   repair provenance --space S --reason PREFIX [--yes]
@@ -171,6 +171,7 @@ pub const VALUE_FLAGS: &[&str] = &[
     "--only",
     "--protect",
     "--ids",
+    "--allow",
     "--to",
     "--keep",
     "--ingress-listen",
@@ -366,6 +367,7 @@ pub fn dispatch(
             need("--space")?,
             Path::new(need("--ids")?),
             &list(flag("--protect")),
+            &list(flag("--allow")),
             sw("--yes"),
             sw("--vacuum"),
         ),
