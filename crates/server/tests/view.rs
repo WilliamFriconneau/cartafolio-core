@@ -352,3 +352,59 @@ fn rights_keep_the_money_space_whole() -> Res {
     );
     Ok(())
 }
+
+#[test]
+fn the_money_chronology_does_not_stop_while_a_day_holds_more_movements_than_a_page() -> Res {
+    let e = env()?;
+    let fin = connect(&e, "chrono-reader", "finances:rw", false)?;
+    // The statement tables exist once a statement tool has been called.
+    text_of(&call(&e, &fin, "finances_balances", json!({})));
+    let conn = e.app.brain.open_space(&sp("finances"))?;
+    conn.execute("INSERT INTO fin_accounts (number, name, balance, balance_on) VALUES ('A1', 'Compte test', 100.0, '2026-11-19')", [])?;
+    for i in 0..450 {
+        conn.execute(
+            "INSERT INTO fin_moves VALUES ('A1', '2026-11-19', NULL, ?1, ?2, ?3, '2026-11-19')",
+            rusqlite::params![format!("PAIEMENT {i}"), -1.0 - f64::from(i), i],
+        )?;
+    }
+    conn.execute(
+        "INSERT INTO fin_moves VALUES ('A1', '2026-11-18', NULL, 'PAIEMENT HIER', -9.0, 0, '2026-11-19')",
+        [],
+    )?;
+    // A note of the same day, at midnight, so that its key sorts among the movements.
+    text_of(&call(
+        &e,
+        &fin,
+        "remember",
+        json!({ "space": "finances", "text": "Une note du jour des mouvements." }),
+    ));
+    // Follow the cursor to the end: every movement once, however many a page holds.
+    let mut seen = std::collections::BTreeSet::new();
+    let mut cursor: Option<String> = None;
+    for _ in 0..200 {
+        let mut args = json!({ "space": "finances", "view": "chronology", "limit": 50 });
+        if let Some(c) = &cursor {
+            args["cursor"] = json!(c);
+        }
+        let page = text_of(&call(&e, &fin, "space_view", args));
+        for item in page["items"].as_array().ok_or("items")? {
+            if item["type"] == "movement" {
+                assert!(
+                    seen.insert(item["id"].as_str().ok_or("id")?.to_string()),
+                    "a movement came twice"
+                );
+            }
+        }
+        cursor = page["page"]["next_cursor"].as_str().map(String::from);
+        if !page["page"]["has_more"].as_bool().unwrap_or(false) {
+            break;
+        }
+    }
+    assert_eq!(
+        seen.len(),
+        451,
+        "every movement of the busy day and the day before: {}",
+        seen.len()
+    );
+    Ok(())
+}
