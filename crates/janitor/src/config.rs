@@ -32,6 +32,8 @@ pub struct Config {
     pub keyword_min_notes: usize,
     /// The least minutes between two times the model is asked to propose keywords (a night pass ignores it).
     pub keywords_every_minutes: u64,
+    /// The signs sweep of the night (see `signs.rs`): off unless `signs_sweep = on`.
+    pub signs_sweep: bool,
 }
 
 fn home() -> PathBuf {
@@ -114,6 +116,7 @@ impl Config {
             "max_notes",
             "keyword_min_notes",
             "keywords_every_minutes",
+            "signs_sweep",
         ];
         if let Some(bad) = map.keys().find(|k| !known.contains(&k.as_str())) {
             return Err(format!("unknown setting {bad}"));
@@ -163,6 +166,13 @@ impl Config {
                 .map_err(|_| "keyword_min_notes".to_string())?,
             keywords_every_minutes: u64::try_from(number("keywords_every_minutes", 360)?)
                 .map_err(|_| "keywords_every_minutes".to_string())?,
+            signs_sweep: matches!(
+                get("signs_sweep")
+                    .as_deref()
+                    .map(str::to_lowercase)
+                    .as_deref(),
+                Some("on" | "yes" | "true" | "1")
+            ),
         };
         if c.models.iter().any(|m| m == "api") && (c.api_url.is_none() || c.api_model.is_none()) {
             return Err("models names `api`: api_url and api_model are needed".into());

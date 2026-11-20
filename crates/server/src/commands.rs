@@ -77,6 +77,9 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          manifest of fingerprints; no key, connection or right
   verify-export DIR                      checks an export (no --data needed)
   skills-export DIR [--data DIR]         writes the professions of the spaces as Claude skills, a plugin marketplace (no --data needed)
+  purge --space S --ids FILE [--protect TAG,TAG] [--yes] [--vacuum]
+                                         removes notes for good, by id (one per line), every version and every trace, on this
+                                         machine only; counts first unless --yes; journals, boards, rules and dossier/kalios stay
   professions [accept|reject KIND/ID]    lists the professions the person added and those an assistant proposed; accepts or drops a proposal
   adopt DIR [--user PERSON] [--prefix P] takes the spaces of an export into this node
   merge --plan EXPORT --user PERSON [--policy keep-both|keep-mine|take-theirs|replace] [--out FILE]
@@ -161,6 +164,7 @@ pub const VALUE_FLAGS: &[&str] = &[
     "--rules",
     "--only",
     "--protect",
+    "--ids",
     "--to",
     "--keep",
     "--ingress-listen",
@@ -351,6 +355,14 @@ pub fn dispatch(
             crate::setup::prepare(kind, &data, settings, Path::new(need("--out")?))
         }
         ("catalogue", _) => cli::catalogue_list(&data),
+        ("purge", _) => cli::purge(
+            &data,
+            need("--space")?,
+            Path::new(need("--ids")?),
+            &list(flag("--protect")),
+            sw("--yes"),
+            sw("--vacuum"),
+        ),
         ("professions", None) => {
             for p in memcp_core::profession::pending(&data) {
                 println!("proposed  {}/{}  {}", p["kind"].as_str().unwrap_or(""), p["id"].as_str().unwrap_or(""), p["title"].as_str().unwrap_or(""));

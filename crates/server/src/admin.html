@@ -2106,8 +2106,8 @@ function dashboardView(d) {
   return out;
 }
 function treeView(tags) {
-  const root = {};
-  for (const t of tags) { let n = root; for (const part of t.tag.split("/")) n = (n[part] = n[part] || {}); }
+  const root = Object.create(null);
+  for (const t of tags) { let n = root; for (const part of t.tag.split("/")) n = (n[part] = n[part] || Object.create(null)); }
   const count = new Map(tags.map(t => [t.tag, t.count]));
   const build = (node, prefix) => {
     const keys = Object.keys(node).sort();

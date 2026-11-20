@@ -97,6 +97,14 @@ pub const COMMANDS: &[Entry] = &[
         false,
     ),
     e(
+        "purge",
+        "removes notes for good, by id, on this machine only",
+        Remote::Local(
+            "deletes rows of the database of this machine, and must never be asked of a node by a key",
+        ),
+        false,
+    ),
+    e(
         "professions",
         "lists the professions the person added and the proposals",
         Remote::Local("reads the professions file in the data folder of this machine"),

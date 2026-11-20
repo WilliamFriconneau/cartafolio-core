@@ -1402,6 +1402,8 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             // Only a tag the caller gave is a correction to learn from; what the node adds below is its own.
             let retagged = !new.tags.is_empty();
+            // What the person gave, before the node adds its own: only that is a correction to learn from.
+            let given = new.tags.clone();
             // The node tags what is written, a corrected text included: an assistant that rewrites a note gets its
             // signs, as one that writes it. The tags the note had stay, none is taken out.
             if !new.text.is_empty() && new.text != old.text {
@@ -1420,7 +1422,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             let f = facts::supersede(&conn, &space, author, id, new, reason)?;
             // The person changed the tags of a note: the node learns it.
             if retagged {
-                tagging::learn_change(brain, author, &space, &f.text, &old.tags, &f.tags);
+                tagging::learn_change(brain, author, &space, &f.text, &old.tags, &given);
             }
             Ok(json!({ "result": "superseded", "fact": f.to_json() }))
         }

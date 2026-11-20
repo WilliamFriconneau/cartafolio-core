@@ -98,6 +98,8 @@ text: the router uses it for a note it cannot place by keywords, and sends it on
 
 ## The signs sweep (night)
 
+**Off by default** (`signs_sweep = on` in the janitor's settings turns it on): until it keeps the identity and the provenance of the notes it tags, it must be asked for.
+
 The write-time tagger only sees what is written through it. Each night the janitor also goes through the notes **already in a
 health space** and gives the ones written without them the tags of the shared health referential: `signe/<sign>`,
 `mesure/<measure>`, `alerte/<red flag>`. Whatever the note's origin (a device, an assistant, an import, a sync from another node),

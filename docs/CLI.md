@@ -89,6 +89,7 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `serve` | runs the node | yes | no: it is the node | - |
 | `mcp` | MCP on standard input and output | yes | no: standard input and output of a program on this machine; a remote assistant uses the node's MCP address | - |
 | `skills-export` | writes the professions as Claude skills (a plugin marketplace) | yes | no: writes a folder of this machine from the built-in professions | - |
+| `purge` | removes notes for good, by id, on this machine only | yes | no: deletes rows of the database of this machine, and must never be asked of a node by a key | - |
 | `professions` | lists the professions the person added and the proposals | yes | no: reads the professions file in the data folder of this machine | - |
 | `professions accept` | accepts an assistant's proposed profession | yes | no: moves a proposal inside the data folder of this machine | - |
 | `professions reject` | drops an assistant's proposed profession | yes | no: edits the proposals file in the data folder of this machine | - |

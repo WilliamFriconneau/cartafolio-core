@@ -2887,6 +2887,240 @@ pub fn prune_window(brain: &Brain, space: &Space, days: u32, now: i64) -> Result
     Ok(out)
 }
 
+/// What a purge did, or would do.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Purged {
+    /// Space purged.
+    pub space: String,
+    /// Ids asked for.
+    pub asked: usize,
+    /// Of those, ids that are not in the space (already gone, or never here).
+    pub missing: usize,
+    /// Notes left alone because one of their versions carries a protected tag.
+    pub skipped_protected: usize,
+    /// Notes left alone because a stored file hangs on one of their versions.
+    pub skipped_files: usize,
+    /// Notes removed, every old version included.
+    pub facts: usize,
+    /// Tag rows removed with them.
+    pub tags: usize,
+    /// Log rows (the copies of the notes kept for the other machines) removed.
+    pub log_rows: usize,
+}
+
+/// Tags that protect a note from a purge: the plumbing and what the person keeps (journals, targets, boards, the rules).
+pub const PURGE_PROTECTED: [&str; 10] = [
+    "rules",
+    "index",
+    "guide",
+    "dashboard",
+    "journal",
+    "pin",
+    "living",
+    "living-meta",
+    "dossier/kalios",
+    "cibles",
+];
+
+fn protected(tag: &str, extra: &[String]) -> bool {
+    PURGE_PROTECTED
+        .iter()
+        .map(|p| p.to_string())
+        .chain(extra.iter().cloned())
+        .any(|p| tag == p || tag.starts_with(&format!("{p}/")))
+}
+
+/// Removes notes of `space` from this replica for good, by id, with every old version of each, their tags, history, index
+/// rows, origin and the copies kept in the log for the other machines, and remembers their ids so that a machine that still
+/// has them does not bring them back (the same ground the pruning of a window walks on). Only on the machine of the
+/// node, on the person's order: it is no tool. A note with a protected tag (`PURGE_PROTECTED` and `protect`) or a stored
+/// file on any version stays and is counted. `apply` false only counts. Nothing is written to the other machines; they keep
+/// what they hold.
+pub fn purge_facts(
+    brain: &Brain,
+    space: &Space,
+    ids: &[String],
+    protect: &[String],
+    apply: bool,
+) -> Result<Purged> {
+    let conn = brain.open_space(space)?;
+    let mut out = Purged {
+        space: space.as_str().to_string(),
+        asked: ids.len(),
+        ..Purged::default()
+    };
+    // The chains: every version of a note, found through `replaces` and `replaced_by`, read once into memory (a scan of
+    // the table for each id would make a large purge quadratic).
+    let mut links: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    let mut here: BTreeSet<String> = BTreeSet::new();
+    for row in conn
+        .prepare("SELECT id, replaces, replaced_by FROM facts")?
+        .query_map([], |r| {
+            Ok((
+                r.get::<_, String>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, Option<String>>(2)?,
+            ))
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?
+    {
+        here.insert(row.0.clone());
+        for other in [row.1, row.2].into_iter().flatten() {
+            links.entry(row.0.clone()).or_default().push(other.clone());
+            links.entry(other).or_default().push(row.0.clone());
+        }
+    }
+    let with_files: BTreeSet<String> = conn
+        .prepare("SELECT fact_id FROM files WHERE fact_id IS NOT NULL")?
+        .query_map([], |r| r.get(0))?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut chains: Vec<Vec<String>> = Vec::new();
+    let mut tag_stmt = conn.prepare("SELECT tag FROM fact_tags WHERE fact_id = ?1")?;
+    for id in ids {
+        if seen.contains(id) {
+            continue;
+        }
+        if !here.contains(id) {
+            out.missing += 1;
+            continue;
+        }
+        let mut chain: Vec<String> = vec![id.clone()];
+        let mut i = 0;
+        while i < chain.len() {
+            for next in links.get(&chain[i]).into_iter().flatten() {
+                if !chain.contains(next) {
+                    chain.push(next.clone());
+                }
+            }
+            i += 1;
+        }
+        seen.extend(chain.iter().cloned());
+        let mut blocked_tag = false;
+        let mut blocked_file = false;
+        for m in &chain {
+            let tags: Vec<String> = tag_stmt
+                .query_map([m], |r| r.get(0))?
+                .collect::<rusqlite::Result<_>>()?;
+            if tags.iter().any(|t| protected(t, protect)) {
+                blocked_tag = true;
+            }
+            if with_files.contains(m) {
+                blocked_file = true;
+            }
+        }
+        if blocked_tag {
+            out.skipped_protected += 1;
+        } else if blocked_file {
+            out.skipped_files += 1;
+        } else {
+            chains.push(chain);
+        }
+    }
+    drop(tag_stmt);
+    for chain in &chains {
+        out.facts += chain.len();
+    }
+    if !apply || chains.is_empty() {
+        return Ok(out);
+    }
+    // The foreign keys are checked by reading the whole child table for every note deleted (the history has no index on the
+    // note): with thousands of notes that is hours. Every child row is deleted here first, and the check is made once at the
+    // end.
+    conn.execute_batch("PRAGMA foreign_keys = OFF")?;
+    // By batches, with the ids of a batch in a temporary table: a statement per note would read the history table (it has
+    // no index on the note) once for every note, and a large purge would take hours.
+    for batch in chains.chunks(2000) {
+        let tx =
+            rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
+        meta_set(&tx, "window_pruning", "1")?;
+        tx.execute_batch(
+            "PRAGMA defer_foreign_keys = ON;
+             CREATE TEMP TABLE IF NOT EXISTS purge_ids (id TEXT PRIMARY KEY) WITHOUT ROWID;
+             DELETE FROM purge_ids;",
+        )?;
+        {
+            let mut ins = tx.prepare("INSERT OR IGNORE INTO purge_ids (id) VALUES (?1)")?;
+            for id in batch.iter().flatten() {
+                ins.execute([id])?;
+            }
+        }
+        for id in batch.iter().flatten() {
+            out.log_rows += tx.execute(
+                "DELETE FROM sync_log WHERE eid IN (?1, ?2)",
+                [format!("c:{id}"), format!("r:{id}")],
+            )?;
+            // By range on the unique index of `eid` (`s:<id>:` up to `s:<id>;`): a function of the column would read the
+            // whole log for every note.
+            for (from, to) in [
+                (format!("s:{id}:"), format!("s:{id};")),
+                (format!("d:{id}:"), format!("d:{id};")),
+            ] {
+                out.log_rows += tx.execute(
+                    "DELETE FROM sync_log WHERE eid >= ?1 AND eid < ?2",
+                    [from, to],
+                )?;
+            }
+        }
+        tx.execute_batch(
+            "DELETE FROM sync_disputes WHERE fact_id IN (SELECT id FROM purge_ids) OR alt IN (SELECT id FROM purge_ids);
+             DELETE FROM fact_events WHERE fact_id IN (SELECT id FROM purge_ids);
+             DELETE FROM embeddings WHERE fact_id IN (SELECT id FROM purge_ids);
+             DELETE FROM fact_origin WHERE fact_id IN (SELECT id FROM purge_ids);
+             DELETE FROM library_raised WHERE fact_id IN (SELECT id FROM purge_ids);",
+        )?;
+        out.tags += tx.execute(
+            "DELETE FROM fact_tags WHERE fact_id IN (SELECT id FROM purge_ids)",
+            [],
+        )?;
+        tx.execute(
+            "DELETE FROM facts_fts WHERE rowid IN (SELECT rowid FROM facts WHERE id IN (SELECT id FROM purge_ids))",
+            [],
+        )?;
+        // Every version of a chain leaves in the same transaction: the pointers are cut first.
+        tx.execute(
+            "UPDATE facts SET replaces = NULL, replaced_by = NULL,
+               status = CASE WHEN status = 'replaced' THEN 'retired' ELSE status END
+             WHERE id IN (SELECT id FROM purge_ids)",
+            [],
+        )?;
+        tx.execute(
+            "INSERT OR IGNORE INTO window_gone (kind, id, at) SELECT 'fact', id, ?1 FROM purge_ids",
+            [util::now()],
+        )?;
+        tx.execute(
+            "DELETE FROM facts WHERE id IN (SELECT id FROM purge_ids)",
+            [],
+        )?;
+        tx.execute("DROP TABLE purge_ids", [])?;
+        tx.execute("DELETE FROM meta WHERE k = 'window_pruning'", [])?;
+        tx.commit()?;
+    }
+    let broken: i64 = conn
+        .prepare("PRAGMA foreign_key_check")?
+        .query_map([], |_| Ok(()))?
+        .count() as i64;
+    conn.execute_batch("PRAGMA foreign_keys = ON")?;
+    if broken > 0 {
+        return Err(Error::Invalid(format!(
+            "the purge left {broken} rows pointing at a note that is gone: check the database against its backup"
+        )));
+    }
+    // A line in the audit with no content: how many, and a hash of the ids.
+    let mut h = std::collections::hash_map::DefaultHasher::new();
+    std::hash::Hash::hash(&ids, &mut h);
+    conn.execute(
+        "INSERT INTO audit (ts, client, tool, ok, fact_ids, args_hash, detail) VALUES (?1, 'purge', 'purge', 1, NULL, ?2, ?3)",
+        params![
+            util::now(),
+            format!("{:x}", std::hash::Hasher::finish(&h)),
+            format!("{} notes purged, {} tag rows, {} log rows", out.facts, out.tags, out.log_rows)
+        ],
+    )?;
+    Ok(out)
+}
+
 /// What the last pruning of this replica did.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LastPrune {

@@ -979,7 +979,15 @@ fn the_night_sweep_tags_the_signs_of_notes_written_without_them_and_only_those()
             .any(|t| t.starts_with("signe/")),
         "the note starts without signs"
     );
-    let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    // Off unless asked for: the sweep is not run by a janitor that was not told to.
+    let mut off = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
+    assert_eq!(off.run_night().signs_tagged, 0);
+    let mut j = janitor_with(
+        &r,
+        &r.base.replace("/mcp", "/mcp/janitor"),
+        &r.janitor_key,
+        "signs_sweep = on\n",
+    );
     let report = j.run_night();
     assert_eq!(report.signs_tagged, 1, "{report:?}");
     let tags = signed(&mut o, "batterie sociale");

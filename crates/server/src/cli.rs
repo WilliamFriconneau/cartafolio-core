@@ -855,3 +855,49 @@ pub fn internal(data: &Path, agent: &str, on: &str) -> Result<(), Failure> {
         Err(fail(format!("unknown connection: {agent}")))
     }
 }
+
+/// `purge`: removes notes for good, by id (one per line in `ids_file`), on this machine only. Counts first unless `apply`.
+pub fn purge(
+    data: &Path,
+    space: &str,
+    ids_file: &Path,
+    protect: &[String],
+    apply: bool,
+    vacuum: bool,
+) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let space = Space::new(space).map_err(fail)?;
+    let text = std::fs::read_to_string(ids_file)
+        .map_err(|e| (1, format!("{}: {e}", ids_file.display())))?;
+    let ids: Vec<String> = text
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+        .map(String::from)
+        .collect();
+    let r = memcp_core::sync::purge_facts(&brain, &space, &ids, protect, apply).map_err(fail)?;
+    sayln!(
+        "{} {}: asked {}, not here {}, protected {} (kept), with a stored file {} (kept); {} {} notes with their versions, {} tag rows, {} log rows",
+        if apply { "purged" } else { "dry run" },
+        r.space,
+        r.asked,
+        r.missing,
+        r.skipped_protected,
+        r.skipped_files,
+        if apply { "removed" } else { "would remove" },
+        r.facts,
+        r.tags,
+        r.log_rows
+    );
+    if apply && vacuum {
+        brain
+            .open_space(&space)
+            .and_then(|c| {
+                c.execute_batch("PRAGMA wal_checkpoint(TRUNCATE); VACUUM;")
+                    .map_err(Into::into)
+            })
+            .map_err(fail)?;
+        sayln!("{}: the file was compacted", space.as_str());
+    }
+    Ok(())
+}

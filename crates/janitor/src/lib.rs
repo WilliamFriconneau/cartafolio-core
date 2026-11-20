@@ -368,7 +368,7 @@ impl Janitor {
             }
         }
         self.file_notes(&triage, &vaults, &tags, night, &mut report);
-        if night {
+        if night && self.config.signs_sweep {
             self.sweep_signs(&vaults, &mut report);
         }
         if self.claimed {

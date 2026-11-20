@@ -1,5 +1,12 @@
 # Changelog
 
+## 20261120.1.0
+
+- **The janitor's signs sweep is off unless asked for** (`signs_sweep = on`). It rewrote notes with `tags_set`, which gave them a new id and the date of the pass and dropped the path and reference they were imported with; a review found it. It must keep the identity and the provenance of a note before it runs again.
+- **`memcp purge`**: removes notes for good, by id, on the machine of the node (it is no tool): every old version, the tags, the history, the search index, the origin and the copies kept in the log for the other machines, with the ids remembered so that a machine that still has them does not bring them back. Journals, boards, rules, indexes and `dossier/kalios` are protected; a note with a stored file stays. It counts first and removes with `--yes`; `--vacuum` compacts the file. See [CLI.md](docs/CLI.md).
+- `supersede` learns only from the tags the person gave, not from those the node added.
+- The tree of tags in the page no longer follows inherited properties (a tag named `__proto__`).
+
 ## 20261119.2.1
 
 - **A fresh memory gives its usual spaces their kind.** `memcp init --defaults` and `setup` made `health`, `home`, `finances`, `hobbies`, `work` and `personal` as custom spaces, so `target_set` answered « health is not a health space » until `space kind` was run. They are now made as health, home, money, hobbies, work and me spaces, and the toolkit of their profession works at once. A memory that already exists is not touched.
