@@ -20,25 +20,10 @@ pub const WAKE_UNKNOWN_HOUR: u32 = 5;
 /// The most tags the rule adds from what the note says.
 const MAX_DETECTED: usize = 12;
 
-/// The language the referential reads a note in: French when it looks French (an accent, or a few common French words),
-/// so that a French word that is also an English sign (`pain`, bread) is not read as one. Anything else is read in
-/// both languages.
+/// The language the referential reads a note in: the one `memcp_health::lang_of` finds (French when the note looks
+/// French, so that a word of both languages in one sense only (`pain`, bread) is not read as a sign).
 fn language_of(text: &str) -> memcp_health::Lang {
-    const FRENCH: [&str; 16] = [
-        "le", "la", "les", "un", "une", "des", "du", "de", "et", "je", "j'ai", "pas", "est", "mon",
-        "ma", "avec",
-    ];
-    let lower = text.to_lowercase();
-    let accents = lower.chars().any(|c| "àâçéèêëîïôùûüœ".contains(c));
-    let words = lower
-        .split(|c: char| !(c.is_alphanumeric() || c == '\''))
-        .filter(|w| FRENCH.contains(w))
-        .count();
-    if accents || words >= 2 {
-        memcp_health::Lang::Fr
-    } else {
-        memcp_health::Lang::Auto
-    }
+    memcp_health::lang_of(text)
 }
 
 /// The tags the health referential finds in the note, as the node's own tagger names them: `alerte/<id>` for a red flag

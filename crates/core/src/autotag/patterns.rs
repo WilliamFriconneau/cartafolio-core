@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use memcp_health::{Lang, detect};
+use memcp_health::{detect, lang_of};
 
 pub(super) struct Found {
     pub tags: Vec<String>,
@@ -21,7 +21,7 @@ pub(super) struct Found {
 /// Finds the red flags, the signs and the measures of a text. The red flags come first, so that the cap on the tags a
 /// note gets never drops one.
 pub(super) fn health(text: &str) -> Found {
-    let found = detect(text, Lang::Auto);
+    let found = detect(text, lang_of(text));
     let mut tags: Vec<String> = Vec::new();
     let mut fields = BTreeMap::new();
     for flag in &found.red_flags {
