@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261120.6.0
+
+- **A sign the person takes off a note stays off.** Correcting a note with `sign_set` (or `tags_set`, by default) leaves the mark `signe-refuse/<sign>` beside the note's tags: the node's tagger and the janitor's night sweep no longer put that sign back on that note, whatever the person writes there afterwards. Adding the sign again with `sign_set` takes the mark off. A pass that says `learn: false` (the sweep, an engine) leaves no mark and clears none.
+- `signs_review` shows those notes too, with `refused`: the signs the person took off, so that one can come back with `sign_set`.
+- **The language of a note is read before its signs** (`memcp_health::lang_of`, used by the node's tagger and by the janitor): French alone when the text looks French, every language at once otherwise. A note once taken for French because of `de`, `la` or `un` (words three languages share) is now read with its English signs; `Müdigkeit` is no longer French.
+
 ## 20261120.5.0
 
 - **`space_view` takes `text_limit`** (register and chronology): each item's `text` is cut to that many characters and `text_truncated` says so. A page of 50 notes was 353 KB; a list that only draws titles can ask for 160.
