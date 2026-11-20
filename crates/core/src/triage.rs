@@ -20,8 +20,8 @@ pub fn of(brain: &Brain, user_id: &str) -> Result<Option<Space>> {
         .open_control()?
         .query_row(
             "SELECT s.name FROM spaces s JOIN space_members m ON m.space = s.name AND m.owner = 1
-             WHERE m.user_id = ?1 AND s.kind = ?2 ORDER BY s.name LIMIT 1",
-            [user_id, TRIAGE],
+             WHERE m.user_id = ?1 AND s.kind IN (?2, ?3) ORDER BY s.name LIMIT 1",
+            [user_id, TRIAGE, catalogue::TRIAGE_LEGACY],
             |r| r.get(0),
         )
         .optional()?;
@@ -54,7 +54,9 @@ pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
 
 /// Whether `space` is an Inbox.
 pub fn is_triage(brain: &Brain, space: &Space) -> bool {
-    brain.space_kind(space).is_ok_and(|k| k == TRIAGE)
+    brain
+        .space_kind(space)
+        .is_ok_and(|k| catalogue::is_inbox_kind(&k))
 }
 
 /// The tag of the note in which the janitor says why it could not place what waits (`{"version":1,"reasons":{id: why}}`).

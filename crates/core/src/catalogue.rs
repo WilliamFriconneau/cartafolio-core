@@ -18,7 +18,16 @@ pub const CUSTOM: &str = "custom";
 
 /// The kind of the person's Inbox: the one box every capturing device writes to, which belongs to no vault. The
 /// janitor sends what lands there to the inbox of a vault, or leaves it for the person to decide. Never in a catalogue.
-pub const TRIAGE: &str = "a-trier";
+pub const TRIAGE: &str = "inbox";
+
+/// The name the kind of the Inbox had before it was in English. A memory made then keeps it until its box is renamed; it
+/// is read everywhere as the Inbox (see [`is_inbox_kind`]).
+pub const TRIAGE_LEGACY: &str = "a-trier";
+
+/// Whether a kind is the Inbox, by its name now or the one it had.
+pub fn is_inbox_kind(kind: &str) -> bool {
+    kind == TRIAGE || kind == TRIAGE_LEGACY
+}
 
 /// A built-in set of tools a kind can carry.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -129,8 +138,8 @@ pub fn parse(text: &str) -> Result<Vec<Kind>> {
         Space::new(key).map_err(|_| {
             at("the key is lowercase letters, digits and dashes, starting with a letter")
         })?;
-        if key == CUSTOM || key == TRIAGE {
-            return Err(at("`custom` and `a-trier` are reserved"));
+        if key == CUSTOM || is_inbox_kind(key) {
+            return Err(at("`custom` and `inbox` are reserved"));
         }
         if out.iter().any(|k| k.key == key) {
             return Err(at("this key is already defined"));

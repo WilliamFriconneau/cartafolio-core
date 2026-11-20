@@ -63,7 +63,7 @@ async function node(prepare) {
 function enrich(j) {
   if (!j.me) return j;
   const me = j.me;
-  j.triage = { space: "owner-a-trier", notes: [{ id: "n1", text: "call the plumber", tags: ["inbox"], created_at: "2026-11-03T08:00:00Z" }], files: [{ id: "f1", name: "scan.pdf", note: "", created_at: "2026-11-03T09:00:00Z" }] };
+  j.triage = { space: "owner-inbox", notes: [{ id: "n1", text: "call the plumber", tags: ["inbox"], created_at: "2026-11-03T08:00:00Z" }], files: [{ id: "f1", name: "scan.pdf", note: "", created_at: "2026-11-03T09:00:00Z" }] };
   j.app_guides = [{ space: "owner-health", app: "kalios", text: "One record per measure.", hash: "h1", standing: "waiting", updated_at: "x", approved_at: null }];
   j.attention = { idle: [{ agent: "forgotten-key", created_at: "2026-10-01T00:00:00+00:00", last_used_at: null, why: "never used" }], refused_24h: 3 };
   j.activity = [{ at: "2026-11-01T12:00:00+00:00", who: "claude-code", ip: "10.0.0.5", event: "revoke", detail: "" }, { at: "2026-11-01T11:00:00+00:00", who: "", ip: "203.0.113.9", event: "mcp_refused", detail: "" }];

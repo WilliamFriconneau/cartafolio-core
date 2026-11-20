@@ -20,7 +20,7 @@ struct Rig {
     models: String,
 }
 
-/// The engine (vaults `sam-me`, `sam-health`, `sam-work`, and `sam-a-trier`, where the devices write), the two keys,
+/// The engine (vaults `sam-me`, `sam-health`, `sam-work`, and `sam-inbox`, where the devices write), the two keys,
 /// and the model server.
 fn rig(tag: &str) -> Rig {
     rig_with(tag, &|_, _| {})
@@ -48,7 +48,7 @@ fn rig_with(tag: &str, setup: &dyn Fn(&memcp_core::Brain, &str)) -> Rig {
         }
         memcp_core::triage::ensure(&brain, &sam, "sam").expect("Inbox");
         setup(&brain, &sam);
-        [("edge", "sam-a-trier/inbox:rw"), ("janitor", "all")]
+        [("edge", "sam-inbox/inbox:rw"), ("janitor", "all")]
             .iter()
             .map(|(agent, spec)| {
                 let r = Rights::parse(spec).expect("rights");
@@ -346,10 +346,10 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
             .any(|t| t.contains("tension des enfants"))
     );
     // What is left in Inbox: the notes no keyword could place, for the person, who is told by a note there.
-    let told = texts(&mut all, "sam-a-trier", &["janitor/waiting"], "");
+    let told = texts(&mut all, "sam-inbox", &["janitor/waiting"], "");
     assert_eq!(told.len(), 1, "{told:?}");
     assert!(told[0].contains("2 note(s) attendent"), "{told:?}");
-    let mut waiting = texts(&mut all, "sam-a-trier", &["inbox"], "");
+    let mut waiting = texts(&mut all, "sam-inbox", &["inbox"], "");
     waiting.sort();
     assert_eq!(waiting.len(), 2, "{waiting:?}");
     assert!(
@@ -367,7 +367,7 @@ fn notes_of_the_inbox_are_filed_where_a_model_says_and_never_rewritten() {
     assert_eq!((again.filed, again.sent), (0, 0), "{again:?}");
     assert_eq!((again.left, again.unsure), (0, 2));
     assert_eq!(
-        texts(&mut all, "sam-a-trier", &["janitor/waiting"], "").len(),
+        texts(&mut all, "sam-inbox", &["janitor/waiting"], "").len(),
         1,
         "the note on what waits is replaced, not doubled"
     );
@@ -518,7 +518,7 @@ fn a_unique_keyword_routes_and_an_ambiguity_stays_in_a_trier() {
     let report = j.run_once();
     assert_eq!((report.sent, report.unsure), (1, 2), "{report:?}");
     assert_eq!(texts(&mut o, "sam-work", &["janitor"], "zephyr").len(), 1);
-    let stays = texts(&mut o, "sam-a-trier", &["inbox"], "");
+    let stays = texts(&mut o, "sam-inbox", &["inbox"], "");
     assert_eq!(
         stays.len(),
         2,
@@ -549,7 +549,7 @@ fn a_note_no_keyword_places_goes_where_the_person_taught_the_node() {
         texts(&mut o, "sam-work", &["janitor"], "assurance").len(),
         1
     );
-    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
+    assert_eq!(texts(&mut o, "sam-inbox", &["inbox"], "").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
 
@@ -592,7 +592,7 @@ fn a_note_with_a_person_goes_where_earlier_notes_with_that_person_went() {
             .contains("personnes/bob"),
         "the person tag went with the note: {sent}"
     );
-    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
+    assert_eq!(texts(&mut o, "sam-inbox", &["inbox"], "").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
 
@@ -612,8 +612,8 @@ fn the_model_proposes_keywords_written_as_a_new_rules_version_and_the_router_run
     assert_eq!(report.keywords_added, 1, "{report:?}");
     // The rerun placed the note, in the same pass.
     assert_eq!((report.sent, report.unsure), (1, 0), "{report:?}");
-    assert!(texts(&mut o, "sam-a-trier", &["inbox"], "").is_empty());
-    assert!(texts(&mut o, "sam-a-trier", &["janitor/waiting"], "").is_empty());
+    assert!(texts(&mut o, "sam-inbox", &["inbox"], "").is_empty());
+    assert!(texts(&mut o, "sam-inbox", &["janitor/waiting"], "").is_empty());
     let rules = texts(&mut o, "sam-work", &["rules"], "");
     assert_eq!(rules.len(), 1, "one active version: {rules:?}");
     assert!(
@@ -683,7 +683,7 @@ fn a_word_that_comes_back_often_in_one_space_becomes_its_keyword_at_night() {
     );
     // The note that holds the new keyword was placed by it; the other one waits.
     assert_eq!((report.sent, report.unsure), (1, 1), "{report:?}");
-    assert_eq!(texts(&mut o, "sam-a-trier", &["inbox"], "").len(), 1);
+    assert_eq!(texts(&mut o, "sam-inbox", &["inbox"], "").len(), 1);
     let _ = std::fs::remove_dir_all(&r.dir);
 }
 
@@ -769,14 +769,14 @@ fn a_note_to_file_in_two_spaces_is_copied_to_each_and_nothing_is_erased() {
     let mut j = janitor(&r, &r.base.replace("/mcp", "/mcp/janitor"), &r.janitor_key);
     let report = j.run_once();
     assert_eq!((report.sent, report.unsure), (1, 0), "{report:?}");
-    assert!(texts(&mut o, "sam-a-trier", &["inbox"], "").is_empty());
+    assert!(texts(&mut o, "sam-inbox", &["inbox"], "").is_empty());
     assert_eq!(texts(&mut o, "sam-finances", &[], "mutuelle").len(), 1);
     assert_eq!(texts(&mut o, "sam-health", &[], "mutuelle").len(), 1);
     // Nothing is erased: the original is retired with a reason that says where the copies went.
     let gone = o
         .call(
             "recall",
-            json!({"space": "sam-a-trier", "query": "", "tags": ["inbox"], "include_retired": true, "limit": 20}),
+            json!({"space": "sam-inbox", "query": "", "tags": ["inbox"], "include_retired": true, "limit": 20}),
         )
         .expect("recall");
     assert!(gone.to_string().contains("copied"), "{gone}");
@@ -888,7 +888,7 @@ fn files_are_routed_by_name_text_and_description_and_the_rest_waits_with_a_reaso
         .as_array()
         .expect("spaces")
         .iter()
-        .find(|s| s["name"] == "sam-a-trier")
+        .find(|s| s["name"] == "sam-inbox")
         .expect("Inbox");
     assert_eq!(row["facts"], 2, "{row}");
     let _ = std::fs::remove_dir_all(&r.dir);
@@ -923,7 +923,7 @@ fn a_recording_given_up_on_is_tagged_and_counted_apart_from_what_waits_for_the_p
         .as_array()
         .expect("spaces")
         .iter()
-        .find(|s| s["name"] == "sam-a-trier")
+        .find(|s| s["name"] == "sam-inbox")
         .expect("Inbox");
     assert_eq!(
         (row["facts"].as_u64(), row["failed_transcription"].as_u64()),

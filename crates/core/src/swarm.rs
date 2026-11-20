@@ -338,7 +338,7 @@ fn adopt_placed(
             return Err(other_person());
         }
         // A box that an earlier version made `custom` here is put right.
-        if kind == TRIAGE && brain.space_kind(space)? == CUSTOM {
+        if crate::catalogue::is_inbox_kind(kind) && brain.space_kind(space)? == CUSTOM {
             brain.open_control()?.execute(
                 "UPDATE spaces SET kind = ?2 WHERE name = ?1",
                 [space.as_str(), TRIAGE],
@@ -348,7 +348,9 @@ fn adopt_placed(
     }
     // Inbox is not in the catalogue, yet it must stay one here; a kind this node's catalogue does not know stays
     // `custom`.
-    let kind = if kind == TRIAGE || brain.catalogue()?.iter().any(|k| k.key == kind) {
+    let kind = if crate::catalogue::is_inbox_kind(kind)
+        || brain.catalogue()?.iter().any(|k| k.key == kind)
+    {
         kind.to_string()
     } else {
         CUSTOM.to_string()
@@ -398,7 +400,7 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
     };
     let held_by_other = brain.has_space(&offer.space)?
         && !is_space_owner(&brain.open_control()?, &offer.space, user)?;
-    if offer.kind == TRIAGE {
+    if crate::catalogue::is_inbox_kind(&offer.kind) {
         if let Some(mine) = crate::triage::of(brain, user)? {
             return Ok(Answer::Triage(mine));
         }
@@ -438,7 +440,7 @@ pub fn accept(brain: &Brain, user: &str, offer: &Offer) -> Result<Answer> {
 /// # Errors
 /// As [`accept`].
 pub fn accept_from(brain: &Brain, user: &str, peer: &str, offer: &Offer) -> Result<Answer> {
-    let here = if offer.kind == TRIAGE {
+    let here = if crate::catalogue::is_inbox_kind(&offer.kind) {
         crate::triage::of(brain, user)?.unwrap_or_else(|| offer.space.clone())
     } else {
         offer.space.clone()

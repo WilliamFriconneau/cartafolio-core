@@ -79,7 +79,7 @@ pub(super) fn spaces(
         // Inbox counts what waits for a decision, not every note it holds (the janitor's own notes, the recordings
         // already transcribed or given up on are not waiting for anybody); the ones given up on are counted apart.
         let mut failed = None;
-        if kind == crate::catalogue::TRIAGE && caller.read_paths(&s).is_none() {
+        if crate::catalogue::is_inbox_kind(&kind) && caller.read_paths(&s).is_none() {
             let w = crate::triage::waiting(brain, &s, 500)?;
             facts = w["count"].as_u64().unwrap_or(0);
             failed = Some(w["failed_transcription"].as_array().map_or(0, Vec::len));

@@ -635,7 +635,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     let made = r.body_json();
     let code = made["code"].as_str().ok_or("code")?.to_string();
     assert_eq!(made["server"], "https://memory.example.net");
-    assert_eq!(made["triage"], "lou-a-trier");
+    assert_eq!(made["triage"], "lou-inbox");
     // The device, with no key, exchanges it on the public listener.
     let pair = |code: &str| {
         m.handle(&rq(
@@ -659,7 +659,7 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     assert!(
         vaults
             .iter()
-            .any(|v| v.as_str().unwrap_or("").starts_with("lou-a-trier")),
+            .any(|v| v.as_str().unwrap_or("").starts_with("lou-inbox")),
         "{vaults:?}"
     );
     assert!(
@@ -673,12 +673,12 @@ fn a_device_pairs_as_a_peer_of_its_person_and_never_reaches_another() -> Res {
     req.path = format!("/mcp/{agent}");
     let w = tool_text(&m.handle(&req));
     assert_eq!(w["result"], "created", "{w}");
-    assert_eq!(w["fact"]["space"], "lou-a-trier", "{w}");
+    assert_eq!(w["fact"]["space"], "lou-inbox", "{w}");
     let mut stats = mcp(key, "stats", json!({}));
     stats.path = format!("/mcp/{agent}");
     let s = tool_text(&m.handle(&stats));
     assert!(
-        s["lou-a-trier"]["kind"] == "a-trier" && s.get("alice-health").is_none(),
+        s["lou-inbox"]["kind"] == "inbox" && s.get("alice-health").is_none(),
         "{s}"
     );
     // Once only; a wrong code is refused the same way, and an address that keeps guessing is held off.

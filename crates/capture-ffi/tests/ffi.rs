@@ -52,21 +52,21 @@ fn pairing_node(answer: serde_json::Value, status: u16) -> String {
 #[test]
 fn pairing_reads_the_spaces_of_the_answer_and_the_old_vaults_key_too() {
     let new = pairing_node(
-        json!({ "agent": "peer-mac-ab12", "key": "hcp_k", "mcp_url": "http://127.0.0.1:1/mcp/peer-mac-ab12", "spaces": ["sam-a-trier"] }),
+        json!({ "agent": "peer-mac-ab12", "key": "hcp_k", "mcp_url": "http://127.0.0.1:1/mcp/peer-mac-ab12", "spaces": ["sam-inbox"] }),
         200,
     );
     let p = pair(new, "ABCD2345".into(), "mac".into()).expect("paired");
     assert_eq!(p.agent, "peer-mac-ab12");
-    assert_eq!(p.spaces, ["sam-a-trier"]);
+    assert_eq!(p.spaces, ["sam-inbox"]);
     assert_eq!(p.vaults, p.spaces, "the old field mirrors the new one");
     assert!(!p.in_clear, "the loopback is the own network");
     // A node older than the rename still says `vaults`.
     let old = pairing_node(
-        json!({ "agent": "peer-mac-cd34", "key": "hcp_k", "mcp_url": "http://127.0.0.1:1/mcp/peer-mac-cd34", "vaults": ["sam-a-trier"] }),
+        json!({ "agent": "peer-mac-cd34", "key": "hcp_k", "mcp_url": "http://127.0.0.1:1/mcp/peer-mac-cd34", "vaults": ["sam-inbox"] }),
         200,
     );
     let p = pair(old, "ABCD2345".into(), "mac".into()).expect("paired");
-    assert_eq!(p.spaces, ["sam-a-trier"]);
+    assert_eq!(p.spaces, ["sam-inbox"]);
     // Errors come out with the right kind and a plain message.
     let refused = pairing_node(json!({ "error": "this code is not valid" }), 400);
     match pair(refused, "ZZZZ2345".into(), "mac".into()) {

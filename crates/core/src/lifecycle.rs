@@ -294,7 +294,7 @@ impl Brain {
     pub fn create_space_with(&self, user_id: &str, person: &str, new: &SpaceNew) -> Result<Space> {
         let kind = new.kind.clone().filter(|k| k != crate::catalogue::CUSTOM);
         if let Some(k) = &kind {
-            if k == crate::catalogue::TRIAGE {
+            if crate::catalogue::is_inbox_kind(k) {
                 return Err(Error::Invalid("the Inbox is made for you already".into()));
             }
             if !self.catalogue()?.iter().any(|c| &c.key == k) {
@@ -349,7 +349,7 @@ impl Brain {
         self.owned_space(user_id, space)?;
         self.not_triage(space)?;
         if let Some(k) = &u.kind {
-            if k == crate::catalogue::TRIAGE {
+            if crate::catalogue::is_inbox_kind(k) {
                 return Err(Error::Invalid("a space cannot become the Inbox".into()));
             }
             self.set_space_kind(space, k)?;

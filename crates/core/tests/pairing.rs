@@ -57,7 +57,7 @@ fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     let t = Temp::new("pairing-triage");
     let brain = brain(&t)?;
     let (code, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
-    assert_eq!(triage, "owner-a-trier");
+    assert_eq!(triage, "owner-inbox");
     let ctl = brain.open_control()?;
     let p = pairing::redeem(&ctl, &code, "phone", NOW + 1)?;
     assert!(p.agent.starts_with("peer-phone-"), "{}", p.agent);

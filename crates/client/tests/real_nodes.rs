@@ -1860,7 +1860,7 @@ fn the_intake_commands_do_one_pass_by_hand_on_the_same_settings() {
         .spaces()
         .unwrap()
         .into_iter()
-        .find(|s| s.as_str().ends_with("a-trier"))
+        .find(|s| s.as_str().ends_with("inbox"))
         .unwrap();
     assert!(has_note(&a, triage.as_str(), "plombier"));
     // `memcp intake text` and `send`: into a space of the person's choice.
@@ -2607,8 +2607,8 @@ fn a_laptop_joined_to_a_person_of_another_id_shares_their_inbox_and_spaces_and_n
         "Book the car service for December".to_string(),
         "Call the plumber about the kitchen tap".to_string(),
     ];
-    assert_eq!(texts(&home, "robin-a-trier"), both);
-    assert_eq!(texts(&laptop, "rob-a-trier"), both);
+    assert_eq!(texts(&home, "robin-inbox"), both);
+    assert_eq!(texts(&laptop, "rob-inbox"), both);
     // The space made on the laptop is robin's at home; nothing of carol's is on the laptop.
     let hb = home.brain();
     let ctl = hb.open_control().unwrap();
@@ -2635,6 +2635,6 @@ fn a_laptop_joined_to_a_person_of_another_id_shares_their_inbox_and_spaces_and_n
         "carol's note crossed"
     );
     // One box on the laptop: the home box was paired with it, not copied beside it.
-    let boxes = on_laptop.iter().filter(|s| s.ends_with("-a-trier")).count();
+    let boxes = on_laptop.iter().filter(|s| s.ends_with("-inbox")).count();
     assert_eq!(boxes, 1, "{on_laptop:?}");
 }

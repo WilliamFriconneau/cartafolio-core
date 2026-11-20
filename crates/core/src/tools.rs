@@ -1673,7 +1673,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 if let Some(paths) = caller.read_paths(&s) {
                     let mut counts = json!({ "restricted_to": paths });
                     if crate::triage::is_triage(brain, &s) {
-                        counts["kind"] = json!(crate::catalogue::TRIAGE);
+                        counts["kind"] = json!(brain.space_kind(&s).unwrap_or_default());
                     }
                     let inside = |layer: &str, app: &str| {
                         caller.may_read_tags(&s, &[format!("{layer}/{app}")])
@@ -1699,7 +1699,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 let mut counts = facts::counts(&conn)?;
                 // Inbox is said, so that the janitor and an assistant know it is no vault.
                 if crate::triage::is_triage(brain, &s) {
-                    counts["kind"] = json!(crate::catalogue::TRIAGE);
+                    counts["kind"] = json!(brain.space_kind(&s).unwrap_or_default());
                 }
                 // The vocabulary of tags is the dear part (every tag of every note): it is kept while the space holds the
                 // same notes, told by a signature that any write, retag, retirement or purge changes.

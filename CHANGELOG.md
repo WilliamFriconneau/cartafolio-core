@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.9.0
+
+- **The Inbox has an English name.** Its kind is `inbox` (it was `a-trier`, French, in the code and the apps), and a box made now is named `<person>-inbox`. The old kind and the old name `<person>-a-trier` are read as the Inbox everywhere (the memory, the janitor, the sync between nodes, the page), so a memory made before keeps working as it is until its box is renamed. A custom kind cannot be called `inbox`.
+
 ## 20261120.8.0
 
 - **The `stats` tool keeps the tag vocabulary of a space while it holds the same notes.** The vocabulary (every tag of every note) was counted again at each call, 100 ms or more on a large space. It is kept, with a signature of the space (notes, tags, last write) that any write, retag, retirement or purge changes.

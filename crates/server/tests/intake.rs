@@ -527,7 +527,7 @@ fn a_folder_with_no_space_goes_to_the_to_sort_box_and_a_missing_folder_is_said()
     let mut intake =
         Intake::new(&w.brain, settings_from(&conf, &w.dir.join("intake"))).expect("intake");
     let triage = intake.memory().triage_space().expect("triage");
-    assert!(triage.ends_with("a-trier"), "{triage}");
+    assert!(triage.ends_with("inbox"), "{triage}");
     let scans = intake.watch();
     assert_eq!(scans[0].space, triage);
     assert_eq!(scans[0].report.as_ref().expect("scan").notes, 1);

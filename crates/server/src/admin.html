@@ -724,6 +724,9 @@ let renaming = null;
 let regranting = null; // { agent, all, spaces: Map(name -> "r"|"rw"), paths: [..] } while rights are edited
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+// The Inbox, by the kind it has now or the one it had before it was in English.
+const isInboxKind = k => k === "inbox" || k === "a-trier";
+const isInboxName = n => /-(inbox|a-trier)$/.test(String(n));
 const el = (tag, attrs = {}, ...kids) => {
   const e = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
@@ -2360,7 +2363,7 @@ async function openNote(body, id) {
 // ---- The spaces as folders: a tree, drag and drop, tags and keywords at each level ----
 const FT = { l: [], open: new Set(), sel: null, info: null };
 async function renderLayout() {
-  try { FT.l = (await api("layout")).spaces.filter(x => x.kind !== "a-trier").map(x => ({ ...x, label: niceLabel(x, x.kind) })); } catch (x) { return; }
+  try { FT.l = (await api("layout")).spaces.filter(x => !isInboxKind(x.kind)).map(x => ({ ...x, label: niceLabel(x, x.kind) })); } catch (x) { return; }
   drawTree();
   $("#layout-kind").replaceChildren(el("option", { value: "" }, "no kind"), ...(S.catalogue || []).map(k => el("option", { value: k.key }, k.label)));
   $("#layout-parent").replaceChildren(el("option", { value: "" }, "— top level —"), ...FT.l.map(x => el("option", { value: x.space }, x.label)));
@@ -2681,7 +2684,7 @@ $("#recover-form").addEventListener("submit", async e => {
 function options(select) {
   let items = [];
   if (select.hasAttribute("data-spaces")) {
-    items = S.spaces.filter(s => s.kind !== "a-trier").map(s => [s.name, spaceLabel(s.name)]);
+    items = S.spaces.filter(s => !isInboxKind(s.kind)).map(s => [s.name, spaceLabel(s.name)]);
   } else if (select.hasAttribute("data-kinds")) {
     items = (S.catalogue || []).map(k => [k.key, k.label + " (" + k.key + ")"]);
   }
@@ -2712,7 +2715,7 @@ function renderTriage() {
   const q = $("#tr-filter").value.trim().toLowerCase(), k = $("#tr-kind").value;
   const shown = all.filter(i => (!k || i.kind === k) && (!q || i.what.toLowerCase().includes(q)));
   const ssel = $("#tr-space"), keep = ssel.value;
-  ssel.replaceChildren(el("option", { value: "" }, "Send to…"), ...S.spaces.filter(v => v.kind !== "a-trier").map(v => el("option", { value: v.name }, spaceLabel(v.name))));
+  ssel.replaceChildren(el("option", { value: "" }, "Send to…"), ...S.spaces.filter(v => !isInboxKind(v.kind)).map(v => el("option", { value: v.name }, spaceLabel(v.name))));
   if (S.spaces.some(v => v.name === keep)) ssel.value = keep;
   $("#tr-empty").hidden = shown.length > 0;
   $("#tr-list").replaceChildren(...shown.map((it, idx) => {
@@ -2773,7 +2776,7 @@ function renderHero() {
   const me = S.me, name = me.display || me.name;
   let h = 0; for (const ch of String(me.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   document.documentElement.dataset.tone = TONES[h % TONES.length];
-  const spaces = S.spaces.filter(v => v.kind !== "a-trier");
+  const spaces = S.spaces.filter(v => !isInboxKind(v.kind));
   const facts = spaces.reduce((n, v) => n + (v.stats ? v.stats.facts : 0), 0);
   const last = spaces.map(v => v.stats && v.stats.last_write).filter(Boolean).sort().pop();
   const hour = new Date().getHours();
@@ -2816,7 +2819,7 @@ function render() {
   const meId = S.installation ? S.installation.me : S.me.id;
   const TONES = ["t1", "t2", "t3", ""];
   $("#people").replaceChildren(...people().map((u, i) => {
-    const names = (u.space_names || u.vault_names || []).filter(n => !n.endsWith("-a-trier")), mine = u.id === meId;
+    const names = (u.space_names || u.vault_names || []).filter(n => !isInboxName(n)), mine = u.id === meId;
     return el("div", { class: "tile " + TONES[i % 4] + (names.length > 3 ? " wide" : "") },
       el("div", { class: "tilehead" },
         el("div", { class: "avatar" }, (u.display || u.name).slice(0, 1).toUpperCase()),
@@ -3536,7 +3539,7 @@ function connKind(agent) {
   const base = agent.replace(/-\d+$/, "");
   return { claudeai: "cloud", "claude-web": "cloud", chatgpt: "cloud", "claude-desktop": "local", "claude-code": "local", opencode: "local", kalios: "local" }[base] || "";
 }
-// The person's Inbox is shown by its label, never by its stored name (`<person>-a-trier`, the name it always had).
+// The person's Inbox is shown by its label, never by its stored name (`<person>-inbox`, or `<person>-a-trier` in a memory made before).
 const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : S && S.triage && S.triage.space === name ? "Inbox" : name; };
 const spaceByName = n => (FT.l || []).find(x => x.space === n);
 // The folders above a space, outermost first.
@@ -3553,12 +3556,12 @@ function orderedSpaces() {
   const out = [], walk = (parent, depth) => { for (const s of kids(parent)) { out.push({ space: s.space, label: s.label, depth }); walk(s.space, depth + 1); } };
   walk("", 0);
   const placed = new Set(out.map(x => x.space));
-  for (const v of (S ? S.spaces : []).filter(v => v.kind !== "a-trier" && !placed.has(v.name))) out.push({ space: v.name, label: spaceLabel(v.name), depth: 0 });
+  for (const v of (S ? S.spaces : []).filter(v => !isInboxKind(v.kind) && !placed.has(v.name))) out.push({ space: v.name, label: spaceLabel(v.name), depth: 0 });
   return out;
 }
 // A colour per space, the same on the journal chips and in the graph.
 const spaceColor = name => {
-  const names = (S ? S.spaces : []).filter(v => v.kind !== "a-trier").map(v => v.name).sort();
+  const names = (S ? S.spaces : []).filter(v => !isInboxKind(v.kind)).map(v => v.name).sort();
   const i = names.indexOf(name);
   return i < 0 ? "var(--gn)" : "var(--g" + (1 + i % 8) + ")";
 };
@@ -3590,7 +3593,7 @@ function renderSpaceTiles() {
   if (!S) return;
   const kindLabel = k => { const c = (S.catalogue || []).find(x => x.key === k); return c ? c.label : k; };
   const num = n => Number(n).toLocaleString(loc());
-  const real = S.spaces.filter(v => v.kind !== "a-trier");
+  const real = S.spaces.filter(v => !isInboxKind(v.kind));
   const byName = new Map(real.map(v => [v.name, v]));
   const placed = new Set((FT.l || []).map(x => x.space));
   if (HOME.folder && !kids(HOME.folder).length) HOME.folder = "";
@@ -3877,7 +3880,7 @@ const joinProblem = r => r.state === "denied" ? "The other machine said no." : r
 const OB = { active: false, mode: null, step: 1, name: "", conn: null, err: "", words: "", joinState: null };
 const OB_STEPS = { start: ["Choose", "Your name", "An assistant", "Done"], join: ["Choose", "Address", "Three words", "Copy"], none: ["Choose", "Set up", "Connect", "Done"] };
 function needsOnboarding() {
-  const real = S.spaces.filter(v => v.kind !== "a-trier");
+  const real = S.spaces.filter(v => !isInboxKind(v.kind));
   return OB.active || (real.length === 0 && SYNC.peers.length === 0 && SYNC.ok);
 }
 function applyOnboarding() {
@@ -4078,7 +4081,7 @@ const sv = (tag, attrs = {}, ...kids) => {
 };
 function renderGlobal() {
   const graph = location.hash === "#graph";
-  const real = S.spaces.filter(v => v.kind !== "a-trier");
+  const real = S.spaces.filter(v => !isInboxKind(v.kind));
   const notes = real.reduce((n, v) => n + (v.stats ? v.stats.facts : 0), 0);
   crumbs($("#global-crumb"), [], graph ? "Graph" : "Journal");
   $("#global-title").textContent = "Your memory";

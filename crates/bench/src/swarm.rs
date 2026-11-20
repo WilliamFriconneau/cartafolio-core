@@ -483,7 +483,7 @@ fn write_notes(
     }
 }
 
-const TRIAGE: &str = "@a-trier";
+const TRIAGE: &str = "@inbox";
 
 /// Notes whose sub-space had not reached the writer's node yet when it was written: the writer waited for it.
 static WAITED: AtomicUsize = AtomicUsize::new(0);
@@ -510,7 +510,7 @@ fn snapshot(n: &mut Node, own_box: &str) -> R<Snapshot> {
     let mut notes = BTreeMap::new();
     let mut boxes = 0;
     for p in &layout {
-        if p.kind == "a-trier" {
+        if p.kind == "inbox" {
             boxes += 1;
         }
         let name = if p.space == TRIAGE {

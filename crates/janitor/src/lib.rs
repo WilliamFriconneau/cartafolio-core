@@ -37,7 +37,8 @@ use models::{Choice, system_prompt};
 const COPY_TAG: &str = "janitor/copy";
 
 /// The kind the memory gives Inbox in `stats`.
-const TRIAGE: &str = "a-trier";
+/// The kinds the memory gives the Inbox in `stats`: its name now, and the one it had before it was in English.
+const TRIAGE: [&str; 2] = ["inbox", "a-trier"];
 
 /// What one pass did.
 #[derive(Debug, Default, PartialEq, Eq)]
@@ -130,7 +131,7 @@ fn split_triage(stats: &Value) -> (Vec<String>, Vec<String>) {
     let mut triage = vec![];
     let mut vaults = vec![];
     for (v, s) in stats.as_object().into_iter().flatten() {
-        if s["kind"] == TRIAGE {
+        if TRIAGE.iter().any(|k| s["kind"] == *k) {
             triage.push(v.clone());
         } else {
             vaults.push(v.clone());

@@ -264,7 +264,13 @@ impl Peer {
         let theirs = entries
             .iter()
             .find(|s| s["triage"].as_bool() == Some(true))
-            .or_else(|| entries.iter().find(|s| s["kind"].as_str() == Some(TRIAGE)))
+            .or_else(|| {
+                entries.iter().find(|s| {
+                    s["kind"]
+                        .as_str()
+                        .is_some_and(memcp_core::catalogue::is_inbox_kind)
+                })
+            })
             .and_then(|s| s["space"].as_str())
             .map(str::to_string);
         let mut pairs = vec![];
@@ -284,7 +290,7 @@ impl Peer {
             let they_give = their_side.is_none_or(Policy::gives);
             // An older peer does not say when its copy began: it counts as made now.
             let since = s["since"].as_i64();
-            if kind == TRIAGE {
+            if memcp_core::catalogue::is_inbox_kind(&kind) {
                 if theirs.as_deref() != Some(name) {
                     continue;
                 }
@@ -372,7 +378,7 @@ impl Peer {
             .into_iter()
             .filter(|o| !listed_names.contains(o.space.as_str()))
             .filter(|o| {
-                if o.kind == TRIAGE {
+                if memcp_core::catalogue::is_inbox_kind(&o.kind) {
                     theirs.is_none() && mine.as_ref() == Some(&o.space)
                 } else {
                     true

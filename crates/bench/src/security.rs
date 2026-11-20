@@ -397,14 +397,14 @@ pub fn run(env: &Env) -> R<Vec<Row>> {
     }
     let (st, v) = post(
         "/sync/spaces",
-        &json!({ "space": triage, "kind": "a-trier", "label": null, "parent": null, "position": 0, "since": 1 }),
+        &json!({ "space": triage, "kind": "inbox", "label": null, "parent": null, "position": 0, "since": 1 }),
     )?;
     if st == 200 && v["space"] == json!(triage) {
         crossed.push(format!("pairs with the owner's À trier: {v}"));
     }
     let (st, v) = post(
         "/sync/spaces",
-        &json!({ "space": garage, "kind": "a-trier", "label": null, "parent": null, "position": 0, "since": 1 }),
+        &json!({ "space": garage, "kind": "inbox", "label": null, "parent": null, "position": 0, "since": 1 }),
     )?;
     if st == 200 {
         crossed.push(format!("takes the owner's {garage} as its box: {v}"));

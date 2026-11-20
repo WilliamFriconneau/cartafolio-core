@@ -11,7 +11,7 @@ const world = { disputes: [{ space: "work", fact: { id: "f0", text: "The meeting
   { id: "f1", kind: "replacement", text: "<i>The meeting is on Tuesday</i>", author: "page", at: "2026-11-03T09:00:00Z" },
   { id: "retired", kind: "retired", author: "laptop", at: "2026-11-03T09:30:00Z", reason: "not needed" }] }],
   connections: [], activity: [], attention: { idle: [], refused_24h: 0 }, app_guides: [],
-  triage: { space: "sam-a-trier", notes: [{ id: "n1", text: "<b>rappeler</b> le plombier", tags: ["inbox"], created_at: "2026-11-03T08:00:00Z" }], files: [] } };
+  triage: { space: "sam-inbox", notes: [{ id: "n1", text: "<b>rappeler</b> le plombier", tags: ["inbox"], created_at: "2026-11-03T08:00:00Z" }], files: [] } };
 const guides = { "space:health": "Compare with my usual range." };
 const state = () => ({
   me: { id: "u1", name: "sam", display: "Sam", admin: true }, my_guide: false, app_guides: world.app_guides, activity: world.activity, attention: world.attention, public_url: "https://memory.example.net",
@@ -24,7 +24,7 @@ const mockFetch = async (url, opts = {}) => {
     const b = JSON.parse(opts.body);
     world.pairCall = b;
     if (b.code !== "ABCDEFGH") return { ok: false, status: 400, json: async () => ({ error: "this code is unknown, used or expired" }) };
-    return { ok: true, status: 200, json: async () => ({ agent: "this-page-1", key: "hcp_paired_key", mcp_url: "https://memory.example.net/mcp/this-page-1", spaces: ["sam-a-trier"] }) };
+    return { ok: true, status: 200, json: async () => ({ agent: "this-page-1", key: "hcp_paired_key", mcp_url: "https://memory.example.net/mcp/this-page-1", spaces: ["sam-inbox"] }) };
   }
   const path = String(url).split("admin/api/")[1];
   calls.push([opts.method || "GET", path, opts.body]);
@@ -52,7 +52,7 @@ const mockFetch = async (url, opts = {}) => {
   }
   if (path === "pairing") {
     world.paired = JSON.parse(opts.body);
-    return ok({ code: "ABCD-EFGH", server: "https://memory.example.net", expires_in: 600, triage: "sam-a-trier" });
+    return ok({ code: "ABCD-EFGH", server: "https://memory.example.net", expires_in: 600, triage: "sam-inbox" });
   }
   if (path === "triage/send-many") {
     const b = JSON.parse(opts.body);
@@ -112,7 +112,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("the Inbox view lists what waits", !$("#view-triage").hidden && $$("#tr-list .trrow").length === 1);
   check("the view is called Inbox", text("#view-triage h2") === "Inbox", text("#view-triage h2"));
   check("a capture is text, never markup", $("#tr-list b") === null && text("#tr-list").includes("<b>rappeler</b>"));
-  check("Inbox is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("a-trier")));
+  check("Inbox is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("inbox")));
   check("nothing picked: send is disabled", $("#tr-send").disabled);
   click($("#tr-list .trrow"));
   check("a row picked, still no space chosen: send stays disabled", $("#tr-send").disabled && text("#tr-count").includes("1 selected"));

@@ -24,7 +24,7 @@ pub mod node;
 uniffi::setup_scaffolding!();
 
 /// What pairing gave: the connection's address and key (put the key in the Keychain at once). `spaces` names the one
-/// box the key writes to, the person's Inbox (`<person>-a-trier`): there is nothing to choose.
+/// box the key writes to, the person's Inbox (`<person>-inbox`): there is nothing to choose.
 #[derive(Clone, uniffi::Record)]
 pub struct Pairing {
     /// Name of the new connection (`peer-...`).

@@ -33,7 +33,7 @@ impl Drop for Dir {
     }
 }
 
-/// The laptop: a memory of its own, its person the bootstrap user, its box `owner-a-trier`.
+/// The laptop: a memory of its own, its person the bootstrap user, its box `owner-inbox`.
 struct Laptop {
     brain: Brain,
     triage: Space,

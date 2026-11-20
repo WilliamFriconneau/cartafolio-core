@@ -1066,9 +1066,13 @@ fn is_machine(ctl: &Connection, id: &str) -> Result<bool> {
         return Ok(false);
     }
     let (total, writes, boxes): (i64, i64, i64) = ctl.query_row(
-        "SELECT count(*), coalesce(sum(g.can_write != 0), 0), coalesce(sum(s.kind = ?2), 0)
+        "SELECT count(*), coalesce(sum(g.can_write != 0), 0), coalesce(sum(s.kind IN (?2, ?3)), 0)
          FROM grants g LEFT JOIN spaces s ON s.name = g.space WHERE g.connection_id = ?1",
-        params![id, crate::catalogue::TRIAGE],
+        params![
+            id,
+            crate::catalogue::TRIAGE,
+            crate::catalogue::TRIAGE_LEGACY
+        ],
         |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
     )?;
     Ok(total >= 2 && writes == total && boxes >= 1)
