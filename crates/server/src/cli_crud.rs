@@ -103,6 +103,7 @@ pub fn run(data: &Path, c: &Cmd) -> Option<Result<(), Failure>> {
         ("space", "tree") => space_tree(data, c),
         ("space", "set") => space_set(data, c),
         ("space", "delete") => space_delete(data, c),
+        ("space", "rename") => space_rename(data, c),
         ("space", "archived") => space_archived(data, c),
         ("space", "restore") => space_restore(data, c),
         ("rules", _) => rules_cmd(data, c, b),
@@ -254,6 +255,38 @@ fn space_delete(data: &Path, c: &Cmd) -> Result<(), Failure> {
             a.display(),
             a.file_name()
                 .map_or(String::new(), |n| n.to_string_lossy().to_string())
+        );
+    }
+    Ok(())
+}
+
+fn space_rename(data: &Path, c: &Cmd) -> Result<(), Failure> {
+    let brain = open(data)?;
+    let who = me(&brain, c)?;
+    let old = space(c.arg(2, "the space")?)?;
+    let new = space(c.arg(3, "the new name")?)?;
+    // A count first, unless --yes: renaming touches the disk and the whole control database.
+    let r = brain
+        .rename_space(&who.id, &old, &new, !(c.sw)("--yes"))
+        .map_err(fail)?;
+    sayln!(
+        "{}{} is now {} (kind {}): {} grants and {} path limits follow it, {} sub-spaces stay under it{}",
+        if r.dry_run { "dry run: " } else { "" },
+        r.from,
+        r.to,
+        r.kind,
+        r.grants,
+        r.path_limits,
+        r.sub_spaces,
+        if r.has_files {
+            ", its files with it"
+        } else {
+            ""
+        }
+    );
+    if r.dry_run {
+        sayln!(
+            "  nothing changed; run it again with --yes while the node is quiet, after a backup"
         );
     }
     Ok(())

@@ -113,6 +113,7 @@ date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
 | `space show` | one space: label, kind, counts, rules | yes | yes, runs on the node | any person |
 | `space tree` | the spaces as a tree | yes | yes, runs on the node | any person |
 | `space set` | label, parent, position, kind | yes | yes, runs on the node | any person |
+| `space rename` | renames a space on disk and in the control database | yes | no: moves the database and files of this machine and rewrites its control database | - |
 | `space delete` | moves a space's notes into another, or archives it | yes | yes, runs on the node | any person |
 | `space archived` | lists the archived spaces | yes | yes, runs on the node | any person |
 | `space restore` | brings an archived space back | yes | yes, runs on the node | any person |

@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261120.10.0
+
+- **`memcp space rename NAME NEW [--yes]`**: a space can be renamed, which it could not (only its label and place changed). The database, the folder of its files and every row of the control database that names it follow (owner, members, grants and path limits of the connections, folders, sync state and policy, approvals, sub-spaces), so a key keeps its access. It counts first and renames with `--yes`, while the node is quiet and after a backup. A box of the old kind (`a-trier`) comes out as `inbox`, labelled « Inbox ».
+- **The Inbox can be given another label** (`space set`); its kind, place and rules stay its own.
+
 ## 20261120.9.0
 
 - **The Inbox has an English name.** Its kind is `inbox` (it was `a-trier`, French, in the code and the apps), and a box made now is named `<person>-inbox`. The old kind and the old name `<person>-a-trier` are read as the Inbox everywhere (the memory, the janitor, the sync between nodes, the page), so a memory made before keeps working as it is until its box is renamed. A custom kind cannot be called `inbox`.

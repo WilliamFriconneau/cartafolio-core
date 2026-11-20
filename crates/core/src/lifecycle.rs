@@ -130,6 +130,27 @@ impl SpaceInfo {
     }
 }
 
+/// What a rename did, or (with `dry_run`) would do.
+#[derive(Clone, Debug, Default)]
+pub struct Renamed {
+    /// The dry run.
+    pub dry_run: bool,
+    /// The old name.
+    pub from: String,
+    /// The new name.
+    pub to: String,
+    /// The kind of the space (`inbox` once renamed, for a box that had the old kind).
+    pub kind: String,
+    /// Grants of connections on the space.
+    pub grants: i64,
+    /// Path limits of connections on the space.
+    pub path_limits: i64,
+    /// Sub-spaces under it.
+    pub sub_spaces: i64,
+    /// Whether it has a folder of stored files.
+    pub has_files: bool,
+}
+
 /// What a delete did, or (with `dry_run`) would do.
 #[derive(Clone, Debug, Default)]
 pub struct DeleteReport {
@@ -347,7 +368,17 @@ impl Brain {
         u: &SpaceUpdate,
     ) -> Result<SpaceInfo> {
         self.owned_space(user_id, space)?;
-        self.not_triage(space)?;
+        // The Inbox may be given another label, nothing else of it changes (its kind, place, rules are its own).
+        let only_label = u.kind.is_none()
+            && u.layout.parent.is_none()
+            && u.layout.position.is_none()
+            && u.rules.add_tags.is_empty()
+            && u.rules.remove_tags.is_empty()
+            && u.rules.add_keywords.is_empty()
+            && u.rules.remove_keywords.is_empty();
+        if !(triage::is_triage(self, space) && only_label) {
+            self.not_triage(space)?;
+        }
         if let Some(k) = &u.kind {
             if crate::catalogue::is_inbox_kind(k) {
                 return Err(Error::Invalid("a space cannot become the Inbox".into()));
@@ -403,6 +434,138 @@ impl Brain {
             .filter(|p| p.parent.as_ref() == Some(space))
             .map(|p| (p.space.clone(), target.clone()))
             .collect())
+    }
+
+    /// Renames a space: its name, on disk (the database, the folder of its files) and in every row of the control
+    /// database that names it (its owner and members, the grants and path limits of the connections, the folders, the sync
+    /// state and policy, the approvals of guides, the sub-spaces under it). The label, the notes and their ids do not
+    /// change. A box of the kind the Inbox had before it was in English takes the kind `inbox`. With `dry_run`, only says
+    /// what it would do. Do it while the node is quiet: a connection that holds the old name is refused after it.
+    pub fn rename_space(
+        &self,
+        user_id: &str,
+        old: &Space,
+        new: &Space,
+        dry_run: bool,
+    ) -> Result<Renamed> {
+        self.owned_space(user_id, old)?;
+        if old == new {
+            return Err(Error::Invalid("the new name is the old one".into()));
+        }
+        if self.has_space(new)? {
+            return Err(Error::Invalid(format!(
+                "a space named {new} already exists"
+            )));
+        }
+        let db_old = self.dir().join(old.file_name());
+        let db_new = self.dir().join(new.file_name());
+        let dir_old = self.dir().join("files").join(old.as_str());
+        let dir_new = self.dir().join("files").join(new.as_str());
+        if db_new.exists() || dir_new.exists() {
+            return Err(Error::Invalid(format!(
+                "{new} is the name of something on disk already: nothing was changed"
+            )));
+        }
+        let ctl = self.open_control()?;
+        let count = |sql: &str| -> i64 {
+            ctl.query_row(sql, [old.as_str()], |r| r.get(0))
+                .unwrap_or(0)
+        };
+        let mut report = Renamed {
+            dry_run,
+            from: old.to_string(),
+            to: new.to_string(),
+            kind: self.space_kind(old).unwrap_or_default(),
+            grants: count("SELECT count(*) FROM grants WHERE space = ?1"),
+            path_limits: count("SELECT count(*) FROM grant_paths WHERE space = ?1"),
+            sub_spaces: count("SELECT count(*) FROM spaces WHERE parent = ?1"),
+            has_files: dir_old.exists(),
+        };
+        if dry_run {
+            return Ok(report);
+        }
+        let _busy = crate::recover::busy(self)?;
+        // 1. The notes name their space; the log is folded into the file so that it is the whole database.
+        {
+            let conn = self.open_space(old)?;
+            conn.execute("UPDATE facts SET space = ?1", [new.as_str()])?;
+            // The file names its space: it is refused under any other name.
+            conn.execute("UPDATE meta SET v = ?1 WHERE k = 'space'", [new.as_str()])?;
+            conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+        }
+        // 2. The files on disk (the database first: a crash after it leaves the old name in the control database, and
+        // running the command again finds the database under its new name and finishes the rest).
+        fs::rename(&db_old, &db_new)?;
+        for ext in ["-wal", "-shm"] {
+            let _ = fs::remove_file(self.dir().join(format!("{}{ext}", old.file_name())));
+        }
+        if dir_old.exists() {
+            fs::rename(&dir_old, &dir_new)?;
+        }
+        crate::fsx::sync_dir(self.dir())?;
+        // 3. The control database, in one transaction.
+        let done = (|| -> Result<()> {
+            let tx = rusqlite::Transaction::new_unchecked(
+                &ctl,
+                rusqlite::TransactionBehavior::Immediate,
+            )?;
+            tx.execute_batch("PRAGMA defer_foreign_keys = ON")?;
+            let (o, n) = (old.as_str(), new.as_str());
+            tx.execute("UPDATE spaces SET name = ?2 WHERE name = ?1", [o, n])?;
+            for table in [
+                "spaces SET parent",
+                "space_members SET space",
+                "grants SET space",
+                "grant_paths SET space",
+                "guide_approvals SET space",
+                "sync_state SET space",
+                "sync_policy SET space",
+                "space_folders SET space",
+                "folder_state SET space",
+            ] {
+                tx.execute(
+                    &format!(
+                        "UPDATE {table} = ?2 WHERE {} = ?1",
+                        table.rsplit(' ').next().unwrap_or("space")
+                    ),
+                    [o, n],
+                )?;
+            }
+            // The Inbox of a memory made before the kind had an English name takes it, and shows as « Inbox ».
+            if report.kind == crate::catalogue::TRIAGE_LEGACY {
+                tx.execute(
+                    "UPDATE spaces SET kind = ?2 WHERE name = ?1",
+                    [n, crate::catalogue::TRIAGE],
+                )?;
+                tx.execute(
+                    "UPDATE spaces SET label = 'Inbox' WHERE name = ?1 AND (label IS NULL OR label = ?2)",
+                    [n, o],
+                )?;
+                report.kind = crate::catalogue::TRIAGE.to_string();
+            }
+            tx.commit()?;
+            Ok(())
+        })();
+        if let Err(e) = done {
+            // Put the disk back as it was, so that the node still finds the space under its name.
+            let _ = fs::rename(&db_new, &db_old);
+            if let Ok(conn) = rusqlite::Connection::open(&db_old) {
+                let _ = conn.execute("UPDATE meta SET v = ?1 WHERE k = 'space'", [old.as_str()]);
+                let _ = conn.execute("UPDATE facts SET space = ?1", [old.as_str()]);
+            }
+            if dir_new.exists() {
+                let _ = fs::rename(&dir_new, &dir_old);
+            }
+            return Err(e);
+        }
+        auth_event(
+            &ctl,
+            Some(user_id),
+            None,
+            "space_rename",
+            &format!("{old} {new}"),
+        );
+        Ok(report)
     }
 
     /// Deletes a space with a choice (see the module). With `dry_run`, only says what it would do.

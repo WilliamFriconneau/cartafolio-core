@@ -44,6 +44,8 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          reads the mounted folders again (only what changed) | lists them
   space new LABEL [--kind K] [--parent S] [--keywords a,b] [--tags t] | space show NAME | space tree
   space set NAME [--label L] [--parent S | --top] [--position N] [--kind K]
+  space rename NAME NEW [--yes]          renames a space (its file, its files, every grant and link); counts first unless --yes;
+                                         do it while the node is quiet, after a backup
   space delete NAME (--into SPACE | --archive) [--children grandparent|top|under:SPACE] [--dry-run]
                                          a space is never destroyed: its notes, files and tags go into another space,
                                          or it is archived (full export, database moved aside); sub-spaces move up

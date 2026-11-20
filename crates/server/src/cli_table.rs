@@ -223,6 +223,14 @@ pub const COMMANDS: &[Entry] = &[
         false,
     ),
     e(
+        "space rename",
+        "renames a space on disk and in the control database",
+        Remote::Local(
+            "moves the database and files of this machine and rewrites its control database",
+        ),
+        false,
+    ),
+    e(
         "space delete",
         "moves a space's notes into another, or archives it",
         Remote::Exec,
