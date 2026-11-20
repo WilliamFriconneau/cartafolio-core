@@ -143,14 +143,16 @@ pub fn protected_resource(app: &App, address: &str) -> Response {
 }
 
 pub fn authorization_server(app: &App) -> Response {
-    let login = app.login_url.as_deref().unwrap_or(&app.public_url);
+    // The consent page is the public one: it asks for an invitation code, and sends a person who is on the tailnet on to
+    // the private page, where Tailscale says who they are. A client cannot be told two addresses, and the private one
+    // cannot be reached by a person who is not on the tailnet.
     Response::json(
         200,
         &json!({
             "issuer": app.public_url,
             // Every authorization response, an error included, carries `iss` (RFC 9207).
             "authorization_response_iss_parameter_supported": true,
-            "authorization_endpoint": format!("{login}/oauth/authorize"),
+            "authorization_endpoint": format!("{}/oauth/authorize", app.public_url),
             "token_endpoint": format!("{}/oauth/token", app.public_url),
             "registration_endpoint": format!("{}/oauth/register", app.public_url),
             "response_types_supported": ["code"],
@@ -507,6 +509,28 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
     .iter()
     .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
     .collect();
+    // On your own devices with Tailscale on: the same request on the private page, where no code is needed.
+    let private = app.login_url.as_deref().map_or(String::new(), |login| {
+        let query: Vec<String> = [
+            "response_type",
+            "client_id",
+            "redirect_uri",
+            "state",
+            "code_challenge",
+            "code_challenge_method",
+            "scope",
+            "resource",
+        ]
+        .iter()
+        .filter(|k| !get(k).is_empty())
+        .map(|k| format!("{k}={}", enc(get(k))))
+        .collect();
+        format!(
+            "<p class=mute>On one of your own devices with Tailscale on? <a href=\"{}/oauth/authorize?{}\">Continue here</a>, no code needed.</p>",
+            esc(login),
+            esc(&query.join("&"))
+        )
+    });
     page(
         app,
         status,
@@ -514,7 +538,7 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
             "<h1>Connect {n}</h1><p>{n} asks to use a memory. Enter the invitation code you were given.</p>{note}\
              <form method=post>{hidden}<p><input name=invite autocomplete=off autocapitalize=characters \
              spellcheck=false placeholder=\"XXXX-XXXX-XXXX\" size=18 required autofocus></p><button>Continue</button></form>\
-             <p class=mute>The code is good once, for an hour.</p>",
+             <p class=mute>The code is good once, for an hour.</p>{private}",
             n = esc(&name)
         ),
     )

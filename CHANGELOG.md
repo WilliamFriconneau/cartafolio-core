@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.11.2
+
+- **The discovery points Claude to the public consent page.** `authorization_endpoint` is now `<public address>/oauth/authorize` (it was the private page, which a person who is not on the tailnet cannot reach). That page asks for an invitation code, and shows a link that takes a person who is on the tailnet to the private page with the same request, where Tailscale says who they are and no code is needed.
+
 ## 20261120.11.1
 
 - **The invitation endpoint follows the rest of the control plane.** `POST /admin/api/users/invite` takes the console token of an administrator of the installation (a member's token is refused), and is never served to a request that came through Funnel.

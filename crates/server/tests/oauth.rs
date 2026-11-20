@@ -259,8 +259,8 @@ fn discovery_starts_from_the_401() -> Res {
         ))
         .body_json();
     assert_eq!(
-        asm["authorization_endpoint"],
-        "https://memory.example.net:8792/oauth/authorize"
+        asm["authorization_endpoint"], "https://memory.example.net/oauth/authorize",
+        "the public page, which asks for a code and leads a tailnet person on to the private one"
     );
     assert_eq!(
         asm["token_endpoint"],
@@ -294,6 +294,12 @@ fn the_consent_page_needs_the_tailnet_and_a_known_person() -> Res {
     assert_eq!(public.status, 200, "public listener: a form for a code");
     let html = String::from_utf8(public.body.clone())?;
     assert!(html.contains("invitation code") && !html.contains("Allow"));
+    // A person on the tailnet is led to the private page with the same request.
+    assert!(
+        html.contains("href=\"https://memory.example.net:8792/oauth/authorize?")
+            && html.contains(&format!("client_id={client}")),
+        "{html}"
+    );
     assert_eq!(
         e.app.handle(&rq("GET", &q, &[], "", Some(""))).status,
         403,
