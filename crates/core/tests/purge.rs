@@ -250,3 +250,37 @@ fn a_protected_tag_can_be_lifted_by_name_for_one_purge() -> Res {
     assert_eq!(done.facts, 1, "{done:?}");
     Ok(())
 }
+
+#[test]
+fn the_cached_tag_vocabulary_of_stats_follows_every_change() -> Res {
+    let t = Temp::new("stats-cache");
+    let b = brain(&t)?;
+    let c = caller(&b)?;
+    let tags_of = |b: &Brain, c: &Caller| -> Result<Value, Box<dyn std::error::Error>> {
+        Ok(tools::call(b, c, "stats", &json!({}))?["home"]["tags"].clone())
+    };
+    let id = put(&b, &c, "Une note pour compter les étiquettes", &["lot/un"])?;
+    assert_eq!(tags_of(&b, &c)?["lot/un"], 1);
+    assert_eq!(
+        tags_of(&b, &c)?["lot/un"],
+        1,
+        "a second call, from the cache"
+    );
+    // A retag changes the vocabulary at once.
+    let r = tools::call(
+        &b,
+        &c,
+        "tags_set",
+        &json!({ "id": id, "add": ["lot/deux"], "learn": false }),
+    )?;
+    let head = r["fact"]["id"].as_str().ok_or("head")?.to_string();
+    assert_eq!(tags_of(&b, &c)?["lot/deux"], 1);
+    // A purge too.
+    purge_facts(&b, &sp("home"), &[head], &[], &[], true)?;
+    assert!(
+        tags_of(&b, &c)?["lot/deux"].is_null(),
+        "{}",
+        tags_of(&b, &c)?
+    );
+    Ok(())
+}

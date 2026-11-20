@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.8.0
+
+- **The `stats` tool keeps the tag vocabulary of a space while it holds the same notes.** The vocabulary (every tag of every note) was counted again at each call, 100 ms or more on a large space. It is kept, with a signature of the space (notes, tags, last write) that any write, retag, retirement or purge changes.
+
 ## 20261120.7.0
 
 - **A denial told by a verb or an absence is not a red flag.** « il niait les idées suicidaires », « elle nie toute idée suicidaire », « absence d'idées suicidaires », « pas d'idée suicidaire » no longer raise `alerte/suicidal_ideation`; up to two article words (`les`, `toute`, `idée`…) may stand between the negation and the sign. In doubt it still fires.

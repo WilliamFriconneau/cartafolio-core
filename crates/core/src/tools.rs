@@ -900,6 +900,15 @@ fn str_arg<'a>(args: &'a Value, key: &str) -> Result<&'a str, ToolError> {
         .ok_or_else(|| ToolError::Invalid(format!("{key:?} (text) is required")))
 }
 
+/// The vocabulary of tags of each space as `stats` last counted it, with the signature of the space it was counted at.
+fn tag_vocabulary_cache()
+-> &'static std::sync::Mutex<std::collections::HashMap<String, (String, Value)>> {
+    static CACHE: std::sync::OnceLock<
+        std::sync::Mutex<std::collections::HashMap<String, (String, Value)>>,
+    > = std::sync::OnceLock::new();
+    CACHE.get_or_init(|| std::sync::Mutex::new(std::collections::HashMap::new()))
+}
+
 fn read_spaces(caller: &Caller, args: &Value) -> Result<Vec<Space>, ToolError> {
     match args.get("space").and_then(Value::as_str) {
         None => Ok(caller.readable()),
@@ -1692,11 +1701,38 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
                 if crate::triage::is_triage(brain, &s) {
                     counts["kind"] = json!(crate::catalogue::TRIAGE);
                 }
-                let tags = facts::tag_counts(&conn)?;
-                if !tags.is_empty() {
-                    let vocabulary: serde_json::Map<String, Value> =
-                        tags.into_iter().map(|(t, n)| (t, json!(n))).collect();
-                    counts["tags"] = Value::Object(vocabulary);
+                // The vocabulary of tags is the dear part (every tag of every note): it is kept while the space holds the
+                // same notes, told by a signature that any write, retag, retirement or purge changes.
+                let signature: String = conn
+                    .query_row(
+                        "SELECT count(*) || ':' || coalesce(max(rowid), 0) || ':' || coalesce(max(created_at), 0)
+                                || ':' || coalesce(max(status_at), 0) || ':' || (SELECT count(*) FROM fact_tags)
+                         FROM facts",
+                        [],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_default();
+                let cache_key = format!("{}|{}", brain.dir().display(), s.as_str());
+                let cached = tag_vocabulary_cache().lock().ok().and_then(|c| {
+                    c.get(&cache_key)
+                        .filter(|(sig, _)| *sig == signature)
+                        .map(|(_, v)| v.clone())
+                });
+                let vocabulary = match cached {
+                    Some(v) => v,
+                    None => {
+                        let tags = facts::tag_counts(&conn)?;
+                        let v: serde_json::Map<String, Value> =
+                            tags.into_iter().map(|(t, n)| (t, json!(n))).collect();
+                        let v = Value::Object(v);
+                        if let Ok(mut c) = tag_vocabulary_cache().lock() {
+                            c.insert(cache_key, (signature, v.clone()));
+                        }
+                        v
+                    }
+                };
+                if vocabulary.as_object().is_some_and(|m| !m.is_empty()) {
+                    counts["tags"] = vocabulary;
                 }
                 let sources = crate::origin::sources(&conn)?;
                 if !sources.is_empty() {
