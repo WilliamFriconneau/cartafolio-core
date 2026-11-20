@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.11.0
+
+- **A person who is not on the tailnet can approve a connector (Claude on the web) with an invitation code.** An administrator makes the code with `POST /admin/api/users/invite {"name": "<person>"}` (a registry console token, or their page): twelve letters shown once as `XXXX-XXXX-XXXX`, good for one hour and one use, kept as a digest in memory only (no database change; a restart forgets them; twenty at most wait at once). On the public address, `GET /oauth/authorize` now shows a form for the code instead of a refusal; the code opens the consent page of that person alone, and the approval carries a nonce tied to them, with the same origin checks as on the tailnet. Wrong codes are counted per address like wrong keys (ten in fifteen minutes hold the address off); a redirect address that is not registered does not spend a code. The tailnet way is unchanged.
+
 ## 20261120.10.0
 
 - **`memcp space rename NAME NEW [--yes]`**: a space can be renamed, which it could not (only its label and place changed). The database, the folder of its files and every row of the control database that names it follow (owner, members, grants and path limits of the connections, folders, sync state and policy, approvals, sub-spaces), so a key keeps its access. It counts first and renames with `--yes`, while the node is quiet and after a backup. A box of the old kind (`a-trier`) comes out as `inbox`, labelled « Inbox ».

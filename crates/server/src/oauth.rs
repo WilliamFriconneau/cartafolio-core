@@ -61,6 +61,12 @@ const CONSENT_TTL: i64 = 600;
 /// Client registrations per address and minute.
 const REGISTER_PER_MIN: i64 = 5;
 const MAX_CLIENTS: i64 = 200;
+/// An invitation code is good for an hour, once.
+const INVITE_TTL: i64 = 3600;
+/// Invitations waiting at the same time.
+const MAX_INVITES: usize = 20;
+/// Crockford's base32: no I, L, O or U, so a code read aloud or typed on a phone is not misread.
+const CODE_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// Access tokens last 30 days; the client refreshes them.
 const ACCESS_DAYS: i64 = 30;
 
@@ -328,20 +334,220 @@ fn esc(s: &str) -> String {
         .replace('\'', "&#39;")
 }
 
-/// `GET` (consent page) and `POST` (approval) `/oauth/authorize`, identity listener only.
-pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
-    let Some(me) = who else {
+/// The key an invitation code is kept under: the digest of its twelve letters, however it was typed (dashes, spaces,
+/// lowercase, and the letters Crockford reads as digits). `None` when it cannot be a code.
+fn invite_key(code: &str) -> Option<String> {
+    let c: String = code
+        .chars()
+        .filter(|c| !c.is_whitespace() && *c != '-')
+        .map(|c| match c.to_ascii_uppercase() {
+            'O' => '0',
+            'I' | 'L' => '1',
+            u => u,
+        })
+        .collect();
+    (c.len() == 12 && c.bytes().all(|b| CODE_ALPHABET.contains(&b))).then(|| hex(&sha(&c)))
+}
+
+/// A one-time code that lets the person named here approve a connector from the public address, where Tailscale does
+/// not tell who is there (a person who is not on the tailnet). It is shown once and kept only as a digest, in memory.
+/// Returns the code, as `XXXX-XXXX-XXXX`, and when it ends; `None` when too many are waiting or the person is unknown.
+pub fn invite_create(app: &App, person: &str, now: i64) -> Option<(String, i64)> {
+    let ctl = app.brain.open_control().ok()?;
+    let user = users::resolve(&ctl, person).ok().filter(|u| !u.disabled)?;
+    // Five random bits per letter: 256 is a multiple of 32, so no letter is likelier than another.
+    let code: String = util::random_bytes::<12>()
+        .iter()
+        .map(|b| CODE_ALPHABET[(b & 31) as usize] as char)
+        .collect();
+    let end = now + INVITE_TTL;
+    {
+        let mut m = app.invites.lock().unwrap_or_else(|e| e.into_inner());
+        m.retain(|_, (_, exp)| *exp > now);
+        if m.len() >= MAX_INVITES {
+            return None;
+        }
+        m.insert(hex(&sha(&code)), (user.id.clone(), end));
+    }
+    access::auth_event(&ctl, Some(&user.name), None, "oauth_invite_made", "");
+    Some((
+        format!("{}-{}-{}", &code[0..4], &code[4..8], &code[8..12]),
+        end,
+    ))
+}
+
+/// The person an invitation code was made for. The code is spent: it opens one consent page.
+fn invite_take(app: &App, code: &str, now: i64) -> Option<String> {
+    let key = invite_key(code)?;
+    let mut m = app.invites.lock().unwrap_or_else(|e| e.into_inner());
+    m.retain(|_, (_, exp)| *exp > now);
+    m.remove(&key).map(|(id, _)| id)
+}
+
+/// Whether this installation holds the invitation code of a consent form (the manager finds the person by it).
+pub fn holds_invite(app: &App, body: &[u8]) -> bool {
+    let q = form(body);
+    let now = util::now();
+    q.get("invite")
+        .and_then(|c| invite_key(c))
+        .is_some_and(|k| {
+            app.invites
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&k)
+                .is_some_and(|(_, exp)| *exp > now)
+        })
+}
+
+/// Whether this installation holds the nonce of a consent form.
+pub fn holds_consent(app: &App, body: &[u8]) -> bool {
+    let q = form(body);
+    let now = util::now();
+    q.get("nonce").is_some_and(|n| {
+        app.consents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(n)
+            .is_some_and(|(_, exp)| *exp > now)
+    })
+}
+
+/// A request to the consent page that is not on the tailnet: the person is the one an invitation code was made for. The
+/// code is checked, and spent, only for a client and a redirect address that are registered (a bad link does not burn
+/// it), and wrong codes are counted per address like wrong keys. The second request (the approval) carries the nonce
+/// the first one was given.
+fn invited_person(app: &App, req: &Request, now: i64) -> Option<User> {
+    if req.method != "POST" {
+        return None;
+    }
+    let q = form(&req.body);
+    let ctl = app.brain.open_control().ok()?;
+    let person = |id: &str| users::user(&ctl, id).ok().flatten().filter(|u| !u.disabled);
+    if let Some(n) = q.get("nonce").filter(|n| !n.is_empty()) {
+        let id = app
+            .consents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(n)
+            .filter(|(_, exp)| *exp > now)
+            .map(|(id, _)| id.clone())?;
+        return person(&id);
+    }
+    let code = q.get("invite")?;
+    let who = req.ip.clone().unwrap_or_else(|| "?".into());
+    if app.blocked(now, &who) {
+        return None;
+    }
+    let (_, uris) = client(&ctl, q.get("client_id").map(String::as_str).unwrap_or(""))?;
+    if !uris.iter().any(|u| Some(u) == q.get("redirect_uri")) {
+        return None;
+    }
+    match invite_take(app, code, now).and_then(|id| person(&id)) {
+        Some(u) => {
+            access::auth_event(
+                &ctl,
+                Some(&u.name),
+                req.ip.as_deref(),
+                "oauth_invite_used",
+                "",
+            );
+            Some(u)
+        }
+        None => {
+            app.fail(now, &who);
+            None
+        }
+    }
+}
+
+/// What the public consent page shows to someone with no code yet, or a wrong one.
+fn invite_form(app: &App, req: &Request, now: i64) -> Response {
+    let q = if req.method == "POST" {
+        form(&req.body)
+    } else {
+        req.query.clone()
+    };
+    let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
+    let Ok(ctl) = app.brain.open_control() else {
+        return page(app, 500, "<p>Storage failed.</p>");
+    };
+    let known = client(&ctl, get("client_id"))
+        .filter(|(_, uris)| uris.iter().any(|u| u == get("redirect_uri")));
+    let Some((name, _)) = known else {
         return page(
             app,
             403,
             "<p>Open this page from one of your devices, with Tailscale on.</p>",
         );
     };
+    let who = req.ip.clone().unwrap_or_else(|| "?".into());
+    let (status, note) = if req.method != "POST" {
+        (200, "")
+    } else if app.blocked(now, &who) {
+        (
+            429,
+            "<p><b>Too many tries.</b> Wait a little, then start again from your assistant.</p>",
+        )
+    } else {
+        (
+            403,
+            "<p><b>This code is not valid, or it has expired.</b> Ask for a new one.</p>",
+        )
+    };
+    let hidden: String = [
+        "client_id",
+        "redirect_uri",
+        "state",
+        "code_challenge",
+        "code_challenge_method",
+        "response_type",
+        "scope",
+        "resource",
+    ]
+    .iter()
+    .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
+    .collect();
+    page(
+        app,
+        status,
+        &format!(
+            "<h1>Connect {n}</h1><p>{n} asks to use a memory. Enter the invitation code you were given.</p>{note}\
+             <form method=post>{hidden}<p><input name=invite autocomplete=off autocapitalize=characters \
+             spellcheck=false placeholder=\"XXXX-XXXX-XXXX\" size=18 required autofocus></p><button>Continue</button></form>\
+             <p class=mute>The code is good once, for an hour.</p>",
+            n = esc(&name)
+        ),
+    )
+}
+
+/// `GET` (consent page) and `POST` (approval) `/oauth/authorize`: on the identity listener, where Tailscale tells who
+/// is there; on the public address, for a person who has an invitation code.
+pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
     let now = util::now();
+    let public = req.tailnet_login.is_none();
+    let who = match who {
+        Some(u) => Some(u),
+        None if public => invited_person(app, req, now),
+        None => None,
+    };
+    let Some(me) = who else {
+        if public {
+            return invite_form(app, req, now);
+        }
+        return page(
+            app,
+            403,
+            "<p>Open this page from one of your devices, with Tailscale on.</p>",
+        );
+    };
     if req.method == "POST" {
         // The approval comes from the consent page itself, never from another site.
         let origin = req.header("origin");
-        let expected = app.login_url.as_deref().map(origin_of);
+        let expected = if public {
+            Some(origin_of(&app.public_url))
+        } else {
+            app.login_url.as_deref().map(origin_of)
+        };
         if req.header("sec-fetch-site") == "cross-site"
             || (!origin.is_empty() && Some(origin) != expected)
         {
@@ -516,7 +722,9 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
             ),
         )
     };
-    if req.method == "GET" {
+    // A code just opened the page: the form that carried it is answered with the consent page, as a GET is.
+    let opened_by_code = public && q.contains_key("invite") && !q.contains_key("nonce");
+    if req.method == "GET" || opened_by_code {
         return consent_page(200, "");
     }
     let chosen: Vec<String> = reach

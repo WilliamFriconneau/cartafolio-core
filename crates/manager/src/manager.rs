@@ -441,6 +441,12 @@ impl Manager {
             let _ = self.ensure_people();
             return r;
         }
+        if path == "/admin/api/users/invite" {
+            if !u.admin {
+                return err(403, "only an administrator of the installation does this");
+            }
+            return self.make_invite(req);
+        }
         if is_installation_path(path) {
             if !u.admin {
                 return err(403, "only an administrator of the installation does this");
@@ -574,6 +580,29 @@ impl Manager {
         Response::json(200, &st)
     }
 
+    /// A one-time code that lets a person who is not on the tailnet approve a connector (Claude on the web) from the
+    /// public address. Shown here once; only its digest is kept, in memory, for an hour.
+    fn make_invite(&self, req: &Request) -> Response {
+        let name = serde_json::from_slice::<Value>(&req.body)
+            .ok()
+            .and_then(|v| v["name"].as_str().map(str::to_string))
+            .unwrap_or_default();
+        let Some(user) = self.person_by_name(&name) else {
+            return err(404, "no such person");
+        };
+        let Some(app) = self.person_app(&user.name) else {
+            return err(404, "this person has no installation yet");
+        };
+        match oauth::invite_create(&app, &user.name, memcp_core::util::now()) {
+            Some((code, ends)) => Response::json(
+                200,
+                &json!({ "person": user.name, "code": code, "expires_at": ends, "valid_minutes": 60 }),
+            )
+            .with("Cache-Control", "no-store"),
+            None => err(409, "too many invitations are waiting"),
+        }
+    }
+
     /// The installation to answer a request that carries a secret of its own.
     fn by_secret(&self, req: &Request) -> Arc<App> {
         let path = req.path.trim_end_matches('/');
@@ -691,6 +720,33 @@ impl Handler for Manager {
                     None => reply(&self.joiner()),
                 }
             }
+            // The consent page on the public address: a form with an invitation code, or the form that came back from it.
+            // The code (or the nonce it gave) belongs to one person's installation, which answers; the client the
+            // assistant registered with the registry is copied there first. Wrong codes are counted by the registry.
+            ("GET" | "POST", "/oauth/authorize") => {
+                let now = memcp_core::util::now();
+                let who = req.ip.clone().unwrap_or_else(|| "?".into());
+                if req.method == "POST" && !self.registry.blocked(now, &who) {
+                    let found =
+                        self.holder(|a| a.holds_invite(&req.body) || a.holds_consent(&req.body));
+                    if let Some(app) = found.filter(|a| !Arc::ptr_eq(a, &self.registry)) {
+                        let cid = oauth::form(&req.body)
+                            .get("client_id")
+                            .cloned()
+                            .unwrap_or_default();
+                        if !cid.is_empty() {
+                            oauth::copy_client(&self.registry, &app, &cid);
+                        }
+                        return reply(&app);
+                    }
+                }
+                reply(&self.registry)
+            }
+            // An administrator's console token makes an invitation code for a person: `{"name": "<person>"}`.
+            ("POST", "/admin/api/users/invite") => match req.key() {
+                Some(t) if self.registry.holds_console_token(&t) => self.make_invite(req),
+                _ => err(401, "an administrator's console token is required"),
+            },
             _ => reply(&self.by_secret(req)),
         }
     }

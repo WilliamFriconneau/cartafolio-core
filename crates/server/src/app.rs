@@ -52,6 +52,9 @@ pub struct App {
     rates: Mutex<HashMap<String, VecDeque<i64>>>,
     /// One-time consent nonces: nonce → (person id, expiry).
     pub(crate) consents: Mutex<HashMap<String, (String, i64)>>,
+    /// One-time invitation codes for the consent page, for a person who is not on the tailnet: hash of the code to
+    /// (person id, end of validity). In memory only: a restart forgets them, and a code is made just before it is used.
+    pub(crate) invites: Mutex<HashMap<String, (String, i64)>>,
     /// Requests to join, waiting for the person's answer (in memory only).
     pub(crate) joins: Mutex<HashMap<String, crate::join::Join>>,
     /// One-time invitation tickets made by a peer or by the person: hash of the ticket to (person id, person name, end
@@ -137,6 +140,7 @@ impl App {
             rates: Mutex::new(HashMap::new()),
             node_name: "MemCP".into(),
             consents: Mutex::new(HashMap::new()),
+            invites: Mutex::new(HashMap::new()),
             joins: Mutex::new(HashMap::new()),
             tickets: Mutex::new(HashMap::new()),
             children: Mutex::new(Vec::new()),
@@ -715,6 +719,16 @@ impl App {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .contains_key(id)
+    }
+
+    /// The invitation code of a consent page's form.
+    pub fn holds_invite(&self, body: &[u8]) -> bool {
+        crate::oauth::holds_invite(self, body)
+    }
+
+    /// The nonce of a consent page that was opened with an invitation code.
+    pub fn holds_consent(&self, body: &[u8]) -> bool {
+        crate::oauth::holds_consent(self, body)
     }
 
     /// The code or refresh token of an OAuth token request.

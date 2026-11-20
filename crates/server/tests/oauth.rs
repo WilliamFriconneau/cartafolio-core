@@ -13,6 +13,7 @@ use memcp_core::users;
 use memcp_core::{Brain, Space};
 use memcp_server::app::App;
 use memcp_server::http::{Request, Response, parse_query};
+use memcp_server::oauth;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -289,11 +290,10 @@ fn the_consent_page_needs_the_tailnet_and_a_known_person() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let q = authorize_query(&client);
-    assert_eq!(
-        e.app.handle(&rq("GET", &q, &[], "", None)).status,
-        403,
-        "public listener"
-    );
+    let public = e.app.handle(&rq("GET", &q, &[], "", None));
+    assert_eq!(public.status, 200, "public listener: a form for a code");
+    let html = String::from_utf8(public.body.clone())?;
+    assert!(html.contains("invitation code") && !html.contains("Allow"));
     assert_eq!(
         e.app.handle(&rq("GET", &q, &[], "", Some(""))).status,
         403,
@@ -1122,6 +1122,156 @@ fn every_authorization_response_names_its_issuer() -> Res {
     assert!(
         loc.contains("error=invalid_request") && loc.contains(iss),
         "{loc}"
+    );
+    Ok(())
+}
+
+// --- a person who is not on the tailnet approves with an invitation code ---
+
+fn invite(e: &Env) -> Result<String, Box<dyn Error>> {
+    Ok(oauth::invite_create(&e.app, "owner", util_now())
+        .ok_or("an invitation")?
+        .0)
+}
+
+fn form_of(q: &str, extra: &str) -> String {
+    q.split_once('?')
+        .map(|(_, b)| format!("{b}{extra}"))
+        .unwrap_or_default()
+}
+
+fn public_post(e: &Env, body: &str, headers: &[(&str, &str)]) -> Response {
+    e.app
+        .handle(&rq("POST", "/oauth/authorize", headers, body, None))
+}
+
+const SITE: [(&str, &str); 1] = [("origin", "https://memory.example.net")];
+
+#[test]
+fn a_person_off_the_tailnet_approves_with_an_invitation_code() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let code = invite(&e)?;
+    assert_eq!(code.len(), 14, "XXXX-XXXX-XXXX");
+    // Typed any way: lowercase, spaces for dashes.
+    let typed = code.to_lowercase().replace('-', "+");
+    let consent = public_post(&e, &form_of(&q, &format!("&invite={typed}")), &SITE);
+    assert_eq!(
+        consent.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&consent.body)
+    );
+    let html = String::from_utf8(consent.body.clone())?;
+    assert!(
+        html.contains("Allow") && html.contains("Signed in as"),
+        "{html}"
+    );
+    assert!(!html.contains(&code), "the page never repeats the code");
+    let n = nonce_from(&html)?;
+    // The approval carries the nonce the page gave, not the code.
+    let done = public_post(
+        &e,
+        &form_of(&q, &format!("&decision=allow&nonce={n}&v_personal=1")),
+        &SITE,
+    );
+    assert_eq!(done.status, 302, "{}", String::from_utf8_lossy(&done.body));
+    let loc = location(&done);
+    assert!(
+        loc.starts_with(CALLBACK) && loc.contains("state=xyz"),
+        "{loc}"
+    );
+    let c = loc
+        .split("code=")
+        .nth(1)
+        .and_then(|c| c.split('&').next())
+        .ok_or("code")?;
+    let cb = "https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback";
+    let t = token(
+        &e,
+        &format!("grant_type=authorization_code&code={c}&redirect_uri={cb}&client_id={client}&code_verifier={VERIFIER}"),
+    )
+    .body_json();
+    assert!(t["access_token"].as_str().is_some(), "{t}");
+    Ok(())
+}
+
+#[test]
+fn an_invitation_code_is_good_once_and_wrong_ones_are_counted() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let code = invite(&e)?;
+    // A redirect address that is not registered does not spend the code.
+    let bad = form_of(&q, &format!("&invite={code}")).replace("claude.ai", "evil.example");
+    assert_eq!(public_post(&e, &bad, &SITE).status, 403);
+    let ok = form_of(&q, &format!("&invite={code}"));
+    assert_eq!(public_post(&e, &ok, &SITE).status, 200);
+    assert_eq!(public_post(&e, &ok, &SITE).status, 403, "spent");
+    // Wrong codes are counted per address; the address is held off, even for a good code.
+    for _ in 0..12 {
+        public_post(&e, &form_of(&q, "&invite=AAAA-AAAA-AAAA"), &SITE);
+    }
+    let fresh = invite(&e)?;
+    let held = public_post(&e, &form_of(&q, &format!("&invite={fresh}")), &SITE);
+    assert_eq!(held.status, 429);
+    Ok(())
+}
+
+#[test]
+fn an_expired_code_and_an_unknown_person_give_nothing() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    assert!(oauth::invite_create(&e.app, "nobody", util_now()).is_none());
+    let (old, _) = oauth::invite_create(&e.app, "owner", util_now() - 7200).ok_or("invite")?;
+    let r = public_post(&e, &form_of(&q, &format!("&invite={old}")), &SITE);
+    assert_eq!(r.status, 403, "expired");
+    // Not twelve letters of the alphabet: nothing to look up.
+    assert_eq!(
+        public_post(&e, &form_of(&q, "&invite=not-a-code"), &SITE).status,
+        403
+    );
+    // No more than twenty wait at the same time.
+    let e2 = env()?;
+    for _ in 0..20 {
+        assert!(oauth::invite_create(&e2.app, "owner", util_now()).is_some());
+    }
+    assert!(oauth::invite_create(&e2.app, "owner", util_now()).is_none());
+    Ok(())
+}
+
+#[test]
+fn the_public_approval_needs_its_nonce_and_its_own_site() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let code = invite(&e)?;
+    let consent = public_post(&e, &form_of(&q, &format!("&invite={code}")), &SITE);
+    let n = nonce_from(&String::from_utf8(consent.body.clone())?)?;
+    let allow = form_of(&q, &format!("&decision=allow&nonce={n}&v_personal=1"));
+    assert_eq!(
+        public_post(&e, &allow, &[("origin", "https://evil.example")]).status,
+        403
+    );
+    assert_eq!(
+        public_post(&e, &allow, &[("sec-fetch-site", "cross-site")]).status,
+        403
+    );
+    // No nonce and no code, or a nonce nobody gave: the form again, never a code.
+    let none = form_of(&q, "&decision=allow&v_personal=1");
+    assert_eq!(public_post(&e, &none, &SITE).status, 403);
+    let wrong = form_of(
+        &q,
+        "&decision=allow&nonce=00000000000000000000000000000000&v_personal=1",
+    );
+    assert_eq!(public_post(&e, &wrong, &SITE).status, 403);
+    assert_eq!(public_post(&e, &allow, &SITE).status, 302);
+    assert_eq!(
+        public_post(&e, &allow, &SITE).status,
+        403,
+        "a nonce works once"
     );
     Ok(())
 }

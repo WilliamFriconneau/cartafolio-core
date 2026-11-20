@@ -917,3 +917,130 @@ fn without_a_public_address_the_manager_names_the_port_it_listens_on() -> Res {
     assert_eq!(m.registry().public_url, "https://memory.example.net");
     Ok(())
 }
+
+#[test]
+fn a_person_off_the_tailnet_connects_claude_with_a_code_the_administrator_makes() -> Res {
+    let d = Dir::new("invite");
+    let m = two_people(&d)?;
+    for p in ["alice", "lou"] {
+        let app = m.person_app(p).ok_or("person")?;
+        app.brain.add_vault(users::OWNER, p, "me")?;
+    }
+    let reg = m.handle(&rq(
+        "POST",
+        "/oauth/register",
+        &[],
+        &json!({ "client_name": "Claude", "redirect_uris": [CALLBACK] }).to_string(),
+    ));
+    let client = reg.body_json()["client_id"]
+        .as_str()
+        .ok_or("client")?
+        .to_string();
+    let ask = r#"{"name":"lou"}"#;
+    // Only an administrator makes a code: not Lou, not a stranger.
+    let lou = ingress("ha-l", "lou", "POST", "/admin/api/users/invite", ask);
+    assert_eq!(m.handle(&lou).status, 403);
+    assert_eq!(
+        m.handle(&rq("POST", "/admin/api/users/invite", &[], ask))
+            .status,
+        401
+    );
+    let alice = ingress("ha-w", "alice", "POST", "/admin/api/users/invite", ask);
+    let made = m.handle(&alice);
+    assert_eq!(made.status, 200, "{}", made.body_json());
+    let code = made.body_json()["code"].as_str().ok_or("code")?.to_string();
+    assert_eq!(
+        m.handle(&ingress(
+            "ha-w",
+            "alice",
+            "POST",
+            "/admin/api/users/invite",
+            r#"{"name":"nobody"}"#
+        ))
+        .status,
+        404
+    );
+    // Lou, with no Tailscale, opens the consent page from the internet and enters the code.
+    let q = authorize_path(&client);
+    let form = |extra: &str| {
+        q.split_once('?')
+            .map(|(_, b)| format!("{b}{extra}"))
+            .unwrap_or_default()
+    };
+    let site = [("origin", "https://memory.example.net")];
+    assert_eq!(m.handle(&rq("GET", &q, &[], "")).status, 200);
+    let consent = m.handle(&rq(
+        "POST",
+        "/oauth/authorize",
+        &site,
+        &form(&format!("&invite={code}")),
+    ));
+    assert_eq!(
+        consent.status,
+        200,
+        "{}",
+        String::from_utf8_lossy(&consent.body)
+    );
+    let html = String::from_utf8(consent.body.clone())?;
+    assert!(
+        html.contains("lou-me") && !html.contains("alice-me"),
+        "{html}"
+    );
+    let nonce = html
+        .split("name=nonce value=")
+        .nth(1)
+        .and_then(|r| r.split('>').next())
+        .ok_or("nonce")?
+        .to_string();
+    let done = m.handle(&rq(
+        "POST",
+        "/oauth/authorize",
+        &site,
+        &form(&format!("&decision=allow&nonce={nonce}&v_lou-me=1")),
+    ));
+    assert_eq!(done.status, 302, "{}", String::from_utf8_lossy(&done.body));
+    let loc = done
+        .headers
+        .iter()
+        .find(|(k, _)| k == "Location")
+        .map(|(_, v)| v.clone())
+        .ok_or("location")?;
+    let auth = loc
+        .split("code=")
+        .nth(1)
+        .and_then(|c| c.split('&').next())
+        .ok_or("code")?;
+    let tok = m.handle(&rq(
+        "POST",
+        "/oauth/token",
+        &[("content-type", "application/x-www-form-urlencoded")],
+        &format!("grant_type=authorization_code&code={auth}&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&client_id={client}&code_verifier={VERIFIER}"),
+    ));
+    assert_eq!(tok.status, 200, "{}", tok.body_json());
+    let access = tok.body_json()["access_token"]
+        .as_str()
+        .ok_or("token")?
+        .to_string();
+    for person in ["alice", "lou"] {
+        let app = m.person_app(person).ok_or("app")?;
+        let ctl = app.brain.open_control()?;
+        if let Some(who) = access::authenticate(&ctl, &access, memcp_core::util::now())? {
+            note(&who.agent, &access);
+        }
+    }
+    let stats = tool_text(&m.handle(&mcp(&access, "stats", json!({}))));
+    let names: Vec<&str> = stats
+        .as_object()
+        .map(|o| o.keys().map(String::as_str).collect())
+        .unwrap_or_default();
+    assert_eq!(names, vec!["lou-me"], "{stats}");
+    // The code is spent.
+    let again = m.handle(&rq(
+        "POST",
+        "/oauth/authorize",
+        &site,
+        &form(&format!("&invite={code}")),
+    ));
+    assert_eq!(again.status, 403);
+    Ok(())
+}
