@@ -659,7 +659,7 @@ pub(crate) fn from_this_machine(req: &Request) -> bool {
 }
 
 /// A request that reached the server through Tailscale Funnel (the public internet).
-fn through_funnel(req: &Request) -> bool {
+pub fn through_funnel(req: &Request) -> bool {
     req.headers.contains_key("tailscale-funnel-request")
 }
 

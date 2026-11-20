@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.11.1
+
+- **The invitation endpoint follows the rest of the control plane.** `POST /admin/api/users/invite` takes the console token of an administrator of the installation (a member's token is refused), and is never served to a request that came through Funnel.
+
 ## 20261120.11.0
 
 - **A person who is not on the tailnet can approve a connector (Claude on the web) with an invitation code.** An administrator makes the code with `POST /admin/api/users/invite {"name": "<person>"}` (a registry console token, or their page): twelve letters shown once as `XXXX-XXXX-XXXX`, good for one hour and one use, kept as a digest in memory only (no database change; a restart forgets them; twenty at most wait at once). On the public address, `GET /oauth/authorize` now shows a form for the code instead of a refusal; the code opens the consent page of that person alone, and the approval carries a nonce tied to them, with the same origin checks as on the tailnet. Wrong codes are counted per address like wrong keys (ten in fifteen minutes hold the address off); a redirect address that is not registered does not spend a code. The tailnet way is unchanged.

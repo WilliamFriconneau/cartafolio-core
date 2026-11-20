@@ -580,6 +580,22 @@ impl Manager {
         Response::json(200, &st)
     }
 
+    /// Whether the request carries the console token of an administrator of the installation.
+    fn console_admin_of(&self, req: &Request) -> bool {
+        let Some(token) = req.key() else {
+            return false;
+        };
+        let Ok(ctl) = self.registry.brain.open_control() else {
+            return false;
+        };
+        let now = memcp_core::util::now();
+        memcp_core::access::authenticate_console(&ctl, &token, now)
+            .ok()
+            .flatten()
+            .and_then(|id| users::user(&ctl, &id).ok().flatten())
+            .is_some_and(|u| u.admin && !u.disabled)
+    }
+
     /// A one-time code that lets a person who is not on the tailnet approve a connector (Claude on the web) from the
     /// public address. Shown here once; only its digest is kept, in memory, for an hour.
     fn make_invite(&self, req: &Request) -> Response {
@@ -743,10 +759,17 @@ impl Handler for Manager {
                 reply(&self.registry)
             }
             // An administrator's console token makes an invitation code for a person: `{"name": "<person>"}`.
-            ("POST", "/admin/api/users/invite") => match req.key() {
-                Some(t) if self.registry.holds_console_token(&t) => self.make_invite(req),
-                _ => err(401, "an administrator's console token is required"),
-            },
+            // Like the rest of the control plane, never to a request that came through Funnel.
+            ("POST", "/admin/api/users/invite") => {
+                if !self.registry.console_admin || memcp_server::app::through_funnel(req) {
+                    return err(404, "not found");
+                }
+                if self.console_admin_of(req) {
+                    self.make_invite(req)
+                } else {
+                    err(401, "an administrator's console token is required")
+                }
+            }
             _ => reply(&self.by_secret(req)),
         }
     }

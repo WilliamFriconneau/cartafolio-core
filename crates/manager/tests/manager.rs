@@ -1044,3 +1044,36 @@ fn a_person_off_the_tailnet_connects_claude_with_a_code_the_administrator_makes(
     assert_eq!(again.status, 403);
     Ok(())
 }
+
+#[test]
+fn the_invitation_endpoint_takes_an_administrators_console_token_and_never_funnel() -> Res {
+    let d = Dir::new("invite-token");
+    let m = two_people(&d)?;
+    let ctl = m.registry().brain.open_control()?;
+    let token_of = |name: &str| -> Result<String, Box<dyn Error>> {
+        let u = users::user_by_name(&ctl, name)?.ok_or("person")?;
+        Ok(access::console_token(&ctl, &u.id)?)
+    };
+    let ask = r#"{"name":"lou"}"#;
+    let post = |token: &str, funnel: bool| {
+        let mut headers = vec![("authorization", format!("Bearer {token}"))];
+        if funnel {
+            headers.push(("tailscale-funnel-request", "?1".to_string()));
+        }
+        let h: Vec<(&str, &str)> = headers.iter().map(|(k, v)| (*k, v.as_str())).collect();
+        m.handle(&rq("POST", "/admin/api/users/invite", &h, ask))
+    };
+    // An administrator's token makes a code; a member's token does not; nor does a token through Funnel.
+    let admin = token_of("alice")?;
+    let made = post(&admin, false);
+    assert_eq!(made.status, 200, "{}", made.body_json());
+    assert_eq!(made.body_json()["code"].as_str().map(str::len), Some(14));
+    assert_eq!(post(&admin, true).status, 404, "never through Funnel");
+    assert_eq!(
+        post(&token_of("lou")?, false).status,
+        401,
+        "a member is not an administrator"
+    );
+    assert_eq!(post("not-a-token", false).status, 401);
+    Ok(())
+}
