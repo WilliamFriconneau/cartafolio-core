@@ -36,7 +36,7 @@ mod tagging;
 mod toolkit;
 mod transcription;
 
-const WRITE_TOOLS: [&str; 20] = [
+const WRITE_TOOLS: [&str; 21] = [
     "profession_propose",
     "target_set",
     "sign_set",
@@ -51,6 +51,7 @@ const WRITE_TOOLS: [&str; 20] = [
     "folder_set",
     "remember",
     "deposit",
+    "derived_deposit",
     "supersede",
     "retire",
     "restore",
@@ -485,7 +486,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 description: "Publish derived JSON records at the memory’s designated authority. A record is keyed by its stable origin and is updated atomically.".into(),
                 schema: json!({"type": "object", "required": ["space", "records"], "properties": {
                     "space": {"type": "string"}, "records": {"type": "array", "minItems": 1, "maxItems": 200,
-                        "items": {"type": "object", "required": ["origin", "text", "tags"]}}
+                        "items": {"type": "object", "required": ["origin", "text", "tags", "legacy_tag"]}}
                 }}),
             });
         }

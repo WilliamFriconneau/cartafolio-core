@@ -1928,3 +1928,13 @@ What is indexed: the path, a title (the `title:` of the front matter, else the f
 | `link` | library folder to library folder | `[[links]]` from the files of one to the files of the other |
 | `raised` | library folder to space | active facts raised from the folder |
 | `mounted` | space to library folder | files in it |
+
+### Derived records
+
+Paired devices can send derived JSON dossiers through `derived_deposit`. Designate a single
+fully populated node for the whole group by placing an empty `derived-authority` file in its
+data directory. Keep that file off replicas and leave the authority’s retention window disabled.
+Devices submit their calculations to this node, which compares and updates each origin in one
+storage transaction. The `legacy_tag` must be the exact tag historically used for that origin.
+If older facts arrived without their origin index, the authority reports `identity_unverified`.
+Establish the origin from verified source records before retrying that entry.

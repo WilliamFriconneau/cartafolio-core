@@ -29,8 +29,10 @@ pub(super) fn deposit(brain: &Brain, caller: &Caller, args: &Value) -> Result<Va
         .enumerate()
         .map(|(index, record)| {
             let mut result = match prepare(caller, &space, record) {
-                Ok((origin, new)) => write(&conn, &space, caller, &origin, new)
-                    .unwrap_or_else(|_| json!({"result": "retry"})),
+                Ok((origin, new, legacy_tag)) => {
+                    write(&conn, &space, caller, &origin, new, &legacy_tag)
+                        .unwrap_or_else(|_| json!({"result": "retry"}))
+                }
                 Err(_) => json!({"result": "invalid"}),
             };
             result["index"] = json!(index);
@@ -44,7 +46,11 @@ fn invalid(message: &str) -> ToolError {
     ToolError::Invalid(message.into())
 }
 
-fn prepare(caller: &Caller, space: &Space, record: &Value) -> Result<(Origin, NewFact), ToolError> {
+fn prepare(
+    caller: &Caller,
+    space: &Space,
+    record: &Value,
+) -> Result<(Origin, NewFact, String), ToolError> {
     let source = &record["origin"];
     let app = source["app"]
         .as_str()
@@ -70,7 +76,11 @@ fn prepare(caller: &Caller, space: &Space, record: &Value) -> Result<(Origin, Ne
     scope_tags(caller, space, &mut new.tags, Some(&origin_tag))?;
     new.tags.push(origin_tag);
     new.tags = facts::normalize_tags(&new.tags)?;
-    Ok((origin, new))
+    let legacy_tag = record["legacy_tag"]
+        .as_str()
+        .filter(|tag| !tag.is_empty() && new.tags.iter().any(|candidate| candidate == tag))
+        .ok_or_else(|| invalid("legacy_tag must be one of the record’s tags"))?;
+    Ok((origin, new, legacy_tag.to_owned()))
 }
 
 fn write(
@@ -79,6 +89,7 @@ fn write(
     caller: &Caller,
     origin: &Origin,
     new: NewFact,
+    legacy_tag: &str,
 ) -> crate::Result<Value> {
     let tx = Transaction::new_unchecked(conn, TransactionBehavior::Immediate)?;
     let versions = origin.versions(&tx)?;
@@ -105,6 +116,22 @@ fn write(
             break;
         }
     }
+    let Some((label, next)) = payload(&new.text) else {
+        return Ok(json!({"result": "invalid"}));
+    };
+    // Older replicas did not replicate the origin index. A legacy match blocks creation,
+    // and a competing active legacy row blocks updates. Neither may select a head.
+    let other: bool = tx.query_row(
+        "SELECT EXISTS(SELECT 1 FROM facts f
+          WHERE (?3 IS NULL OR (f.id <> ?3 AND f.status = 'active'))
+            AND ((?2 <> '' AND substr(f.text, 1, length(?2)) = ?2)
+                 OR EXISTS (SELECT 1 FROM fact_tags t WHERE t.fact_id = f.id AND t.tag = ?1)))",
+        rusqlite::params![legacy_tag, label, head.as_ref().map(|fact| &fact.id)],
+        |row| row.get(0),
+    )?;
+    if other {
+        return Ok(json!({"result": "identity_unverified"}));
+    }
     let (status, saved) = if let Some(head) = head {
         if head.status != "active" {
             return Ok(json!({"result": "retired"}));
@@ -115,11 +142,11 @@ fn write(
         let Some((_, current)) = payload(&head.text) else {
             return Ok(json!({"result": "invalid"}));
         };
-        let Some((_, next)) = payload(&new.text) else {
-            return Ok(json!({"result": "invalid"}));
-        };
         if same_values(&current, &next) {
             return Ok(json!({"result": "unchanged", "id": head.id}));
+        }
+        if facts::active_with_text(&tx, &new.text)?.is_some() {
+            return Ok(json!({"result": "identity_unverified"}));
         }
         // Preserve tags added to the established fact.
         let mut new = new;

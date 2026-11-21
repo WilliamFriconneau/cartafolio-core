@@ -94,3 +94,52 @@ fn two_isolated_replicas_can_only_submit_to_one_authority() -> Res {
     }
     Ok(())
 }
+
+#[test]
+fn a_new_device_cannot_create_a_replacement_for_unbound_history() -> Res {
+    let root = Temp::new("derived-history");
+    let space = Space::new("totals")?;
+    let authority = node(&root, "authority", &space)?;
+    let legacy = node(&root, "legacy", &space)?;
+    let old_caller = peer(&legacy, &space, "writer")?;
+    let new_caller = peer(&authority, &space, "new-device")?;
+    std::fs::write(authority.dir().join("derived-authority"), "")?;
+    let original = tools::call(&legacy, &old_caller, "deposit", &args(&space, "1"))?;
+    let id = original["results"][0]["id"]
+        .as_str()
+        .ok_or("missing original")?;
+    let events = sync::events_after(&legacy, &space, 0, 100, 1 << 20, None)?;
+    sync::apply(&authority, &space, &events.events, "legacy")?;
+
+    let result = tools::call(
+        &authority,
+        &new_caller,
+        "derived_deposit",
+        &args(&space, "2"),
+    )?;
+    assert_eq!(result["results"][0]["result"], "identity_unverified");
+    assert_eq!(facts::history(&authority.open_space(&space)?, id)?.len(), 1);
+
+    // A date without any evidence in the authority’s storage can be created.
+    let other_day = |value: &str| {
+        let raw = args(&space, value)
+            .to_string()
+            .replace("day-1", "day-2")
+            .replace("Daily total:", "Second daily total:");
+        serde_json::from_str(&raw)
+    };
+    let created = tools::call(&authority, &new_caller, "derived_deposit", &other_day("8")?)?;
+    assert_eq!(created["results"][0]["result"], "created");
+    let corrected = tools::call(&authority, &new_caller, "derived_deposit", &other_day("9")?)?;
+    assert_eq!(corrected["results"][0]["result"], "updated");
+    let corrected_id = corrected["results"][0]["id"]
+        .as_str()
+        .ok_or("missing head")?;
+    let head =
+        facts::read_fact(&authority.open_space(&space)?, corrected_id)?.ok_or("missing fact")?;
+    assert_eq!(
+        head.replaces.as_deref(),
+        created["results"][0]["id"].as_str()
+    );
+    Ok(())
+}
