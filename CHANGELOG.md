@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **New names, old names kept.** `CARTAFOLIO_*` environment variables, `cartafolio.toml`, `/.well-known/cartafolio` and a `cartafolio` command are accepted next to the old ones; the old ones keep working.
+
 - **MemCP is now called Cartafolio.** The name changes in the documentation, the page, the Home Assistant app and the messages; the command, the environment variables, the configuration file, the data folders and the addresses keep their names.
 
 ## 20261120.12.0

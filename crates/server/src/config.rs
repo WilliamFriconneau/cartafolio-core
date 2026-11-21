@@ -875,40 +875,77 @@ fn valid_tailnet_pair(s: &str) -> bool {
     })
 }
 
-/// Where the settings file is: the one named, else `MEMCP_CONFIG`, else the user's, else the system's. `Ok(None)`: none
-/// of the default places holds one. A file named and missing is an error.
+/// Resolves an explicit path, using the newer name first for a standard settings filename.
+pub fn named_path(path: PathBuf) -> PathBuf {
+    if path.file_name().is_some_and(|name| name == "memcp.toml") {
+        let alias = path.with_file_name("cartafolio.toml");
+        if alias.is_file() {
+            return alias;
+        }
+    }
+    path
+}
+
+/// Finds settings by flag, environment, user directory or system directory.
 pub fn locate(explicit: Option<&str>) -> Result<Option<PathBuf>, String> {
+    locate_with_data(explicit, None)
+}
+
+/// Finds settings, also looking beside the data directory as the last fallback.
+pub fn locate_with_data(
+    explicit: Option<&str>,
+    data: Option<&Path>,
+) -> Result<Option<PathBuf>, String> {
     if let Some(p) = explicit {
-        let p = PathBuf::from(p);
+        let p = named_path(PathBuf::from(p));
         return if p.is_file() {
             Ok(Some(p))
         } else {
             Err(format!("{}: no such settings file", p.display()))
         };
     }
-    if let Some(p) = std::env::var_os("MEMCP_CONFIG").filter(|p| !p.is_empty()) {
-        let p = PathBuf::from(p);
+    if let Some(p) = memcp_core::env::var_os("MEMCP_CONFIG").filter(|p| !p.is_empty()) {
+        let p = named_path(PathBuf::from(p));
         return if p.is_file() {
             Ok(Some(p))
         } else {
             Err(format!("MEMCP_CONFIG: {}: no such file", p.display()))
         };
     }
-    Ok(default_places().into_iter().find(|p| p.is_file()))
+    Ok(default_places()
+        .into_iter()
+        .chain(
+            data.and_then(Path::parent)
+                .into_iter()
+                .flat_map(settings_in),
+        )
+        .find(|p| p.is_file()))
+}
+
+fn settings_in(dir: &Path) -> [PathBuf; 2] {
+    [dir.join("cartafolio.toml"), dir.join("memcp.toml")]
+}
+
+fn config_home() -> Option<PathBuf> {
+    std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
+}
+
+/// The historical user settings path, where setup creates a new file.
+pub fn user_target() -> Option<PathBuf> {
+    config_home().map(|h| h.join("memcp/memcp.toml"))
 }
 
 /// The places looked at without being told, the user's first.
 pub fn default_places() -> Vec<PathBuf> {
-    let mut v = vec![];
-    if let Some(h) = std::env::var_os("XDG_CONFIG_HOME")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")))
-    {
-        v.push(h.join("memcp").join("memcp.toml"));
-    }
-    v.push(PathBuf::from("/etc/memcp/memcp.toml"));
-    v
+    config_home()
+        .into_iter()
+        .chain([PathBuf::from("/etc")])
+        .flat_map(|root| [root.join("memcp"), root.join("cartafolio")])
+        .flat_map(|dir| settings_in(&dir))
+        .collect()
 }
 
 /// The command line the file stands for: for every option that has a flag and that the file sets (and the line does not),
@@ -987,4 +1024,31 @@ pub fn describe(settings: &Settings) -> Vec<String> {
         );
     }
     out
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::*;
+
+    #[test]
+    fn cartafolio_toml_wins_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
+        let dir = std::env::temp_dir().join(format!(
+            "cartafolio-config-{}",
+            memcp_core::util::random_base32(16)
+        ));
+        std::fs::create_dir_all(&dir)?;
+        let [new, old] = settings_in(&dir);
+        let find = || settings_in(&dir).into_iter().find(|p| p.is_file());
+        std::fs::write(&new, "")?;
+        assert_eq!(find(), Some(new.clone()));
+        assert_eq!(locate(old.to_str())?, Some(new.clone()));
+        std::fs::write(&old, "")?;
+        assert_eq!(find(), Some(new.clone()));
+        assert_eq!(locate(old.to_str())?, Some(new.clone()));
+        std::fs::remove_file(new)?;
+        assert_eq!(find(), Some(old.clone()));
+        assert_eq!(locate(old.to_str())?, Some(old));
+        std::fs::remove_dir_all(dir)?;
+        Ok(())
+    }
 }

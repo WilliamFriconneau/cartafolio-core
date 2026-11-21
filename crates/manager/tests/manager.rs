@@ -162,6 +162,21 @@ fn two_people(d: &Dir) -> Result<Manager, Box<dyn Error>> {
 }
 
 #[test]
+fn cartafolio_discovery_matches_memcp_on_the_manager() -> Res {
+    let d = Dir::new("discovery-alias");
+    let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
+    let old = m.handle(&rq("GET", "/.well-known/memcp", &[], ""));
+    let new = m.handle(&rq("GET", "/.well-known/cartafolio", &[], ""));
+    assert_eq!(old.status, 200);
+    assert_eq!(new.status, old.status);
+    assert_eq!(new.headers, old.headers);
+    assert_eq!(new.body, old.body);
+    assert_eq!(new.body_json()["product"], "cartafolio");
+    assert_eq!(new.body_json()["service"], "memcp");
+    Ok(())
+}
+
+#[test]
 fn the_first_login_becomes_the_administrator_and_gets_a_directory_of_their_own() -> Res {
     let d = Dir::new("first");
     let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;

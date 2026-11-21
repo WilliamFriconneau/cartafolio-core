@@ -43,7 +43,7 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
     }
     let node = match a.flags.get("--node") {
         Some(n) => n.clone(),
-        None => match std::env::var("MEMCP_NODE") {
+        None => match memcp_core::env::var("MEMCP_NODE") {
             Ok(n) if !n.trim().is_empty() => n,
             _ => return Ok(None),
         },
@@ -66,14 +66,15 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
         from_file(f)?
     } else if let Some(k) = a.flags.get("--key") {
         k.trim().to_string()
-    } else if let Ok(f) = std::env::var("MEMCP_KEY_FILE") {
+    } else if let Ok(f) = memcp_core::env::var("MEMCP_KEY_FILE") {
         from_file(&f)?
-    } else if let Ok(k) = std::env::var("MEMCP_KEY") {
+    } else if let Ok(k) = memcp_core::env::var("MEMCP_KEY") {
         k.trim().to_string()
     } else {
-        return Err(bad(
-            "a node needs a key: --key-file FILE (or MEMCP_KEY_FILE), or MEMCP_KEY. A console key comes from `memcp console-token PERSON` on the node",
-        ));
+        return Err(bad(&format!(
+            "a node needs a key: --key-file FILE (or MEMCP_KEY_FILE), or MEMCP_KEY. A console key comes from `{} console-token PERSON` on the node",
+            crate::commands::command_name(),
+        )));
     };
     if key.is_empty() {
         return Err(bad("the key is empty"));
@@ -85,7 +86,7 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
             .flags
             .get("--agent")
             .cloned()
-            .or_else(|| std::env::var("MEMCP_AGENT").ok())
+            .or_else(|| memcp_core::env::var("MEMCP_AGENT").ok())
             .filter(|s| !s.is_empty()),
         json: a.switches.iter().any(|s| s == "--json"),
     }))
@@ -137,10 +138,9 @@ fn refusal(status: u16, body: &str) -> Failure {
     match status {
         401 => (
             EXIT_REFUSED,
-            "the node refused the key: it is unknown, revoked or expired, or it is a connection key (that opens the \
+            format!("the node refused the key: it is unknown, revoked or expired, or it is a connection key (that opens the \
              assistants' tools, add --agent NAME for it; the command line needs a console key, made with \
-             `memcp console-token PERSON` on the node)"
-                .into(),
+             `{} console-token PERSON` on the node)", crate::commands::command_name()),
         ),
         403 => (
             EXIT_RIGHTS,
@@ -229,7 +229,7 @@ fn files_under(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
 
 /// The size of a chunk: 8 MiB, or `MEMCP_UPLOAD_CHUNK` bytes (between 1 KiB and 32 MiB) on a slow link, and for the tests.
 fn chunk() -> usize {
-    std::env::var("MEMCP_UPLOAD_CHUNK")
+    memcp_core::env::var("MEMCP_UPLOAD_CHUNK")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .map_or(CHUNK, |n| n.clamp(1024, 32 * 1024 * 1024))

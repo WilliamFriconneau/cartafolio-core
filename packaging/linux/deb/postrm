@@ -1,5 +1,11 @@
 #!/bin/sh
 set -e
+if [ "$1" = remove ]; then
+  for prog in memcp memcp-manager memcp-sync; do
+    alias="/usr/bin/cartafolio${prog#memcp}"
+    if [ "$(readlink "$alias")" = "$prog" ]; then rm -f "$alias"; fi
+  done
+fi
 # The memory (/var/lib/memcp), the backups and the settings are never removed by the package, not even by purge:
 # they are yours. See docs/LINUX.md, "Uninstall".
 if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi

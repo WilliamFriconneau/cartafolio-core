@@ -96,3 +96,116 @@ pub use moves::Moved;
 pub use recover::Recovered;
 pub use schema::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 pub use space::Space;
+
+/// Environment variable aliases for Cartafolio.
+pub mod env {
+    use std::env::{self, VarError};
+    use std::ffi::OsString;
+
+    fn lookup(name: &str, get: impl Fn(&str) -> Option<OsString>) -> Option<OsString> {
+        if let Some(suffix) = name
+            .strip_prefix("MEMCP_")
+            .or_else(|| name.strip_prefix("CARTAFOLIO_"))
+        {
+            get(&format!("CARTAFOLIO_{suffix}")).or_else(|| get(&format!("MEMCP_{suffix}")))
+        } else {
+            get(name)
+        }
+    }
+
+    /// Reads a variable, preferring its `CARTAFOLIO_` spelling over `MEMCP_`.
+    pub fn var_os(name: &str) -> Option<OsString> {
+        lookup(name, |key| env::var_os(key))
+    }
+
+    /// Reads a Unicode variable with the same precedence as [var_os].
+    pub fn var(name: &str) -> Result<String, VarError> {
+        var_os(name)
+            .ok_or(VarError::NotPresent)?
+            .into_string()
+            .map_err(VarError::NotUnicode)
+    }
+
+    /// Sets both spellings on a child command.
+    pub fn set_child<'a>(
+        command: &'a mut std::process::Command,
+        suffix: &str,
+        value: impl AsRef<std::ffi::OsStr>,
+    ) -> &'a mut std::process::Command {
+        command
+            .env(format!("MEMCP_{suffix}"), value.as_ref())
+            .env(format!("CARTAFOLIO_{suffix}"), value.as_ref())
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        #[test]
+        fn cartafolio_environment_aliases() {
+            for (new, old, expected) in [
+                (Some("new"), Some("old"), "new"),
+                (Some("new"), None, "new"),
+                (None, Some("old"), "old"),
+                (Some(""), Some("old"), ""),
+            ] {
+                for name in ["MEMCP_TEST", "CARTAFOLIO_TEST"] {
+                    assert_eq!(
+                        lookup(name, |key| match key {
+                            "CARTAFOLIO_TEST" => new.map(Into::into),
+                            "MEMCP_TEST" => old.map(Into::into),
+                            _ => None,
+                        }),
+                        Some(expected.into()),
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// The command name for messages, based on the filename used to invoke the program.
+pub fn program_name(
+    argv0: &std::path::Path,
+    legacy: &'static str,
+    alias: &'static str,
+) -> &'static str {
+    if argv0
+        .file_name()
+        .is_some_and(|name| name.to_string_lossy().starts_with("cartafolio"))
+    {
+        alias
+    } else {
+        legacy
+    }
+}
+
+/// The command name for the current process.
+pub fn invoked_as(legacy: &'static str, alias: &'static str) -> &'static str {
+    let argv0 = std::env::args_os().next().unwrap_or_default();
+    program_name(std::path::Path::new(&argv0), legacy, alias)
+}
+
+#[cfg(test)]
+mod program_name_tests {
+    use super::*;
+
+    #[test]
+    fn cartafolio_invocation_uses_the_filename_prefix() {
+        for (legacy, alias) in [
+            ("memcp", "cartafolio"),
+            ("memcp-manager", "cartafolio-manager"),
+            ("memcp-sync", "cartafolio-sync"),
+        ] {
+            for (argv0, expected) in [
+                (format!("/bin/{alias}.exe"), alias),
+                ("cartafolio-custom".into(), alias),
+                (format!("/cartafolio/{legacy}"), legacy),
+                ("renamed".into(), legacy),
+                (String::new(), legacy),
+            ] {
+                assert_eq!(program_name(argv0.as_ref(), legacy, alias), expected);
+            }
+        }
+    }
+}

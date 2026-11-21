@@ -53,7 +53,9 @@ Both are checked by tests: `crates/server/tests/admin.rs` (console keys open the
 
 ## Settings
 
-`/etc/memcp/memcp.toml` (or `~/.config/memcp/memcp.toml`, or the file named by `--config` or `MEMCP_CONFIG`; the first found wins). It is plain `key = value`; `memcp config check` reads it and says what is wrong, `memcp config example` prints the documented file, `memcp config show` prints yours with every option. **A flag on the command line wins over the file.** After a change: `sudo systemctl restart memcp`.
+The search starts with `--config FILE`, then `CARTAFOLIO_CONFIG` or `MEMCP_CONFIG` (the new variable wins when both are set). Without either, it checks `~/.config/memcp`, `~/.config/cartafolio`, `/etc/memcp`, `/etc/cartafolio`, and finally beside the data directory supplied by flag or environment, in that order, with `XDG_CONFIG_HOME` taking the place of `~/.config` when set to an absolute path. In any of these folders, including the folder of a named `memcp.toml`, `cartafolio.toml` takes precedence.
+
+The file uses plain `key = value`; `memcp config check` reads it and says what is wrong, `memcp config example` prints the documented file, `memcp config show` prints yours with every option. **A flag on the command line wins over the file.** After a change: `sudo systemctl restart memcp`.
 
 Memory itself is never in the file: no key, no password. A service key (the janitor's model, a speech service) is a file whose path you give (`janitor_api_key_file`).
 

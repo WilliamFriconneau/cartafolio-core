@@ -15,6 +15,14 @@ use memcp_core::Brain;
 
 const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS [--join ADDRESS…] [--expect-id ID] --status-file FILE [--name NAME]";
 
+fn command_name() -> &'static str {
+    memcp_core::invoked_as("memcp-sync", "cartafolio-sync")
+}
+
+fn usage() -> String {
+    USAGE.replace("memcp-sync ", &format!("{} ", command_name()))
+}
+
 /// A name that is safe in a file name and a connection: lower case letters, digits and dashes.
 fn slug(text: &str) -> String {
     let mut out = String::new();
@@ -56,7 +64,7 @@ fn join(
         write(serde_json::json!({ "state": "failed", "error": e }));
         ExitCode::from(1)
     };
-    let ticket = std::env::var("MEMCP_JOIN_TICKET")
+    let ticket = memcp_core::env::var("MEMCP_JOIN_TICKET")
         .ok()
         .filter(|t| !t.is_empty());
     let own_id = Brain::open(&PathBuf::from(data))
@@ -233,18 +241,19 @@ fn main() -> ExitCode {
         return join(&data, &addresses, expect.as_deref(), &status, &name);
     }
     let (Some(data), Some(peer)) = (value("--data"), value("--peer")) else {
-        eprintln!("{USAGE}");
+        eprintln!("{}", usage());
         return ExitCode::from(2);
     };
     if !memcp_client::allowed_url(&peer) {
         eprintln!(
-            "memcp-sync: this address is refused: HTTPS, or in clear only on this machine or the own network"
+            "{}: this address is refused: HTTPS, or in clear only on this machine or the own network",
+            command_name()
         );
         return ExitCode::from(2);
     }
     let var = value("--token-env").unwrap_or_else(|| "MEMCP_PEER_TOKEN".into());
-    let Ok(key) = std::env::var(&var) else {
-        eprintln!("memcp-sync: no key in {var}");
+    let Ok(key) = memcp_core::env::var(&var) else {
+        eprintln!("{}: no key in {var}", command_name());
         return ExitCode::from(2);
     };
     let name = value("--name").unwrap_or_else(|| {
@@ -259,7 +268,7 @@ fn main() -> ExitCode {
     let brain = match Brain::open(&PathBuf::from(&data)) {
         Ok(b) => b,
         Err(e) => {
-            eprintln!("memcp-sync: {e}");
+            eprintln!("{}: {e}", command_name());
             return ExitCode::from(2);
         }
     };
@@ -267,14 +276,14 @@ fn main() -> ExitCode {
     // bytes keeps this pass and a server's on the same folder from sweeping under each other.
     match brain.recover() {
         Ok(r) if r.is_clean() && r.swept => {}
-        Ok(r) => eprintln!("memcp-sync: {}", r.summary()),
-        Err(e) => eprintln!("memcp-sync: recovery: not finished yet: {e}"),
+        Ok(r) => eprintln!("{}: {}", command_name(), r.summary()),
+        Err(e) => eprintln!("{}: recovery: not finished yet: {e}", command_name()),
     }
     // `--node-name NAME`: the name this node goes by in the peer directory (else one it made for itself, kept).
     if let Some(n) = value("--node-name")
         && let Err(e) = memcp_core::directory::set_own_name(&brain, &n)
     {
-        eprintln!("memcp-sync: {e}");
+        eprintln!("{}: {e}", command_name());
         return ExitCode::from(2);
     }
     // `--window-days N`: this replica holds the last N days only (kept in its settings); `off` holds everything.
@@ -284,13 +293,13 @@ fn main() -> ExitCode {
             n => match n.parse::<u32>() {
                 Ok(d) => Some(d),
                 Err(_) => {
-                    eprintln!("{USAGE}");
+                    eprintln!("{}", usage());
                     return ExitCode::from(2);
                 }
             },
         };
         if let Err(e) = memcp_core::sync::set_window_days(&brain, days) {
-            eprintln!("memcp-sync: {e}");
+            eprintln!("{}: {e}", command_name());
             return ExitCode::from(2);
         }
     }
@@ -303,14 +312,14 @@ fn main() -> ExitCode {
         match found {
             Ok(u) => peer = peer.with_person(&u.id),
             Err(e) => {
-                eprintln!("memcp-sync: --person {person}: {e}");
+                eprintln!("{}: --person {person}: {e}", command_name());
                 return ExitCode::from(2);
             }
         }
     }
     // `MEMCP_SYNC_PARENT`: the node that started this loop (it sets it). When that node is gone (killed, crashed),
     // the loop ends: a node started again starts its own, and two loops with one peer must never pile up.
-    let parent = std::env::var("MEMCP_SYNC_PARENT")
+    let parent = memcp_core::env::var("MEMCP_SYNC_PARENT")
         .ok()
         .and_then(|p| p.trim().parse::<u32>().ok());
     loop {
@@ -333,12 +342,12 @@ fn main() -> ExitCode {
                     pass.archived
                 );
                 for p in &pass.problems {
-                    eprintln!("memcp-sync: {p}");
+                    eprintln!("{}: {p}", command_name());
                 }
                 if pass.problems.is_empty() { 0 } else { 3 }
             }
             Err(e) => {
-                eprintln!("memcp-sync: {e}");
+                eprintln!("{}: {e}", command_name());
                 if e == "refused" || e.contains("does not reach") {
                     1
                 } else {
@@ -351,7 +360,8 @@ fn main() -> ExitCode {
                 for _ in 0..s.max(5) {
                     if orphaned(parent) {
                         eprintln!(
-                            "memcp-sync: the node that started this loop is gone; it ends with it"
+                            "{}: the node that started this loop is gone; it ends with it",
+                            command_name()
                         );
                         return ExitCode::SUCCESS;
                     }

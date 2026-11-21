@@ -296,6 +296,7 @@ impl Node {
                 .open(self.log())
                 .map_err(fail)?;
             let err = log.try_clone().map_err(fail)?;
+            let wrapper = self.env.sync_wrapper()?;
             let child = Command::new(self.env.exe("memcp"))
                 .arg("--data")
                 .arg(&self.data)
@@ -310,7 +311,8 @@ impl Node {
                     "--threads",
                     "8",
                 ])
-                .env("MEMCP_SYNC_BIN", self.env.sync_wrapper()?)
+                .env("MEMCP_SYNC_BIN", &wrapper)
+                .env("CARTAFOLIO_SYNC_BIN", &wrapper)
                 .stdin(Stdio::null())
                 .stdout(log)
                 .stderr(err)
@@ -541,6 +543,7 @@ impl Node {
                 &self.name,
             ])
             .env("MEMCP_PEER_TOKEN", &peer.key)
+            .env("CARTAFOLIO_PEER_TOKEN", &peer.key)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -570,6 +573,7 @@ impl Node {
                 &self.name,
             ])
             .env("MEMCP_PEER_TOKEN", &peer.key)
+            .env("CARTAFOLIO_PEER_TOKEN", &peer.key)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

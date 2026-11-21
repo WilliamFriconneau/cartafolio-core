@@ -84,28 +84,22 @@ fn target_config(a: &SetupArgs) -> PathBuf {
     if a.system {
         return PathBuf::from("/etc/memcp/memcp.toml");
     }
-    config::default_places()
-        .into_iter()
-        .next()
-        .unwrap_or_else(|| home().join(".config/memcp/memcp.toml"))
+    config::user_target().unwrap_or_else(|| PathBuf::from("/etc/memcp/memcp.toml"))
 }
 
 pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
     if a.system && !is_root() {
-        return Err(bad(
-            "--system makes /var/lib/memcp and /etc/memcp: run it as root (sudo memcp setup --system)",
-        ));
+        return Err(bad(&format!(
+            "--system makes /var/lib/memcp and /etc/memcp: run it as root (sudo {} setup --system)",
+            crate::commands::command_name(),
+        )));
     }
     let interactive = !a.yes && std::io::stdin().is_terminal();
     let mut settings = match &existing {
         Some(p) => Settings::load(p).map_err(bad_text)?,
         None => Settings::default(),
     };
-    let cfg_path = a
-        .config
-        .clone()
-        .or(existing)
-        .unwrap_or_else(|| target_config(&a));
+    let cfg_path = existing.unwrap_or_else(|| target_config(&a));
 
     println!("Cartafolio setup\n");
     let default_data = a
@@ -274,7 +268,8 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
             }
         }
         Err(_) => println!(
-            "\nThe connection {agent:?} exists already: `memcp connect {agent} --all --rotate` gives it a new key."
+            "\nThe connection {agent:?} exists already: `{} connect {agent} --all --rotate` gives it a new key.",
+            crate::commands::command_name()
         ),
     }
     if !wrote {
@@ -284,7 +279,8 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         );
     }
     println!(
-        "\nStart it: memcp serve   (or: systemctl enable --now memcp)\nCheck it: memcp doctor"
+        "\nStart it: {name} serve   (or: systemctl enable --now memcp)\nCheck it: {name} doctor",
+        name = crate::commands::command_name()
     );
     Ok(())
 }
@@ -373,7 +369,10 @@ pub fn prepare(kind: &str, data: &Path, s: &Settings, out: &Path) -> Result<(), 
     match kind {
         "janitor" => {
             if !s.flag("janitor") {
-                eprintln!("memcp prepare: janitor = false in memcp.toml");
+                eprintln!(
+                    "{} prepare: janitor = false in memcp.toml",
+                    crate::commands::command_name()
+                );
                 return Err((78, "the janitor is off".into()));
             }
             if s.text("janitor_api_url").is_none() && s.text("janitor_ollama_url").is_none() {

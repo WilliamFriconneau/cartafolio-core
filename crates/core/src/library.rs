@@ -295,7 +295,7 @@ const PDF_COMMAND: &str = "MEMCP_PDF_TEXT_COMMAND";
 const PDF_SECONDS: u64 = 120;
 
 fn pdf_text(path: &Path) -> String {
-    match std::env::var(PDF_COMMAND) {
+    match crate::env::var(PDF_COMMAND) {
         Ok(command) => text_by_command(&command, path),
         Err(_) => String::new(),
     }

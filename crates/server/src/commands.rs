@@ -129,8 +129,18 @@ MEMCP_KEY_FILE / MEMCP_KEY. The same commands print the same text; --json prints
 MEMCP_AGENT) with a connection key does the note commands through the assistants' tools; --local forces the data directory.
 Exit codes: 0 done, 1 failed, 2 wrong command line, 3 key refused, 4 key lacks the rights, 5 node unreachable, 6 odd answer.
 
-Settings come from memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp/memcp.toml, /etc/memcp/memcp.toml); a flag wins.
+Settings come from cartafolio.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
+
+/// The command name printed by the CLI.
+pub fn command_name() -> &'static str {
+    memcp_core::invoked_as("memcp", "cartafolio")
+}
+
+/// Help for the current command name.
+pub fn usage() -> String {
+    USAGE.replace("memcp ", &format!("{} ", command_name()))
+}
 
 pub const VALUE_FLAGS: &[&str] = &[
     "--config",
@@ -219,7 +229,7 @@ pub fn parse(args: &[String]) -> Result<Args, Failure> {
         if VALUE_FLAGS.contains(&x.as_str()) {
             let v = it
                 .next()
-                .ok_or_else(|| (2, format!("{x} needs a value\n\n{USAGE}")))?;
+                .ok_or_else(|| (2, format!("{x} needs a value\n\n{}", usage())))?;
             a.flags.insert(x.clone(), v.clone());
         } else if x.starts_with("--") || x == "-h" {
             a.switches.push(x.clone());
@@ -282,12 +292,12 @@ pub fn dispatch(
         a.pos
             .get(i)
             .map(String::as_str)
-            .ok_or_else(|| (2, format!("missing {what}\n\n{USAGE}")))
+            .ok_or_else(|| (2, format!("missing {what}\n\n{}", usage())))
     };
-    let need = |name: &str| flag(name).ok_or_else(|| (2, format!("missing {name}\n\n{USAGE}")));
+    let need = |name: &str| flag(name).ok_or_else(|| (2, format!("missing {name}\n\n{}", usage())));
     let public = flag("--public-url")
         .map(String::from)
-        .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok())
+        .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok())
         .unwrap_or_else(|| "http://127.0.0.1:8791".into());
     let rights = || cli::rights(sw("--all"), flag("--grant"));
 
@@ -526,6 +536,6 @@ pub fn dispatch(
                 |k| k.parse().map_err(|_| cli::bad("--keep needs a number")),
             )?,
         ),
-        (other, _) => Err((2, format!("unknown command {other:?}\n\n{USAGE}"))),
+        (other, _) => Err((2, format!("unknown command {other:?}\n\n{}", usage()))),
 }
 }

@@ -34,7 +34,7 @@ impl FolderTask {
 
 /// The seconds between two passes: `MEMCP_FOLDER_EVERY` if it is a number of at least one, else [`EVERY`].
 pub fn every() -> u64 {
-    std::env::var("MEMCP_FOLDER_EVERY")
+    memcp_core::env::var("MEMCP_FOLDER_EVERY")
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .filter(|n| *n >= 1)

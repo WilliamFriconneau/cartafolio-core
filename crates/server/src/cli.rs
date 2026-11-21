@@ -410,10 +410,13 @@ pub fn merge(
 /// The MCP server on standard input and output, with the rights of the key in the environment
 /// variable `token_env`. Nothing but protocol goes to standard output.
 pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
-    let token = std::env::var(token_env).map_err(|_| {
+    let token = memcp_core::env::var(token_env).map_err(|_| {
         (
             2,
-            format!("set {token_env} to a key (make one with `memcp open SPACE`)"),
+            format!(
+                "set {token_env} to a key (make one with `{} open SPACE`)",
+                crate::commands::command_name()
+            ),
         )
     })?;
     let brain = open(data)?;
@@ -435,7 +438,8 @@ pub fn status(data: &Path, user: Option<&str>) -> Result<(), Failure> {
     let who = person(&brain, user)?;
     let ctl = brain.open_control().map_err(fail)?;
     sayln!(
-        "memcp {}, search language {}",
+        "{} {}, search language {}",
+        crate::commands::command_name(),
         memcp_core::directory::own_version(),
         brain.language().map_err(fail)?.code()
     );

@@ -128,6 +128,9 @@ foreach ($d in @($Root, $Bin, $Data, $Keys, $Logs)) { New-Item -ItemType Directo
 Make-Private $Root
 Stop-Tasks
 if ($From) {
+    foreach ($p in @('memcp-manager', 'memcp-sync')) {
+        if (Test-Path (Join-Path $From "$p.exe")) { $Programs += $p }
+    }
     foreach ($p in $Programs) {
         $f = Join-Path $From "$p.exe"
         if (-not (Test-Path $f)) { Die "$f is missing" }
@@ -146,6 +149,11 @@ if ($From) {
     try {
         $sums = (Invoke-WebRequest -UseBasicParsing "$base/SHA256SUMS").Content
         if ($sums -is [byte[]]) { $sums = [Text.Encoding]::UTF8.GetString($sums) }
+        foreach ($p in @('memcp-manager', 'memcp-sync')) {
+            if (($sums -split "`n") | Where-Object { $_.Trim().EndsWith(" $p-$Version-$Target.exe") }) {
+                $Programs += $p
+            }
+        }
         foreach ($p in $Programs) {
             $f = "$p-$Version-$Target.exe"
             Invoke-WebRequest -UseBasicParsing "$base/$f" -OutFile (Join-Path $tmp $f)
@@ -158,6 +166,12 @@ if ($From) {
         Say 'checksums match.'
         foreach ($p in $Programs) { Copy-Item -Force (Join-Path $tmp "$p-$Version-$Target.exe") (Join-Path $Bin "$p.exe") }
     } finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
+}
+foreach ($p in @('memcp', 'memcp-manager', 'memcp-sync')) {
+    $source = Join-Path $Bin "$p.exe"
+    if (Test-Path $source) {
+        Copy-Item -Force $source (Join-Path $Bin ("cartafolio" + $p.Substring(5) + ".exe"))
+    }
 }
 $Memcp = Join-Path $Bin 'memcp.exe'
 Say "installed in $Bin"

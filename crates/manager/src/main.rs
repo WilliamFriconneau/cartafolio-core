@@ -11,7 +11,7 @@ use memcp_server::net;
 
 const USAGE: &str = "usage: memcp-manager --data DIR <command>
 
-  Settings: memcp.toml (--config FILE, MEMCP_CONFIG, ~/.config/memcp, /etc/memcp); a flag wins.
+  Settings: cartafolio.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--public-url URL] [--admins ha_name,...] [--language en|fr] [--new-people auto|ask]
         [--ingress-listen ADDR --trust-ingress IP]
@@ -26,6 +26,14 @@ const USAGE: &str = "usage: memcp-manager --data DIR <command>
 
 A person's own commands are the engine's, on their directory:
   memcp --data DIR/people/NAME connections";
+
+fn command_name() -> &'static str {
+    memcp_core::invoked_as("memcp-manager", "cartafolio-manager")
+}
+
+fn usage() -> String {
+    USAGE.replace("memcp-manager ", &format!("{} ", command_name()))
+}
 
 struct Args {
     pos: Vec<String>,
@@ -67,7 +75,7 @@ fn parse(args: &[String]) -> Result<Args, Failure> {
         if x == "--ha-user" || VALUE_FLAGS.contains(&x.as_str()) {
             let v = it
                 .next()
-                .ok_or_else(|| (2, format!("{x} needs a value\n\n{USAGE}")))?;
+                .ok_or_else(|| (2, format!("{x} needs a value\n\n{}", usage())))?;
             a.flags.insert(x.clone(), v.clone());
         } else if x.starts_with("--") || x == "-h" {
             a.switches.push(x.clone());
@@ -109,7 +117,7 @@ fn options(a: &Args) -> Result<Options, Failure> {
     Ok(Options {
         public_url: flag("--public-url")
             .map(String::from)
-            .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok()),
+            .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok()),
         node_name: flag("--node-name").map(String::from),
         listen: flag("--listen").map(String::from),
         allowed_origins: flag("--allow-origin")
@@ -132,22 +140,30 @@ fn run(args: &[String]) -> Result<(), Failure> {
     let mut a = parse(args)?;
     // memcp.toml (the same file as `memcp`) fills in what the command line does not say.
     let mut settings = memcp_server::config::Settings::default();
-    if let Some(p) = memcp_server::config::locate(a.flags.get("--config").map(String::as_str))
-        .map_err(|e| (2, e))?
+    let data_hint = a
+        .flags
+        .get("--data")
+        .map(PathBuf::from)
+        .or_else(|| memcp_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
+    if let Some(p) = memcp_server::config::locate_with_data(
+        a.flags.get("--config").map(String::as_str),
+        data_hint.as_deref(),
+    )
+    .map_err(|e| (2, e))?
     {
         settings = memcp_server::config::Settings::load(&p).map_err(|e| (2, e))?;
         memcp_server::config::fill_flags(&settings, &mut a.flags, &mut a.switches);
     }
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
-        println!("{USAGE}");
+        println!("{}", usage());
         return Ok(());
     }
     let data: PathBuf = a
         .flags
         .get("--data")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("MEMCP_DATA").map(PathBuf::from))
-        .ok_or_else(|| (2, format!("missing --data DIR\n\n{USAGE}")))?;
+        .or(data_hint)
+        .ok_or_else(|| (2, format!("missing --data DIR\n\n{}", usage())))?;
     let flag = |n: &str| a.flags.get(n).map(String::as_str);
     match (a.pos[0].as_str(), a.pos.get(1).map(String::as_str)) {
         ("serve", _) => serve(&data, &a, &settings),
@@ -183,7 +199,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
             m.console_token(person)
         }
         ("doctor", _) => m_doctor(&data, &a),
-        (other, _) => Err((2, format!("unknown command {other:?}\n\n{USAGE}"))),
+        (other, _) => Err((2, format!("unknown command {other:?}\n\n{}", usage()))),
     }
 }
 
@@ -329,7 +345,7 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             ingress,
             threads,
         },
-        &format!("memcp-manager {}", memcp_server::app::VERSION),
+        &format!("{} {}", command_name(), memcp_server::app::VERSION),
     )
 }
 

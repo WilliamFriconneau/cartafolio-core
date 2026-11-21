@@ -729,7 +729,7 @@ impl Handler for Manager {
                     _ => reply(&self.registry),
                 }
             }
-            ("GET", "/.well-known/memcp") => Response::json(
+            ("GET", "/.well-known/memcp" | "/.well-known/cartafolio") => Response::json(
                 200,
                 &memcp_server::discovery::well_known(
                     &self.node_name.read().map(|n| n.clone()).unwrap_or_default(),

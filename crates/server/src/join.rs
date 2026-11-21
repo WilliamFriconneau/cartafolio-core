@@ -24,7 +24,7 @@ const TTL_VAR: &str = "MEMCP_JOIN_TTL";
 pub fn ttl() -> i64 {
     static T: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
     *T.get_or_init(|| {
-        std::env::var(TTL_VAR)
+        memcp_core::env::var(TTL_VAR)
             .ok()
             .and_then(|v| v.parse::<i64>().ok())
             .map_or(TTL, |v| v.clamp(2, 3600))

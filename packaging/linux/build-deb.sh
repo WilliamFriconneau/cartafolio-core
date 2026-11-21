@@ -6,10 +6,10 @@ set -eu
 cd "$(dirname "$0")/../.."
 command -v cargo-deb >/dev/null 2>&1 || cargo install cargo-deb --locked
 if [ $# -gt 0 ]; then
-  cargo build --release --locked --target "$1" -p memcp-server -p memcp-janitor
+  cargo build --release --locked --target "$1" -p memcp-server -p memcp-janitor -p memcp-manager -p memcp-client --features memcp-client/sync
   cargo deb --no-build --target "$1" -p memcp-server
 else
-  cargo build --release --locked -p memcp-server -p memcp-janitor
+  cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-manager -p memcp-client --features memcp-client/sync
   cargo deb --no-build -p memcp-server
 fi
 ls -1 target/debian/*.deb target/*/debian/*.deb 2>/dev/null || true

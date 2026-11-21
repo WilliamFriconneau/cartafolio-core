@@ -154,6 +154,9 @@ mkdir -p "$BIN" "$DATA" "$LOGS"
 chmod 700 "$ROOT" "$DATA"
 PROGRAMS="memcp memcp-janitor"
 if [ -n "$FROM" ]; then
+  for prog in memcp-manager memcp-sync; do
+    if [ -x "$FROM/$prog" ]; then PROGRAMS="$PROGRAMS $prog"; fi
+  done
   for prog in $PROGRAMS; do
     [ -x "$FROM/$prog" ] || die "$FROM/$prog is missing"
   done
@@ -172,6 +175,9 @@ else
   say "release $VERSION for $TARGET"
   TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT INT TERM
   curl -fsSL -o "$TMP/SHA256SUMS" "$BASE/$VERSION/SHA256SUMS" || die "no SHA256SUMS for $VERSION"
+  for prog in memcp-manager memcp-sync; do
+    if grep -q " $prog-$VERSION-$TARGET\$" "$TMP/SHA256SUMS"; then PROGRAMS="$PROGRAMS $prog"; fi
+  done
   for prog in $PROGRAMS; do
     f="$prog-$VERSION-$TARGET"
     curl -fsSL -o "$TMP/$f" "$BASE/$VERSION/$f" || die "cannot download $f"
@@ -184,6 +190,9 @@ else
   stop_agents
   for prog in $PROGRAMS; do install -m 755 "$TMP/$prog-$VERSION-$TARGET" "$BIN/$prog"; done
 fi
+for prog in memcp memcp-manager memcp-sync; do
+  if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/cartafolio${prog#memcp}"; fi
+done
 say "installed in $BIN"
 
 # --- the memory ----------------------------------------------------------------------------------------------

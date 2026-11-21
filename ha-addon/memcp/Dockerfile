@@ -21,6 +21,7 @@ RUN apk add --no-cache tzdata curl poppler-utils \
       grep " ${f}\$" SHA256SUMS | sha256sum -c -; \
       install -m 0755 "${f}" "/usr/bin/${b}"; \
     done \
+ && for b in memcp memcp-manager memcp-sync; do ln -s "${b}" "/usr/bin/cartafolio${b#memcp}"; done \
  && rm -f /tmp/*
 # The library reads the text of a PDF with this program (a scanned book needs an OCR: see docs/LIBRARY.md).
 ENV MEMCP_PDF_TEXT_COMMAND="pdftotext -layout {} -"

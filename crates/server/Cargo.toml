@@ -55,6 +55,8 @@ conf-files = ["/etc/memcp/memcp.toml"]
 assets = [
     ["../../target/release/memcp", "usr/bin/", "755"],
     ["../../target/release/memcp-janitor", "usr/bin/", "755"],
+    ["../../target/release/memcp-manager", "usr/bin/", "755"],
+    ["../../target/release/memcp-sync", "usr/bin/", "755"],
     ["../../packaging/linux/memcp.toml", "etc/memcp/memcp.toml", "644"],
     ["../../packaging/linux/memcp.service", "lib/systemd/system/", "644"],
     ["../../packaging/linux/memcp-backup.service", "lib/systemd/system/", "644"],

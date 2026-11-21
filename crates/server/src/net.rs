@@ -218,7 +218,7 @@ fn respond<H: Handler>(app: &Arc<H>, rq: tiny_http::Request, mode: Mode) {
 
 /// How long a connection may stay silent before the node closes it: `MEMCP_READ_TIMEOUT_SECS`, 30 by default.
 fn read_timeout() -> Duration {
-    std::env::var("MEMCP_READ_TIMEOUT_SECS")
+    memcp_core::env::var("MEMCP_READ_TIMEOUT_SECS")
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .filter(|s| *s > 0)

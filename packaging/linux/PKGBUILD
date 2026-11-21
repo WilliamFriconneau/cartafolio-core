@@ -26,7 +26,7 @@ _src() {
 build() {
   cd "$(_src)"
   export CARGO_TARGET_DIR="$srcdir/target"
-  cargo build --release --locked -p memcp-server -p memcp-janitor
+  cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-manager -p memcp-client --features memcp-client/sync
 }
 
 check() {
@@ -38,7 +38,11 @@ check() {
 package() {
   cd "$(_src)"
   local t="$srcdir/target/release"
-  install -Dm755 "$t/memcp" "$t/memcp-janitor" -t "$pkgdir/usr/bin"
+  install -Dm755 "$t/memcp" "$t/memcp-janitor" "$t/memcp-manager" "$t/memcp-sync" -t "$pkgdir/usr/bin"
+  local prog
+  for prog in memcp memcp-manager memcp-sync; do
+    ln -s "$prog" "$pkgdir/usr/bin/cartafolio${prog#memcp}"
+  done
   local p=packaging/linux
   install -Dm644 $p/memcp.service $p/memcp-backup.service $p/memcp-backup.timer \
     $p/memcp-janitor.service \

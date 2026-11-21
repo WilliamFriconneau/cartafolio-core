@@ -124,6 +124,12 @@ mkdir -p "$PREFIX"
 for prog in memcp memcp-janitor; do
   install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"
 done
+for prog in memcp-manager memcp-sync; do
+  if [ -x "$SRC/bin/$prog" ]; then install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"; fi
+done
+for prog in memcp memcp-manager memcp-sync; do
+  if [ -x "$PREFIX/$prog" ]; then ln -sfn "$prog" "$PREFIX/cartafolio${prog#memcp}"; fi
+done
 say "installed in $PREFIX"
 case ":$PATH:" in *":$PREFIX:"*) ;; *) say "note: $PREFIX is not in your PATH; add it to your shell profile." ;; esac
 

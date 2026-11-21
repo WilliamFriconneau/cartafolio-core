@@ -10,7 +10,7 @@ use cli::Failure;
 use memcp_core::Brain;
 use memcp_core::text;
 
-use memcp_server::commands::{Args, USAGE, dispatch, list, parse};
+use memcp_server::commands::{Args, dispatch, list, parse, usage};
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
@@ -28,7 +28,7 @@ fn main() -> ExitCode {
 fn run(args: &[String]) -> Result<(), Failure> {
     let mut a = parse(args)?;
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
-        println!("{USAGE}");
+        println!("{}", usage());
         return Ok(());
     }
     // The professions as Claude skills, in a plugin marketplace: built from the registry, no installation needed
@@ -37,7 +37,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         let dir = a
             .pos
             .get(1)
-            .ok_or_else(|| (2, format!("missing the folder to write\n\n{USAGE}")))?;
+            .ok_or_else(|| (2, format!("missing the folder to write\n\n{}", usage())))?;
         let data = a.flags.get("--data").map(PathBuf::from);
         let n = memcp_core::profession::export(
             Path::new(dir),
@@ -55,7 +55,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         let dir = a
             .pos
             .get(1)
-            .ok_or_else(|| (2, format!("missing the export directory\n\n{USAGE}")))?;
+            .ok_or_else(|| (2, format!("missing the export directory\n\n{}", usage())))?;
         return cli::verify_export(Path::new(dir));
     }
     // Against a running node (`--node`, or MEMCP_NODE): the same commands, over HTTP with a key (docs/CLI.md).
@@ -65,9 +65,14 @@ fn run(args: &[String]) -> Result<(), Failure> {
     // The settings file fills in what the command line does not say.
     // `setup` may name a file that does not exist yet: it makes it.
     let named = a.flags.get("--config").map(String::as_str);
+    let data_hint = a
+        .flags
+        .get("--data")
+        .map(PathBuf::from)
+        .or_else(|| memcp_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
     let cfg_path = match named {
-        Some(f) if a.pos[0] == "setup" && !Path::new(f).is_file() => None,
-        _ => config::locate(named).map_err(|e| (2, e))?,
+        Some(f) if a.pos[0] == "setup" && !config::named_path(PathBuf::from(f)).is_file() => None,
+        _ => config::locate_with_data(named, data_hint.as_deref()).map_err(|e| (2, e))?,
     };
     let settings = match &cfg_path {
         Some(p) => config::Settings::load(p).map_err(|e| (2, e))?,
@@ -106,8 +111,8 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .flags
         .get("--data")
         .map(PathBuf::from)
-        .or_else(|| std::env::var_os("MEMCP_DATA").map(PathBuf::from))
-        .ok_or_else(|| (2, format!("missing --data DIR\n\n{USAGE}")))?;
+        .or(data_hint)
+        .ok_or_else(|| (2, format!("missing --data DIR\n\n{}", usage())))?;
     if a.pos[0] == "serve" {
         return serve(
             &data,
@@ -177,7 +182,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
     }
     if let Some(u) = flag("--public-url")
         .map(String::from)
-        .or_else(|| std::env::var("MEMCP_PUBLIC_URL").ok())
+        .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok())
     {
         app.public_url = u.trim_end_matches('/').to_string();
     } else if let Some(u) = app::listened_url(listen) {

@@ -254,7 +254,7 @@ impl Archived {
 impl Brain {
     /// The archive folder.
     pub fn archive_root(&self) -> PathBuf {
-        std::env::var_os("MEMCP_ARCHIVE")
+        crate::env::var_os("MEMCP_ARCHIVE")
             .map(PathBuf::from)
             .unwrap_or_else(|| self.dir().join("archive"))
     }

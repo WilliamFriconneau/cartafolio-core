@@ -17,6 +17,7 @@ pub const SERVICE: &str = "_memcp._tcp.local.";
 pub fn well_known(name: &str) -> Value {
     json!({
         "service": "memcp",
+        "product": "cartafolio",
         "version": env!("CARGO_PKG_VERSION"),
         "name": name,
         "join": "/join",

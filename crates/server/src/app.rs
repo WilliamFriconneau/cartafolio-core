@@ -195,7 +195,7 @@ impl App {
             ("POST", "/oauth/register") => crate::oauth::register(self, req),
             ("POST", "/oauth/token") => crate::oauth::token(self, req),
             ("POST", "/pair") => crate::pair::exchange(self, req),
-            ("GET", "/.well-known/memcp") => Response::json(
+            ("GET", "/.well-known/memcp" | "/.well-known/cartafolio") => Response::json(
                 200,
                 &match self.own_node_id() {
                     Some(id) => crate::discovery::well_known_with_id(&self.node_name, id),

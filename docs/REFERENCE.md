@@ -168,6 +168,10 @@ The consent page is on the public address, and every new connection starts with 
 The code is kept only as a digest, in memory (a restart forgets it, and twenty at most wait at once). `POST /admin/api/invite` makes one for the signed-in person; `POST /admin/api/users/invite` with `{"name": "<person>"}` makes one for another person (an administrator's console token, or the administrator's page; never through Funnel). Wrong codes are counted per address, and an address that keeps guessing is held off.
 
 
+## Node discovery
+
+`GET /.well-known/cartafolio` and `GET /.well-known/memcp` serve the same response under the same listener and access rules. Both return `"service": "memcp"` and `"product": "cartafolio"`.
+
 ## Is it healthy?
 
 `memcp --data DIR doctor [--public-url URL] [--listen ADDR]` reads the installation and says, in plain words, what is fine and what deserves a look: file permissions, database versions and integrity, people, connections that reach everything or are no longer used, notes tagged `inbox` waiting to be filed, the public address, whether the node answers. It also reads `memcp.toml` and the age of the newest backup. It writes nothing and starts no migration, so it is safe on a live installation and before an update. Every check is listed in [LINUX.md](LINUX.md#what-memcp-doctor-checks). The settings file and the commands `setup`, `config` and `prepare` are in [LINUX.md](LINUX.md) and [PARITY.md](PARITY.md).

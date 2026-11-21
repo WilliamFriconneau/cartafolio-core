@@ -45,7 +45,7 @@ pub fn start(app: &App, ctl: &rusqlite::Connection, me: &User, name: &str) -> Re
 
 /// A program shipped next to this one (or the one named by the variable).
 fn program(var: &str, base: &str) -> PathBuf {
-    if let Some(p) = std::env::var_os(var) {
+    if let Some(p) = memcp_core::env::var_os(var) {
         return PathBuf::from(p);
     }
     let name = if cfg!(windows) {
@@ -140,7 +140,7 @@ fn ask(
         .stderr(Stdio::null());
     // The ticket goes by the environment, never on a command line another user of the machine could read.
     if let Some(t) = ticket {
-        cmd.env("MEMCP_JOIN_TICKET", t);
+        memcp_core::env::set_child(&mut cmd, "JOIN_TICKET", t);
     }
     let child = cmd.spawn().map_err(|_| {
         "the program that joins (memcp-sync) is not installed on this node".to_string()
@@ -228,13 +228,14 @@ pub fn resume(app: &App) {
                 continue;
             }
         }
-        if let Ok(child) = Command::new(sync_program())
+        let mut cmd = Command::new(sync_program());
+        memcp_core::env::set_child(&mut cmd, "PEER_TOKEN", key);
+        // The loop ends with this node, so a restart never runs two loops with one peer.
+        memcp_core::env::set_child(&mut cmd, "SYNC_PARENT", std::process::id().to_string());
+        if let Ok(child) = cmd
             .arg("--data")
             .arg(app.brain.dir())
             .args(["--peer", address, "--name", name, "--every", EVERY])
-            .env("MEMCP_PEER_TOKEN", key)
-            // The loop ends with this node, so a node started again never runs two loops with one peer.
-            .env("MEMCP_SYNC_PARENT", std::process::id().to_string())
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())
