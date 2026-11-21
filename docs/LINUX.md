@@ -8,7 +8,7 @@ Pick one.
 
 **A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp` and `memcp-janitor` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
 
-**One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
+**One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
 
 **From source.** `cargo install --path crates/server` and `cargo install --path crates/janitor`.
 

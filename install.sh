@@ -1,7 +1,7 @@
 #!/bin/sh
 # MemCP installer: a guided install of the memory server on Linux (x86_64 or aarch64).
 #
-#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/install.sh | sh
 #   sudo sh install.sh --system        a system service run by its own user (see docs/LINUX.md)
 #
 # It downloads the release archive, checks it against the published SHA256SUMS, installs the programs, then lets
@@ -22,7 +22,7 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/memcp-core}"
+REPO="${MEMCP_REPO:-WilliamFriconneau/cartafolio-core}"
 BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
 API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
 

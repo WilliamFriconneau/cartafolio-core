@@ -31,7 +31,7 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/memcp-core}"
+REPO="${MEMCP_REPO:-WilliamFriconneau/cartafolio-core}"
 BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
 API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
 

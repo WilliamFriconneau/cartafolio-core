@@ -6,7 +6,7 @@ pkgver=20261117.0.8
 pkgrel=1
 pkgdesc='A durable memory for AI assistants over MCP, kept on your own machine'
 arch=('x86_64' 'aarch64')
-url='https://github.com/WilliamFriconneau/memcp-core'
+url='https://github.com/WilliamFriconneau/cartafolio-core'
 license=('AGPL-3.0-or-later')
 depends=('gcc-libs' 'systemd')
 makedepends=('cargo')
@@ -20,7 +20,7 @@ sha256sums=('SKIP')
 if [ -n "${MEMCP_SRC:-}" ]; then source=(); sha256sums=(); fi
 
 _src() {
-  if [ -n "${MEMCP_SRC:-}" ]; then echo "$MEMCP_SRC"; else echo "$srcdir/memcp-core-$pkgver"; fi
+  if [ -n "${MEMCP_SRC:-}" ]; then echo "$MEMCP_SRC"; else echo "$srcdir/${url##*/}-$pkgver"; fi
 }
 
 build() {

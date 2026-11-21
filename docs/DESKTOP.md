@@ -22,14 +22,14 @@ the voice notes.
 Mac (Apple silicon):
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/packaging/macos/install-mac.sh
+curl -fsSLO https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/packaging/macos/install-mac.sh
 sh install-mac.sh
 ```
 
 Windows (PowerShell, as yourself, not as an administrator):
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/packaging/windows/install.ps1 -OutFile install.ps1
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/packaging/windows/install.ps1 -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 

@@ -41,7 +41,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
 
-$Repo = if ($env:MEMCP_REPO) { $env:MEMCP_REPO } else { 'WilliamFriconneau/memcp-core' }
+$Repo = if ($env:MEMCP_REPO) { $env:MEMCP_REPO } else { 'WilliamFriconneau/cartafolio-core' }
 $Bin = Join-Path $Root 'bin'
 $Data = Join-Path $Root 'data'
 $OldBridge = Join-Path $Root 'bridge'

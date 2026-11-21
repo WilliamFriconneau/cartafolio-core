@@ -17,7 +17,7 @@ Keeping it simple is the point: a drive, folders, a page to look inside. Add-ons
 
 It is also a manager for your notes and files: your Markdown, your photos, your voice notes, organised into one memory you can browse yourself and your assistants can read.
 
-A public page presents it and its installation: **[williamfriconneau.github.io/memcp-core](https://williamfriconneau.github.io/memcp-core/)**, with a step-by-step guide in French at [/wiki/](https://williamfriconneau.github.io/memcp-core/wiki/). The pages are written from `site/`.
+A public page presents it and its installation: **[williamfriconneau.github.io/cartafolio-core](https://williamfriconneau.github.io/cartafolio-core/)**, with a step-by-step guide in French at [/wiki/](https://williamfriconneau.github.io/cartafolio-core/wiki/). The pages are written from `site/`.
 
 ## Who made this, and how
 
@@ -73,7 +73,7 @@ the core, per space.
 This repository is an app store for Home Assistant.
 
 1. Open **Settings → Apps** (older versions: **Add-ons**), then the app store.
-2. In the menu **⋮**, choose **Repositories** and add `https://github.com/WilliamFriconneau/memcp-core` ([one click with My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fmemcp-core)).
+2. In the menu **⋮**, choose **Repositories** and add `https://github.com/WilliamFriconneau/cartafolio-core` ([one click with My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fcartafolio-core)).
 3. Install **Cartafolio**, start it, and open **Memory** from the sidebar.
 
 The first Home Assistant login becomes the administrator and gets a memory of its own. Port 8791 is not encrypted: read [docs/TAILSCALE.md](docs/TAILSCALE.md) before you connect an assistant from outside.
@@ -81,7 +81,7 @@ The first Home Assistant login becomes the administrator and gets a memory of it
 ### One command (Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/memcp-core/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/install.sh | sh
 ```
 
 It asks where the memory should live, checks what it downloads against the published `SHA256SUMS`, runs `memcp setup` (a private data folder, your first spaces, `memcp.toml`), can run the node as a service of your own user (nothing exposed: it listens on the loopback), and prints the address of the page and one address with the key for an assistant. Read it first if you like; `--help` lists the options.

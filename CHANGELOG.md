@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **The repository is now `cartafolio-core`.** The old address redirects. The release files keep their `memcp-` names.
+
 ## 20261121.1.0
 
 - **New names, old names kept.** `CARTAFOLIO_*` environment variables, `cartafolio.toml`, `/.well-known/cartafolio` and a `cartafolio` command are accepted next to the old ones; the old ones keep working.

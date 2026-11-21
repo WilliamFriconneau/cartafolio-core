@@ -2,7 +2,7 @@ name: Cartafolio
 version: "20261121.1.0"
 slug: memcp
 description: Cartafolio, durable memory for AI assistants over MCP, one memory per person, organised in spaces
-url: https://github.com/WilliamFriconneau/memcp-core
+url: https://github.com/WilliamFriconneau/cartafolio-core
 arch:
   - amd64
   - aarch64
