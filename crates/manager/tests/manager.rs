@@ -1068,6 +1068,10 @@ fn the_invitation_endpoint_takes_an_administrators_console_token_and_never_funne
     let made = post(&admin, false);
     assert_eq!(made.status, 200, "{}", made.body_json());
     assert_eq!(made.body_json()["code"].as_str().map(str::len), Some(14));
+    assert_eq!(
+        made.body_json()["connector_url"],
+        "https://memory.example.net/mcp/lou-claude"
+    );
     assert_eq!(post(&admin, true).status, 404, "never through Funnel");
     assert_eq!(
         post(&token_of("lou")?, false).status,

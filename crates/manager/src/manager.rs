@@ -612,7 +612,13 @@ impl Manager {
         match oauth::invite_create(&app, &user.name, memcp_core::util::now()) {
             Some((code, ends)) => Response::json(
                 200,
-                &json!({ "person": user.name, "code": code, "expires_at": ends, "valid_minutes": 60 }),
+                &json!({
+                    "person": user.name,
+                    "code": code,
+                    "expires_at": ends,
+                    "valid_minutes": 60,
+                    "connector_url": format!("{}/mcp/{}-claude", app.public_url, user.name),
+                }),
             )
             .with("Cache-Control", "no-store"),
             None => err(409, "too many invitations are waiting"),

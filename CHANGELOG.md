@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261120.11.3
+
+- **The administrator's page makes the invitation code.** Each person's tile has a « claude.ai code » button: it shows the one-time code, the address to paste in Claude's connector settings (`<public address>/mcp/<person>-claude`) and the two steps. The answer of `POST /admin/api/users/invite` carries that address as `connector_url`.
+
 ## 20261120.11.2
 
 - **The discovery points Claude to the public consent page.** `authorization_endpoint` is now `<public address>/oauth/authorize` (it was the private page, which a person who is not on the tailnet cannot reach). That page asks for an invitation code, and shows a link that takes a person who is on the tailnet to the private page with the same request, where Tailscale says who they are and no code is needed.

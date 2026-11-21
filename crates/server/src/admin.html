@@ -1245,6 +1245,12 @@ const FR = {
   "disable": "désactiver",
   "unlink": "dissocier",
   "console key": "clé de console",
+  "claude.ai code": "code claude.ai",
+  "A one-time code that lets this person connect Claude on the web without Tailscale": "Un code à usage unique qui permet à cette personne de connecter Claude sur le web sans Tailscale",
+  "Code (good once, for one hour)": "Code (valable une fois, pendant une heure)",
+  "Address of the connector": "Adresse du connecteur",
+  "Steps for the person": "Étapes pour la personne",
+  "1. In claude.ai: Settings, Connectors, Add custom connector, and paste the address above.\n2. Click Connect. The page that opens asks for the code: type it, tick the spaces, then Allow.": "1. Dans claude.ai : Réglages, Connecteurs, Ajouter un connecteur personnalisé, et coller l’adresse ci-dessus.\n2. Cliquer sur Connecter. La page qui s’ouvre demande le code : le saisir, cocher les espaces, puis Autoriser.",
   "disabled": "désactivé",
   "member": "membre",
   "linked to Home Assistant": "lié à Home Assistant",
@@ -1508,6 +1514,7 @@ const FRX = [
   [/^Instructions for the space (.+)$/, n => "Consignes de l’espace " + n],
   [/^Token for (.+)$/, n => "Jeton pour " + n],
   [/^Console token for (.+)$/, n => "Jeton de console pour " + n],
+  [/^Invitation code for (.+)$/, n => "Code d’invitation pour " + n],
   [/^Revoke (.+)\?$/, n => "Révoquer " + n + " ?"],
   [/^Revoke these (\d+) connections\?$/, n => "Révoquer ces " + n + " connexions ?"],
   [/^revoke all (\d+)$/, n => "tout révoquer (" + n + ")"],
@@ -2838,7 +2845,8 @@ function render() {
         mine ? null : el("button", { class: "link", onclick: () => askText("Name shown for " + u.name, u.display || "", v => act("users/update", { id: u.id, display: v })) }, "edit name"),
         mine || u.disabled ? null : el("button", { class: "link danger", title: "Disables them and keeps a full export of their memory: nothing is lost", onclick: () => previewThen("users/delete", { id: u.id }) }, "remove"),
         !mine && u.home_assistant ? el("button", { class: "link", title: "Cut the link to their Home Assistant account (their memory stays); the next login of that name takes it up again", onclick: () => confirmThen("Unlink " + (u.display || u.name) + " from their Home Assistant account?", () => act("users/unlink", { id: u.id })) }, "unlink") : null,
-        el("button", { class: "link", onclick: () => consoleToken(u) }, "console key")));
+        el("button", { class: "link", onclick: () => consoleToken(u) }, "console key"),
+        u.disabled ? null : el("button", { class: "link", title: "A one-time code that lets this person connect Claude on the web without Tailscale", onclick: () => inviteCode(u) }, "claude.ai code")));
   }));
 
   const said = { revoke: "revoked", renew: "key renewed", regrant: "rights changed", readonly: "read-only changed",
@@ -3490,6 +3498,14 @@ $("#pair-dlg").addEventListener("close", () => { clearInterval(pairTimer); clear
 async function consoleToken(u) {
   const r = await act("users/console-token", { user: u.id });
   if (r) secret("Console token for " + (u.display || u.name), [["Opens this page (not MCP)", r.token]]);
+}
+
+async function inviteCode(u) {
+  const r = await act("users/invite", { name: u.name });
+  if (r) secret("Invitation code for " + (u.display || u.name), [
+    ["Code (good once, for one hour)", r.code],
+    ["Address of the connector", r.connector_url],
+    ["Steps for the person", "1. In claude.ai: Settings, Connectors, Add custom connector, and paste the address above.\n2. Click Connect. The page that opens asks for the code: type it, tick the spaces, then Allow."]]);
 }
 
 $$("form[data-act]").forEach(f => f.addEventListener("submit", async e => {
