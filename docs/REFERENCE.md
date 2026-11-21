@@ -127,7 +127,7 @@ Any MCP client that speaks Streamable HTTP with a bearer token works the same wa
 
 ### Claude Code on the same computer
 
-The memory runs on this machine (the MemCP app is open, or `memcp serve` runs): Claude Code talks to it on the loopback, and
+The memory runs on this machine (the Cartafolio app is open, or `memcp serve` runs): Claude Code talks to it on the loopback, and
 nothing is exposed on the network.
 
 1. **Recommended: the local node, by MCP.** In the app, *Connections* → *Connect an assistant* (or `memcp connect` on the
@@ -151,7 +151,7 @@ nothing is exposed on the network.
 
 ### Hermes Agent
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) connects like any MCP client: add the connection's address and key as an MCP server in its configuration, or `memcp mcp` for a Hermes on the same computer. MemCP has no plugin of its own for it: one way in, the MCP, for every assistant.
+[Hermes Agent](https://github.com/NousResearch/hermes-agent) connects like any MCP client: add the connection's address and key as an MCP server in its configuration, or `memcp mcp` for a Hermes on the same computer. Cartafolio has no plugin of its own for it: one way in, the MCP, for every assistant.
 
 ### Claude on the web (OAuth)
 

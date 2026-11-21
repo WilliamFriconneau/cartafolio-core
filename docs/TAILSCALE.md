@@ -1,6 +1,6 @@
 # Over Tailscale
 
-[Tailscale](https://tailscale.com) gives every machine of a person a private address and a name on a network of their own (a *tailnet*), with encrypted connections between them. MemCP is built to sit behind it: a node reaches its peers, an assistant reaches a node, and the person reaches the page of a node, without opening a port to the internet.
+[Tailscale](https://tailscale.com) gives every machine of a person a private address and a name on a network of their own (a *tailnet*), with encrypted connections between them. Cartafolio is built to sit behind it: a node reaches its peers, an assistant reaches a node, and the person reaches the page of a node, without opening a port to the internet.
 
 What follows was checked against Tailscale's documentation of `tailscale serve` (page last validated 26 January 2026, for client 1.52 and later; read the page again for your version) and against what the code does. Where a statement rests on the code only, it says so.
 
@@ -29,7 +29,7 @@ tailscale serve status                            # what is served, and where
 
 ## The node page and who you are
 
-The node page is not on the listener that faces the network. Behind `tailscale serve`, MemCP can know who is asking from the login header that Serve adds (`Tailscale-User-Login`; this is what the code reads, and Tailscale's page for Serve does not list the headers, so check their documentation for your version):
+The node page is not on the listener that faces the network. Behind `tailscale serve`, Cartafolio can know who is asking from the login header that Serve adds (`Tailscale-User-Login`; this is what the code reads, and Tailscale's page for Serve does not list the headers, so check their documentation for your version):
 
 ```sh
 memcp serve --identity-listen 127.0.0.1:8792 --login-url https://<machine>.<tailnet>.ts.net:8792 \
@@ -56,9 +56,9 @@ The consent page stays on the identity listener, private. Each approval makes an
 ## Between nodes
 
 - Nodes find each other by tailnet name, so a laptop that changes network is still found. A node behind a router connects out; nothing is opened.
-- Restrict who may talk to whom with Tailscale's access rules: a tag for the nodes of one person (for example `tag:memcp`), and a rule that lets that tag reach only the port of the node. This is Tailscale's own feature; MemCP does not need it to be safe (every connection needs a key), but it keeps strangers on a shared tailnet away from the port.
+- Restrict who may talk to whom with Tailscale's access rules: a tag for the nodes of one person (for example `tag:memcp`), and a rule that lets that tag reach only the port of the node. This is Tailscale's own feature; Cartafolio does not need it to be safe (every connection needs a key), but it keeps strangers on a shared tailnet away from the port.
 - A node that is **blind** (it holds encrypted spaces without the key, see ENCRYPTION.md) can be run on a machine you do not fully trust, or in a friend's tailnet, and still learns nothing but sizes and times.
 
 ## Using another network
 
-Nothing in MemCP needs Tailscale. A TLS proxy (Caddy, nginx), a WireGuard network of your own, or a plain local network behind a firewall work the same way: the node listens on the loopback, something in front of it provides encryption, and `--public-url` says the address the outside sees. Without encryption in front, tokens travel in clear and the node refuses to listen beyond the loopback unless told to.
+Nothing in Cartafolio needs Tailscale. A TLS proxy (Caddy, nginx), a WireGuard network of your own, or a plain local network behind a firewall work the same way: the node listens on the loopback, something in front of it provides encryption, and `--public-url` says the address the outside sees. Without encryption in front, tokens travel in clear and the node refuses to listen beyond the loopback unless told to.

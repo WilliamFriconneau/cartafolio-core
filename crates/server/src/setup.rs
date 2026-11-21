@@ -107,7 +107,7 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         .or(existing)
         .unwrap_or_else(|| target_config(&a));
 
-    println!("MemCP setup\n");
+    println!("Cartafolio setup\n");
     let default_data = a
         .data
         .clone()

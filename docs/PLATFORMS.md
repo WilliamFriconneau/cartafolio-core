@@ -16,7 +16,7 @@ its device has. Every device is a node: it writes into its own copy and the sync
 
 ## CarPlay (plan)
 
-Only « Trace or drop » by voice, hands-free: Siri « Dicter dans MemCP », then the note is read back once and filed.
+Only « Trace or drop » by voice, hands-free: Siri « Dicter dans Cartafolio », then the note is read back once and filed.
 Apple lets a CarPlay app exist only in its listed categories, each with an entitlement Apple grants on request; a voice
 note fits « voice-based conversational » if Apple offers it for this use, otherwise Siri on the iPhone is the way in the
 car (App Shortcuts work through CarPlay's Siri). To check with Apple before any code: the category and the entitlement.

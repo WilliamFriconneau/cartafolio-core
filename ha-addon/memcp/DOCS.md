@@ -1,4 +1,4 @@
-# MemCP
+# Cartafolio
 
 A durable memory for your AI assistants (Claude, Gemini, a local model), served over MCP. **One memory per person**: each person has a directory of their own, spaces of their own, and keys that never go beyond them. The add-on creates and administers the people; it stores no memory of its own.
 

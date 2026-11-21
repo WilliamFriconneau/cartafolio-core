@@ -1,4 +1,4 @@
-# MemCP on Linux
+# Cartafolio on Linux
 
 The same complete node as on Home Assistant, as a system service of your own machine: the memory, its page, its janitor, its voice. Settings are in one file, `memcp.toml` (every option is listed in the file itself and matched with the add-on's in [PARITY.md](PARITY.md)).
 

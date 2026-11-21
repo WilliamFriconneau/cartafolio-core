@@ -1,4 +1,4 @@
-# MemCP on a computer: the desktop node
+# Cartafolio on a computer: the desktop node
 
 The same memory as the node under Home Assistant, on a Mac or a Windows computer: the node (`memcp serve`) keeps the
 memory, serves its page, reads the voice notes and watches the folders the person named ([INTAKE.md](INTAKE.md)). It is the one

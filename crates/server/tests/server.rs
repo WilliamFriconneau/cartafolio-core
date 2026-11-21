@@ -864,7 +864,7 @@ fn the_handshake_tells_a_connection_the_guides_of_what_it_reaches_only() -> Res 
             "{method}: nothing about a vault it cannot reach"
         );
         assert!(
-            w.starts_with("This service is called MemCP."),
+            w.starts_with("This service is called Cartafolio."),
             "the general rules come first"
         );
     }

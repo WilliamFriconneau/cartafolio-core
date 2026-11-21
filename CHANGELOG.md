@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **MemCP is now called Cartafolio.** The name changes in the documentation, the page, the Home Assistant app and the messages; the command, the environment variables, the configuration file, the data folders and the addresses keep their names.
+
 ## 20261120.12.0
 
 - **Every new connection of an assistant that signs in starts with an invitation code, on the tailnet too.** The consent page (`/oauth/authorize`) is the same on the public address and on the identity listener: it asks for a one-time code (twelve letters, `XXXX-XXXX-XXXX`) and shows the consent page of the person the code was made for; there is no more shortcut for a person Tailscale recognises. The person makes the code on their own page (`POST /admin/api/invite`, and the « Connect an assistant » steps of Claude, ChatGPT and Le Chat now show it), or an administrator makes it for them. Keys for assistants that take a key, and the pairing codes of devices, are unchanged.

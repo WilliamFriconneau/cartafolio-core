@@ -123,7 +123,7 @@ function clean(name, text) {
   // Trace or drop: the Inbox in its simple view; a note written there is in the list.
   await go("#note");
   check("Trace or drop opens its own view", await until(() => shown(w, $("#view-space")) && $("#space-title").textContent === "Tracer ou déposer"), $("#space-title").textContent);
-  check("the browser tab names Trace or drop", /^MemCP · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
+  check("the browser tab names Trace or drop", /^Cartafolio · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
   check("Trace or drop hides the tabs of a space", !shown(w, $("#space-tabs")));
   const buttons = () => $$("#space-body button").filter(b => shown(w, b)).map(b => b.textContent.trim());
   check("Trace or drop has its three buttons", await until(() => ["Ajouter au journal", "Joindre des fichiers", "● Enregistrer"].every(t => buttons().includes(t))), buttons().join(" | "));
