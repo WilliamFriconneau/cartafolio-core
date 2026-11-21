@@ -188,16 +188,15 @@ fn setup_makes_a_private_memory_a_page_key_and_one_address_for_an_assistant() ->
 
     // Served from the file alone.
     let _server = start(&conf)?;
-    let (head, body) = get(port, "/.well-known/memcp", "")?;
+    let (head, body) = get(port, "/.well-known/pensine", "")?;
     assert!(head.starts_with("HTTP/1.1 200"), "{head}");
     assert!(body.contains("atelier"), "{body}");
-    let (alias_head, alias_body) = get(port, "/.well-known/silice", "")?;
-    assert!(alias_head.starts_with("HTTP/1.1 200"), "{alias_head}");
-    assert_eq!(alias_body, body);
-    assert_eq!(
-        serde_json::from_str::<Value>(&alias_body)?["product"],
-        "silice"
-    );
+    for path in ["/.well-known/silice", "/.well-known/memcp"] {
+        let (alias_head, alias_body) = get(port, path, "")?;
+        assert!(alias_head.starts_with("HTTP/1.1 200"), "{alias_head}");
+        assert_eq!(alias_body, body);
+    }
+    assert_eq!(serde_json::from_str::<Value>(&body)?["product"], "pensine");
 
     // Remember and recall through the address of the connection.
     let r = tool(
@@ -410,7 +409,7 @@ fn setup_rewrites_only_the_explicit_configuration_path() -> Res {
     let folder = t.join("memcp");
     fs::create_dir_all(&folder)?;
     let legacy = folder.join("memcp.toml");
-    let newer = folder.join("silice.toml");
+    let newer = folder.join("pensine.toml");
     let untouched = "node_name = \"From discovery\"\n";
     fs::write(&legacy, "node_name = \"Explicit\"\n")?;
     fs::write(&newer, untouched)?;
@@ -419,17 +418,38 @@ fn setup_rewrites_only_the_explicit_configuration_path() -> Res {
         cmd.env("XDG_CONFIG_HOME", &t)
             .env_remove("MEMCP_CONFIG")
             .env_remove("SILICE_CONFIG")
+            .env_remove("PENSINE_CONFIG")
             .env_remove("MEMCP_NODE")
-            .env_remove("SILICE_NODE");
+            .env_remove("SILICE_NODE")
+            .env_remove("PENSINE_NODE");
         cmd
     };
     let implicit = command().args(["config", "check"]).output()?;
     assert!(implicit.status.success());
-    assert!(String::from_utf8_lossy(&implicit.stdout).contains("silice.toml"));
+    assert!(String::from_utf8_lossy(&implicit.stdout).contains("pensine.toml"));
+
+    // The preferred directory wins even when it only contains a legacy filename.
+    let preferred = t.join("pensine").join("memcp.toml");
+    fs::create_dir_all(t.join("pensine"))?;
+    fs::write(&preferred, untouched)?;
+    let check = command().args(["config", "check"]).output()?;
+    assert!(check.status.success());
+    assert!(String::from_utf8_lossy(&check.stdout).contains(&*preferred.to_string_lossy()));
+
+    let check = command()
+        .env("MEMCP_CONFIG", t.join("missing-memcp.toml"))
+        .env("SILICE_CONFIG", t.join("missing-silice.toml"))
+        .env("PENSINE_CONFIG", &legacy)
+        .args(["config", "check"])
+        .output()?;
+    assert!(check.status.success());
+    assert!(String::from_utf8_lossy(&check.stdout).contains(&*legacy.to_string_lossy()));
+
     for (variable, name) in [
         (None, "Flag"),
         (Some("MEMCP_CONFIG"), "Legacy"),
         (Some("SILICE_CONFIG"), "Alias"),
+        (Some("PENSINE_CONFIG"), "Preferred"),
     ] {
         let mut cmd = command();
         if let Some(variable) = variable {

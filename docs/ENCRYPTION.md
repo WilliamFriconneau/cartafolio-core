@@ -43,7 +43,7 @@ A folder mounted in a space (SPACES.md) has a mode that says how it is kept on t
 - *Locked* is for a folder you put on a drive you do not trust, or that holds a sensitive space. A synchronised drive then sees only ciphertext. The price: other programs cannot read it; an assistant reads it through the node.
 - A locked mount hides names too, if the person asks: files are stored under random names and the list of names is kept, encrypted, in the node. Visible names leak titles and structure; hidden names make the folder unusable by hand. The choice is the person's, per mount.
 - *File by file* suits a synchronised drive: a small change re-uploads one small file, and conflicts are per file. *One container* hides the names, the number and the sizes of the files, but a synchroniser re-uploads the whole file at every change and a conflict loses a copy. Use it for a folder that rarely changes, or for a copy at rest; use *file by file* for a living folder.
-- The open format is deliberate: a person is never trapped; the files can be opened without Silice, and the tool is a standard one.
+- The open format is deliberate: a person is never trapped; the files can be opened without Pensine, and the tool is a standard one.
 
 ## Peers and blind nodes
 

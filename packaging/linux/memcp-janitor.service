@@ -1,8 +1,8 @@
 # The janitor: files the notes of the inboxes with the model named in memcp.toml (janitor = true, and a model).
 # It stays running and passes once the writing has calmed down and once a night. Off by default.
 [Unit]
-Description=MemCP janitor
-Documentation=https://github.com/WilliamFriconneau/silice-core/blob/main/docs/JANITOR.md
+Description=Pensine janitor
+Documentation=https://github.com/WilliamFriconneau/pensine-core/blob/main/docs/JANITOR.md
 After=memcp.service
 Wants=memcp.service
 

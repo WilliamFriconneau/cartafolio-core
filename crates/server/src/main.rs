@@ -268,7 +268,7 @@ mod tests {
     #[test]
     fn node_name_defaults_only_when_no_name_is_given_or_stored() -> Result<(), String> {
         let dir = std::env::temp_dir().join(format!(
-            "silice-node-name-{}",
+            "pensine-node-name-{}",
             memcp_core::util::random_base32(16)
         ));
         let brain = Brain::init(&dir, &[], text::Language::English).map_err(|e| e.to_string())?;
@@ -287,12 +287,12 @@ mod tests {
             .map_err(|e| e.to_string())
         };
 
-        assert_eq!(start(&["serve"], "")?.node_name, "Silice");
+        assert_eq!(start(&["serve"], "")?.node_name, "Pensine");
         assert_eq!(
             directory::stored_own_name(&brain)
                 .map_err(|e| e.to_string())?
                 .as_deref(),
-            Some("Silice")
+            Some("Pensine")
         );
 
         let settings = r#"node_name = "MemCP""#;

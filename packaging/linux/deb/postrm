@@ -2,8 +2,10 @@
 set -e
 if [ "$1" = remove ]; then
   for prog in memcp memcp-manager memcp-sync; do
-    alias="/usr/bin/silice${prog#memcp}"
-    if [ "$(readlink "$alias")" = "$prog" ]; then rm -f "$alias"; fi
+    for brand in pensine silice; do
+      alias="/usr/bin/$brand${prog#memcp}"
+      if [ "$(readlink "$alias")" = "$prog" ]; then rm -f "$alias"; fi
+    done
   done
 fi
 # The memory (/var/lib/memcp), the backups and the settings are never removed by the package, not even by purge:

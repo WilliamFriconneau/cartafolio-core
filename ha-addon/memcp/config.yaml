@@ -1,8 +1,8 @@
-name: Silice
-version: "20261121.3.0"
+name: Pensine
+version: "20261122.1.0"
 slug: memcp
-description: Silice, durable memory for AI assistants over MCP, one memory per person, organised in spaces
-url: https://github.com/WilliamFriconneau/silice-core
+description: Pensine, durable memory for AI assistants over MCP, one memory per person, organised in spaces
+url: https://github.com/WilliamFriconneau/pensine-core
 arch:
   - amd64
   - aarch64

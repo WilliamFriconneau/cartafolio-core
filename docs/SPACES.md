@@ -32,15 +32,15 @@ A space can be fed by **several folders scattered on the machine** (Markdown, te
 
 ### One synchroniser per folder
 
-When the same folder is held by several nodes (a laptop and the Home Assistant hub), the files are replicated between them the way Syncthing does it: by content hash, in chunks, a file only when it changed, a conflict kept as a copy. Silice does not become a second drive:
+When the same folder is held by several nodes (a laptop and the Home Assistant hub), the files are replicated between them the way Syncthing does it: by content hash, in chunks, a file only when it changed, a conflict kept as a copy. Pensine does not become a second drive:
 
-- A folder already synchronised by a drive (Google Drive, OneDrive, iCloud) is marked *managed elsewhere* on that node: Silice only reads it there. Two synchronisers writing the same files make echoes and conflicts.
+- A folder already synchronised by a drive (Google Drive, OneDrive, iCloud) is marked *managed elsewhere* on that node: Pensine only reads it there. Two synchronisers writing the same files make echoes and conflicts.
 - Replication is per mount and per pair of nodes, chosen by the person: *files and passages*, *passages only* (the files stay where they are), or *nothing*.
 - The node that holds the drive copy sends its files; the other node keeps its own copy outside any drive and is the one that can be restored from a backup.
 
 ### Living next to a synchronised drive
 
-Silice is also a manager of folders that other programs synchronise (Google Drive, Syncthing, iCloud, OneDrive). Those programs move, duplicate and half-write files at any time, so the rules are strict:
+Pensine is also a manager of folders that other programs synchronise (Google Drive, Syncthing, iCloud, OneDrive). Those programs move, duplicate and half-write files at any time, so the rules are strict:
 
 - **The memory's own data never lives in a synchronised folder.** The SQLite files, the keys and the control database stay on a local disk of the machine that runs the node. A database copied by a sync tool while it is written is a corrupted database. Only the mounted folders and the backup archives may be in a synchronised folder. A node refuses to start with its data directory inside a mount, and says why.
 - **Settle before reading.** A file is read only once its size and modification time have not changed for a few seconds, so a file being written or uploaded is not ingested half-done.

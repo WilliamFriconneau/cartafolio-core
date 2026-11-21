@@ -122,7 +122,7 @@ function clean(name, text) {
   // Trace or drop: the Inbox in its simple view; a note written there is in the list.
   w.location.hash = "#note";
   check("Trace or drop opens its own view", await until(() => shown(w, $("#view-space")) && $("#space-title").textContent === "Tracer ou déposer"), $("#space-title").textContent);
-  check("the browser tab names Trace or drop", /^Silice · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
+  check("the browser tab names Trace or drop", /^Pensine · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
   check("Trace or drop hides the tabs of a space", !shown(w, $("#space-tabs")));
   const buttons = () => $$("#inbox-capture button").filter(b => shown(w, b));
   const list = () => $("#space-body [data-journal-list]");

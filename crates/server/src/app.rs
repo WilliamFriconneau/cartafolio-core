@@ -221,13 +221,15 @@ impl App {
             ("POST", "/oauth/register") => crate::oauth::register(self, req),
             ("POST", "/oauth/token") => crate::oauth::token(self, req),
             ("POST", "/pair") => crate::pair::exchange(self, req),
-            ("GET", "/.well-known/memcp" | "/.well-known/silice") => Response::json(
-                200,
-                &match self.own_node_id() {
-                    Some(id) => crate::discovery::well_known_with_id(&self.node_name, id),
-                    None => crate::discovery::well_known(&self.node_name),
-                },
-            ),
+            ("GET", "/.well-known/pensine" | "/.well-known/silice" | "/.well-known/memcp") => {
+                Response::json(
+                    200,
+                    &match self.own_node_id() {
+                        Some(id) => crate::discovery::well_known_with_id(&self.node_name, id),
+                        None => crate::discovery::well_known(&self.node_name),
+                    },
+                )
+            }
             ("POST", "/join") => crate::join::request(self, req),
             ("GET", p) if p.starts_with("/join/") => {
                 crate::join::poll(self, req, &p["/join/".len()..])

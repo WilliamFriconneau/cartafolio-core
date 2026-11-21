@@ -1,10 +1,10 @@
 # The command line
 
-`memcp` is first a command line: every function of the memory is a command, and every command works two ways.
+`pensine` is first a command line: every function of the memory is a command, and every command works two ways.
 
-- **Local**: `memcp --data DIR <command>` opens the data directory itself. It needs to be on the machine and to be allowed
+- **Local**: `pensine --data DIR <command>` opens the data directory itself. It needs to be on the machine and to be allowed
   into the directory.
-- **Remote**: `memcp --node ADDRESS --key-file FILE <command>` talks to a node that is **running**, over HTTP, with a key.
+- **Remote**: `pensine --node ADDRESS --key-file FILE <command>` talks to a node that is **running**, over HTTP, with a key.
   The data stay where the node keeps them. This is the way on a Mac, where the data of the app live in its sandbox and
   no other program can open them, and the way from any other machine.
 
@@ -13,7 +13,7 @@ line runs and sends back the text. `--json` prints the node's raw JSON answer in
 
 ## Reaching a node
 
-Every `MEMCP_*` environment variable read by the commands has a `SILICE_*` alias. When both spellings are set, the `SILICE_*` value wins.
+The commands use the first nonempty value in this order: `PENSINE_*`, `SILICE_*`, `MEMCP_*`. Installers provide the `pensine`, `pensine-manager`, and `pensine-sync` commands alongside their `silice` and `memcp` equivalents.
 
 | What | Option | Environment |
 |---|---|---|

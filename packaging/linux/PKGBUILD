@@ -1,4 +1,4 @@
-# Maintainer: the MemCP project
+# Maintainer: the Pensine project
 # `makepkg -si` in this folder builds the source of the tag below. For a local checkout instead of a tag,
 # run it with MEMCP_SRC=/path/to/memcp-core (the sources are then not downloaded again).
 pkgname=memcp
@@ -6,7 +6,7 @@ pkgver=20261121.2.0
 pkgrel=1
 pkgdesc='A durable memory for AI assistants over MCP, kept on your own machine'
 arch=('x86_64' 'aarch64')
-url='https://github.com/WilliamFriconneau/silice-core'
+url='https://github.com/WilliamFriconneau/pensine-core'
 license=('AGPL-3.0-or-later')
 depends=('gcc-libs' 'systemd')
 makedepends=('cargo')
@@ -17,10 +17,11 @@ source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
 # Run `updpkgsums` once the tag is published.
 sha256sums=('SKIP')
 # A local checkout (MEMCP_SRC) needs no download: CI builds the package this way.
-if [ -n "${MEMCP_SRC:-}" ]; then source=(); sha256sums=(); fi
+_local_src="${PENSINE_SRC:-${SILICE_SRC:-${MEMCP_SRC:-}}}"
+if [ -n "$_local_src" ]; then source=(); sha256sums=(); fi
 
 _src() {
-  if [ -n "${MEMCP_SRC:-}" ]; then echo "$MEMCP_SRC"; else echo "$srcdir/${url##*/}-$pkgver"; fi
+  if [ -n "$_local_src" ]; then echo "$_local_src"; else echo "$srcdir/${url##*/}-$pkgver"; fi
 }
 
 build() {
@@ -41,6 +42,7 @@ package() {
   install -Dm755 "$t/memcp" "$t/memcp-janitor" "$t/memcp-manager" "$t/memcp-sync" -t "$pkgdir/usr/bin"
   local prog
   for prog in memcp memcp-manager memcp-sync; do
+    ln -s "$prog" "$pkgdir/usr/bin/pensine${prog#memcp}"
     ln -s "$prog" "$pkgdir/usr/bin/silice${prog#memcp}"
   done
   local p=packaging/linux

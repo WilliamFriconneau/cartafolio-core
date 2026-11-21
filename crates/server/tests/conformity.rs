@@ -43,12 +43,14 @@ fn request(method: &str, path: &str, body: Value) -> Request {
 fn discovery_tells_the_service_the_name_and_the_version_and_nothing_else() -> Res {
     let (mut a, dir) = app("wellknown")?;
     a.node_name = "kitchen".into();
-    let r = a.handle(&request("GET", "/.well-known/memcp", json!({})));
-    let alias = a.handle(&request("GET", "/.well-known/silice", json!({})));
+    let r = a.handle(&request("GET", "/.well-known/pensine", json!({})));
     assert_eq!(r.status, 200);
-    assert_eq!(alias.status, r.status);
-    assert_eq!(alias.headers, r.headers);
-    assert_eq!(alias.body, r.body);
+    for path in ["/.well-known/silice", "/.well-known/memcp"] {
+        let alias = a.handle(&request("GET", path, json!({})));
+        assert_eq!(alias.status, r.status);
+        assert_eq!(alias.headers, r.headers);
+        assert_eq!(alias.body, r.body);
+    }
     let v = r.body_json();
     let mut keys: Vec<&str> = v
         .as_object()
@@ -75,7 +77,7 @@ fn discovery_tells_the_service_the_name_and_the_version_and_nothing_else() -> Re
         "the id names the node, nothing more"
     );
     assert_eq!(v["service"], "memcp");
-    assert_eq!(v["product"], "silice");
+    assert_eq!(v["product"], "pensine");
     assert_eq!(v["name"], "kitchen");
     let _ = fs::remove_dir_all(dir);
     Ok(())

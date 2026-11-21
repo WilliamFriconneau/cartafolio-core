@@ -24,7 +24,7 @@ const TOUCH_EVERY: i64 = 30;
 const MAX_ENTRIES: usize = 10_000;
 
 /// The name stored on first use if no name was given.
-pub const DEFAULT_NODE_NAME: &str = "Silice";
+pub const DEFAULT_NODE_NAME: &str = "Pensine";
 
 const NAME_KEY: &str = "node_name";
 
@@ -216,7 +216,7 @@ pub fn stored_own_name(brain: &Brain) -> Result<Option<String>> {
     meta_get(&brain.open_control()?, NAME_KEY)
 }
 
-/// This node's stored name, defaulting to Silice on first use.
+/// This node's stored name, defaulting to Pensine on first use.
 pub fn own_name(brain: &Brain) -> Result<String> {
     let ctl = brain.open_control()?;
     own_name_in(&ctl)

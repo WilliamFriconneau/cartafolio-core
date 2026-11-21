@@ -1,5 +1,5 @@
 #!/bin/sh
-# MemCP on a Mac: the node (`memcp serve`) as a background task of your user, started at login and again after a crash,
+# Pensine on a Mac: the node (`memcp serve`) as a background task of your user, started at login and again after a crash,
 # with its log. The node reads the voice notes and watches the folders itself, as `memcp.toml` says. Nothing runs as
 # root and nothing is put outside your home folder.
 #
@@ -31,24 +31,24 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/silice-core}"
-BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
-API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
+REPO="${PENSINE_REPO:-${SILICE_REPO:-${MEMCP_REPO:-WilliamFriconneau/pensine-core}}}"
+BASE="${PENSINE_RELEASE_BASE:-${SILICE_RELEASE_BASE:-${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}}}"
+API="${PENSINE_API:-${SILICE_API:-${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}}}"
 
-ROOT="${MEMCP_ROOT:-$HOME/Library/Application Support/MemCP}"
-LOGS="${MEMCP_LOGS:-$HOME/Library/Logs/MemCP}"
-AGENTS="${MEMCP_AGENTS:-$HOME/Library/LaunchAgents}"
-VERSION="${MEMCP_VERSION:-}"
-FROM="${MEMCP_FROM:-}"
-LANGUAGE="${MEMCP_LANGUAGE:-en}"
-SPACES="${MEMCP_SPACES:-personal,work,health}"
-PORT="${MEMCP_PORT:-8791}"
+ROOT="${PENSINE_ROOT:-${SILICE_ROOT:-${MEMCP_ROOT:-$HOME/Library/Application Support/MemCP}}}"
+LOGS="${PENSINE_LOGS:-${SILICE_LOGS:-${MEMCP_LOGS:-$HOME/Library/Logs/MemCP}}}"
+AGENTS="${PENSINE_AGENTS:-${SILICE_AGENTS:-${MEMCP_AGENTS:-$HOME/Library/LaunchAgents}}}"
+VERSION="${PENSINE_VERSION:-${SILICE_VERSION:-${MEMCP_VERSION:-}}}"
+FROM="${PENSINE_FROM:-${SILICE_FROM:-${MEMCP_FROM:-}}}"
+LANGUAGE="${PENSINE_LANGUAGE:-${SILICE_LANGUAGE:-${MEMCP_LANGUAGE:-en}}}"
+SPACES="${PENSINE_SPACES:-${SILICE_SPACES:-${MEMCP_SPACES:-personal,work,health}}}"
+PORT="${PENSINE_PORT:-${SILICE_PORT:-${MEMCP_PORT:-8791}}}"
 # `MEMCP_BRIDGE_PORT` and `--bridge-port` are the old names of a setting that is gone: read, said, and ignored.
-OLD_BRIDGE_PORT="${MEMCP_BRIDGE_PORT:-}"
-WHISPER_MODEL="${MEMCP_WHISPER_MODEL:-}"
-SPEECH_API="${MEMCP_SPEECH_API:-}"
-AGENTS_ON="${MEMCP_AGENTS_ON:-1}"
-YES="${MEMCP_YES:-0}"
+OLD_BRIDGE_PORT="${PENSINE_BRIDGE_PORT:-${SILICE_BRIDGE_PORT:-${MEMCP_BRIDGE_PORT:-}}}"
+WHISPER_MODEL="${PENSINE_WHISPER_MODEL:-${SILICE_WHISPER_MODEL:-${MEMCP_WHISPER_MODEL:-}}}"
+SPEECH_API="${PENSINE_SPEECH_API:-${SILICE_SPEECH_API:-${MEMCP_SPEECH_API:-}}}"
+AGENTS_ON="${PENSINE_AGENTS_ON:-${SILICE_AGENTS_ON:-${MEMCP_AGENTS_ON:-1}}}"
+YES="${PENSINE_YES:-${SILICE_YES:-${MEMCP_YES:-0}}}"
 ACTION=install
 PURGE=0
 
@@ -111,7 +111,7 @@ stop_agents() {
 
 # --- uninstall -----------------------------------------------------------------------------------------------
 if [ "$ACTION" = uninstall ]; then
-  step "Removing MemCP from this Mac"
+  step "Removing Pensine from this Mac"
   stop_agents
   for label in $LABELS $OLD_LABELS; do rm -f "$AGENTS/$label.plist"; done
   for service in $SERVICE $OLD_SERVICE; do
@@ -135,7 +135,7 @@ if [ "$ACTION" = uninstall ]; then
   exit 0
 fi
 
-step "MemCP for the Mac"
+step "Pensine for the Mac"
 say "A durable memory for your AI assistants, kept on this Mac."
 
 # --- choices -------------------------------------------------------------------------------------------------
@@ -191,6 +191,7 @@ else
   for prog in $PROGRAMS; do install -m 755 "$TMP/$prog-$VERSION-$TARGET" "$BIN/$prog"; done
 fi
 for prog in memcp memcp-manager memcp-sync; do
+  if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/pensine${prog#memcp}"; fi
   if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/silice${prog#memcp}"; fi
 done
 say "installed in $BIN"
@@ -238,7 +239,7 @@ if [ ! -e "$SETTINGS" ] || [ -n "$WHISPER_MODEL$SPEECH_API" ]; then
       done
     elif [ -n "$SPEECH_API" ]; then
       echo "transcribe_api_url = \"$SPEECH_API\""
-      SPEECH_KEY="${MEMCP_SPEECH_API_KEY:-$OLD_SPEECH_KEY}"
+      SPEECH_KEY="${PENSINE_SPEECH_API_KEY:-${SILICE_SPEECH_API_KEY:-${MEMCP_SPEECH_API_KEY:-$OLD_SPEECH_KEY}}}"
       if [ -n "$SPEECH_KEY" ]; then
         printf '%s' "$SPEECH_KEY" > "$ROOT/speech.key"
         chmod 600 "$ROOT/speech.key"
@@ -380,7 +381,7 @@ For Claude Code:
 Devices use their own pairing keys. For an assistant that signs in, use Connect an assistant on
 your page and enter its one-time invitation code on the public consent page.
 
-The silice, silice-manager and silice-sync aliases are installed in $BIN.
+The pensine, pensine-manager and pensine-sync commands and their silice aliases are installed in $BIN.
 
 Voice notes and watched folders are set in $SETTINGS (\`memcp config example\` lists the options);
 restart the node after a change: launchctl kickstart -k $DOMAIN/org.memcp.node

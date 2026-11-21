@@ -299,7 +299,7 @@ fn client(ctl: &Connection, id: &str) -> Option<(String, Vec<String>)> {
 fn page(app: &App, status: u16, body: &str) -> Response {
     let html = format!(
         "<!doctype html><meta charset=utf-8><meta name=viewport content='width=device-width,initial-scale=1'>\
-         <title>Silice</title><style>body{{font:16px system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;color:#1d1d1b;background:#f6f5f2}}\
+         <title>Pensine</title><style>body{{font:16px system-ui,sans-serif;max-width:28rem;margin:4rem auto;padding:0 1rem;color:#1d1d1b;background:#f6f5f2}}\
          @media(prefers-color-scheme:dark){{body{{color:#ecebe7;background:#141413}}}}button{{font:inherit;padding:.5rem 1rem;border-radius:8px;border:1px solid #2f5d8a;background:#2f5d8a;color:#fff}}\
          .mute{{color:#6b6a66}}</style>{body}"
     );

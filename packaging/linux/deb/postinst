@@ -2,6 +2,7 @@
 set -e
 if [ "$1" = configure ]; then
   for prog in memcp memcp-manager memcp-sync; do
+    ln -sfn "$prog" "/usr/bin/pensine${prog#memcp}"
     ln -sfn "$prog" "/usr/bin/silice${prog#memcp}"
   done
   # The service user and the folders, as the sysusers and tmpfiles files say.
@@ -14,7 +15,7 @@ if [ "$1" = configure ]; then
     systemd-tmpfiles --create /usr/lib/tmpfiles.d/memcp.conf || true
   fi
   if [ -d /run/systemd/system ]; then systemctl daemon-reload || true; fi
-  echo "MemCP is installed. First run:  sudo memcp setup --system  then  sudo systemctl enable --now memcp"
+  echo "Pensine is installed. First run:  sudo pensine setup --system  then  sudo systemctl enable --now memcp"
 fi
 #DEBHELPER#
 exit 0

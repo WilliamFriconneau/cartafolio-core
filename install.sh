@@ -1,7 +1,7 @@
 #!/bin/sh
-# MemCP installer: a guided install of the memory server on Linux (x86_64 or aarch64).
+# Pensine installer: a guided install of the memory server on Linux (x86_64 or aarch64).
 #
-#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/pensine-core/main/install.sh | sh
 #   sudo sh install.sh --system        a system service run by its own user (see docs/LINUX.md)
 #
 # It downloads the release archive, checks it against the published SHA256SUMS, installs the programs, then lets
@@ -22,19 +22,19 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/silice-core}"
-BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
-API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
+REPO="${PENSINE_REPO:-${SILICE_REPO:-${MEMCP_REPO:-WilliamFriconneau/pensine-core}}}"
+BASE="${PENSINE_RELEASE_BASE:-${SILICE_RELEASE_BASE:-${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}}}"
+API="${PENSINE_API:-${SILICE_API:-${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}}}"
 
-VERSION="${MEMCP_VERSION:-}"
-PREFIX="${MEMCP_PREFIX:-}"
-DATA="${MEMCP_DATA:-}"
-LANGUAGE="${MEMCP_LANGUAGE:-en}"
-SPACES="${MEMCP_SPACES:-}"
-PORT="${MEMCP_PORT:-8791}"
-SERVICE="${MEMCP_SERVICE:-ask}"
-SYSTEM="${MEMCP_SYSTEM:-0}"
-YES="${MEMCP_YES:-0}"
+VERSION="${PENSINE_VERSION:-${SILICE_VERSION:-${MEMCP_VERSION:-}}}"
+PREFIX="${PENSINE_PREFIX:-${SILICE_PREFIX:-${MEMCP_PREFIX:-}}}"
+DATA="${PENSINE_DATA:-${SILICE_DATA:-${MEMCP_DATA:-}}}"
+LANGUAGE="${PENSINE_LANGUAGE:-${SILICE_LANGUAGE:-${MEMCP_LANGUAGE:-en}}}"
+SPACES="${PENSINE_SPACES:-${SILICE_SPACES:-${MEMCP_SPACES:-}}}"
+PORT="${PENSINE_PORT:-${SILICE_PORT:-${MEMCP_PORT:-8791}}}"
+SERVICE="${PENSINE_SERVICE:-${SILICE_SERVICE:-${MEMCP_SERVICE:-ask}}}"
+SYSTEM="${PENSINE_SYSTEM:-${SILICE_SYSTEM:-${MEMCP_SYSTEM:-0}}}"
+YES="${PENSINE_YES:-${SILICE_YES:-${MEMCP_YES:-0}}}"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -79,7 +79,7 @@ confirm() { # confirm "question" default(y|n)
   case "$ANSWER" in y|Y|yes|YES|o|O|oui) return 0 ;; *) return 1 ;; esac
 }
 
-step "MemCP installer"
+step "Pensine installer"
 say "A durable memory for your AI assistants, kept on your machine."
 
 [ "$(uname -s)" = Linux ] || die "this installer is for Linux. On macOS, use: cargo install --git https://github.com/$REPO memcp-server (see the README). On Home Assistant, add the repository as an add-on repository."
@@ -129,6 +129,7 @@ for prog in memcp-manager memcp-sync; do
   if [ -x "$SRC/bin/$prog" ]; then install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"; fi
 done
 for prog in memcp memcp-manager memcp-sync; do
+  if [ -x "$PREFIX/$prog" ]; then ln -sfn "$prog" "$PREFIX/pensine${prog#memcp}"; fi
   if [ -x "$PREFIX/$prog" ]; then ln -sfn "$prog" "$PREFIX/silice${prog#memcp}"; fi
 done
 say "installed in $PREFIX"
@@ -172,7 +173,7 @@ if [ "$SYSTEM" = 1 ]; then
   UNIT_DIR=/etc/systemd/system
   if [ "$SERVICE" = ask ]; then
     if have systemctl && [ -d /run/systemd/system ]; then
-      if confirm "Start MemCP now and at every boot?" y; then SERVICE=yes; else SERVICE=no; fi
+      if confirm "Start Pensine now and at every boot?" y; then SERVICE=yes; else SERVICE=no; fi
     else SERVICE=no; fi
   fi
   for u in "$SRC"/units/*.service "$SRC"/units/*.timer; do install -m 644 "$u" "$UNIT_DIR/$(basename "$u")"; done
@@ -201,7 +202,7 @@ else
   UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
   if [ "$SERVICE" = ask ]; then
     if have systemctl && systemctl --user show-environment >/dev/null 2>&1; then
-      if confirm "Run MemCP as a service of your user, started at login?" y; then SERVICE=yes; else SERVICE=no; fi
+      if confirm "Run Pensine as a service of your user, started at login?" y; then SERVICE=yes; else SERVICE=no; fi
     else SERVICE=no; fi
   fi
   if [ "$SERVICE" = yes ]; then
@@ -211,7 +212,7 @@ else
     mkdir -p "$UNIT_DIR"
     cat >"$UNIT_DIR/memcp.service" <<EOF
 [Unit]
-Description=MemCP, a durable memory for AI assistants
+Description=Pensine, a durable memory for AI assistants
 After=network-online.target
 
 [Service]
@@ -238,8 +239,8 @@ fi
 
 step "4/4  Next"
 cat <<EOF
-Check the installation:   "$PREFIX/silice" doctor
-Aliases: silice, silice-manager and silice-sync are installed in $PREFIX alongside the memcp commands.
+Check the installation:   "$PREFIX/pensine" doctor
+Commands: pensine, pensine-manager and pensine-sync are installed in $PREFIX with their silice and memcp equivalents.
 Backups, TLS, upgrade:    docs/LINUX.md  (https://github.com/$REPO/blob/main/docs/LINUX.md)
 Put HTTPS in front of port $PORT before an assistant outside this machine connects (keys travel in clear on plain HTTP):
   Tailscale:  tailscale serve --bg $PORT      (private, your devices only)

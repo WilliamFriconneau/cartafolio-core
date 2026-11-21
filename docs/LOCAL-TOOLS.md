@@ -6,7 +6,7 @@ remote model is only ever a choice of the installation. See the principles in th
 ```mermaid
 flowchart TB
   subgraph Machine["One machine (Home Assistant, Mac, Windows or Linux PC)"]
-    N["Silice node<br/>memory, page, tools"]
+    N["Pensine node<br/>memory, page, tools"]
     J["Janitor<br/>keeps each space's keywords,<br/>runs the router again"]
     R["Router<br/>deterministic, by keywords"]
     V["Voice<br/>transcribes recordings"]
@@ -42,7 +42,7 @@ cloud: it is not a local model and is never the janitor's default. What runs on 
   `api_url`.
 - **Phi Silica** (Microsoft): the small model of Copilot+ PCs, run on their NPU, reached by an app through the Windows AI
   APIs (`LanguageModel`), not by an address. Source: *Phi Silica*, Microsoft Learn,
-  https://learn.microsoft.com/windows/ai/apis/phi-silica (read 16 November 2026, not dated). A Windows app of Silice would
+  https://learn.microsoft.com/windows/ai/apis/phi-silica (read 16 November 2026, not dated). A Windows app of Pensine would
   serve it to the janitor on the loopback, the way the Mac app serves Apple Intelligence.
 
 What has been checked: the Mac's way (Apple Intelligence served on the loopback, a note classified without leaving the Mac).

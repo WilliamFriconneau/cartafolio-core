@@ -13,7 +13,7 @@ RUN apk add --no-cache tzdata curl poppler-utils \
       aarch64) T=aarch64-unknown-linux-musl ;; \
       *) echo "unsupported architecture ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac \
- && base="https://github.com/WilliamFriconneau/silice-core/releases/download/v${MEMCP_VERSION}" \
+ && base="https://github.com/WilliamFriconneau/pensine-core/releases/download/v${MEMCP_VERSION}" \
  && cd /tmp && curl -fsSLO "${base}/SHA256SUMS" \
  && for b in memcp memcp-manager memcp-janitor memcp-sync; do \
       f="${b}-v${MEMCP_VERSION}-${T}"; \
@@ -21,7 +21,7 @@ RUN apk add --no-cache tzdata curl poppler-utils \
       grep " ${f}\$" SHA256SUMS | sha256sum -c -; \
       install -m 0755 "${f}" "/usr/bin/${b}"; \
     done \
- && for b in memcp memcp-manager memcp-sync; do ln -s "${b}" "/usr/bin/silice${b#memcp}"; done \
+ && for b in memcp memcp-manager memcp-sync; do ln -s "${b}" "/usr/bin/pensine${b#memcp}" && ln -s "${b}" "/usr/bin/silice${b#memcp}" || exit 1; done \
  && rm -f /tmp/*
 # The library reads the text of a PDF with this program (a scanned book needs an OCR: see docs/LIBRARY.md).
 ENV MEMCP_PDF_TEXT_COMMAND="pdftotext -layout {} -"

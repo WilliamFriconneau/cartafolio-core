@@ -102,7 +102,7 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         .or(existing)
         .unwrap_or_else(|| target_config(&a));
 
-    println!("Silice setup\n");
+    println!("Pensine setup\n");
     let default_data = a
         .data
         .clone()

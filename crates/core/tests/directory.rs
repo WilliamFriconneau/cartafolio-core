@@ -51,9 +51,15 @@ fn a_node_writes_its_own_entry_with_its_name_and_the_program_version() -> Res {
     // The first exchange persists the same default name as server startup.
     let b = Brain::init(&t.path().join("anon"), &[], Language::English)?;
     directory::touch_self(&b, NOW)?;
-    assert_eq!(directory::stored_own_name(&b)?.as_deref(), Some("Silice"));
-    assert_eq!(directory::own_name(&b)?, "Silice");
+    assert_eq!(directory::stored_own_name(&b)?.as_deref(), Some("Pensine"));
+    assert_eq!(directory::own_name(&b)?, "Pensine");
     assert!(directory::set_own_name(&b, "  ").is_err());
+
+    for name in ["Silice", "MemCP"] {
+        directory::set_own_name(&b, name)?;
+        directory::touch_self(&b, NOW)?;
+        assert_eq!(directory::own_name(&b)?, name);
+    }
     Ok(())
 }
 

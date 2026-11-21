@@ -1,23 +1,23 @@
-# Silice
+# Pensine
 
-Release installers put `silice`, `silice-manager`, and `silice-sync` alongside their `memcp` counterparts. On Linux this is `~/.local/bin` for a user install, `/usr/local/bin` for `--system`, or `/usr/bin` for a package. On macOS it is `~/Library/Application Support/MemCP/bin`. On Windows the aliases are `.exe` files in `%LOCALAPPDATA%\MemCP\bin`. A custom install location takes precedence.
+Release installers provide `pensine`, `pensine-manager`, and `pensine-sync`. The corresponding `silice` and `memcp` commands still work. On Linux this is `~/.local/bin` for a user install, `/usr/local/bin` for `--system`, or `/usr/bin` for a package. On macOS it is `~/Library/Application Support/MemCP/bin`. On Windows the aliases are `.exe` files in `%LOCALAPPDATA%\MemCP\bin`. A custom install location takes precedence.
 
 **The external hard drive for your AIs.**
 
-Apple sold *personal context* as the heart of its new Siri; in Europe we do not have it. We have intelligence anyway: Silice builds your personal context and your memory on your own machines, as a network of nodes, and lets the model of your choice use it (Claude, a local model, any MCP client).
+Apple sold *personal context* as the heart of its new Siri; in Europe we do not have it. We have intelligence anyway: Pensine builds your personal context and your memory on your own machines, as a network of nodes, and lets the model of your choice use it (Claude, a local model, any MCP client).
 
 - In the car, a new idea: you say it, it is filed in the right space and lands in that space's idea box.
 - After a meeting you no longer know what you have to do: the actions are already on the space's board, each with the note it came from.
 - « What do I need to buy? »: the shopping list of your home space answers, fed by every note that mentioned a purchase, wherever it was said.
 - The boiler shows the same error for the third time: it is a target of the home space, with its signs counted day after day.
 
-AI assistants forget. Each one keeps its own scraps, in its own cloud, and none of them knows the whole person. Silice is a drive you host yourself: plug any assistant into it through [MCP](https://modelcontextprotocol.io) and they all read and write the same place. It stays yours: you decide who sees what, nothing is deleted behind your back, and nothing leaves your machines unless you connect it.
+AI assistants forget. Each one keeps its own scraps, in its own cloud, and none of them knows the whole person. Pensine is a drive you host yourself: plug any assistant into it through [MCP](https://modelcontextprotocol.io) and they all read and write the same place. It stays yours: you decide who sees what, nothing is deleted behind your back, and nothing leaves your machines unless you connect it.
 
 Keeping it simple is the point: a drive, folders, a page to look inside. Add-ons come on top. The one closest to a nurse's heart is **health through Apple Health**, and it is the only part of the app with a paid option (3 € a month); everything else is free.
 
 It is also a manager for your notes and files: your Markdown, your photos, your voice notes, organised into one memory you can browse yourself and your assistants can read.
 
-A public page presents it and its installation: **[williamfriconneau.github.io/silice-core](https://williamfriconneau.github.io/silice-core/)**, with a step-by-step guide in French at [/wiki/](https://williamfriconneau.github.io/silice-core/wiki/). The pages are written from `site/`.
+A public page presents it and its installation: **[williamfriconneau.github.io/pensine-core](https://williamfriconneau.github.io/pensine-core/)**, with a step-by-step guide in French at [/wiki/](https://williamfriconneau.github.io/pensine-core/wiki/). The pages are written from `site/`.
 
 ## Who made this, and how
 
@@ -34,7 +34,7 @@ I am a nurse. I am a much better nurse than developer, so this project is **buil
 
 ## Principles
 
-These hold for every part of Silice: the node, the apps, the tools. The screens of each app are specified in [docs/UI-SPEC.md](docs/UI-SPEC.md).
+These hold for every part of Pensine: the node, the apps, the tools. The screens of each app are specified in [docs/UI-SPEC.md](docs/UI-SPEC.md).
 
 - **One program, one memory, many machines.** A Home Assistant install, a Mac, a Windows or Linux PC each run the same complete node: the memory, its page, its janitor, its voice. Nothing is migrated from a "simple" version to a "bigger" one. A device that joins a memory is a **peer** of it: it reads and writes the person's spaces and holds a copy, kept in step with the others. Nothing only drops notes into another machine.
 - **Everything runs locally first.** Each node sorts, transcribes and summarises with the tools of its own machine: Apple Intelligence on a Mac, an iPhone or an iPad, a local model (Ollama) or a speech model on a PC. A remote model is a choice of the installation, never a default.
@@ -45,7 +45,7 @@ These hold for every part of Silice: the node, the apps, the tools. The screens 
 - **A desktop app records meetings.** On a Mac or a PC the app can record a call or a meeting and transcribe it on the machine. Recording people needs their knowledge and their agreement: tell everyone at the start and record only if they accept. The law of your country applies.
 - **A phone holds a window.** An iPhone or an iPad keeps the last thirty days and the facts marked important, syncs in the background, and shows the memory as folders in the Files app, where documents can be added. The whole memory stays on the computers and the node that is always on.
 - **Old folders are a library.** Years of a drive or of daily notes are mounted read-only and indexed, never filed or rewritten; what is searched, opened or cited is raised into the memory. Originals keep their format.
-- **Health is the one paid part, set up by a nurse.** The free app does everything above. *Silice Health* adds a health space already organised by a registered nurse: Apple Health synchronised, notes tagged by themselves, targets to follow, conditions followed over time, and the dashboards a nurse would read. The help screen, the red-flag checks and the export for a health professional (a PDF laid out as nurses hand over, SBAR) stay free.
+- **Health is the one paid part, set up by a nurse.** The free app does everything above. *Pensine Health* adds a health space already organised by a registered nurse: Apple Health synchronised, notes tagged by themselves, targets to follow, conditions followed over time, and the dashboards a nurse would read. The help screen, the red-flag checks and the export for a health professional (a PDF laid out as nurses hand over, SBAR) stay free.
 
 Built: nodes that synchronise as peers (a phone holds a window of thirty days), living boards in every space, a deterministic router whose keywords the janitor improves, the map of every peer and how it is reached. Planned, with a design written for each in [docs/](docs/): locking a space with a passphrase or a key ([ENCRYPTION.md](docs/ENCRYPTION.md)), and signed sync events ([FEDERATION.md](docs/FEDERATION.md)).
 
@@ -73,15 +73,15 @@ the core, per space.
 This repository is an app store for Home Assistant.
 
 1. Open **Settings → Apps** (older versions: **Add-ons**), then the app store.
-2. In the menu **⋮**, choose **Repositories** and add `https://github.com/WilliamFriconneau/silice-core` ([one click with My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fsilice-core)).
-3. Install **Silice**, start it, and open **Memory** from the sidebar.
+2. In the menu **⋮**, choose **Repositories** and add `https://github.com/WilliamFriconneau/pensine-core` ([one click with My Home Assistant](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FWilliamFriconneau%2Fpensine-core)).
+3. Install **Pensine**, start it, and open **Memory** from the sidebar.
 
 The first Home Assistant login becomes the administrator and gets a memory of its own. Port 8791 is not encrypted: read [docs/TAILSCALE.md](docs/TAILSCALE.md) before you connect an assistant from outside.
 
 ### One command (Linux)
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/install.sh | sh
+curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/pensine-core/main/install.sh | sh
 ```
 
 It asks where the memory should live, checks what it downloads against the published `SHA256SUMS`, runs `memcp setup` (a private data folder, your first spaces, `memcp.toml`), can run the node as a service of your own user (nothing exposed: it listens on the loopback), and prints the address of the page and one address with the key for an assistant. Read it first if you like; `--help` lists the options.
@@ -90,7 +90,7 @@ As a system service, with a Debian or Arch package and hardened systemd units, a
 
 ### macOS and Windows
 
-**On a Mac, the Silice app is the recommended way** (Mac App Store, once published): it runs the node for you, keeps the keys in the iCloud Keychain so that another device of the same Apple account joins your memory in one tap, and adds what only a device can do (dictation transcribed on the Mac, recording a call with everyone told). The node it runs is the one below; nothing is different in the memory.
+**On a Mac, the Pensine app is the recommended way** (Mac App Store, once published): it runs the node for you, keeps the keys in the iCloud Keychain so that another device of the same Apple account joins your memory in one tap, and adds what only a device can do (dictation transcribed on the Mac, recording a call with everyone told). The node it runs is the one below; nothing is different in the memory.
 
 The releases carry `memcp`, `memcp-janitor` and `memcp-sync` for macOS and Windows. Everything builds and its tests pass on both in CI. On Windows, read [docs/SPACES.md](docs/SPACES.md) for what differs.
 
@@ -100,7 +100,7 @@ On the page, press **Connect an assistant**: the wizard gives you the address an
 
 ## Join a node
 
-Press **Join a Silice network** on the page. A phone or a computer scans the QR code, or finds the node by itself on your network or your tailnet (`memcp intake discover`) and asks to join; you compare three words on both screens and allow it. Details in [docs/DISCOVERY.md](docs/DISCOVERY.md).
+Press **Join a Pensine network** on the page. A phone or a computer scans the QR code, or finds the node by itself on your network or your tailnet (`pensine intake discover`) and asks to join; you compare three words on both screens and allow it. Details in [docs/DISCOVERY.md](docs/DISCOVERY.md).
 
 ## Safe by default
 
@@ -112,4 +112,4 @@ A node listens on the loopback only. Keys are shown once and only their digest i
 
 ## License
 
-**AGPL-3.0-or-later**, with a commercial licence available. See `LICENSE`, `NOTICE` and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md). You may use, study, change and share Silice, including at work; if you run a modified version for others over a network, the AGPL asks you to offer them its source. To build it into something you do not want to open, you need a commercial licence. Versions 0.23.1 and earlier were released under Apache-2.0 and stay available under it.
+**AGPL-3.0-or-later**, with a commercial licence available. See `LICENSE`, `NOTICE` and [COMMERCIAL-LICENSE.md](COMMERCIAL-LICENSE.md). You may use, study, change and share Pensine, including at work; if you run a modified version for others over a network, the AGPL asks you to offer them its source. To build it into something you do not want to open, you need a commercial licence. Versions 0.23.1 and earlier were released under Apache-2.0 and stay available under it.

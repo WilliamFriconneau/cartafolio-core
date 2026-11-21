@@ -4,7 +4,7 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 
 | Add-on option | `memcp.toml` | Command line | Note |
 |---|---|---|---|
-| `node_name` | `node_name` | `serve --node-name` | Defaults to `Silice` when no name is set. |
+| `node_name` | `node_name` | `serve --node-name` | Defaults to `Pensine` when no name is set. |
 | `language` | `language` | `setup --language`, `init --language` | Written once into the new memory. |
 | `strict_write_agents` | `strict_write_agents` | `--strict-write-agents NAME,...` | Require a read within 30 minutes before selected MCP writes. Empty by default. |
 | `admins` | `admins` | `serve --admins` | Logins for the ingress listener (Home Assistant). On Linux the page is opened by console key or tailnet identity, so it is rarely needed. |

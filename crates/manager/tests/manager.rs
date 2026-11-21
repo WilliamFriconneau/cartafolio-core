@@ -162,16 +162,18 @@ fn two_people(d: &Dir) -> Result<Manager, Box<dyn Error>> {
 }
 
 #[test]
-fn silice_discovery_matches_memcp_on_the_manager() -> Res {
+fn discovery_aliases_match_on_the_manager() -> Res {
     let d = Dir::new("discovery-alias");
     let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
-    let old = m.handle(&rq("GET", "/.well-known/memcp", &[], ""));
-    let new = m.handle(&rq("GET", "/.well-known/silice", &[], ""));
-    assert_eq!(old.status, 200);
-    assert_eq!(new.status, old.status);
-    assert_eq!(new.headers, old.headers);
-    assert_eq!(new.body, old.body);
-    assert_eq!(new.body_json()["product"], "silice");
+    let new = m.handle(&rq("GET", "/.well-known/pensine", &[], ""));
+    assert_eq!(new.status, 200);
+    for path in ["/.well-known/silice", "/.well-known/memcp"] {
+        let alias = m.handle(&rq("GET", path, &[], ""));
+        assert_eq!(alias.status, new.status);
+        assert_eq!(alias.headers, new.headers);
+        assert_eq!(alias.body, new.body);
+    }
+    assert_eq!(new.body_json()["product"], "pensine");
     assert_eq!(new.body_json()["service"], "memcp");
     Ok(())
 }
@@ -1142,10 +1144,10 @@ fn a_restored_manager_keeps_the_name_already_stored_in_its_memory() -> Res {
     let old = Dir::new("before-import");
     let restored = Dir::new("after-import");
     let first = Manager::open(old.path(), options()).map_err(|e| e.1)?;
-    assert_eq!(first.node_name(), "Silice");
+    assert_eq!(first.node_name(), "Pensine");
     assert_eq!(
         memcp_core::directory::stored_own_name(&first.registry().brain)?.as_deref(),
-        Some("Silice"),
+        Some("Pensine"),
     );
     let mut explicit = options();
     explicit.node_name = Some("Atelier".into());

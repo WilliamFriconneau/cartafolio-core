@@ -2,8 +2,8 @@
 # Where it goes and how many are kept: backup_dir and backup_keep in /etc/memcp/memcp.toml
 # (by default /var/backups/memcp, 14 kept: the same as `memcp backup --keep 14`).
 [Unit]
-Description=MemCP backup
-Documentation=https://github.com/WilliamFriconneau/silice-core/blob/main/docs/LINUX.md
+Description=Pensine backup
+Documentation=https://github.com/WilliamFriconneau/pensine-core/blob/main/docs/LINUX.md
 ConditionPathExists=/var/lib/memcp/control.sqlite
 
 [Service]

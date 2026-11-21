@@ -97,25 +97,23 @@ pub use recover::Recovered;
 pub use schema::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 pub use space::Space;
 
-/// Environment variable aliases for Silice.
+/// Environment variable aliases for Pensine.
 pub mod env {
     use std::env::{self, VarError};
     use std::ffi::OsString;
 
     fn lookup(name: &str, get: impl Fn(&str) -> Option<OsString>) -> Option<OsString> {
-        if let Some(suffix) = name
-            .strip_prefix("MEMCP_")
-            .or_else(|| name.strip_prefix("SILICE_"))
-        {
-            get(&format!("SILICE_{suffix}"))
-                .filter(|value| !value.is_empty())
-                .or_else(|| get(&format!("MEMCP_{suffix}")).filter(|value| !value.is_empty()))
+        let prefixes = ["PENSINE_", "SILICE_", "MEMCP_"];
+        if let Some(suffix) = prefixes.iter().find_map(|prefix| name.strip_prefix(prefix)) {
+            prefixes.iter().find_map(|prefix| {
+                get(&format!("{prefix}{suffix}")).filter(|value| !value.is_empty())
+            })
         } else {
             get(name)
         }
     }
 
-    /// Reads a variable, preferring a nonempty `SILICE_` value over `MEMCP_`.
+    /// Reads the first nonempty value in PENSINE_, SILICE_, MEMCP_ order.
     pub fn var_os(name: &str) -> Option<OsString> {
         lookup(name, |key| env::var_os(key))
     }
@@ -128,7 +126,7 @@ pub mod env {
             .map_err(VarError::NotUnicode)
     }
 
-    /// Sets both spellings on a child command.
+    /// Sets all three spellings on a child command.
     pub fn set_child<'a>(
         command: &'a mut std::process::Command,
         suffix: &str,
@@ -137,6 +135,7 @@ pub mod env {
         command
             .env(format!("MEMCP_{suffix}"), value.as_ref())
             .env(format!("SILICE_{suffix}"), value.as_ref())
+            .env(format!("PENSINE_{suffix}"), value.as_ref())
     }
 
     #[cfg(test)]
@@ -144,21 +143,24 @@ pub mod env {
         use super::*;
 
         #[test]
-        fn silice_environment_aliases() {
-            for (new, old, expected) in [
-                (Some("new"), Some("old"), "new"),
-                (Some("new"), None, "new"),
-                (None, Some("old"), "old"),
-                (Some(""), Some("old"), "old"),
+        fn environment_alias_precedence() {
+            for (pensine, silice, memcp, expected) in [
+                (Some("new"), Some("middle"), Some("old"), Some("new")),
+                (None, Some("middle"), Some("old"), Some("middle")),
+                (Some(""), Some("middle"), Some("old"), Some("middle")),
+                (None, Some(""), Some("old"), Some("old")),
+                (None, None, Some("old"), Some("old")),
+                (Some(""), None, Some(""), None),
             ] {
-                for name in ["MEMCP_TEST", "SILICE_TEST"] {
+                for name in ["PENSINE_TEST", "SILICE_TEST", "MEMCP_TEST"] {
                     assert_eq!(
                         lookup(name, |key| match key {
-                            "SILICE_TEST" => new.map(Into::into),
-                            "MEMCP_TEST" => old.map(Into::into),
+                            "PENSINE_TEST" => pensine.map(Into::into),
+                            "SILICE_TEST" => silice.map(Into::into),
+                            "MEMCP_TEST" => memcp.map(Into::into),
                             _ => None,
                         }),
-                        Some(expected.into()),
+                        expected.map(Into::into),
                     );
                 }
             }
@@ -170,23 +172,31 @@ pub mod env {
 pub fn program_name(
     argv0: &std::path::Path,
     legacy: &'static str,
-    alias: &'static str,
+    silice: &'static str,
+    pensine: &'static str,
 ) -> &'static str {
-    if argv0.file_stem().is_some_and(|name| {
-        name.to_string_lossy()
-            .to_ascii_lowercase()
-            .starts_with("silice")
-    }) {
-        alias
+    let name = argv0
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_ascii_lowercase();
+    if name.starts_with("pensine") {
+        pensine
+    } else if name.starts_with("silice") {
+        silice
     } else {
         legacy
     }
 }
 
 /// The command name for the current process.
-pub fn invoked_as(legacy: &'static str, alias: &'static str) -> &'static str {
+pub fn invoked_as(
+    legacy: &'static str,
+    silice: &'static str,
+    pensine: &'static str,
+) -> &'static str {
     let argv0 = std::env::args_os().next().unwrap_or_default();
-    program_name(std::path::Path::new(&argv0), legacy, alias)
+    program_name(std::path::Path::new(&argv0), legacy, silice, pensine)
 }
 
 #[cfg(test)]
@@ -194,21 +204,25 @@ mod program_name_tests {
     use super::*;
 
     #[test]
-    fn silice_invocation_uses_the_filename_prefix() {
-        for (legacy, alias) in [
-            ("memcp", "silice"),
-            ("memcp-manager", "silice-manager"),
-            ("memcp-sync", "silice-sync"),
+    fn invocation_uses_the_filename_prefix() {
+        for (legacy, silice, pensine) in [
+            ("memcp", "silice", "pensine"),
+            ("memcp-manager", "silice-manager", "pensine-manager"),
+            ("memcp-sync", "silice-sync", "pensine-sync"),
         ] {
             for (argv0, expected) in [
-                (format!("/bin/{alias}.exe"), alias),
-                (format!("/bin/{}.EXE", alias.to_ascii_uppercase()), alias),
-                ("silice-custom".into(), alias),
-                (format!("/silice/{legacy}"), legacy),
+                (format!("/bin/{pensine}.exe"), pensine),
+                ("PENSINE-custom.EXE".into(), pensine),
+                (format!("/bin/{}.EXE", silice.to_ascii_uppercase()), silice),
+                ("silice-custom".into(), silice),
+                (format!("/pensine/silice/{legacy}"), legacy),
                 ("renamed".into(), legacy),
                 (String::new(), legacy),
             ] {
-                assert_eq!(program_name(argv0.as_ref(), legacy, alias), expected);
+                assert_eq!(
+                    program_name(argv0.as_ref(), legacy, silice, pensine),
+                    expected
+                );
             }
         }
     }

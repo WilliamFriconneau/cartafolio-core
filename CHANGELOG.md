@@ -1,5 +1,10 @@
 # Changelog
 
+## 20261122.1.0
+
+- **The product is now called Pensine** (Silice for a day, MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.
+- **New names, old names kept.** `PENSINE_*` environment variables, `pensine.toml`, `/.well-known/pensine` and a `pensine` command are accepted first; the Silice and MemCP ones keep working.
+
 ## 20261121.3.0
 
 - **Trace or drop keeps drafts.** Filtering, opening a note, attaching files and recording audio preserve the draft. A confirmed save clears the submitted text.

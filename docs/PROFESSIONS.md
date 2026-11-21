@@ -109,4 +109,4 @@ on the note; any other word is a tag of its own. See [AUTOTAG.md](AUTOTAG.md).
 
 `memcp skills-export DIR` writes the professions as a plugin marketplace for Claude (`.claude-plugin/marketplace.json`, one
 plugin, one `SKILL.md` per profile), built from the registry so that a new version of the node regenerates it. The tools are
-those of the Silice connection; the skill only carries the profession.
+those of the Pensine connection; the skill only carries the profession.

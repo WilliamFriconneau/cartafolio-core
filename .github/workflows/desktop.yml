@@ -29,8 +29,10 @@ jobs:
         run: |
           APP="$HOME/Library/Application Support/MemCP"
           for suffix in "" -manager -sync; do
-            test -x "$APP/bin/silice$suffix" || exit 1
-            test "$(readlink "$APP/bin/silice$suffix")" = "memcp$suffix" || exit 1
+            for brand in pensine silice; do
+              test -x "$APP/bin/$brand$suffix" || exit 1
+              test "$(readlink "$APP/bin/$brand$suffix")" = "memcp$suffix" || exit 1
+            done
           done
           M="$APP/bin/memcp"
           URL=http://127.0.0.1:18791/mcp/desktop
@@ -73,10 +75,12 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:LOCALAPPDATA 'MemCP'
           foreach ($suffix in @('', '-manager', '-sync')) {
-            $alias = Join-Path $root "bin\silice$suffix.exe"
             $original = Join-Path $root "bin\memcp$suffix.exe"
-            if ((Get-FileHash -LiteralPath $alias).Hash -ne (Get-FileHash -LiteralPath $original).Hash) {
-              throw "wrong alias: $alias"
+            foreach ($brand in @('pensine', 'silice')) {
+              $alias = Join-Path $root "bin\$brand$suffix.exe"
+              if ((Get-FileHash -LiteralPath $alias).Hash -ne (Get-FileHash -LiteralPath $original).Hash) {
+                throw "wrong alias: $alias"
+              }
             }
           }
           $m = Join-Path $root 'bin\memcp.exe'

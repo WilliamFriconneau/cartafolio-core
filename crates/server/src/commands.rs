@@ -132,14 +132,14 @@ MEMCP_AGENT) with a connection key does the note commands through the assistants
 Exit codes: 0 done, 1 failed, 2 wrong command line, 3 key refused, 4 key lacks the rights, 5 node unreachable, 6 odd answer.
 
 For an assistant that signs in, use Connect an assistant on your page to make a one-time code for the public
-consent page. Assistants that take a key and devices use keys. Installers put silice aliases beside the memcp binaries.
+consent page. Assistants that take a key and devices use keys. Installers provide pensine and silice aliases for the memcp binaries.
 
-Settings come from silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
+Settings come from pensine.toml, silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
 /// The command name printed by the CLI.
 pub fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp", "silice")
+    memcp_core::invoked_as("memcp", "silice", "pensine")
 }
 
 /// Help for the current command name.

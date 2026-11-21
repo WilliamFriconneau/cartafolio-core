@@ -921,8 +921,8 @@ pub fn locate_with_data(
         .find(|p| p.is_file()))
 }
 
-fn settings_in(dir: &Path) -> [PathBuf; 2] {
-    [dir.join("silice.toml"), dir.join("memcp.toml")]
+fn settings_in(dir: &Path) -> [PathBuf; 3] {
+    ["pensine.toml", "silice.toml", "memcp.toml"].map(|name| dir.join(name))
 }
 
 fn config_home() -> Option<PathBuf> {
@@ -939,10 +939,18 @@ pub fn user_target() -> Option<PathBuf> {
 
 /// The places looked at without being told, the user's first.
 pub fn default_places() -> Vec<PathBuf> {
-    config_home()
+    let roots: Vec<_> = config_home()
         .into_iter()
         .chain([PathBuf::from("/etc")])
-        .flat_map(|root| [root.join("memcp"), root.join("silice")])
+        .collect();
+    roots
+        .iter()
+        .map(|root| root.join("pensine"))
+        .chain(
+            roots
+                .iter()
+                .flat_map(|root| [root.join("memcp"), root.join("silice")]),
+        )
         .flat_map(|dir| settings_in(&dir))
         .collect()
 }
@@ -1035,13 +1043,13 @@ mod alias_tests {
     use super::*;
 
     #[test]
-    fn silice_toml_wins_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
+    fn config_alias_precedence_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
         let dir = std::env::temp_dir().join(format!(
-            "silice-config-{}",
+            "pensine-config-{}",
             memcp_core::util::random_base32(16)
         ));
         std::fs::create_dir_all(&dir)?;
-        let [new, old] = settings_in(&dir);
+        let [new, alias, old] = settings_in(&dir);
         let find = || settings_in(&dir).into_iter().find(|p| p.is_file());
         std::fs::write(&new, "")?;
         assert_eq!(find(), Some(new.clone()));
@@ -1049,7 +1057,11 @@ mod alias_tests {
         std::fs::write(&old, "")?;
         assert_eq!(find(), Some(new.clone()));
         assert_eq!(locate(old.to_str())?, Some(old.clone()));
+        std::fs::write(&alias, "")?;
+        assert_eq!(find(), Some(new.clone()));
         std::fs::remove_file(new)?;
+        assert_eq!(find(), Some(alias.clone()));
+        std::fs::remove_file(alias)?;
         assert_eq!(find(), Some(old.clone()));
         assert_eq!(locate(old.to_str())?, Some(old));
         std::fs::remove_dir_all(dir)?;

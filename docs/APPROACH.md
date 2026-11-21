@@ -1,6 +1,6 @@
 # The approach: human memory first
 
-Silice is a memory for AI assistants that starts from a person, not from a tool. This page says why it is built the way it is, so that you can judge it, audit it and change it. Where the design is going is in [MODEL.md](MODEL.md); what the code does today is in the [README](../README.md).
+Pensine is a memory for AI assistants that starts from a person, not from a tool. This page says why it is built the way it is, so that you can judge it, audit it and change it. Where the design is going is in [MODEL.md](MODEL.md); what the code does today is in the [README](../README.md).
 
 ## The problem
 

@@ -1,5 +1,5 @@
 <#
-MemCP on Windows: the node (`memcp serve`) as a task of your user, started at logon and again after a crash, with its
+Pensine on Windows: the node (`memcp serve`) as a task of your user, started at logon and again after a crash, with its
 log. The node reads the voice notes and watches the folders itself, as memcp.toml says. Nothing needs an administrator
 and nothing is put outside your own folders.
 
@@ -7,7 +7,7 @@ and nothing is put outside your own folders.
   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall    remove the tasks and the programs; the memory is kept
 
 What goes where:
-  %LOCALAPPDATA%\MemCP\bin         memcp executables and their silice aliases
+  %LOCALAPPDATA%\MemCP\bin         memcp executables and their pensine and silice aliases
   %LOCALAPPDATA%\MemCP\data        the memory (a folder of databases: back it up, it is yours)
   %LOCALAPPDATA%\MemCP\memcp.toml  the node's settings: voice notes, watched folders (readable by you only)
   %LOCALAPPDATA%\MemCP\keys        the keys of this computer and of its assistants (readable by you only)
@@ -19,29 +19,29 @@ Assistants that take a key can use keys\desktop.key. Assistants that sign in use
 [CmdletBinding()]
 param(
     [switch]$Yes,
-    [string]$Version = $env:MEMCP_VERSION,
+    [string]$Version = (@($env:PENSINE_VERSION, $env:SILICE_VERSION, $env:MEMCP_VERSION) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
     # Take the programs from this folder (a build of your own) instead of a release.
-    [string]$From = $env:MEMCP_FROM,
-    [string]$Language = $(if ($env:MEMCP_LANGUAGE) { $env:MEMCP_LANGUAGE } else { 'en' }),
-    [string]$Spaces = $(if ($env:MEMCP_SPACES) { $env:MEMCP_SPACES } else { 'personal,work,health' }),
-    [int]$Port = $(if ($env:MEMCP_PORT) { [int]$env:MEMCP_PORT } else { 8791 }),
+    [string]$From = (@($env:PENSINE_FROM, $env:SILICE_FROM, $env:MEMCP_FROM) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
+    [string]$Language = (@($env:PENSINE_LANGUAGE, $env:SILICE_LANGUAGE, $env:MEMCP_LANGUAGE, 'en') | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
+    [string]$Spaces = (@($env:PENSINE_SPACES, $env:SILICE_SPACES, $env:MEMCP_SPACES, 'personal,work,health') | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
+    [int]$Port = [int](@($env:PENSINE_PORT, $env:SILICE_PORT, $env:MEMCP_PORT, 8791) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
     # No longer used (the node serves the assistants itself): the old name is read, said, and ignored.
-    [int]$BridgePort = $(if ($env:MEMCP_BRIDGE_PORT) { [int]$env:MEMCP_BRIDGE_PORT } else { 0 }),
+    [int]$BridgePort = [int](@($env:PENSINE_BRIDGE_PORT, $env:SILICE_BRIDGE_PORT, $env:MEMCP_BRIDGE_PORT, 0) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
     # Voice notes read on this machine by whisper.cpp (whisper-cli.exe and ffmpeg.exe on the PATH) with this model,
-    [string]$WhisperModel = $env:MEMCP_WHISPER_MODEL,
+    [string]$WhisperModel = (@($env:PENSINE_WHISPER_MODEL, $env:SILICE_WHISPER_MODEL, $env:MEMCP_WHISPER_MODEL) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
     # or by a speech service of the OpenAI kind (key in MEMCP_SPEECH_API_KEY): the recordings leave this machine for it.
-    [string]$SpeechApi = $env:MEMCP_SPEECH_API,
+    [string]$SpeechApi = (@($env:PENSINE_SPEECH_API, $env:SILICE_SPEECH_API, $env:MEMCP_SPEECH_API) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1),
     # Install the programs and the memory, leave nothing running.
     [switch]$NoTasks,
     [switch]$Uninstall,
     # With -Uninstall: also delete the memory and the logs.
     [switch]$Purge,
-    [string]$Root = $(if ($env:MEMCP_ROOT) { $env:MEMCP_ROOT } else { Join-Path $env:LOCALAPPDATA 'MemCP' })
+    [string]$Root = (@($env:PENSINE_ROOT, $env:SILICE_ROOT, $env:MEMCP_ROOT, (Join-Path $env:LOCALAPPDATA 'MemCP')) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1)
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
 
-$Repo = if ($env:MEMCP_REPO) { $env:MEMCP_REPO } else { 'WilliamFriconneau/silice-core' }
+$Repo = (@($env:PENSINE_REPO, $env:SILICE_REPO, $env:MEMCP_REPO, 'WilliamFriconneau/pensine-core') | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1)
 $Bin = Join-Path $Root 'bin'
 $Data = Join-Path $Root 'data'
 $OldBridge = Join-Path $Root 'bridge'
@@ -55,7 +55,7 @@ $OldTasks = @('MemCP bridge', 'MemCP transcribe')
 $Programs = @('memcp', 'memcp-janitor')
 $Companions = @('memcp-manager', 'memcp-sync')
 $AliasSources = @('memcp') + $Companions
-$Aliases = @('silice', 'silice-manager', 'silice-sync')
+$Aliases = @('pensine', 'pensine-manager', 'pensine-sync', 'silice', 'silice-manager', 'silice-sync')
 $ShippedPrograms = $Programs + $Companions + $Aliases
 $Target = 'x86_64-pc-windows-msvc'
 $NodeUrl = "http://127.0.0.1:$Port"
@@ -121,7 +121,7 @@ function Confirm-ProgramsReplaceable {
 
 # --- uninstall -----------------------------------------------------------------------------------------------
 if ($Uninstall) {
-    Step 'Removing MemCP from this computer'
+    Step 'Removing Pensine from this computer'
     Stop-Tasks
     foreach ($d in @($Bin, $Keys, $OldBridge)) { if (Test-Path $d) { Remove-Item -Recurse -Force $d } }
     if (Test-Path $Settings) { Remove-Item -Force $Settings }
@@ -139,7 +139,7 @@ if ($Uninstall) {
     exit 0
 }
 
-Step 'MemCP for Windows'
+Step 'Pensine for Windows'
 Say 'A durable memory for your AI assistants, kept on this computer.'
 
 # --- choices -------------------------------------------------------------------------------------------------
@@ -203,7 +203,9 @@ if ($From) {
 foreach ($p in $AliasSources) {
     $source = Join-Path $Bin "$p.exe"
     if (Test-Path -LiteralPath $source -PathType Leaf) {
-        Copy-Item -Force -LiteralPath $source -Destination (Join-Path $Bin ("silice" + $p.Substring(5) + ".exe"))
+        foreach ($brand in @('pensine', 'silice')) {
+            Copy-Item -Force -LiteralPath $source -Destination (Join-Path $Bin ($brand + $p.Substring(5) + ".exe"))
+        }
     }
 }
 $Memcp = Join-Path $Bin 'memcp.exe'
@@ -263,7 +265,7 @@ if ((-not (Test-Path $Settings)) -or $WhisperModel -or $SpeechApi) {
         $lines += "transcribe_model = $(& $q $WhisperModel)", "transcribe_cmd = $(& $q $whisper)", "transcribe_ffmpeg = $(& $q $ffmpeg)"
     } elseif ($SpeechApi) {
         $lines += "transcribe_api_url = `"$SpeechApi`""
-        $speechKey = if ($env:MEMCP_SPEECH_API_KEY) { $env:MEMCP_SPEECH_API_KEY } else { $oldSpeechKey }
+        $speechKey = (@($env:PENSINE_SPEECH_API_KEY, $env:SILICE_SPEECH_API_KEY, $env:MEMCP_SPEECH_API_KEY, $oldSpeechKey) | Where-Object { $_ -ne $null -and $_ -ne "" } | Select-Object -First 1)
         if ($speechKey) {
             $keyFile = Join-Path $Keys 'speech.key'
             Set-Content -NoNewline -Encoding ascii -Path $keyFile -Value $speechKey
@@ -378,7 +380,7 @@ An assistant that takes a key can use $NodeUrl/mcp/$Connection. Its key is in
 Devices use their own pairing keys. For an assistant that signs in, use Connect an assistant on
 your page and enter its one-time invitation code on the public consent page.
 
-The silice.exe, silice-manager.exe and silice-sync.exe aliases are installed in $Bin.
+The pensine.exe, pensine-manager.exe and pensine-sync.exe commands and their silice aliases are installed in $Bin.
 
 Voice notes and watched folders are set in $Settings (memcp config example lists the options);
 restart the node after a change.

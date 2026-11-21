@@ -1,8 +1,8 @@
-# The MemCP server, as a system service run by its own unprivileged user.
+# The Pensine server, as a system service run by its own unprivileged user.
 # Settings: /etc/memcp/memcp.toml (docs/LINUX.md). First run: sudo memcp setup --system
 [Unit]
-Description=MemCP, a durable memory for AI assistants
-Documentation=https://github.com/WilliamFriconneau/silice-core/blob/main/docs/LINUX.md
+Description=Pensine, a durable memory for AI assistants
+Documentation=https://github.com/WilliamFriconneau/pensine-core/blob/main/docs/LINUX.md
 After=network-online.target
 Wants=network-online.target
 # Nothing to serve before `memcp setup` has made the memory.

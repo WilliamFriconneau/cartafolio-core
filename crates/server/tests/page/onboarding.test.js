@@ -302,7 +302,9 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   await page.evaluate(() => { location.hash = "#space/owner-work"; });
   await page.waitForSelector("#space-tabs button");
   await page.click("#space-tabs button:has-text('Graph')");
-  await page.waitForSelector("#graph-svg .gnode");
+  // The graph of the home page may still be drawn: wait for the one of this space.
+  await page.waitForSelector("#graph-svg .gnode[data-id='space:owner-work']");
+  await sleep(300);
   const mine = await page.locator("#graph-svg .gnode").evaluateAll(ns => ns.map(n => n.getAttribute("data-id")));
   check("the graph of a space holds that space only, with its tags and keywords", mine.includes("space:owner-work") && !mine.includes("space:owner-health") && mine.includes("keyword:atlas"), mine.join(" "));
   await page.click(".gnode[data-id='keyword:atlas'] .shape");

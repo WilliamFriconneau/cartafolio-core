@@ -4,10 +4,10 @@ members = ["crates/core", "crates/finances", "crates/server", "crates/manager", 
 exclude = ["vendor/tiny_http"]
 
 [workspace.package]
-version = "20261121.3.0"
+version = "20261122.1.0"
 edition = "2024"
 license = "AGPL-3.0-or-later"
-repository = "https://github.com/WilliamFriconneau/silice-core"
+repository = "https://github.com/WilliamFriconneau/pensine-core"
 rust-version = "1.89"
 
 [workspace.lints.rust]

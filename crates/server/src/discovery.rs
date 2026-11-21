@@ -1,7 +1,7 @@
 //! Finding a node without typing its address.
 //!
 //! A node that listens beyond the loopback **advertises itself** on the local network (mDNS, the service `_memcp._tcp`),
-//! with its name and its version, and answers `GET /.well-known/memcp` with the same, so that what is found can be
+//! with its name and its version, and answers `GET /.well-known/pensine` with the same, so that what is found can be
 //! checked. A device that finds it shows it to the person, who asks to join (join.rs) and is answered by a person.
 //! Advertising gives no access: it says that a node is here, nothing of what it holds, and joining always needs a yes.
 
@@ -13,11 +13,11 @@ use serde_json::{Value, json};
 /// The service type nodes advertise.
 pub const SERVICE: &str = "_memcp._tcp.local.";
 
-/// What `GET /.well-known/memcp` says.
+/// What `GET /.well-known/pensine` and its aliases say.
 pub fn well_known(name: &str) -> Value {
     json!({
         "service": "memcp",
-        "product": "silice",
+        "product": "pensine",
         "version": env!("CARGO_PKG_VERSION"),
         "name": name,
         "join": "/join",
@@ -50,7 +50,7 @@ pub fn advertise(port: u16, name: &str) -> Option<ServiceDaemon> {
     let mut txt: HashMap<String, String> = HashMap::new();
     txt.insert("v".into(), env!("CARGO_PKG_VERSION").into());
     txt.insert("join".into(), "/join".into());
-    txt.insert("wk".into(), "/.well-known/memcp".into());
+    txt.insert("wk".into(), "/.well-known/pensine".into());
     let host = format!("{}.local.", host_label(name));
     let info = ServiceInfo::new(SERVICE, name, &host, "", port, txt)
         .ok()?

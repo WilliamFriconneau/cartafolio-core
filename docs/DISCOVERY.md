@@ -2,7 +2,7 @@
 
 ## Finding
 
-A node that listens beyond the loopback **advertises itself** on the local network (mDNS, the service `_memcp._tcp`) with its name and its version, and answers `GET /.well-known/memcp` with the same and its node id (`id`, `ABCD-EFGH-IJKL`: it names the node and opens nothing; see FEDERATION.md, « Adding a node »), so that what a device finds can be checked. The node and the manager turn it on with `--advertise --node-name NAME`.
+A node that listens beyond the loopback **advertises itself** on the local network (mDNS, the service `_memcp._tcp`) with its name and its version, and answers `GET /.well-known/pensine` with the same and its node id (`id`, `ABCD-EFGH-IJKL`: it names the node and opens nothing; see FEDERATION.md, « Adding a node »), so that what a device finds can be checked. The node and the manager turn it on with `--advertise --node-name NAME`.
 
 A Home Assistant app runs in a container, which cannot advertise itself on the network: a device finds it by the names a Home Assistant installation answers to (`homeassistant.local`, `memcp.local`), which `discover` tries, and by the tailnet. Advertising by the app itself would need the host network, and is not done.
 
@@ -12,7 +12,7 @@ Advertising says that a node is here, and nothing of what it holds. It gives no 
 
 ## Joining
 
-1. The device asks the node (the page's **Join a Silice network**, `memcp-sync --join http://HOST:8791 --name "My laptop"`, or an app from its welcome screen).
+1. The device asks the node (the page's **Join a Pensine network**, `pensine-sync --join http://HOST:8791 --name "My laptop"`, or an app from its welcome screen).
 2. The node shows the request on its page, and in the notifications of its apps, with **three words**. The device shows the same three words.
 3. The person compares them and presses **Allow**. Nothing is typed.
 4. The device receives a connection of its own, once, and keeps it where only it can read (a file of the node's `peers/` folder, or the Keychain). It reaches the person's Inbox and nothing else until the person says otherwise.

@@ -1,5 +1,5 @@
 [Unit]
-Description=MemCP backup, every night
+Description=Pensine backup, every night
 
 [Timer]
 OnCalendar=*-*-* 02:30:00

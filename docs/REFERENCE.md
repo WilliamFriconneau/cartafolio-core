@@ -127,7 +127,7 @@ Any MCP client that speaks Streamable HTTP with a bearer token works the same wa
 
 ### Claude Code on the same computer
 
-The memory runs on this machine (the Silice app is open, or `memcp serve` runs): Claude Code talks to it on the loopback, and
+The memory runs on this machine (the Pensine app is open, or `memcp serve` runs): Claude Code talks to it on the loopback, and
 nothing is exposed on the network.
 
 1. **Recommended: the local node, by MCP.** In the app, *Connections* → *Connect an assistant* (or `memcp connect` on the
@@ -172,7 +172,7 @@ The optional `strict_write_agents` setting requires selected MCP connections to 
 
 ## Node discovery
 
-`GET /.well-known/silice` and `GET /.well-known/memcp` serve the same response under the same listener and access rules. Both return `"service": "memcp"` and `"product": "silice"`.
+`GET /.well-known/pensine` and its aliases `GET /.well-known/silice` and `GET /.well-known/memcp` serve the same response under the same listener and access rules. All three return `"service": "memcp"` and `"product": "pensine"`.
 
 ## Is it healthy?
 

@@ -658,7 +658,7 @@ pub fn export(
         serde_json::to_string_pretty(&json!({
             "name": MARKETPLACE,
             "description": desc,
-            "owner": { "name": "Silice" },
+            "owner": { "name": "Pensine" },
             "plugins": [{ "name": MARKETPLACE, "description": desc, "source": format!("./plugins/{MARKETPLACE}"), "category": "productivity", "version": version }],
         }))? + "\n",
     )?;
