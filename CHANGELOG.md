@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 20261121.1.0
 
 - **New names, old names kept.** `CARTAFOLIO_*` environment variables, `cartafolio.toml`, `/.well-known/cartafolio` and a `cartafolio` command are accepted next to the old ones; the old ones keep working.
 
