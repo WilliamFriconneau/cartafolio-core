@@ -113,7 +113,7 @@ function Confirm-ProgramsReplaceable {
     }
     $probe = Join-Path $Bin ([Guid]::NewGuid().ToString())
     try {
-        $file = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None,
+        $file = New-Object IO.FileStream($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None,
             4096, [IO.FileOptions]::DeleteOnClose)
         $file.Dispose()
     } catch { Die "cannot write to ${Bin}: $_" }

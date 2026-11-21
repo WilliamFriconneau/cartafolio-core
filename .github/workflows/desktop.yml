@@ -45,7 +45,7 @@ jobs:
             -d '{"jsonrpc":"2.0","id":2,"method":"tools/list"}' | tee answers.txt
           grep -q '"tools"' answers.txt
           "$M" --data "$APP/data" space list | tee spaces.txt
-          grep -q 'owner-a-trier' spaces.txt
+          grep -q 'owner-inbox' spaces.txt
       - name: Logs
         if: always()
         run: tail -n 50 "$HOME/Library/Logs/MemCP/"*.log || true
@@ -96,7 +96,7 @@ jobs:
           if (-not $answers.result.tools) { throw 'no tools through the node' }
           $spaces = & $m --data $data space list
           $spaces
-          if (-not ($spaces -match 'owner-a-trier')) { throw 'no Inbox' }
+          if (-not ($spaces -match 'owner-inbox')) { throw 'no Inbox' }
       - name: Logs
         if: always()
         shell: pwsh
