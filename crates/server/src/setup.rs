@@ -118,11 +118,19 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         &default_data.to_string_lossy(),
         interactive && a.data.is_none(),
     ));
+    let stored_name = if data.join("control.sqlite").is_file() {
+        let brain = Brain::open(&data).map_err(fail)?;
+        directory::stored_own_name(&brain).map_err(fail)?
+    } else {
+        None
+    };
     let node_name = ask(
         "Name of this node",
         a.node_name
             .as_deref()
-            .unwrap_or(&settings.text_or_default("node_name")),
+            .or_else(|| settings.text("node_name"))
+            .or(stored_name.as_deref())
+            .unwrap_or(config::DEFAULT_NODE_NAME),
         interactive && a.node_name.is_none(),
     );
     let language = ask(
@@ -199,7 +207,9 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
     if fresh || !person.is_empty() && me.display.is_empty() {
         users::set_display(&ctl, &me.id, &person).map_err(fail)?;
     }
-    directory::set_own_name(&brain, &node_name).map_err(fail)?;
+    if stored_name.as_deref() != Some(&node_name) {
+        directory::set_own_name(&brain, &node_name).map_err(fail)?;
+    }
     let mut granted = vec![];
     for s in brain.spaces().map_err(fail)? {
         granted.push(format!("{s}:rw"));

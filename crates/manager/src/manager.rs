@@ -132,12 +132,13 @@ impl Manager {
         Self::configure(&mut app, &opts);
         app.ingress_admins.clone_from(&opts.admins);
         app.auto_create_people = opts.auto_create_people;
+        let node_name = RwLock::new(app.node_name.clone());
         let m = Manager {
             registry: Arc::new(app),
             people_dir,
             opts,
             apps: RwLock::new(BTreeMap::new()),
-            node_name: RwLock::new("MemCP".into()),
+            node_name,
         };
         m.ensure_people()?;
         Ok(m)
@@ -145,6 +146,9 @@ impl Manager {
 
     /// What every installation here shares: the address, the origins, the OAuth redirects.
     fn configure(app: &mut App, opts: &Options) {
+        if let Some(name) = &opts.node_name {
+            app.node_name.clone_from(name);
+        }
         if let Some(u) = &opts.public_url {
             app.public_url = u.trim_end_matches('/').to_string();
         } else if let Some(u) = opts
@@ -180,6 +184,10 @@ impl Manager {
     }
 
     /// How this node calls itself when it advertises and answers `/.well-known/memcp`.
+    pub fn node_name(&self) -> String {
+        self.node_name.read().map(|n| n.clone()).unwrap_or_default()
+    }
+
     pub fn set_node_name(&self, name: &str) {
         self.node_name
             .write()
@@ -729,12 +737,9 @@ impl Handler for Manager {
                     _ => reply(&self.registry),
                 }
             }
-            ("GET", "/.well-known/memcp" | "/.well-known/cartafolio") => Response::json(
-                200,
-                &memcp_server::discovery::well_known(
-                    &self.node_name.read().map(|n| n.clone()).unwrap_or_default(),
-                ),
-            ),
+            ("GET", "/.well-known/memcp" | "/.well-known/cartafolio") => {
+                Response::json(200, &memcp_server::discovery::well_known(&self.node_name()))
+            }
             // An invitation ticket is kept by the person's installation that made it: the request goes there, else a
             // ticket made for anyone but the first administrator was « unknown ». The polls follow their request.
             ("POST", "/join") => match self.holder(|a| a.holds_join_ticket(&req.body)) {

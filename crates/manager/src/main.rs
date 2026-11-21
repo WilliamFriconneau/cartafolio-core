@@ -297,7 +297,6 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
         ));
     }
     let manager = Arc::new(Manager::open(data, options(a)?)?);
-    manager.set_node_name(flag("--node-name").unwrap_or("MemCP"));
     // Voice notes, watched folders and absorbed folders work for one person of this node: tasks of the node itself.
     let _intake = start_intake(&manager, settings);
     // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
@@ -307,7 +306,7 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             .next()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8791);
-        memcp_server::discovery::advertise(port, flag("--node-name").unwrap_or("MemCP"))
+        memcp_server::discovery::advertise(port, &manager.node_name())
     } else {
         None
     };

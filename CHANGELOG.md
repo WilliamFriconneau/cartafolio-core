@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **A new installation names itself Cartafolio.** The default node name changes; an installation that already has a name keeps it.
+
 - **The repository is now `cartafolio-core`.** The old address redirects. The release files keep their `memcp-` names.
 
 ## 20261121.1.0

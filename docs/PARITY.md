@@ -4,7 +4,7 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 
 | Add-on option | `memcp.toml` | Command line | Note |
 |---|---|---|---|
-| `node_name` | `node_name` | `serve --node-name` | |
+| `node_name` | `node_name` | `serve --node-name` | Defaults to `Cartafolio` when no name is set. |
 | `language` | `language` | `setup --language`, `init --language` | Written once into the new memory. |
 | `admins` | `admins` | `serve --admins` | Logins for the ingress listener (Home Assistant). On Linux the page is opened by console key or tailnet identity, so it is rarely needed. |
 | `new_people` | `new_people` | `memcp-manager serve --new-people` | Only for `memcp-manager` (several people on one node). `memcp serve` holds one memory and ignores it. |

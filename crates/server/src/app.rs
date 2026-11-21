@@ -123,6 +123,10 @@ pub fn listened_url(listen: &str) -> Option<String> {
 
 impl App {
     pub fn new(brain: Brain) -> App {
+        let node_name = memcp_core::directory::stored_own_name(&brain)
+            .ok()
+            .flatten()
+            .unwrap_or_else(|| crate::config::DEFAULT_NODE_NAME.into());
         App {
             brain,
             allowed_origins: vec![],
@@ -138,7 +142,7 @@ impl App {
             tailnet_users: std::collections::HashMap::new(),
             fails: Mutex::new(VecDeque::new()),
             rates: Mutex::new(HashMap::new()),
-            node_name: "MemCP".into(),
+            node_name,
             consents: Mutex::new(HashMap::new()),
             invites: Mutex::new(HashMap::new()),
             joins: Mutex::new(HashMap::new()),

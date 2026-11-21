@@ -32,7 +32,7 @@ map:
 hassio_api: false
 homeassistant_api: false
 options:
-  node_name: MemCP
+  node_name: Cartafolio
   language: en
   admins: []
   new_people: auto

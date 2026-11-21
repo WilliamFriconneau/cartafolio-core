@@ -143,6 +143,14 @@ fn start_intake(
     }
 }
 
+fn apply_node_name(app: &mut app::App, name: Option<&str>) {
+    // The name the node goes by in the peer directory: the one given, else the one it made for itself once.
+    if let Some(n) = name {
+        app.node_name = n.to_string();
+        let _ = memcp_core::directory::set_own_name(&app.brain, n);
+    }
+}
+
 fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Result<(), Failure> {
     let flag = |name: &str| a.flags.get(name).map(String::as_str);
     // Tokens travel in clear between the client and this process: only a local TLS
@@ -189,11 +197,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         // No address given: the one it listens on (the connections it makes name it).
         app.public_url = u;
     }
-    app.node_name = flag("--node-name").unwrap_or("MemCP").to_string();
-    // The name the node goes by in the peer directory: the one given, else the one it made for itself once.
-    if let Some(n) = flag("--node-name") {
-        let _ = memcp_core::directory::set_own_name(&app.brain, n);
-    }
+    apply_node_name(&mut app, flag("--node-name"));
     // How this node can be reached, from its settings: told to the other nodes in its directory entry.
     let tailnet = flag("--identity-listen")
         .map(String::from)
@@ -255,4 +259,55 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         },
         &format!("{} {}", app::NAME, app::VERSION),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use memcp_core::directory;
+
+    #[test]
+    fn node_name_defaults_only_when_no_name_is_given_or_stored() -> Result<(), String> {
+        let dir = std::env::temp_dir().join(format!(
+            "cartafolio-node-name-{}",
+            memcp_core::util::random_base32(16)
+        ));
+        let brain = Brain::init(&dir, &[], text::Language::English).map_err(|e| e.to_string())?;
+        let start = |args: &[&str], settings: &str| -> Result<app::App, String> {
+            let mut args = parse(&args.iter().map(|s| s.to_string()).collect::<Vec<_>>())
+                .map_err(|(_, message)| message)?;
+            config::fill_flags(
+                &config::Settings::parse(settings)?,
+                &mut args.flags,
+                &mut args.switches,
+            );
+            let mut app = app::App::new(Brain::open(&dir).map_err(|e| e.to_string())?);
+            apply_node_name(&mut app, args.flags.get("--node-name").map(String::as_str));
+            Ok(app)
+        };
+
+        assert_eq!(start(&["serve"], "")?.node_name, "Cartafolio");
+        assert_eq!(
+            directory::stored_own_name(&brain).map_err(|e| e.to_string())?,
+            None
+        );
+
+        let settings = r#"node_name = "MemCP""#;
+        assert_eq!(start(&["serve"], settings)?.node_name, "MemCP");
+        assert_eq!(start(&["serve"], "")?.node_name, "MemCP");
+        assert_eq!(
+            directory::stored_own_name(&brain)
+                .map_err(|e| e.to_string())?
+                .as_deref(),
+            Some("MemCP")
+        );
+
+        assert_eq!(
+            start(&["serve", "--node-name", "Atelier"], settings)?.node_name,
+            "Atelier"
+        );
+        assert_eq!(start(&["serve"], "")?.node_name, "Atelier");
+        std::fs::remove_dir_all(dir).map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }

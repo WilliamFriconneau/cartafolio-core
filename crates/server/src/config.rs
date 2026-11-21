@@ -132,11 +132,13 @@ static WHERE: [Opt; 8] = [
     ),
 ];
 
+pub const DEFAULT_NODE_NAME: &str = "Cartafolio";
+
 static NODE: [Opt; 3] = [
     o(
         "node_name",
         Kind::Text,
-        "MemCP",
+        DEFAULT_NODE_NAME,
         Some("node_name"),
         Some("--node-name"),
         "The name of this node, shown to the other nodes of your memory and on the network.",

@@ -208,6 +208,11 @@ fn meta_get(conn: &Connection, key: &str) -> Result<Option<String>> {
         .optional()?)
 }
 
+/// The name already recorded for this node, without generating one.
+pub fn stored_own_name(brain: &Brain) -> Result<Option<String>> {
+    meta_get(&brain.open_control()?, NAME_KEY)
+}
+
 /// This node's name in the directory: the one the person gave it, else one made once and kept.
 pub fn own_name(brain: &Brain) -> Result<String> {
     let ctl = brain.open_control()?;

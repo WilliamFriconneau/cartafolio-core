@@ -94,7 +94,7 @@ fn lan_nodes(wait: Duration) -> Vec<Found> {
                     .get_fullname()
                     .split("._memcp")
                     .next()
-                    .unwrap_or("MemCP")
+                    .unwrap_or(crate::config::DEFAULT_NODE_NAME)
                     .to_string();
                 let version = info
                     .get_property_val_str("v")
