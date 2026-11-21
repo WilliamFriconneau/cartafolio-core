@@ -53,7 +53,7 @@ or « Inbox » while it waits. « To confirm » (proposals for Apple Health, Rem
 
 Every note of every space the person reads, by day, newest first, each with its time, its space and its tags; a
 structured trace (an app's day of measures) reads as values, never as JSON. Filter by space, tag or words. With
-Cartafolio Health the days also carry the health journal (feelings, measures, Apple Health). « Context for an assistant »
+Silice Health the days also carry the health journal (feelings, measures, Apple Health). « Context for an assistant »
 makes a PDF of one space, with its dates.
 
 ### 3. Spaces
@@ -76,7 +76,7 @@ Health is not a section of its own: it is the health space, in Spaces, with the 
 original health journal, apart from dictated notes, so one always knows where a measure comes from. « Prepare an
 appointment » (a PDF laid out as nurses hand over, SBAR) is free, on every app.
 
-**What is sold**: the iPhone app's synchronisation with Apple Health (Cartafolio Health: 3 € a month or 9,90 € once). Nothing
+**What is sold**: the iPhone app's synchronisation with Apple Health (Silice Health: 3 € a month or 9,90 € once). Nothing
 else is paid. An ended subscription only pauses that synchronisation, and says so.
 
 ### 4. Settings
@@ -84,7 +84,7 @@ else is paid. An ended subscription only pauses that synchronisation, and says s
 Machines (see below), Assistants
 (connect one: address and key, or the line for Claude Code; rights per space), Engines (transcription: the device's
 own or Whisper in the app; reading documents; summaries: Apple Intelligence when the device has it), Privacy (Face ID
-or Touch ID at every opening, the veil in the app switcher), Cartafolio Health, Advanced (export, start over). On the node
+or Touch ID at every opening, the veil in the app switcher), Silice Health, Advanced (export, start over). On the node
 page: People, Updates, the janitor.
 
 **Machines** is the one place where nodes meet, the same on every platform and kept lean. In this order, and nothing else
@@ -115,7 +115,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 **Everyone**
 1. *An idea in the car*: « I have an idea for project Alpha at work » → filed in Work, a card in its Ideas.
 2. *After a meeting*: the actions said are cards of What's next, each with the note it came from.
-3. *« What do I need to buy? »*: Spaces › Home › Shopping, or Siri's « What do I need to buy in Cartafolio ».
+3. *« What do I need to buy? »*: Spaces › Home › Shopping, or Siri's « What do I need to buy in Silice ».
 4. *A second device*: install, « Continue with the memory of <device> », the same memory in a minute.
 5. *An assistant*: Settings › Assistants › Connect, paste the line in Claude, ask « what's next at home? ».
 

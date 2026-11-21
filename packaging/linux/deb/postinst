@@ -2,7 +2,7 @@
 set -e
 if [ "$1" = configure ]; then
   for prog in memcp memcp-manager memcp-sync; do
-    ln -sfn "$prog" "/usr/bin/cartafolio${prog#memcp}"
+    ln -sfn "$prog" "/usr/bin/silice${prog#memcp}"
   done
   # The service user and the folders, as the sysusers and tmpfiles files say.
   if command -v systemd-sysusers >/dev/null 2>&1; then

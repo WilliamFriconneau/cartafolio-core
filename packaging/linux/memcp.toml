@@ -42,7 +42,7 @@
 
 # The name of this node, shown to the other nodes of your memory and on the
 # network.
-# node_name = "Cartafolio"
+# node_name = "Silice"
 
 # The search language of a new memory (`en` or `fr`). It is written once, by
 # `memcp setup` or `init`; changing it later needs a reindex.

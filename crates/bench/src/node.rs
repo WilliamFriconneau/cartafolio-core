@@ -312,7 +312,7 @@ impl Node {
                     "8",
                 ])
                 .env("MEMCP_SYNC_BIN", &wrapper)
-                .env("CARTAFOLIO_SYNC_BIN", &wrapper)
+                .env("SILICE_SYNC_BIN", &wrapper)
                 .stdin(Stdio::null())
                 .stdout(log)
                 .stderr(err)
@@ -543,7 +543,7 @@ impl Node {
                 &self.name,
             ])
             .env("MEMCP_PEER_TOKEN", &peer.key)
-            .env("CARTAFOLIO_PEER_TOKEN", &peer.key)
+            .env("SILICE_PEER_TOKEN", &peer.key)
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -573,7 +573,7 @@ impl Node {
                 &self.name,
             ])
             .env("MEMCP_PEER_TOKEN", &peer.key)
-            .env("CARTAFOLIO_PEER_TOKEN", &peer.key)
+            .env("SILICE_PEER_TOKEN", &peer.key)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null())

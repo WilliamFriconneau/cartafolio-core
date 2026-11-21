@@ -737,7 +737,7 @@ impl Handler for Manager {
                     _ => reply(&self.registry),
                 }
             }
-            ("GET", "/.well-known/memcp" | "/.well-known/cartafolio") => {
+            ("GET", "/.well-known/memcp" | "/.well-known/silice") => {
                 Response::json(200, &memcp_server::discovery::well_known(&self.node_name()))
             }
             // An invitation ticket is kept by the person's installation that made it: the request goes there, else a

@@ -1,4 +1,4 @@
-# Cartafolio
+# Silice
 
 A durable memory for your AI assistants (Claude, Gemini, a local model), served over MCP. **One memory per person**: each person has a directory of their own, spaces of their own, and keys that never go beyond them. The add-on creates and administers the people; it stores no memory of its own.
 
@@ -44,7 +44,7 @@ The add-on uses cold backups: Home Assistant stops it for a few seconds while it
 
 The add-on holds the memory of each person, one space per subject: the health record that apps deposit into, the bank statements, and the rest. It stores and finds what it is given; it fetches and proxies nothing. Mail, calendar and the house are a connector of their own, outside the add-on, added to an assistant next to this one. Nothing else has to run for the add-on, so Home Assistant can start alone with the whole memory.
 
-A health app deposits into a person's health space, under its own path: see [HEALTH-SOURCES.md](https://github.com/WilliamFriconneau/cartafolio-core/blob/main/docs/HEALTH-SOURCES.md) for what an app should send.
+A health app deposits into a person's health space, under its own path: see [HEALTH-SOURCES.md](https://github.com/WilliamFriconneau/silice-core/blob/main/docs/HEALTH-SOURCES.md) for what an app should send.
 
 ### Tailscale
 

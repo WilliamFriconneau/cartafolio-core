@@ -13,7 +13,7 @@ line runs and sends back the text. `--json` prints the node's raw JSON answer in
 
 ## Reaching a node
 
-Every `MEMCP_*` environment variable read by the commands has a `CARTAFOLIO_*` alias. When both spellings are set, the `CARTAFOLIO_*` value wins.
+Every `MEMCP_*` environment variable read by the commands has a `SILICE_*` alias. When both spellings are set, the `SILICE_*` value wins.
 
 | What | Option | Environment |
 |---|---|---|

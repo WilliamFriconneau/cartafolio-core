@@ -1,7 +1,7 @@
 # Depositing health data: what an app should send
 
 For the makers of a health app (a tracker, a workout log, a journal) who want a person's data
-to reach their Cartafolio space, and for the person who wires it up. An app such as Bevel or
+to reach their Silice space, and for the person who wires it up. An app such as Bevel or
 HealthFit could do this with an export of its data and statistics; nothing here is specific to
 one app.
 
@@ -140,7 +140,7 @@ diastolic `8462-4`, body weight `29463-7`, body height `8302-2`, body temperatur
 
 The space carries no table of codes and checks only the shape of `system:code`, so there is no
 licence to carry. FHIR itself (its resources and JSON) is not the space's storage format; it is a
-good format for an export or an import, which an app or a later version of Cartafolio may offer.
+good format for an export or an import, which an app or a later version of Silice may offer.
 
 To read one measure across sources, ask for the code and the raw layer together:
 `recall` with the tags `code/loinc/8867-4` and `sources`.

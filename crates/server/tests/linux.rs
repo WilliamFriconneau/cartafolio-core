@@ -191,12 +191,12 @@ fn setup_makes_a_private_memory_a_page_key_and_one_address_for_an_assistant() ->
     let (head, body) = get(port, "/.well-known/memcp", "")?;
     assert!(head.starts_with("HTTP/1.1 200"), "{head}");
     assert!(body.contains("atelier"), "{body}");
-    let (alias_head, alias_body) = get(port, "/.well-known/cartafolio", "")?;
+    let (alias_head, alias_body) = get(port, "/.well-known/silice", "")?;
     assert!(alias_head.starts_with("HTTP/1.1 200"), "{alias_head}");
     assert_eq!(alias_body, body);
     assert_eq!(
         serde_json::from_str::<Value>(&alias_body)?["product"],
-        "cartafolio"
+        "silice"
     );
 
     // Remember and recall through the address of the connection.

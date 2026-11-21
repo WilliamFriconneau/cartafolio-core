@@ -1,7 +1,7 @@
 #!/bin/sh
 # MemCP installer: a guided install of the memory server on Linux (x86_64 or aarch64).
 #
-#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/install.sh | sh
 #   sudo sh install.sh --system        a system service run by its own user (see docs/LINUX.md)
 #
 # It downloads the release archive, checks it against the published SHA256SUMS, installs the programs, then lets
@@ -22,7 +22,7 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/cartafolio-core}"
+REPO="${MEMCP_REPO:-WilliamFriconneau/silice-core}"
 BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
 API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
 
@@ -128,7 +128,7 @@ for prog in memcp-manager memcp-sync; do
   if [ -x "$SRC/bin/$prog" ]; then install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"; fi
 done
 for prog in memcp memcp-manager memcp-sync; do
-  if [ -x "$PREFIX/$prog" ]; then ln -sfn "$prog" "$PREFIX/cartafolio${prog#memcp}"; fi
+  if [ -x "$PREFIX/$prog" ]; then ln -sfn "$prog" "$PREFIX/silice${prog#memcp}"; fi
 done
 say "installed in $PREFIX"
 case ":$PATH:" in *":$PREFIX:"*) ;; *) say "note: $PREFIX is not in your PATH; add it to your shell profile." ;; esac

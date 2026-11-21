@@ -101,7 +101,7 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
     };
     let cfg_path = existing.unwrap_or_else(|| target_config(&a));
 
-    println!("Cartafolio setup\n");
+    println!("Silice setup\n");
     let default_data = a
         .data
         .clone()

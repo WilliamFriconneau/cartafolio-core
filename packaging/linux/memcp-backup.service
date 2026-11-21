@@ -3,7 +3,7 @@
 # (by default /var/backups/memcp, 14 kept: the same as `memcp backup --keep 14`).
 [Unit]
 Description=MemCP backup
-Documentation=https://github.com/WilliamFriconneau/cartafolio-core/blob/main/docs/LINUX.md
+Documentation=https://github.com/WilliamFriconneau/silice-core/blob/main/docs/LINUX.md
 ConditionPathExists=/var/lib/memcp/control.sqlite
 
 [Service]

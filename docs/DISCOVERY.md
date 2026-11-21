@@ -12,7 +12,7 @@ Advertising says that a node is here, and nothing of what it holds. It gives no 
 
 ## Joining
 
-1. The device asks the node (the page's **Join a Cartafolio network**, `memcp-sync --join http://HOST:8791 --name "My laptop"`, or an app from its welcome screen).
+1. The device asks the node (the page's **Join a Silice network**, `memcp-sync --join http://HOST:8791 --name "My laptop"`, or an app from its welcome screen).
 2. The node shows the request on its page, and in the notifications of its apps, with **three words**. The device shows the same three words.
 3. The person compares them and presses **Allow**. Nothing is typed.
 4. The device receives a connection of its own, once, and keeps it where only it can read (a file of the node's `peers/` folder, or the Keychain). It reaches the person's Inbox and nothing else until the person says otherwise.

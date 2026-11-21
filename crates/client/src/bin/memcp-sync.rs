@@ -16,7 +16,7 @@ use memcp_core::Brain;
 const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS [--join ADDRESS…] [--expect-id ID] --status-file FILE [--name NAME]";
 
 fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp-sync", "cartafolio-sync")
+    memcp_core::invoked_as("memcp-sync", "silice-sync")
 }
 
 fn usage() -> String {

@@ -97,7 +97,7 @@ pub use recover::Recovered;
 pub use schema::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 pub use space::Space;
 
-/// Environment variable aliases for Cartafolio.
+/// Environment variable aliases for Silice.
 pub mod env {
     use std::env::{self, VarError};
     use std::ffi::OsString;
@@ -105,15 +105,15 @@ pub mod env {
     fn lookup(name: &str, get: impl Fn(&str) -> Option<OsString>) -> Option<OsString> {
         if let Some(suffix) = name
             .strip_prefix("MEMCP_")
-            .or_else(|| name.strip_prefix("CARTAFOLIO_"))
+            .or_else(|| name.strip_prefix("SILICE_"))
         {
-            get(&format!("CARTAFOLIO_{suffix}")).or_else(|| get(&format!("MEMCP_{suffix}")))
+            get(&format!("SILICE_{suffix}")).or_else(|| get(&format!("MEMCP_{suffix}")))
         } else {
             get(name)
         }
     }
 
-    /// Reads a variable, preferring its `CARTAFOLIO_` spelling over `MEMCP_`.
+    /// Reads a variable, preferring its `SILICE_` spelling over `MEMCP_`.
     pub fn var_os(name: &str) -> Option<OsString> {
         lookup(name, |key| env::var_os(key))
     }
@@ -134,7 +134,7 @@ pub mod env {
     ) -> &'a mut std::process::Command {
         command
             .env(format!("MEMCP_{suffix}"), value.as_ref())
-            .env(format!("CARTAFOLIO_{suffix}"), value.as_ref())
+            .env(format!("SILICE_{suffix}"), value.as_ref())
     }
 
     #[cfg(test)]
@@ -142,17 +142,17 @@ pub mod env {
         use super::*;
 
         #[test]
-        fn cartafolio_environment_aliases() {
+        fn silice_environment_aliases() {
             for (new, old, expected) in [
                 (Some("new"), Some("old"), "new"),
                 (Some("new"), None, "new"),
                 (None, Some("old"), "old"),
                 (Some(""), Some("old"), ""),
             ] {
-                for name in ["MEMCP_TEST", "CARTAFOLIO_TEST"] {
+                for name in ["MEMCP_TEST", "SILICE_TEST"] {
                     assert_eq!(
                         lookup(name, |key| match key {
-                            "CARTAFOLIO_TEST" => new.map(Into::into),
+                            "SILICE_TEST" => new.map(Into::into),
                             "MEMCP_TEST" => old.map(Into::into),
                             _ => None,
                         }),
@@ -172,7 +172,7 @@ pub fn program_name(
 ) -> &'static str {
     if argv0
         .file_name()
-        .is_some_and(|name| name.to_string_lossy().starts_with("cartafolio"))
+        .is_some_and(|name| name.to_string_lossy().starts_with("silice"))
     {
         alias
     } else {
@@ -191,16 +191,16 @@ mod program_name_tests {
     use super::*;
 
     #[test]
-    fn cartafolio_invocation_uses_the_filename_prefix() {
+    fn silice_invocation_uses_the_filename_prefix() {
         for (legacy, alias) in [
-            ("memcp", "cartafolio"),
-            ("memcp-manager", "cartafolio-manager"),
-            ("memcp-sync", "cartafolio-sync"),
+            ("memcp", "silice"),
+            ("memcp-manager", "silice-manager"),
+            ("memcp-sync", "silice-sync"),
         ] {
             for (argv0, expected) in [
                 (format!("/bin/{alias}.exe"), alias),
-                ("cartafolio-custom".into(), alias),
-                (format!("/cartafolio/{legacy}"), legacy),
+                ("silice-custom".into(), alias),
+                (format!("/silice/{legacy}"), legacy),
                 ("renamed".into(), legacy),
                 (String::new(), legacy),
             ] {

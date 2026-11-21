@@ -162,16 +162,16 @@ fn two_people(d: &Dir) -> Result<Manager, Box<dyn Error>> {
 }
 
 #[test]
-fn cartafolio_discovery_matches_memcp_on_the_manager() -> Res {
+fn silice_discovery_matches_memcp_on_the_manager() -> Res {
     let d = Dir::new("discovery-alias");
     let m = Manager::open(d.path(), options()).map_err(|e| e.1)?;
     let old = m.handle(&rq("GET", "/.well-known/memcp", &[], ""));
-    let new = m.handle(&rq("GET", "/.well-known/cartafolio", &[], ""));
+    let new = m.handle(&rq("GET", "/.well-known/silice", &[], ""));
     assert_eq!(old.status, 200);
     assert_eq!(new.status, old.status);
     assert_eq!(new.headers, old.headers);
     assert_eq!(new.body, old.body);
-    assert_eq!(new.body_json()["product"], "cartafolio");
+    assert_eq!(new.body_json()["product"], "silice");
     assert_eq!(new.body_json()["service"], "memcp");
     Ok(())
 }

@@ -48,7 +48,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.waitForSelector("#app:not([hidden])", { timeout: 5000 });
   check("signed in: the app shows", await page.locator("#app").isVisible());
   const rows = await page.locator("#spaces .tile[data-space]").allInnerTexts();
-  check("the page carries the project name", (await page.title()) === "Cartafolio" && (await page.locator("h1").first().innerText()) === "Cartafolio");
+  check("the page carries the project name", (await page.title()) === "Silice" && (await page.locator("h1").first().innerText()) === "Silice");
   check("the spaces are listed with their kind", rows.some(r => /work/i.test(r)) && rows.some(r => /health/i.test(r)), rows.join(" | "));
   check("each space is a tile with its own connect button", (await page.locator("#spaces .tile[data-space] button:has-text('Connect')").count()) === rows.length, String(rows.length));
   await section(page, "#settings");

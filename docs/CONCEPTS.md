@@ -1,6 +1,6 @@
 # Concepts, with cases
 
-What Cartafolio is made of, each concept with why it is there and an example. The examples use made-up people and places.
+What Silice is made of, each concept with why it is there and an example. The examples use made-up people and places.
 
 ## A trace
 

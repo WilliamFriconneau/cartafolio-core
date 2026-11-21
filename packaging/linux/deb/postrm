@@ -2,7 +2,7 @@
 set -e
 if [ "$1" = remove ]; then
   for prog in memcp memcp-manager memcp-sync; do
-    alias="/usr/bin/cartafolio${prog#memcp}"
+    alias="/usr/bin/silice${prog#memcp}"
     if [ "$(readlink "$alias")" = "$prog" ]; then rm -f "$alias"; fi
   done
 fi

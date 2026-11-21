@@ -22,7 +22,7 @@ The price is that each platform needs its own renderer, written and kept up to d
 ## The screens
 
 1. **Spaces.** The tree of spaces; drag to move, rename in place, add, merge, retire. Each line shows the number of notes waiting, the connector, a lock if it is locked, a shield if it is sensitive.
-2. **A space.** Name and place in the tree; **keywords**; sensitive or not and, if sensitive, the spaces it **may share notes with**; its **folders** (several, each with the path on this machine, a mode: source or export, and plain or locked); its connectors (Cartafolio node, folder, drive, another MCP memory); **assistants** and the level each has on its keywords (propose, add, full); a switch to send Apple Health data with it (iOS only, off by default); lock and passphrase.
+2. **A space.** Name and place in the tree; **keywords**; sensitive or not and, if sensitive, the spaces it **may share notes with**; its **folders** (several, each with the path on this machine, a mode: source or export, and plain or locked); its connectors (Silice node, folder, drive, another MCP memory); **assistants** and the level each has on its keywords (propose, add, full); a switch to send Apple Health data with it (iOS only, off by default); lock and passphrase.
 3. **Intelligence.** The janitor that files what the keywords did not settle: off, on the device, or an API of your own (address and key); never used for a sensitive space unless the person says so for that space.
 4. **Nodes.** This node and its peers: name, last synchronisation, what each holds, which spaces are synchronised with which node; add a node by its code, revoke one.
 5. **Backup.** Where snapshots go, how often, the last one, a restore.

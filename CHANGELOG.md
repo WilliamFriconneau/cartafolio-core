@@ -1,10 +1,14 @@
 # Changelog
 
-## Unreleased
+## 20261121.2.0
 
-- **A new installation names itself Cartafolio.** The default node name changes; an installation that already has a name keeps it.
+- **The product is now called Silice** (it was called Cartafolio for one day, and MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.
 
-- **The repository is now `cartafolio-core`.** The old address redirects. The release files keep their `memcp-` names.
+- **New names, old names kept.** `SILICE_*` environment variables, `silice.toml`, `/.well-known/silice` and a `silice` command are accepted next to the MemCP ones, which keep working. The short-lived `cartafolio` names are gone.
+
+- **A new installation names itself Silice.** The default node name changes; an installation that already has a name keeps it.
+
+- **The repository is now `silice-core`.** The old address redirects. The release files keep their `memcp-` names.
 
 ## 20261121.1.0
 

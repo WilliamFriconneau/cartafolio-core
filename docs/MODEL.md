@@ -1,4 +1,4 @@
-# Cartafolio model (the 0.9 refactor)
+# Silice model (the 0.9 refactor)
 
 Status: design, not implemented yet. Tests of 0.8.0 pass under the new name. The "Open an MCP" action (page and `open` command) is the one piece already built.
 
@@ -97,7 +97,7 @@ Until then every change stays additive and carries a test that rewinds a databas
 
 - **A zero-knowledge relay.** Set aside: the nodes of a person meet directly (local network, tailnet), and each holds the whole memory or its window of it.
 - **A hash-chained log as the source of truth.** Its value was backup and sync; without sync the database, the Home Assistant backup and the readable export are enough.
-- **Markdown files as the source of truth, mem0, palace-rs, Basic Memory, engram as the engine.** Each lacks something we need or adds a cost we reject (a model on every write, a Docker stack, a copyleft licence, no HTTP server, editing and deleting by the assistant).
+- **Markdown files as the source of truth, or mem0, palace-rs or Basic Memory as the engine.** Each lacks something we need or adds a cost we reject (a model on every write, a Docker stack, a copyleft licence, no HTTP server, editing and deleting by the assistant).
 - **Sharing, groups, per-fact rights, passwords.** (Rights on a tag path were set aside too, then built on 2026-11-01 because several apps deposit into one space: see "Rights by path".)
 
 

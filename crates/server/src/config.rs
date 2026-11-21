@@ -132,7 +132,7 @@ static WHERE: [Opt; 8] = [
     ),
 ];
 
-pub const DEFAULT_NODE_NAME: &str = "Cartafolio";
+pub const DEFAULT_NODE_NAME: &str = "Silice";
 
 static NODE: [Opt; 3] = [
     o(
@@ -880,7 +880,7 @@ fn valid_tailnet_pair(s: &str) -> bool {
 /// Resolves an explicit path, using the newer name first for a standard settings filename.
 pub fn named_path(path: PathBuf) -> PathBuf {
     if path.file_name().is_some_and(|name| name == "memcp.toml") {
-        let alias = path.with_file_name("cartafolio.toml");
+        let alias = path.with_file_name("silice.toml");
         if alias.is_file() {
             return alias;
         }
@@ -925,7 +925,7 @@ pub fn locate_with_data(
 }
 
 fn settings_in(dir: &Path) -> [PathBuf; 2] {
-    [dir.join("cartafolio.toml"), dir.join("memcp.toml")]
+    [dir.join("silice.toml"), dir.join("memcp.toml")]
 }
 
 fn config_home() -> Option<PathBuf> {
@@ -945,7 +945,7 @@ pub fn default_places() -> Vec<PathBuf> {
     config_home()
         .into_iter()
         .chain([PathBuf::from("/etc")])
-        .flat_map(|root| [root.join("memcp"), root.join("cartafolio")])
+        .flat_map(|root| [root.join("memcp"), root.join("silice")])
         .flat_map(|dir| settings_in(&dir))
         .collect()
 }
@@ -1033,9 +1033,9 @@ mod alias_tests {
     use super::*;
 
     #[test]
-    fn cartafolio_toml_wins_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
+    fn silice_toml_wins_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
         let dir = std::env::temp_dir().join(format!(
-            "cartafolio-config-{}",
+            "silice-config-{}",
             memcp_core::util::random_base32(16)
         ));
         std::fs::create_dir_all(&dir)?;

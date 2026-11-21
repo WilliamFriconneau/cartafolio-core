@@ -11,7 +11,7 @@ use memcp_server::net;
 
 const USAGE: &str = "usage: memcp-manager --data DIR <command>
 
-  Settings: cartafolio.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
+  Settings: silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
         [--public-url URL] [--admins ha_name,...] [--language en|fr] [--new-people auto|ask]
         [--ingress-listen ADDR --trust-ingress IP]
@@ -28,7 +28,7 @@ A person's own commands are the engine's, on their directory:
   memcp --data DIR/people/NAME connections";
 
 fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp-manager", "cartafolio-manager")
+    memcp_core::invoked_as("memcp-manager", "silice-manager")
 }
 
 fn usage() -> String {

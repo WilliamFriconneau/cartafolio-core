@@ -1,4 +1,4 @@
-# Cartafolio on a computer: the desktop node
+# Silice on a computer: the desktop node
 
 The same memory as the node under Home Assistant, on a Mac or a Windows computer: the node (`memcp serve`) keeps the
 memory, serves its page, reads the voice notes and watches the folders the person named ([INTAKE.md](INTAKE.md)). It is the one
@@ -22,14 +22,14 @@ the voice notes.
 Mac (Apple silicon):
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/packaging/macos/install-mac.sh
+curl -fsSLO https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/packaging/macos/install-mac.sh
 sh install-mac.sh
 ```
 
 Windows (PowerShell, as yourself, not as an administrator):
 
 ```powershell
-Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/packaging/windows/install.ps1 -OutFile install.ps1
+Invoke-WebRequest -UseBasicParsing https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/packaging/windows/install.ps1 -OutFile install.ps1
 powershell -ExecutionPolicy Bypass -File install.ps1
 ```
 

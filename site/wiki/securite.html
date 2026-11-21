@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sécurité et limites — Cartafolio</title>
-<meta name="description" content="Ce que Cartafolio protège par défaut, ce qu'il ne protège pas encore, et ce qu'il faut savoir avant d'y mettre des données sensibles.">
+<title>Sécurité et limites — Silice</title>
+<meta name="description" content="Ce que Silice protège par défaut, ce qu'il ne protège pas encore, et ce qu'il faut savoir avant d'y mettre des données sensibles.">
 <meta name="theme-color" content="#fbfbfa" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#0b0c0d" media="(prefers-color-scheme: dark)">
 <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
@@ -13,14 +13,14 @@
 <body>
 <a class="skip" href="#contenu">Aller au contenu</a>
 <header class="nav simple">
-  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>Cartafolio</span></a>
+  <a class="nav-brand" href="../index.html"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>Silice</span></a>
   <nav class="nav-links" aria-label="Sections">
     <a href="../index.html#installer">Installer</a>
     <a href="../index.html#fait">Ce qu'il fait</a>
     <a href="../index.html#captures">Captures</a>
     <a href="../index.html#prix">Gratuit ou payant</a>
     <a href="index.html" aria-current="page">Guide</a>
-    <a class="nav-github" href="https://github.com/WilliamFriconneau/cartafolio-core">GitHub</a>
+    <a class="nav-github" href="https://github.com/WilliamFriconneau/silice-core">GitHub</a>
   </nav>
 </header>
 
@@ -58,9 +58,9 @@
       <h2>Ce qui n'est pas encore fait</h2>
       <ul>
         <li><strong>La mémoire n'est pas chiffrée au repos.</strong> Le disque de la machine peut l'être, ce n'est pas la même chose. Le chiffrement d'un espace par phrase secrète ou par clé est conçu, pas livré.</li>
-        <li><strong>Aucun audit indépendant.</strong> Une première revue de sécurité est publiée dans <a href="https://github.com/WilliamFriconneau/cartafolio-core/blob/main/docs/reviews/">docs/reviews</a>, avec ce qu'elle a lu et ce qu'elle n'a pas lu. Lisez-la.</li>
+        <li><strong>Aucun audit indépendant.</strong> Une première revue de sécurité est publiée dans <a href="https://github.com/WilliamFriconneau/silice-core/blob/main/docs/reviews/">docs/reviews</a>, avec ce qu'elle a lu et ce qu'elle n'a pas lu. Lisez-la.</li>
         <li><strong>Le port 8791 de l'application Home Assistant n'est pas chiffré.</strong> Il attend Tailscale ou un proxy TLS devant lui.</li>
-        <li><strong>Pas de signature des événements de synchronisation</strong> : c'est écrit dans <a href="https://github.com/WilliamFriconneau/cartafolio-core/blob/main/docs/FEDERATION.md">docs/FEDERATION.md</a>.</li>
+        <li><strong>Pas de signature des événements de synchronisation</strong> : c'est écrit dans <a href="https://github.com/WilliamFriconneau/silice-core/blob/main/docs/FEDERATION.md">docs/FEDERATION.md</a>.</li>
       </ul>
 
       <h2>Le code est écrit avec l'IA</h2>
@@ -73,24 +73,24 @@
       <p>Chaque assistant envoie à son fournisseur ce qu'il lit pour répondre. Un modèle local, ou la fonction d'Apple sur l'appareil, évite cet envoi. Le choix vous appartient, et il se fait connexion par connexion.</p>
 
       <div class="note">
-        <p>Des données de santé de tiers, dans un cadre professionnel, demandent plus que ce que Cartafolio offre aujourd'hui : un hébergement certifié HDS, une analyse d'impact, un chiffrement. Ne l'utilisez pas pour ça en production.</p>
+        <p>Des données de santé de tiers, dans un cadre professionnel, demandent plus que ce que Silice offre aujourd'hui : un hébergement certifié HDS, une analyse d'impact, un chiffrement. Ne l'utilisez pas pour ça en production.</p>
       </div>
 
       <div class="doc-next">
         <a class="btn btn-primary" href="depannage.html">Dépannage</a>
-        <a class="btn btn-quiet" href="https://github.com/WilliamFriconneau/cartafolio-core/blob/main/SECURITY.md">Le document de sécurité</a>
+        <a class="btn btn-quiet" href="https://github.com/WilliamFriconneau/silice-core/blob/main/SECURITY.md">Le document de sécurité</a>
       </div>
     </article>
   </div>
 </main>
 
 <footer class="footer">
-  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>Cartafolio</span></div>
+  <div class="footer-brand"><svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><circle cx="16" cy="16" r="12"/><circle cx="16" cy="16" r="4"/></svg><span>Silice</span></div>
   <nav class="footer-links" aria-label="Liens">
-    <a href="https://github.com/WilliamFriconneau/cartafolio-core">Dépôt</a>
+    <a href="https://github.com/WilliamFriconneau/silice-core">Dépôt</a>
     <a href="index.html">Guide</a>
-    <a href="https://github.com/WilliamFriconneau/cartafolio-core/blob/main/SECURITY.md">Sécurité</a>
-    <a href="https://github.com/WilliamFriconneau/cartafolio-core/blob/main/LICENSE">Licence AGPL</a>
+    <a href="https://github.com/WilliamFriconneau/silice-core/blob/main/SECURITY.md">Sécurité</a>
+    <a href="https://github.com/WilliamFriconneau/silice-core/blob/main/LICENSE">Licence AGPL</a>
   </nav>
 </footer>
 </body>

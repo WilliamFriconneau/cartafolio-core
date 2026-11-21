@@ -129,12 +129,12 @@ MEMCP_KEY_FILE / MEMCP_KEY. The same commands print the same text; --json prints
 MEMCP_AGENT) with a connection key does the note commands through the assistants' tools; --local forces the data directory.
 Exit codes: 0 done, 1 failed, 2 wrong command line, 3 key refused, 4 key lacks the rights, 5 node unreachable, 6 odd answer.
 
-Settings come from cartafolio.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
+Settings come from silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";
 
 /// The command name printed by the CLI.
 pub fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp", "cartafolio")
+    memcp_core::invoked_as("memcp", "silice")
 }
 
 /// Help for the current command name.

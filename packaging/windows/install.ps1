@@ -41,7 +41,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 3
 
-$Repo = if ($env:MEMCP_REPO) { $env:MEMCP_REPO } else { 'WilliamFriconneau/cartafolio-core' }
+$Repo = if ($env:MEMCP_REPO) { $env:MEMCP_REPO } else { 'WilliamFriconneau/silice-core' }
 $Bin = Join-Path $Root 'bin'
 $Data = Join-Path $Root 'data'
 $OldBridge = Join-Path $Root 'bridge'
@@ -170,7 +170,7 @@ if ($From) {
 foreach ($p in @('memcp', 'memcp-manager', 'memcp-sync')) {
     $source = Join-Path $Bin "$p.exe"
     if (Test-Path $source) {
-        Copy-Item -Force $source (Join-Path $Bin ("cartafolio" + $p.Substring(5) + ".exe"))
+        Copy-Item -Force $source (Join-Path $Bin ("silice" + $p.Substring(5) + ".exe"))
     }
 }
 $Memcp = Join-Path $Bin 'memcp.exe'

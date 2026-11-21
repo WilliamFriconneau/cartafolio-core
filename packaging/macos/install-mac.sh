@@ -31,7 +31,7 @@
 #   --help
 set -eu
 
-REPO="${MEMCP_REPO:-WilliamFriconneau/cartafolio-core}"
+REPO="${MEMCP_REPO:-WilliamFriconneau/silice-core}"
 BASE="${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}"
 API="${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}"
 
@@ -191,7 +191,7 @@ else
   for prog in $PROGRAMS; do install -m 755 "$TMP/$prog-$VERSION-$TARGET" "$BIN/$prog"; done
 fi
 for prog in memcp memcp-manager memcp-sync; do
-  if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/cartafolio${prog#memcp}"; fi
+  if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/silice${prog#memcp}"; fi
 done
 say "installed in $BIN"
 

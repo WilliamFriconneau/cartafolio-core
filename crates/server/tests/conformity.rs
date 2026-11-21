@@ -44,7 +44,7 @@ fn discovery_tells_the_service_the_name_and_the_version_and_nothing_else() -> Re
     let (mut a, dir) = app("wellknown")?;
     a.node_name = "kitchen".into();
     let r = a.handle(&request("GET", "/.well-known/memcp", json!({})));
-    let alias = a.handle(&request("GET", "/.well-known/cartafolio", json!({})));
+    let alias = a.handle(&request("GET", "/.well-known/silice", json!({})));
     assert_eq!(r.status, 200);
     assert_eq!(alias.status, r.status);
     assert_eq!(alias.headers, r.headers);
@@ -75,7 +75,7 @@ fn discovery_tells_the_service_the_name_and_the_version_and_nothing_else() -> Re
         "the id names the node, nothing more"
     );
     assert_eq!(v["service"], "memcp");
-    assert_eq!(v["product"], "cartafolio");
+    assert_eq!(v["product"], "silice");
     assert_eq!(v["name"], "kitchen");
     let _ = fs::remove_dir_all(dir);
     Ok(())

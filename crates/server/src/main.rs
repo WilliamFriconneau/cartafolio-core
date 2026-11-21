@@ -269,7 +269,7 @@ mod tests {
     #[test]
     fn node_name_defaults_only_when_no_name_is_given_or_stored() -> Result<(), String> {
         let dir = std::env::temp_dir().join(format!(
-            "cartafolio-node-name-{}",
+            "silice-node-name-{}",
             memcp_core::util::random_base32(16)
         ));
         let brain = Brain::init(&dir, &[], text::Language::English).map_err(|e| e.to_string())?;
@@ -286,7 +286,7 @@ mod tests {
             Ok(app)
         };
 
-        assert_eq!(start(&["serve"], "")?.node_name, "Cartafolio");
+        assert_eq!(start(&["serve"], "")?.node_name, "Silice");
         assert_eq!(
             directory::stored_own_name(&brain).map_err(|e| e.to_string())?,
             None

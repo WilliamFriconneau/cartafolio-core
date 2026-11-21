@@ -1,4 +1,4 @@
-# Cartafolio on Linux
+# Silice on Linux
 
 The same complete node as on Home Assistant, as a system service of your own machine: the memory, its page, its janitor, its voice. Settings are in one file, `memcp.toml` (every option is listed in the file itself and matched with the add-on's in [PARITY.md](PARITY.md)).
 
@@ -8,7 +8,7 @@ Pick one.
 
 **A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp` and `memcp-janitor` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
 
-**One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/cartafolio-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
+**One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/silice-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
 
 **From source.** `cargo install --path crates/server` and `cargo install --path crates/janitor`.
 
@@ -53,7 +53,7 @@ Both are checked by tests: `crates/server/tests/admin.rs` (console keys open the
 
 ## Settings
 
-The search starts with `--config FILE`, then `CARTAFOLIO_CONFIG` or `MEMCP_CONFIG` (the new variable wins when both are set). Without either, it checks `~/.config/memcp`, `~/.config/cartafolio`, `/etc/memcp`, `/etc/cartafolio`, and finally beside the data directory supplied by flag or environment, in that order, with `XDG_CONFIG_HOME` taking the place of `~/.config` when set to an absolute path. In any of these folders, including the folder of a named `memcp.toml`, `cartafolio.toml` takes precedence.
+The search starts with `--config FILE`, then `SILICE_CONFIG` or `MEMCP_CONFIG` (the new variable wins when both are set). Without either, it checks `~/.config/memcp`, `~/.config/silice`, `/etc/memcp`, `/etc/silice`, and finally beside the data directory supplied by flag or environment, in that order, with `XDG_CONFIG_HOME` taking the place of `~/.config` when set to an absolute path. In any of these folders, including the folder of a named `memcp.toml`, `silice.toml` takes precedence.
 
 The file uses plain `key = value`; `memcp config check` reads it and says what is wrong, `memcp config example` prints the documented file, `memcp config show` prints yours with every option. **A flag on the command line wins over the file.** After a change: `sudo systemctl restart memcp`.
 

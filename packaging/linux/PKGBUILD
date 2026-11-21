@@ -6,7 +6,7 @@ pkgver=20261117.0.8
 pkgrel=1
 pkgdesc='A durable memory for AI assistants over MCP, kept on your own machine'
 arch=('x86_64' 'aarch64')
-url='https://github.com/WilliamFriconneau/cartafolio-core'
+url='https://github.com/WilliamFriconneau/silice-core'
 license=('AGPL-3.0-or-later')
 depends=('gcc-libs' 'systemd')
 makedepends=('cargo')
@@ -41,7 +41,7 @@ package() {
   install -Dm755 "$t/memcp" "$t/memcp-janitor" "$t/memcp-manager" "$t/memcp-sync" -t "$pkgdir/usr/bin"
   local prog
   for prog in memcp memcp-manager memcp-sync; do
-    ln -s "$prog" "$pkgdir/usr/bin/cartafolio${prog#memcp}"
+    ln -s "$prog" "$pkgdir/usr/bin/silice${prog#memcp}"
   done
   local p=packaging/linux
   install -Dm644 $p/memcp.service $p/memcp-backup.service $p/memcp-backup.timer \
