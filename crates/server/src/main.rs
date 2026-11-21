@@ -178,6 +178,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
     app.allowed_origins.extend(list(flag("--allow-origin")));
     // The admin page on this listener (console token): by default only on the loopback.
     app.console_admin = a.switches.iter().any(|s| s == "--console-admin") || loopback;
+    app.strict_write_agents = list(flag("--strict-write-agents"));
     app.ingress_admins = list(flag("--admins"));
     app.login_url = flag("--login-url").map(|u| u.trim_end_matches('/').to_string());
     app.oauth_redirects.extend(list(flag("--oauth-redirect")));

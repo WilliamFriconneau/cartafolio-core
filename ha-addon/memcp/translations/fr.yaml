@@ -1,0 +1,4 @@
+configuration:
+  strict_write_agents:
+    name: Lire avant d’écrire
+    description: Connexions qui doivent avoir lu la mémoire dans les 30 minutes précédant une écriture. Indiquez les noms des connexions ou un seul "*" pour toutes sauf les apps, les pairs, les consoles et le rangeur.

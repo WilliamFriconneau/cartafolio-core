@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- **Read before write.** `strict_write_agents` (a list of connection names, or `*`) makes a connection read (`recall`…) before it may write; a write with no read in the last 30 minutes is refused with a message that says what to do. Off by default.
+
 ## 20261121.2.0
 
 - **The product is now called Silice** (it was called Cartafolio for one day, and MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.

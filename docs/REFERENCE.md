@@ -168,6 +168,10 @@ The consent page is on the public address, and every new connection starts with 
 The code is kept only as a digest, in memory (a restart forgets it, and twenty at most wait at once). `POST /admin/api/invite` makes one for the signed-in person; `POST /admin/api/users/invite` with `{"name": "<person>"}` makes one for another person (an administrator's console token, or the administrator's page; never through Funnel). Wrong codes are counted per address, and an address that keeps guessing is held off.
 
 
+### Read before write
+
+The optional `strict_write_agents` setting requires selected MCP connections to have called a read tool within 30 minutes before calling `remember`, `supersede`, `retire`, `tags_set`, `notes_move` or `living_set`. Read tools include `recall`, `read_fact`, `history`, `space_view`, `links`, `library_search`, `disputes`, `living_get`, `stats` and `triage_waiting`. A refusal is a tool error that asks the assistant to call `recall` on the topic and read its results before retrying. `deposit`, `file_put` and quick notes tagged `inbox` are exempt. The setting is off by default. See [LINUX.md](LINUX.md#settings).
+
 ## Node discovery
 
 `GET /.well-known/silice` and `GET /.well-known/memcp` serve the same response under the same listener and access rules. Both return `"service": "memcp"` and `"product": "silice"`.

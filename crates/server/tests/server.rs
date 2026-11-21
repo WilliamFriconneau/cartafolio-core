@@ -119,6 +119,143 @@ fn text_of(v: &Value) -> Value {
 }
 
 #[test]
+fn read_before_write_requires_a_recent_read_from_the_same_connection() -> Res {
+    let mut e = env()?;
+    e.app.strict_write_agents = vec!["writer".into(), "other-writer".into()];
+    let token = connect(&e, "writer", "work:rw", false)?;
+    let other_token = connect(&e, "other-writer", "work:rw", false)?;
+    let ctl = e.app.brain.open_control()?;
+    let now = memcp_core::util::now();
+    let writer = access::authenticate(&ctl, &token, now)?.ok_or("missing writer")?;
+    let other = access::authenticate(&ctl, &other_token, now)?.ok_or("missing other writer")?;
+    let call_at = |caller: &access::Caller, name, args, at| {
+        e.app.dispatch(
+            caller,
+            &json!(1),
+            "tools/call",
+            &json!({ "name": name, "arguments": args }),
+            at,
+        )
+    };
+    let note = json!({
+        "space": "work", "text": "The observatory opens in spring.", "tags": ["schedule"]
+    });
+    let (status, refused) = call_at(&writer, "remember", note.clone(), now);
+    assert_eq!(status, 200);
+    assert_eq!(refused["result"]["isError"], true);
+    assert_eq!(
+        refused["result"]["content"][0]["text"],
+        "Read first. Call `recall` with the topic of what you are about to write, read what it returns, then call this tool again: write only what the memory does not already say, and correct a fact with `supersede`, never with a second note."
+    );
+    let event: String = ctl.query_row(
+        "SELECT detail FROM auth_audit WHERE event = 'write_refused_read_first' AND agent = 'writer'",
+        [],
+        |row| row.get(0),
+    )?;
+    assert_eq!(event, "remember");
+
+    let (_, read) = call_at(
+        &writer,
+        "recall",
+        json!({ "space": "work", "query": "observatory" }),
+        now,
+    );
+    assert_eq!(read["result"]["isError"], false);
+    assert_eq!(text_of(&read)["results"], json!([]));
+    assert_eq!(
+        call_at(&other, "remember", note.clone(), now).1["result"]["isError"],
+        true
+    );
+    let (_, saved) = call_at(&writer, "remember", note.clone(), now + 30 * 60);
+    assert_eq!(saved["result"]["isError"], false);
+    assert!(text_of(&saved)["fact"]["id"].is_string());
+    let (_, expired) = call_at(&writer, "remember", note, now + 30 * 60 + 1);
+    assert_eq!(expired, refused);
+    Ok(())
+}
+
+#[test]
+fn read_before_write_is_off_by_default_and_wildcard_exempts_peers_and_apps() -> Res {
+    let mut e = env()?;
+    let normal = connect(&e, "writer", "work:rw", false)?;
+    let note = |text| json!({ "space": "work", "text": text, "tags": ["test"] });
+    let saved = call(
+        &e,
+        &normal,
+        "remember",
+        note("The bakery opens before dawn."),
+    );
+    assert_eq!(saved["result"]["isError"], false);
+    e.app.strict_write_agents = vec!["*".into()];
+    let refused = call(
+        &e,
+        &normal,
+        "remember",
+        note("The bakery opens before dawn."),
+    );
+    assert_eq!(refused["result"]["isError"], true);
+    let ctl = e.app.brain.open_control()?;
+    let peer = access::connect_peer(&ctl, "owner", "peer-laptop", &Rights::owner(), false)?;
+    let saved = call(&e, &peer, "remember", note("A ferry crosses the bay."));
+    assert_eq!(saved["result"]["isError"], false);
+    for (name, text) in [
+        ("weather-app", "Rain fell overnight."),
+        ("app-weather", "Fog delayed the morning flight."),
+        ("janitor", "The gardener planted tulips."),
+    ] {
+        let token = connect(&e, name, "work:rw", false)?;
+        assert_eq!(
+            call(&e, &token, "remember", note(text))["result"]["isError"],
+            false
+        );
+    }
+    Ok(())
+}
+
+#[test]
+fn read_before_write_exempts_deposits_files_and_inbox_notes() -> Res {
+    let mut e = env()?;
+    e.app.strict_write_agents = vec!["writer".into()];
+    let token = connect(&e, "writer", "work:rw", false)?;
+    for (name, args) in [
+        (
+            "deposit",
+            json!({
+                "space": "work", "records": [{
+                    "text": "A sensor recorded rain.",
+                    "origin": { "app": "weather", "id": "rain-1" }
+                }]
+            }),
+        ),
+        (
+            "file_put",
+            json!({
+                "space": "work", "name": "sample.txt", "data_base64": "aGVsbG8="
+            }),
+        ),
+        (
+            "remember",
+            json!({
+                "space": "work", "text": "A quick note for later.", "tags": ["inbox"]
+            }),
+        ),
+    ] {
+        let reply = call(&e, &token, name, args);
+        assert_eq!(reply["result"]["isError"], false, "{name}: {reply}");
+    }
+    let reply = call(
+        &e,
+        &token,
+        "remember",
+        json!({
+            "space": "work", "text": "The festival opens on Saturday.", "tags": ["schedule"]
+        }),
+    );
+    assert_eq!(reply["result"]["isError"], true);
+    Ok(())
+}
+
+#[test]
 fn space_reads_repeat_the_journal_handoff_without_initializing() -> Res {
     let e = env()?;
     let writer = connect(&e, "health-writer", "health:rw,work:rw", false)?;

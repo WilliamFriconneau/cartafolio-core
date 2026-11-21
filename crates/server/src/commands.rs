@@ -65,6 +65,7 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
         [--public-url URL] [--ingress-listen ADDR --trust-ingress IP --admins ha_login,...]
                                          the page through Home Assistant ingress
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL] [--oauth-redirect URL]
+        [--strict-write-agents NAME,...]
                                          OAuth for Claude on the web: consent page behind Tailscale serve
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
         [--days N] [--read-only] [--rotate] [--internal] [--public-url URL]
@@ -189,6 +190,7 @@ pub const VALUE_FLAGS: &[&str] = &[
     "--ingress-listen",
     "--trust-ingress",
     "--admins",
+    "--strict-write-agents",
     "--user",
     "--display",
     "--access",
@@ -470,7 +472,11 @@ pub fn dispatch(
             flag("--days").and_then(|d| d.parse().ok()),
             &public,
         ),
-        ("mcp", _) => cli::mcp_stdio(&data, flag("--token-env").unwrap_or("MEMCP_TOKEN")),
+        ("mcp", _) => cli::mcp_stdio_with_strict_write_agents(
+            &data,
+            flag("--token-env").unwrap_or("MEMCP_TOKEN"),
+            list(flag("--strict-write-agents")),
+        ),
         ("export", _) => cli::export_person(&data, flag("--user"), Path::new(need("--to")?)),
         ("adopt", _) => cli::adopt(
             &data,

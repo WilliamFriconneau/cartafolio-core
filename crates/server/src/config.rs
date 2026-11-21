@@ -65,7 +65,7 @@ pub const SECTIONS: &[(&str, &[Opt])] = &[
 
 const INT_PORT: Kind = Kind::Int { min: 1, max: 1024 };
 
-static WHERE: [Opt; 8] = [
+static WHERE: [Opt; 9] = [
     o(
         "data",
         Kind::Path,
@@ -121,6 +121,14 @@ static WHERE: [Opt; 8] = [
         None,
         Some("--console-admin"),
         "Serve the node page (`/admin`) on `listen` with a console token. On by itself while `listen` is the loopback; never through Tailscale Funnel.",
+    ),
+    o(
+        "strict_write_agents",
+        Kind::List,
+        "",
+        Some("strict_write_agents"),
+        Some("--strict-write-agents"),
+        "Connection names that must read the memory before writing. Use [\"*\"] for all except apps, peers, consoles and the janitor. Empty: off.",
     ),
     o(
         "oauth_redirect",
@@ -957,6 +965,11 @@ pub fn fill_flags(
     flags: &mut std::collections::HashMap<String, String>,
     switches: &mut Vec<String>,
 ) {
+    if let Ok(agents) = memcp_core::env::var("MEMCP_STRICT_WRITE_AGENTS") {
+        flags
+            .entry("--strict-write-agents".into())
+            .or_insert(agents);
+    }
     for opt in all() {
         let Some(flag) = opt.flag else { continue };
         let Some(v) = settings.get(opt.key) else {

@@ -34,6 +34,10 @@
 # itself while `listen` is the loopback; never through Tailscale Funnel.
 # console_admin = false
 
+# Connection names that must read the memory before writing. Use ["*"] for all
+# except apps, peers, consoles and the janitor. Empty: off.
+# strict_write_agents = []
+
 # Extra redirect addresses accepted by the OAuth sign-in of an assistant (a
 # list of URLs).
 # oauth_redirect = []

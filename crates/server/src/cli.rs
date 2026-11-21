@@ -410,6 +410,14 @@ pub fn merge(
 /// The MCP server on standard input and output, with the rights of the key in the environment
 /// variable `token_env`. Nothing but protocol goes to standard output.
 pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
+    mcp_stdio_with_strict_write_agents(data, token_env, vec![])
+}
+
+pub(crate) fn mcp_stdio_with_strict_write_agents(
+    data: &Path,
+    token_env: &str,
+    strict_write_agents: Vec<String>,
+) -> Result<(), Failure> {
     let token = memcp_core::env::var(token_env).map_err(|_| {
         (
             2,
@@ -426,7 +434,8 @@ pub fn mcp_stdio(data: &Path, token_env: &str) -> Result<(), Failure> {
         Ok(r) => eprintln!("{}", r.summary()),
         Err(e) => eprintln!("recovery: not finished yet: {e}"),
     }
-    let app = crate::app::App::new(brain);
+    let mut app = crate::app::App::new(brain);
+    app.strict_write_agents = strict_write_agents;
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
     crate::stdio::run(&app, token.trim(), stdin.lock(), stdout.lock()).map_err(|e| (1, e))

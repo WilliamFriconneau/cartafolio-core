@@ -17,6 +17,7 @@ const USAGE: &str = "usage: memcp-manager --data DIR <command>
         [--ingress-listen ADDR --trust-ingress IP]
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL]
         [--oauth-redirect URL]
+        [--strict-write-agents NAME,...]
                                          serves every person, each from a directory of their own
   people                                 lists the people
   person add NAME [--display TEXT] [--ha-user ID] [--admin]
@@ -41,7 +42,7 @@ struct Args {
     switches: Vec<String>,
 }
 
-const VALUE_FLAGS: [&str; 20] = [
+const VALUE_FLAGS: [&str; 21] = [
     "--config",
     "--data",
     "--node-name",
@@ -50,6 +51,7 @@ const VALUE_FLAGS: [&str; 20] = [
     "--threads",
     "--public-url",
     "--admins",
+    "--strict-write-agents",
     "--language",
     "--ingress-listen",
     "--trust-ingress",
@@ -126,6 +128,7 @@ fn options(a: &Args) -> Result<Options, Failure> {
         login_url: flag("--login-url").map(String::from),
         oauth_redirects: list(flag("--oauth-redirect")),
         tailnet_users,
+        strict_write_agents: list(flag("--strict-write-agents")),
         admins: list(flag("--admins")),
         auto_create_people: match flag("--new-people") {
             None | Some("auto") => true,

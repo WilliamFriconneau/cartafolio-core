@@ -24,6 +24,10 @@ const MCP_BODY_MAX: usize = 34 * 1024 * 1024;
 const FAIL_WINDOW: i64 = 900;
 const MAX_FAILS_PER_IP: usize = 10;
 const MAX_FAILS_HELD: usize = 5000;
+const READ_WINDOW: i64 = 30 * 60;
+const READ_RETENTION: i64 = 24 * 60 * 60;
+const MAX_RECENT_READS: usize = 4096;
+const READ_FIRST: &str = "Read first. Call `recall` with the topic of what you are about to write, read what it returns, then call this tool again: write only what the memory does not already say, and correct a fact with `supersede`, never with a second note.";
 
 pub struct App {
     pub brain: Brain,
@@ -48,6 +52,9 @@ pub struct App {
     pub oauth_redirects: Vec<String>,
     /// Tailnet login (lowercase) → person, for the identity listener.
     pub tailnet_users: std::collections::HashMap<String, String>,
+    /// Connections subject to the MCP read-before-write rule.
+    pub strict_write_agents: Vec<String>,
+    last_reads: Mutex<HashMap<String, i64>>,
     fails: Mutex<VecDeque<(i64, String)>>,
     rates: Mutex<HashMap<String, VecDeque<i64>>>,
     /// One-time consent nonces: nonce → (person id, expiry, digest of the OAuth request it was given for).
@@ -140,6 +147,8 @@ impl App {
                 .map(|s| (*s).to_string())
                 .collect(),
             tailnet_users: std::collections::HashMap::new(),
+            strict_write_agents: vec![],
+            last_reads: Mutex::new(HashMap::new()),
             fails: Mutex::new(VecDeque::new()),
             rates: Mutex::new(HashMap::new()),
             node_name,
@@ -585,10 +594,94 @@ impl App {
                     .collect();
                 rpc_ok(id, json!({ "tools": list }))
             }
+            "tools/call" if self.write_needs_read(caller, params, now) => {
+                if let Ok(ctl) = self.brain.open_control() {
+                    access::auth_event(
+                        &ctl,
+                        Some(&caller.agent),
+                        None,
+                        "write_refused_read_first",
+                        params["name"].as_str().unwrap_or_default(),
+                    );
+                }
+                rpc_ok(
+                    id,
+                    json!({ "content": [{ "type": "text", "text": READ_FIRST }], "isError": true }),
+                )
+            }
             "tools/call" => self.tools_call(caller, id, params, now),
             _ => return (404, rpc_err(id, -32601, "Method not found", None)),
         };
         (200, body)
+    }
+
+    fn write_needs_read(&self, caller: &Caller, params: &Value, now: i64) -> bool {
+        let agent = &caller.agent;
+        let flagged = if self.strict_write_agents == ["*"] {
+            !matches!(caller.kind, access::Kind::Peer | access::Kind::Console)
+                && !agent.starts_with(memcp_core::sync::PEER_PREFIX)
+                && !agent.starts_with("console-")
+                && !agent.starts_with("app-")
+                && !agent.ends_with("-app")
+                && agent != "janitor"
+        } else {
+            self.strict_write_agents.contains(agent)
+        };
+        if !flagged
+            || params
+                .get("arguments")
+                .is_some_and(|args| !args.is_object())
+        {
+            return false;
+        }
+        let name = params["name"].as_str().unwrap_or_default();
+        let read = matches!(
+            name,
+            "recall"
+                | "read_fact"
+                | "history"
+                | "space_view"
+                | "links"
+                | "library_search"
+                | "disputes"
+                | "living_get"
+                | "stats"
+                | "triage_waiting"
+        );
+        let write = matches!(
+            name,
+            "remember" | "supersede" | "retire" | "tags_set" | "notes_move" | "living_set"
+        );
+        let inbox_note = name == "remember"
+            && params["arguments"]["tags"].as_array().is_some_and(|tags| {
+                tags.iter().filter_map(Value::as_str).any(|tag| {
+                    memcp_core::facts::normalize_tag(tag).is_ok_and(|tag| tag == "inbox")
+                })
+            });
+        if !read && (!write || inbox_note) {
+            return false;
+        }
+        let mut reads = self.last_reads.lock().unwrap_or_else(|e| e.into_inner());
+        reads.retain(|_, at| now.saturating_sub(*at) <= READ_RETENTION);
+        if read {
+            if reads.len() >= MAX_RECENT_READS
+                && !reads.contains_key(agent)
+                && let Some(oldest) = reads
+                    .iter()
+                    .min_by_key(|(_, at)| *at)
+                    .map(|(name, _)| name.clone())
+            {
+                reads.remove(&oldest);
+            }
+            reads
+                .entry(agent.clone())
+                .and_modify(|at| *at = (*at).max(now))
+                .or_insert(now);
+            return false;
+        }
+        !reads
+            .get(agent)
+            .is_some_and(|at| now.saturating_sub(*at) <= READ_WINDOW)
     }
 
     fn tools_call(&self, caller: &Caller, id: &Value, params: &Value, now: i64) -> Value {

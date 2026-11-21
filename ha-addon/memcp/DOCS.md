@@ -11,6 +11,7 @@ A durable memory for your AI assistants (Claude, Gemini, a local model), served 
 | option | meaning |
 |---|---|
 | `language` | The search language of a new memory (`en` or `fr`). |
+| `strict_write_agents` | Connections that must read the memory within 30 minutes before writing. Use a list of names or `["*"]` to cover all except apps, peers, consoles and the janitor. Empty by default. |
 | `admins` | Home Assistant logins that administer the installation. Empty: the first login. |
 | `new_people` | `auto` (the default): every Home Assistant user gets a memory of their own the first time they open it. `ask`: a user you did not add waits for you. |
 | `public_url` | The address assistants reach, `https://…`. |

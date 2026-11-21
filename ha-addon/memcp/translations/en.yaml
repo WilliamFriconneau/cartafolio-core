@@ -1,0 +1,4 @@
+configuration:
+  strict_write_agents:
+    name: Read before write
+    description: Connections that must read the memory within 30 minutes before writing. Enter connection names or a single "*" to cover all except apps, peers, consoles and the janitor.

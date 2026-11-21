@@ -29,6 +29,8 @@ ADMINS=$(bashio::config 'admins' | paste -sd, -)
 # Every Home Assistant user gets a memory of their own unless asked otherwise.
 if bashio::config.has_value 'new_people'; then ARGS+=(--new-people "$(bashio::config 'new_people')"); fi
 [ -n "$ADMINS" ] && ARGS+=(--admins "$ADMINS")
+STRICT_WRITE_AGENTS=$(bashio::config 'strict_write_agents' | paste -sd, -)
+[ -n "$STRICT_WRITE_AGENTS" ] && ARGS+=(--strict-write-agents "$STRICT_WRITE_AGENTS")
 if bashio::config.has_value 'public_url'; then
   ARGS+=(--public-url "$(bashio::config 'public_url')")
 else
