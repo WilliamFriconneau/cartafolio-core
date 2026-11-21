@@ -43,6 +43,7 @@ pub struct Options {
     pub allowed_origins: Vec<String>,
     /// Where the OAuth consent page is reached.
     pub login_url: Option<String>,
+    pub strict_write_agents: Vec<String>,
     pub oauth_redirects: Vec<String>,
     /// Tailnet login (lowercase) → person.
     pub tailnet_users: HashMap<String, String>,
@@ -146,6 +147,8 @@ impl Manager {
 
     /// What every installation here shares: the address, the origins, the OAuth redirects.
     fn configure(app: &mut App, opts: &Options) {
+        app.strict_write_agents
+            .clone_from(&opts.strict_write_agents);
         if let Some(name) = &opts.node_name {
             app.node_name.clone_from(name);
         }
@@ -186,13 +189,6 @@ impl Manager {
     /// How this node calls itself when it advertises and answers `/.well-known/memcp`.
     pub fn node_name(&self) -> String {
         self.node_name.read().map(|n| n.clone()).unwrap_or_default()
-    }
-
-    pub fn set_node_name(&self, name: &str) {
-        self.node_name
-            .write()
-            .map(|mut n| *n = name.to_string())
-            .ok();
     }
 
     /// The installation that answers a device asking to join: the first administrator's (their page shows the request

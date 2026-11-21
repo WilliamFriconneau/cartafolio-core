@@ -29,10 +29,6 @@ whisper-rs = { version = "0.16", optional = true }
 local-whisper = ["dep:whisper-rs"]
 metal = ["local-whisper", "whisper-rs/metal"]
 
-[dev-dependencies]
-base64 = "0.22"
-sha2 = "0.11.0"
-
 [lints]
 workspace = true
 
