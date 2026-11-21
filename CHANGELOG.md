@@ -1,5 +1,9 @@
 # Changelog
 
+## 20261122.2.0
+
+- **Derived records at one memory authority.** `deposit` writes records an app derived from a note (a training load, say) only on a node that holds the authority file, one record per origin; a second authority or an unbound legacy history is refused with `authority_unavailable` or `retry`, never merged silently.
+
 ## 20261122.1.0
 
 - **The product is now called Pensine** (Silice for a day, MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.
