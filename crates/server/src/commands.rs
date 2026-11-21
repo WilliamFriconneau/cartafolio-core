@@ -17,8 +17,8 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
   setup [--system] [--yes] [--person NAME] [--node-name NAME] [--language en|fr] [--listen ADDR]
         [--public-url URL] [--spaces LIST] [--assistant NAME] [--config FILE] [--force]
                                          first run: the data directory (private), the first memory, the default
-                                         spaces, memcp.toml; prints the page address and one address with the key for an
-                                         assistant. Asks questions on a terminal; --yes (or no terminal) asks nothing.
+                                         spaces, memcp.toml; prints the page address and a connection for an assistant that takes
+                                         a key. Asks questions on a terminal; --yes (or no terminal) asks nothing.
   config check|show|example              reads memcp.toml, shows it with every option, or prints the documented file
   prepare janitor --out DIR              what the janitor's service unit runs first: its key and its settings
   transcribe [--user PERSON]             one pass over the recordings waiting in the inboxes (the node does it by itself
@@ -66,7 +66,8 @@ pub const USAGE: &str = "usage: memcp --data DIR <command>
                                          the page through Home Assistant ingress
         [--identity-listen ADDR [--identity-trust IP] --tailnet-user login=person,... --login-url URL] [--oauth-redirect URL]
         [--strict-write-agents NAME,...]
-                                         OAuth for Claude on the web: consent page behind Tailscale serve
+                                         the private page can use tailnet identity
+                                         OAuth consent uses the public HTTPS address and an invitation code
   connect AGENT [--user PERSON] (--all | --grant health:rw,work:r)
         [--days N] [--read-only] [--rotate] [--internal] [--public-url URL]
                                          creates an MCP connection and shows its token once
@@ -129,6 +130,9 @@ Against a running node, with a key (docs/CLI.md): `memcp --node ADDRESS --key-fi
 MEMCP_KEY_FILE / MEMCP_KEY. The same commands print the same text; --json prints the node's JSON; --agent NAME (or
 MEMCP_AGENT) with a connection key does the note commands through the assistants' tools; --local forces the data directory.
 Exit codes: 0 done, 1 failed, 2 wrong command line, 3 key refused, 4 key lacks the rights, 5 node unreachable, 6 odd answer.
+
+For an assistant that signs in, use Connect an assistant on your page to make a one-time code for the public
+consent page. Assistants that take a key and devices use keys. Installers put silice aliases beside the memcp binaries.
 
 Settings come from silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
 The directory may come from MEMCP_DATA. The default public address comes from MEMCP_PUBLIC_URL.";

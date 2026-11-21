@@ -11,7 +11,7 @@ What follows was checked against Tailscale's documentation of `tailscale serve` 
 | An assistant on one of your machines → a node | MCP over HTTPS, address `https://<machine>.<tailnet>.ts.net/mcp/<connection>` | your tailnet only |
 | A node ↔ its peers (synchronisation, backup) | one encrypted connection per pair, over the tailnet (FEDERATION.md) | your tailnet only |
 | You → the page of a node | the identity listener behind `tailscale serve` | your tailnet only |
-| Claude on the web or the phone → a node (OAuth) | the MCP address must be public: `tailscale funnel` on that address only | the internet, on the MCP address only |
+| Claude on the web or the phone → a node (OAuth) | the MCP address must be public: `tailscale funnel` on that address only | the internet, for MCP and OAuth consent |
 
 ## Serving a node to the tailnet
 
@@ -51,7 +51,7 @@ tailscale funnel --bg --https=443 http://127.0.0.1:8791
 
 (`funnel` takes the same form as `serve`; I read the page of `serve` only, so check Tailscale's Funnel page for the flags of your version, and for the ports and the rules it asks for.)
 
-The consent page stays on the identity listener, private. Each approval makes an ordinary connection named `oauth-<person>-<client>`, with the rights you ticked and nothing else, which you can revoke on the page. A public address attracts probing: keep the keys limited to one space at a time and read-only first, and keep the node page off the public address (it is, by default).
+The assistant opens the consent page on the public address. Use **Connect an assistant** on your private node page to get a one-time invitation code, then enter it on the public consent page and choose the spaces to share. Each approval makes an ordinary connection named `oauth-<person>-<client>`, with the rights you ticked and nothing else, which you can revoke on the page. A public address attracts probing: keep the keys limited to one space at a time and read-only first, and keep the node page off the public address (it is, by default).
 
 ## Between nodes
 

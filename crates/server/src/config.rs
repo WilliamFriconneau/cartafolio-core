@@ -140,7 +140,7 @@ static WHERE: [Opt; 9] = [
     ),
 ];
 
-pub const DEFAULT_NODE_NAME: &str = "Silice";
+pub use memcp_core::directory::DEFAULT_NODE_NAME;
 
 static NODE: [Opt; 3] = [
     o(
@@ -885,17 +885,6 @@ fn valid_tailnet_pair(s: &str) -> bool {
     })
 }
 
-/// Resolves an explicit path, using the newer name first for a standard settings filename.
-pub fn named_path(path: PathBuf) -> PathBuf {
-    if path.file_name().is_some_and(|name| name == "memcp.toml") {
-        let alias = path.with_file_name("silice.toml");
-        if alias.is_file() {
-            return alias;
-        }
-    }
-    path
-}
-
 /// Finds settings by flag, environment, user directory or system directory.
 pub fn locate(explicit: Option<&str>) -> Result<Option<PathBuf>, String> {
     locate_with_data(explicit, None)
@@ -907,15 +896,15 @@ pub fn locate_with_data(
     data: Option<&Path>,
 ) -> Result<Option<PathBuf>, String> {
     if let Some(p) = explicit {
-        let p = named_path(PathBuf::from(p));
+        let p = PathBuf::from(p);
         return if p.is_file() {
             Ok(Some(p))
         } else {
             Err(format!("{}: no such settings file", p.display()))
         };
     }
-    if let Some(p) = memcp_core::env::var_os("MEMCP_CONFIG").filter(|p| !p.is_empty()) {
-        let p = named_path(PathBuf::from(p));
+    if let Some(p) = memcp_core::env::var_os("MEMCP_CONFIG") {
+        let p = PathBuf::from(p);
         return if p.is_file() {
             Ok(Some(p))
         } else {
@@ -1056,10 +1045,10 @@ mod alias_tests {
         let find = || settings_in(&dir).into_iter().find(|p| p.is_file());
         std::fs::write(&new, "")?;
         assert_eq!(find(), Some(new.clone()));
-        assert_eq!(locate(old.to_str())?, Some(new.clone()));
+        assert!(locate(old.to_str()).is_err());
         std::fs::write(&old, "")?;
         assert_eq!(find(), Some(new.clone()));
-        assert_eq!(locate(old.to_str())?, Some(new.clone()));
+        assert_eq!(locate(old.to_str())?, Some(old.clone()));
         std::fs::remove_file(new)?;
         assert_eq!(find(), Some(old.clone()));
         assert_eq!(locate(old.to_str())?, Some(old));

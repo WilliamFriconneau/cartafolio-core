@@ -199,7 +199,7 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
     await api("fact/add", { space: "owner-work", text: "Ask the doctor about the schedule", tags: ["owner-health"] });
     await api("fact/add", { space: "owner-health", text: "Walked four kilometres by the river", tags: ["training/walk"] });
   });
-  await page.reload(); await page.waitForSelector("#app:not([hidden])"); await sleep(900);
+  await page.reload(); await page.waitForSelector("#sections button");
 
   // ---- The journal of every space ----
   await page.evaluate(() => { location.hash = "#journal"; });
@@ -210,36 +210,46 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   check("each entry carries its space chip and its tags", (await page.locator("#gj-list .note .chip.sp").count()) === jrows && /planning/.test(await page.locator("#gj-list").innerText()));
   check("the notes of the rules (keywords) are not entries", !/"keywords"/.test(await page.locator("#gj-list").innerText()));
   await shot(page, "journal-1280.png");
-  await page.selectOption("#gj-space", "owner-work");
-  await sleep(500);
+  const journalAction = async action => {
+    const [response] = await Promise.all([
+      page.waitForResponse(r => new URL(r.url()).pathname.endsWith("/admin/api/journal")),
+      action(),
+    ]);
+    if (!response.ok()) throw new Error("journal request failed: " + response.status());
+    await page.waitForFunction(() => !GL.busy);
+  };
+  const clearJournal = () => journalAction(() => page.click("#gj-clear"));
+  const searchJournal = async words => {
+    await page.fill("#global-body input[type=search]", words);
+    await journalAction(() => page.press("#global-body input[type=search]", "Enter"));
+  };
+  await journalAction(() => page.selectOption("#gj-space", "owner-work"));
   check("filter by space", (await page.locator("#gj-list .note").count()) === 2 && (await page.locator("#gj-list .note .chip.sp:has-text('health')").count()) === 0);
-  await page.click("#gj-clear");
-  await sleep(500);
-  await page.selectOption("#gj-tag", "planning");
-  await sleep(500);
+  await clearJournal();
+  await journalAction(() => page.selectOption("#gj-tag", "planning"));
   check("filter by tag", (await page.locator("#gj-list .note").count()) === 2);
-  await page.click("#gj-clear");
-  await sleep(400);
-  await page.fill("#global-body input[type=search]", "kilometres");
-  await page.press("#global-body input[type=search]", "Enter");
-  await sleep(500);
+  await clearJournal();
+  await searchJournal("kilometres");
   check("search across spaces", (await page.locator("#gj-list .note").count()) === 1 && /health/i.test(await page.locator("#gj-list .chip.sp").innerText()));
-  await page.fill("#global-body input[type=search]", "nothing-like-this");
-  await page.press("#global-body input[type=search]", "Enter");
-  await sleep(500);
+  await searchJournal("nothing-like-this");
   check("no result says so and offers the way out", /No note matches/.test(await page.locator("#gj-list").innerText()) && (await page.locator("#gj-list button:has-text('Clear filters')").count()) === 1);
-  await page.click("#gj-list button:has-text('Clear filters')");
-  await sleep(500);
-  // load more: the page asks for 50; make it ask for 2
+  // Load two notes at a time and compare their ids with the unpaginated list.
+  const noteIds = () => page.locator("#gj-list .note").evaluateAll(ns => ns.map(n => n.dataset.id));
+  await journalAction(() => page.click("#gj-list button:has-text('Clear filters')"));
+  const allIds = await noteIds();
   await page.route("**/admin/api/journal?*", r => r.continue({ url: r.request().url().replace("limit=50", "limit=2") }));
-  await page.click("#gj-clear").catch(() => {});
-  await page.evaluate(() => { location.hash = "#graph"; }); await sleep(300);
-  await page.evaluate(() => { location.hash = "#journal"; }); await page.waitForSelector("#gj-more", { timeout: 5000 });
-  const before = await page.locator("#gj-list .note").count();
-  await page.click("#gj-more");
-  await sleep(600);
-  check("« Older notes » loads the next page, without a repeat", before === 2 && (await page.locator("#gj-list .note").count()) > before && (await page.locator("#gj-list .note").count()) <= jrows);
+  await page.evaluate(() => { location.hash = "#graph"; });
+  await page.waitForSelector("#graph-svg .gnode", { timeout: 5000 });
+  await journalAction(() => page.evaluate(() => { location.hash = "#journal"; }));
+  const firstIds = await noteIds();
+  await journalAction(() => page.click("#gj-more"));
+  const paginatedIds = await noteIds();
+  check("« Older notes » loads the next page, without a repeat", firstIds.length === 2
+    && paginatedIds.length > firstIds.length && paginatedIds.every(Boolean)
+    && new Set(paginatedIds).size === paginatedIds.length
+    && paginatedIds.every((id, i) => id === allIds[i]), paginatedIds.join(", "));
   await page.unroute("**/admin/api/journal?*");
+  await searchJournal("kilometres");
   const note = "Walked four kilometres by the river";
   await page.locator("#gj-list .note", { hasText: note }).click();
   const editor = page.locator("#space-body .editor textarea");

@@ -403,3 +403,62 @@ fn the_companion_services_get_their_key_and_settings_from_the_file() -> Res {
     let _ = fs::remove_dir_all(&t);
     Ok(())
 }
+
+#[test]
+fn setup_rewrites_only_the_explicit_configuration_path() -> Res {
+    let t = temp("config-path");
+    let folder = t.join("memcp");
+    fs::create_dir_all(&folder)?;
+    let legacy = folder.join("memcp.toml");
+    let newer = folder.join("silice.toml");
+    let untouched = "node_name = \"From discovery\"\n";
+    fs::write(&legacy, "node_name = \"Explicit\"\n")?;
+    fs::write(&newer, untouched)?;
+    let command = || {
+        let mut cmd = Command::new(BIN);
+        cmd.env("XDG_CONFIG_HOME", &t)
+            .env_remove("MEMCP_CONFIG")
+            .env_remove("SILICE_CONFIG")
+            .env_remove("MEMCP_NODE")
+            .env_remove("SILICE_NODE");
+        cmd
+    };
+    let implicit = command().args(["config", "check"]).output()?;
+    assert!(implicit.status.success());
+    assert!(String::from_utf8_lossy(&implicit.stdout).contains("silice.toml"));
+    for (variable, name) in [
+        (None, "Flag"),
+        (Some("MEMCP_CONFIG"), "Legacy"),
+        (Some("SILICE_CONFIG"), "Alias"),
+    ] {
+        let mut cmd = command();
+        if let Some(variable) = variable {
+            cmd.env(variable, &legacy);
+        } else {
+            cmd.arg("--config").arg(&legacy);
+        }
+        let check = cmd.args(["config", "check"]).output()?;
+        assert!(check.status.success());
+        assert!(String::from_utf8_lossy(&check.stdout).contains("memcp.toml"));
+
+        let mut cmd = command();
+        if let Some(variable) = variable {
+            cmd.env(variable, &legacy);
+        } else {
+            cmd.arg("--config").arg(&legacy);
+        }
+        let setup = cmd
+            .args(["setup", "--yes", "--force", "--node-name", name, "--data"])
+            .arg(t.join("data"))
+            .output()?;
+        assert!(
+            setup.status.success(),
+            "{}",
+            String::from_utf8_lossy(&setup.stderr)
+        );
+        assert!(fs::read_to_string(&legacy)?.contains(&format!("node_name = \"{name}\"")));
+        assert_eq!(fs::read_to_string(&newer)?, untouched);
+    }
+    fs::remove_dir_all(t)?;
+    Ok(())
+}

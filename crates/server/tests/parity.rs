@@ -18,13 +18,13 @@ fn read(rel: &str) -> String {
     }
 }
 
-/// The options of `ha-addon/memcp/config.yaml`: the keys under `options:`.
+/// The options of `ha-addon/memcp/config.yaml`: the keys under `schema:` (every option, including those with no default).
 fn addon_options() -> Vec<String> {
     let yaml = read("ha-addon/memcp/config.yaml");
     let mut keys = vec![];
     let mut inside = false;
     for line in yaml.lines() {
-        if line.starts_with("options:") {
+        if line.starts_with("schema:") {
             inside = true;
             continue;
         }

@@ -23,6 +23,7 @@ pub const SUPPORTED: [&str; 4] = ["2026-07-28", "2025-11-25", "2025-06-18", "202
 const MCP_BODY_MAX: usize = 34 * 1024 * 1024;
 const FAIL_WINDOW: i64 = 900;
 const MAX_FAILS_PER_IP: usize = 10;
+const MAX_CONSOLE_FAILURES: usize = 10;
 const MAX_FAILS_HELD: usize = 5000;
 const READ_WINDOW: i64 = 30 * 60;
 const READ_RETENTION: i64 = 24 * 60 * 60;
@@ -57,8 +58,8 @@ pub struct App {
     last_reads: Mutex<HashMap<String, i64>>,
     fails: Mutex<VecDeque<(i64, String)>>,
     rates: Mutex<HashMap<String, VecDeque<i64>>>,
-    /// One-time consent nonces: nonce → (person id, expiry, digest of the OAuth request it was given for).
-    pub(crate) consents: Mutex<HashMap<String, (String, i64, String)>>,
+    /// Pending OAuth approvals, keyed by their one-time nonce.
+    pub(crate) consents: Mutex<HashMap<String, crate::oauth::Consent>>,
     /// One-time invitation codes for the consent page, for a person who is not on the tailnet: hash of the code to
     /// (person id, end of validity). In memory only: a restart forgets them, and a code is made just before it is used.
     pub(crate) invites: Mutex<HashMap<String, (String, i64)>>,
@@ -130,10 +131,22 @@ pub fn listened_url(listen: &str) -> Option<String> {
 
 impl App {
     pub fn new(brain: Brain) -> App {
-        let node_name = memcp_core::directory::stored_own_name(&brain)
-            .ok()
-            .flatten()
-            .unwrap_or_else(|| crate::config::DEFAULT_NODE_NAME.into());
+        let node_name = memcp_core::directory::own_name(&brain).unwrap_or_else(|e| {
+            eprintln!("node name: {e}");
+            memcp_core::directory::DEFAULT_NODE_NAME.into()
+        });
+        Self::with_node_name(brain, node_name)
+    }
+
+    pub fn new_with_name(brain: Brain, name: Option<&str>) -> memcp_core::Result<App> {
+        if let Some(name) = name {
+            memcp_core::directory::set_own_name(&brain, name)?;
+        }
+        let node_name = memcp_core::directory::own_name(&brain)?;
+        Ok(Self::with_node_name(brain, node_name))
+    }
+
+    fn with_node_name(brain: Brain, node_name: String) -> App {
         App {
             brain,
             allowed_origins: vec![],
@@ -295,18 +308,40 @@ impl App {
         }
     }
 
+    pub(crate) fn invite_guard_key(req: &Request) -> String {
+        format!(
+            "invite:{}",
+            Self::guard_key(req.ip.as_deref().unwrap_or("?"))
+        )
+    }
+
+    pub fn console_guard_key(req: &Request) -> String {
+        format!(
+            "console:{}",
+            Self::guard_key(req.ip.as_deref().unwrap_or("?"))
+        )
+    }
+
     /// Failures held at the moment (bounded).
     pub fn failures_held(&self) -> usize {
         self.fails.lock().unwrap_or_else(|e| e.into_inner()).len()
     }
 
+    pub fn console_blocked(&self, now: i64, key: &str) -> bool {
+        self.blocked_with_limit(now, key, MAX_CONSOLE_FAILURES)
+    }
+
     pub fn blocked(&self, now: i64, who: &str) -> bool {
+        self.blocked_with_limit(now, who, MAX_FAILS_PER_IP)
+    }
+
+    pub(crate) fn blocked_with_limit(&self, now: i64, who: &str, limit: usize) -> bool {
         let who = Self::guard_key(who);
         let mut q = self.fails.lock().unwrap_or_else(|e| e.into_inner());
         while q.front().is_some_and(|(t, _)| now - t > FAIL_WINDOW) {
             q.pop_front();
         }
-        q.iter().filter(|(_, w)| *w == who).count() >= MAX_FAILS_PER_IP
+        q.iter().filter(|(_, w)| *w == who).count() >= limit
     }
 
     pub fn fail(&self, now: i64, who: &str) {

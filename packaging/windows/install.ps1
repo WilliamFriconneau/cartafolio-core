@@ -7,20 +7,20 @@ and nothing is put outside your own folders.
   powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall    remove the tasks and the programs; the memory is kept
 
 What goes where:
-  %LOCALAPPDATA%\MemCP\bin         memcp.exe, memcp-janitor.exe
+  %LOCALAPPDATA%\MemCP\bin         memcp executables and their silice aliases
   %LOCALAPPDATA%\MemCP\data        the memory (a folder of databases: back it up, it is yours)
   %LOCALAPPDATA%\MemCP\memcp.toml  the node's settings: voice notes, watched folders (readable by you only)
   %LOCALAPPDATA%\MemCP\keys        the keys of this computer and of its assistants (readable by you only)
   %LOCALAPPDATA%\MemCP\logs        node.log
   Task Scheduler, folder \MemCP     the task MemCP node
 
-An assistant reaches the memory at the node's address, with the key of `keys\desktop.key`.
+Assistants that take a key can use keys\desktop.key. Assistants that sign in use the public consent page and a one-time invitation code.
 #>
 [CmdletBinding()]
 param(
     [switch]$Yes,
     [string]$Version = $env:MEMCP_VERSION,
-    # Take memcp.exe and memcp-janitor.exe from this folder (a build of your own) instead of a release.
+    # Take the programs from this folder (a build of your own) instead of a release.
     [string]$From = $env:MEMCP_FROM,
     [string]$Language = $(if ($env:MEMCP_LANGUAGE) { $env:MEMCP_LANGUAGE } else { 'en' }),
     [string]$Spaces = $(if ($env:MEMCP_SPACES) { $env:MEMCP_SPACES } else { 'personal,work,health' }),
@@ -53,6 +53,10 @@ $Tasks = @('MemCP node')
 # The tasks of an earlier version: stopped and removed at every install and uninstall.
 $OldTasks = @('MemCP bridge', 'MemCP transcribe')
 $Programs = @('memcp', 'memcp-janitor')
+$Companions = @('memcp-manager', 'memcp-sync')
+$AliasSources = @('memcp') + $Companions
+$Aliases = @('silice', 'silice-manager', 'silice-sync')
+$ShippedPrograms = $Programs + $Companions + $Aliases
 $Target = 'x86_64-pc-windows-msvc'
 $NodeUrl = "http://127.0.0.1:$Port"
 # The connection of the assistants of this computer. An installation made before the rename has `desktop-bridge`: kept.
@@ -86,9 +90,33 @@ function Stop-Tasks {
         }
     }
     # A program the task started can outlive the task's stop: the ones of this install only.
-    Get-Process -Name $Programs -ErrorAction SilentlyContinue |
-        Where-Object { $_.Path -and $_.Path.StartsWith($Bin, [StringComparison]::OrdinalIgnoreCase) } |
-        Stop-Process -Force -ErrorAction SilentlyContinue
+    foreach ($program in $ShippedPrograms) {
+        $expected = [IO.Path]::GetFullPath((Join-Path $Bin "$program.exe"))
+        foreach ($process in (Get-Process -Name $program -ErrorAction SilentlyContinue)) {
+            if ([string]::Equals($process.Path, $expected, [StringComparison]::OrdinalIgnoreCase)) {
+                Stop-Process -InputObject $process -Force
+                if (-not $process.WaitForExit(10000)) { Die "$expected did not stop" }
+            }
+        }
+    }
+}
+
+function Confirm-ProgramsReplaceable {
+    foreach ($program in $ShippedPrograms) {
+        $path = Join-Path $Bin "$program.exe"
+        if (Test-Path -LiteralPath $path) {
+            try {
+                $file = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::ReadWrite, [IO.FileShare]::None)
+                $file.Dispose()
+            } catch { Die "cannot replace ${path}: $_" }
+        }
+    }
+    $probe = Join-Path $Bin ([Guid]::NewGuid().ToString())
+    try {
+        $file = [IO.File]::Open($probe, [IO.FileMode]::CreateNew, [IO.FileAccess]::Write, [IO.FileShare]::None,
+            4096, [IO.FileOptions]::DeleteOnClose)
+        $file.Dispose()
+    } catch { Die "cannot write to ${Bin}: $_" }
 }
 
 # --- uninstall -----------------------------------------------------------------------------------------------
@@ -126,15 +154,18 @@ $NodeUrl = "http://127.0.0.1:$Port"
 Step '2/5  Programs'
 foreach ($d in @($Root, $Bin, $Data, $Keys, $Logs)) { New-Item -ItemType Directory -Force -Path $d | Out-Null }
 Make-Private $Root
-Stop-Tasks
 if ($From) {
-    foreach ($p in @('memcp-manager', 'memcp-sync')) {
-        if (Test-Path (Join-Path $From "$p.exe")) { $Programs += $p }
+    foreach ($p in $Companions) {
+        if (Test-Path -LiteralPath (Join-Path $From "$p.exe") -PathType Leaf) { $Programs += $p }
     }
     foreach ($p in $Programs) {
         $f = Join-Path $From "$p.exe"
-        if (-not (Test-Path $f)) { Die "$f is missing" }
-        Copy-Item -Force $f (Join-Path $Bin "$p.exe")
+        if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { Die "$f is missing" }
+    }
+    Stop-Tasks
+    Confirm-ProgramsReplaceable
+    foreach ($p in $Programs) {
+        Copy-Item -Force -LiteralPath (Join-Path $From "$p.exe") -Destination (Join-Path $Bin "$p.exe")
     }
     Say "taken from $From"
 } else {
@@ -149,7 +180,7 @@ if ($From) {
     try {
         $sums = (Invoke-WebRequest -UseBasicParsing "$base/SHA256SUMS").Content
         if ($sums -is [byte[]]) { $sums = [Text.Encoding]::UTF8.GetString($sums) }
-        foreach ($p in @('memcp-manager', 'memcp-sync')) {
+        foreach ($p in $Companions) {
             if (($sums -split "`n") | Where-Object { $_.Trim().EndsWith(" $p-$Version-$Target.exe") }) {
                 $Programs += $p
             }
@@ -164,13 +195,15 @@ if ($From) {
             if ($want -ne $got) { Die "checksum mismatch for ${f}: refusing to install it" }
         }
         Say 'checksums match.'
-        foreach ($p in $Programs) { Copy-Item -Force (Join-Path $tmp "$p-$Version-$Target.exe") (Join-Path $Bin "$p.exe") }
+        Stop-Tasks
+        Confirm-ProgramsReplaceable
+        foreach ($p in $Programs) { Copy-Item -Force -LiteralPath (Join-Path $tmp "$p-$Version-$Target.exe") -Destination (Join-Path $Bin "$p.exe") }
     } finally { Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue }
 }
-foreach ($p in @('memcp', 'memcp-manager', 'memcp-sync')) {
+foreach ($p in $AliasSources) {
     $source = Join-Path $Bin "$p.exe"
-    if (Test-Path $source) {
-        Copy-Item -Force $source (Join-Path $Bin ("silice" + $p.Substring(5) + ".exe"))
+    if (Test-Path -LiteralPath $source -PathType Leaf) {
+        Copy-Item -Force -LiteralPath $source -Destination (Join-Path $Bin ("silice" + $p.Substring(5) + ".exe"))
     }
 }
 $Memcp = Join-Path $Bin 'memcp.exe'
@@ -339,9 +372,13 @@ The page of your memory, on this computer only:
 Its console key (shown once; it opens the page, never the memory):
   $console
 
-An assistant of this computer reaches the memory at $NodeUrl/mcp/$Connection. Its key is in
+An assistant that takes a key can use $NodeUrl/mcp/$Connection. Its key is in
   $desktopKey
 (readable by you only; read it only when you configure the assistant).
+Devices use their own pairing keys. For an assistant that signs in, use Connect an assistant on
+your page and enter its one-time invitation code on the public consent page.
+
+The silice.exe, silice-manager.exe and silice-sync.exe aliases are installed in $Bin.
 
 Voice notes and watched folders are set in $Settings (memcp config example lists the options);
 restart the node after a change.

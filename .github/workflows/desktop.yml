@@ -6,9 +6,9 @@ name: desktop
 on:
   push:
     branches: [main]
-    paths: ["packaging/**", "crates/capture/**", "crates/server/**", "crates/core/**", ".github/workflows/desktop.yml"]
+    paths: ["packaging/**", "crates/capture/**", "crates/server/**", "crates/core/**", "crates/manager/**", "crates/client/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
   pull_request:
-    paths: ["packaging/**", "crates/capture/**", "crates/server/**", "crates/core/**", ".github/workflows/desktop.yml"]
+    paths: ["packaging/**", "crates/capture/**", "crates/server/**", "crates/core/**", "crates/manager/**", "crates/client/**", "Cargo.toml", "Cargo.lock", ".github/workflows/desktop.yml"]
   workflow_dispatch:
 
 permissions:
@@ -20,12 +20,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build --release --locked -p memcp-server -p memcp-janitor
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-manager
+      - name: Build sync
+        run: cargo build --release --locked -p memcp-client --features sync --bin memcp-sync
       - name: Install
         run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791
       - name: A note, a file and an assistant's request through the node
         run: |
           APP="$HOME/Library/Application Support/MemCP"
+          for suffix in "" -manager -sync; do
+            test -x "$APP/bin/silice$suffix" || exit 1
+            test "$(readlink "$APP/bin/silice$suffix")" = "memcp$suffix" || exit 1
+          done
           M="$APP/bin/memcp"
           URL=http://127.0.0.1:18791/mcp/desktop
           launchctl list | grep org.memcp
@@ -55,7 +61,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build
-        run: cargo build --release --locked -p memcp-server -p memcp-janitor
+        run: cargo build --release --locked -p memcp-server -p memcp-janitor -p memcp-manager
+      - name: Build sync
+        run: cargo build --release --locked -p memcp-client --features sync --bin memcp-sync
       - name: Install
         shell: pwsh
         run: ./packaging/windows/install.ps1 -Yes -From target\release -Port 18791
@@ -64,6 +72,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $root = Join-Path $env:LOCALAPPDATA 'MemCP'
+          foreach ($suffix in @('', '-manager', '-sync')) {
+            $alias = Join-Path $root "bin\silice$suffix.exe"
+            $original = Join-Path $root "bin\memcp$suffix.exe"
+            if ((Get-FileHash -LiteralPath $alias).Hash -ne (Get-FileHash -LiteralPath $original).Hash) {
+              throw "wrong alias: $alias"
+            }
+          }
           $m = Join-Path $root 'bin\memcp.exe'
           $data = Join-Path $root 'data'
           Get-ScheduledTask -TaskPath '\MemCP\' | Format-Table TaskName, State

@@ -3,12 +3,12 @@
 
 mod common;
 
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::Brain;
 use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
+use memcp_core::{Brain, Error};
 
 const NOW: i64 = 1_900_000_000;
 
@@ -50,28 +50,31 @@ fn active(b: &Brain, space: &str) -> i64 {
 #[test]
 fn many_writers_on_one_space_lose_nothing_and_a_reader_sees_it_only_grow() -> Res {
     let t = Temp::new("conc-many");
-    let b = Arc::new(brain(&t)?);
+    let b = brain(&t)?;
     let (writers, each) = (8usize, 30usize);
     let done = Arc::new(AtomicBool::new(false));
     let start = Arc::new(Barrier::new(writers + 1));
-    let failures = Arc::new(AtomicUsize::new(0));
+    let space = sp("work");
+    let conn = b.open_space(&space)?;
+    let writers_conn = (0..writers)
+        .map(|_| b.open_space(&space))
+        .collect::<Result<Vec<_>, _>>()?;
     let reader = {
-        let (b, done, start) = (Arc::clone(&b), Arc::clone(&done), Arc::clone(&start));
+        let (done, start) = (Arc::clone(&done), Arc::clone(&start));
         std::thread::spawn(move || -> Result<Vec<i64>, String> {
+            let count = || {
+                conn.query_row(
+                    "SELECT count(*) FROM facts WHERE status = 'active'",
+                    [],
+                    |r| r.get(0),
+                )
+                .map_err(|e| format!("count: {e}"))
+            };
+            let first = count();
             start.wait();
-            let mut seen = vec![];
-            let conn = b
-                .open_space(&sp("work"))
-                .map_err(|e| format!("reader open: {e}"))?;
+            let mut seen = vec![first?];
             while !done.load(Ordering::SeqCst) {
-                let n: i64 = conn
-                    .query_row(
-                        "SELECT count(*) FROM facts WHERE status = 'active'",
-                        [],
-                        |r| r.get(0),
-                    )
-                    .map_err(|e| format!("count: {e}"))?;
-                // Searching while others write answers, and finds only whole facts.
+                let n = count()?;
                 let hits = facts::recall(&conn, "ka", &RecallOptions::default(), NOW)
                     .map_err(|e| format!("recall: {e}"))?;
                 if hits.iter().any(|h| h.fact.text.is_empty()) {
@@ -79,54 +82,53 @@ fn many_writers_on_one_space_lose_nothing_and_a_reader_sees_it_only_grow() -> Re
                 }
                 seen.push(n);
             }
+            seen.push(count()?);
             Ok(seen)
         })
     };
-    let handles: Vec<_> = (0..writers)
-        .map(|w| {
-            let (b, start, failures) = (Arc::clone(&b), Arc::clone(&start), Arc::clone(&failures));
+    let handles: Vec<_> = writers_conn
+        .into_iter()
+        .enumerate()
+        .map(|(w, conn)| {
+            let start = Arc::clone(&start);
+            let space = sp("work");
             std::thread::spawn(move || {
-                let space = sp("work");
                 start.wait();
-                for i in 0..each {
-                    let conn = match b.open_space(&space) {
-                        Ok(c) => c,
-                        Err(e) => {
-                            eprintln!("OPEN FAILED: {e}");
-                            failures.fetch_add(1, Ordering::SeqCst);
-                            continue;
+                (0..each)
+                    .filter_map(|i| {
+                        let text = format!("{} ka", words((w * 1000 + i) as u64));
+                        match facts::remember(
+                            &conn,
+                            &space,
+                            "me",
+                            NewFact::agent(&text, "agent:t"),
+                            &[],
+                        ) {
+                            Ok(Remembered::Created(_)) => None,
+                            other => Some(format!("writer {w}, write {i}: {other:?}")),
                         }
-                    };
-                    let text = format!("{} ka", words((w * 1000 + i) as u64));
-                    match facts::remember(
-                        &conn,
-                        &space,
-                        "me",
-                        NewFact::agent(&text, "agent:t"),
-                        &[],
-                    ) {
-                        Ok(Remembered::Created(_)) => {}
-                        other => {
-                            eprintln!("REMEMBER FAILED: {other:?}");
-                            failures.fetch_add(1, Ordering::SeqCst);
-                        }
-                    }
-                }
+                    })
+                    .collect::<Vec<_>>()
             })
         })
         .collect();
-    for h in handles {
-        h.join().map_err(|_| "a writer panicked")?;
-    }
+    let failures: Vec<_> = handles
+        .into_iter()
+        .flat_map(|h| {
+            h.join()
+                .unwrap_or_else(|_| vec!["a writer panicked".into()])
+        })
+        .collect();
     done.store(true, Ordering::SeqCst);
-    let seen = reader.join().map_err(|_| "the reader panicked")??;
-    assert_eq!(
-        failures.load(Ordering::SeqCst),
-        0,
-        "no write failed or was refused"
+    let seen = reader.join().map_err(|_| "the reader panicked")?;
+    assert!(
+        failures.is_empty() && seen.is_ok(),
+        "writers: {failures:?}, reader: {seen:?}"
     );
+    let seen = seen?;
+    assert_eq!(seen.first(), Some(&0));
+    assert_eq!(seen.last(), Some(&((writers * each) as i64)));
     assert_eq!(active(&b, "work"), (writers * each) as i64);
-    assert!(!seen.is_empty());
     assert!(
         seen.windows(2).all(|w| w[0] <= w[1]),
         "the count only grows: {seen:?}"
@@ -160,33 +162,40 @@ fn many_writers_on_one_space_lose_nothing_and_a_reader_sees_it_only_grow() -> Re
 #[test]
 fn the_same_text_written_at_once_is_kept_once() -> Res {
     let t = Temp::new("conc-same");
-    let b = Arc::new(brain(&t)?);
+    let b = brain(&t)?;
     let n = 8;
     let start = Arc::new(Barrier::new(n));
-    let created = Arc::new(AtomicUsize::new(0));
-    let handles: Vec<_> = (0..n)
-        .map(|_| {
-            let (b, start, created) = (Arc::clone(&b), Arc::clone(&start), Arc::clone(&created));
+    let connections = (0..n)
+        .map(|_| b.open_space(&sp("work")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let handles: Vec<_> = connections
+        .into_iter()
+        .map(|conn| {
+            let start = Arc::clone(&start);
             std::thread::spawn(move || {
-                let space = sp("work");
-                let conn = b.open_space(&space).unwrap_or_else(|e| panic!("{e}"));
                 start.wait();
-                if let Ok(Remembered::Created(_)) = facts::remember(
+                facts::remember(
                     &conn,
-                    &space,
+                    &sp("work"),
                     "me",
                     NewFact::agent("The boiler is serviced every autumn.", "agent:t"),
                     &[],
-                ) {
-                    created.fetch_add(1, Ordering::SeqCst);
-                }
+                )
             })
         })
         .collect();
-    for h in handles {
-        h.join().map_err(|_| "panicked")?;
-    }
-    assert_eq!(created.load(Ordering::SeqCst), 1);
+    let results: Vec<_> = handles.into_iter().map(|h| h.join()).collect();
+    assert!(
+        results.iter().all(|r| matches!(r, Ok(Ok(_)))),
+        "{results:?}"
+    );
+    assert_eq!(
+        results
+            .iter()
+            .filter(|r| matches!(r, Ok(Ok(Remembered::Created(_)))))
+            .count(),
+        1
+    );
     assert_eq!(active(&b, "work"), 1);
     Ok(())
 }
@@ -194,7 +203,7 @@ fn the_same_text_written_at_once_is_kept_once() -> Res {
 #[test]
 fn many_threads_superseding_one_fact_leave_one_winner_and_a_whole_history() -> Res {
     let t = Temp::new("conc-race");
-    let b = Arc::new(brain(&t)?);
+    let b = brain(&t)?;
     let space = sp("work");
     let id = {
         let conn = b.open_space(&space)?;
@@ -211,12 +220,16 @@ fn many_threads_superseding_one_fact_leave_one_winner_and_a_whole_history() -> R
     };
     let n = 8;
     let start = Arc::new(Barrier::new(n));
-    let handles: Vec<_> = (0..n)
-        .map(|i| {
-            let (b, start, id) = (Arc::clone(&b), Arc::clone(&start), id.clone());
+    let connections = (0..n)
+        .map(|_| b.open_space(&space))
+        .collect::<Result<Vec<_>, _>>()?;
+    let handles: Vec<_> = connections
+        .into_iter()
+        .enumerate()
+        .map(|(i, conn)| {
+            let (start, id) = (Arc::clone(&start), id.clone());
             std::thread::spawn(move || {
                 let space = sp("work");
-                let conn = b.open_space(&space).unwrap_or_else(|e| panic!("{e}"));
                 start.wait();
                 let text = format!("{} meeting moved", words(900 + i as u64));
                 facts::supersede(
@@ -227,16 +240,20 @@ fn many_threads_superseding_one_fact_leave_one_winner_and_a_whole_history() -> R
                     NewFact::agent(&text, "agent:t"),
                     None,
                 )
-                .is_ok()
             })
         })
         .collect();
-    let wins = handles
-        .into_iter()
-        .map(|h| h.join().unwrap_or(false))
-        .filter(|ok| *ok)
-        .count();
-    assert_eq!(wins, 1, "exactly one supersede wins the race");
+    let results: Vec<_> = handles.into_iter().map(|h| h.join()).collect();
+    assert_eq!(
+        results.iter().filter(|r| matches!(r, Ok(Ok(_)))).count(),
+        1,
+        "{results:?}"
+    );
+    assert!(
+        results.iter().all(|r| matches!(r, Ok(Ok(_)))
+            || matches!(r, Ok(Err(Error::Invalid(msg))) if msg.contains("is replaced:"))),
+        "{results:?}"
+    );
     let conn = b.open_space(&space)?;
     let (replaced, by): (String, Option<String>) = conn.query_row(
         "SELECT status, replaced_by FROM facts WHERE id = ?1",
@@ -259,7 +276,7 @@ fn many_threads_superseding_one_fact_leave_one_winner_and_a_whole_history() -> R
 #[test]
 fn a_retire_and_a_supersede_racing_on_one_fact_have_one_winner() -> Res {
     let t = Temp::new("conc-retire");
-    let b = Arc::new(brain(&t)?);
+    let b = brain(&t)?;
     let space = sp("work");
     let id = {
         let conn = b.open_space(&space)?;
@@ -275,41 +292,43 @@ fn a_retire_and_a_supersede_racing_on_one_fact_have_one_winner() -> Res {
         }
     };
     let start = Arc::new(Barrier::new(2));
-    let (b1, s1, id1) = (Arc::clone(&b), Arc::clone(&start), id.clone());
+    let (c1, c2) = (b.open_space(&space)?, b.open_space(&space)?);
+    let (s1, id1) = (Arc::clone(&start), id.clone());
     let retire = std::thread::spawn(move || {
-        let space = sp("work");
-        let conn = b1.open_space(&space).unwrap_or_else(|e| panic!("{e}"));
         s1.wait();
-        facts::retire(&conn, "me", &id1, "obsolete").is_ok()
+        facts::retire(&c1, "me", &id1, "obsolete")
     });
-    let (b2, s2, id2) = (Arc::clone(&b), Arc::clone(&start), id.clone());
+    let id2 = id.clone();
     let supersede = std::thread::spawn(move || {
         let space = sp("work");
-        let conn = b2.open_space(&space).unwrap_or_else(|e| panic!("{e}"));
-        s2.wait();
+        start.wait();
         facts::supersede(
-            &conn,
+            &c2,
             &space,
             "me",
             &id2,
             NewFact::agent("The garage code changed in spring.", "agent:t"),
             None,
         )
-        .is_ok()
     });
-    let (r, s) = (
-        retire.join().unwrap_or(false),
-        supersede.join().unwrap_or(false),
-    );
+    let (r, s) = (retire.join(), supersede.join());
     assert!(
-        r ^ s,
-        "one of the two wins, not both and not neither (retire {r}, supersede {s})"
+        matches!((&r, &s), (Ok(Ok(_)), Ok(Err(Error::Invalid(msg)))) if msg.contains("is retired:"))
+            || matches!((&r, &s), (Ok(Err(Error::Invalid(msg))), Ok(Ok(_))) if msg.contains("is replaced:")),
+        "retire: {r:?}, supersede: {s:?}"
     );
     let conn = b.open_space(&space)?;
     let status: String = conn.query_row("SELECT status FROM facts WHERE id = ?1", [&id], |r| {
         r.get(0)
     })?;
-    assert_eq!(status, if r { "retired" } else { "replaced" });
+    assert_eq!(
+        status,
+        if matches!(r, Ok(Ok(_))) {
+            "retired"
+        } else {
+            "replaced"
+        }
+    );
     Ok(())
 }
 

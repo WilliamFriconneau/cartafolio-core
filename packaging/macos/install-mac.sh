@@ -371,11 +371,16 @@ EOF
 [ -z "$TOKEN" ] || printf 'Its console key (shown once; it opens the page, never the memory):\n  %s\n' "$TOKEN"
 cat <<EOF
 
-An assistant of this Mac reaches the memory at $CONNECTION_URL. Its key is in the Keychain; read it only when you
+An assistant that takes a key can use $CONNECTION_URL. Its key is in the Keychain; read it only when you
 configure the assistant:
   security find-generic-password -s $SERVICE -a "$CONNECTION_URL" -w
 For Claude Code:
   claude mcp add --transport http memcp $CONNECTION_URL --header "Authorization: Bearer \$(security find-generic-password -s $SERVICE -a $CONNECTION_URL -w)"
+
+Devices use their own pairing keys. For an assistant that signs in, use Connect an assistant on
+your page and enter its one-time invitation code on the public consent page.
+
+The silice, silice-manager and silice-sync aliases are installed in $BIN.
 
 Voice notes and watched folders are set in $SETTINGS (\`memcp config example\` lists the options);
 restart the node after a change: launchctl kickstart -k $DOMAIN/org.memcp.node

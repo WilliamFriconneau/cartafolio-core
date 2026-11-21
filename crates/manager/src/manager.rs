@@ -129,7 +129,7 @@ impl Manager {
         };
         recover(&brain, "registry");
         text::set_language(brain.language().map_err(fail)?);
-        let mut app = App::new(brain);
+        let mut app = App::new_with_name(brain, opts.node_name.as_deref()).map_err(fail)?;
         Self::configure(&mut app, &opts);
         app.ingress_admins.clone_from(&opts.admins);
         app.auto_create_people = opts.auto_create_people;
@@ -149,9 +149,6 @@ impl Manager {
     fn configure(app: &mut App, opts: &Options) {
         app.strict_write_agents
             .clone_from(&opts.strict_write_agents);
-        if let Some(name) = &opts.node_name {
-            app.node_name.clone_from(name);
-        }
         if let Some(u) = &opts.public_url {
             app.public_url = u.trim_end_matches('/').to_string();
         } else if let Some(u) = opts
@@ -260,14 +257,11 @@ impl Manager {
             let ctl = brain.open_control().map_err(fail)?;
             users::claim_owner(&ctl, &u.name, &u.display, u.ha_user.as_deref()).map_err(fail)?;
         }
-        let mut app = App::new(brain);
+        let mut app = App::new_with_name(brain, self.opts.node_name.as_deref()).map_err(fail)?;
         Self::configure(&mut app, &self.opts);
         // The person's memory in the peer directory: the installation's name, and how it can be reached (the local
         // network on the listener, the tailnet or the internet on the public address). Without it the apps saw a
         // made-up name and no way in.
-        if let Some(n) = self.opts.node_name.as_deref() {
-            let _ = memcp_core::directory::set_own_name(&app.brain, n);
-        }
         let tailnet = self
             .opts
             .login_url
@@ -635,6 +629,33 @@ impl Manager {
         }
     }
 
+    /// An invitation or nonce selects its installation on either listener.
+    fn consent_by_secret(&self, req: &Request) -> Option<Response> {
+        let q = oauth::form(&req.body);
+        let approval = q.contains_key("nonce");
+        if !approval && !q.contains_key("invite") {
+            return None;
+        }
+        if !approval && oauth::invite_blocked(&self.registry, req, memcp_core::util::now()) {
+            return Some(self.registry.handle(req));
+        }
+        let found = self.holder(|app| {
+            if approval {
+                app.holds_consent(&req.body)
+            } else {
+                app.holds_invite(&req.body)
+            }
+        });
+        let app = found.as_deref().unwrap_or(&self.registry);
+        if !approval
+            && !std::ptr::eq(app, self.registry.as_ref())
+            && let Some(id) = q.get("client_id")
+        {
+            oauth::copy_client(&self.registry, app, id);
+        }
+        Some(app.handle(req))
+    }
+
     /// The installation to answer a request that carries a secret of its own.
     fn by_secret(&self, req: &Request) -> Arc<App> {
         let path = req.path.trim_end_matches('/');
@@ -679,6 +700,13 @@ impl Handler for Manager {
     }
 
     fn handle(&self, req: &Request) -> Response {
+        if !req.via_ingress
+            && req.method == "POST"
+            && req.path.trim_end_matches('/') == "/oauth/authorize"
+            && let Some(response) = self.consent_by_secret(req)
+        {
+            return response;
+        }
         if let Some(login) = &req.tailnet_login {
             return self.identity(req, login);
         }
@@ -749,42 +777,24 @@ impl Handler for Manager {
                     None => reply(&self.joiner()),
                 }
             }
-            // The consent page on the public address: a form with an invitation code, or the form that came back from it.
-            // The code (or the nonce it gave) belongs to one person's installation, which answers; the client the
-            // assistant registered with the registry is copied there first. Wrong codes are counted by the registry.
-            ("GET" | "POST", "/oauth/authorize") => {
-                let now = memcp_core::util::now();
-                let who = req.ip.clone().unwrap_or_else(|| "?".into());
-                // Only a code is a guess: an approval that carries its nonce is not held off with the guessers.
-                let guess = {
-                    let q = oauth::form(&req.body);
-                    q.contains_key("invite") && !q.contains_key("nonce")
-                };
-                if req.method == "POST" && !(guess && self.registry.blocked(now, &who)) {
-                    let found =
-                        self.holder(|a| a.holds_invite(&req.body) || a.holds_consent(&req.body));
-                    if let Some(app) = found.filter(|a| !Arc::ptr_eq(a, &self.registry)) {
-                        let cid = oauth::form(&req.body)
-                            .get("client_id")
-                            .cloned()
-                            .unwrap_or_default();
-                        if !cid.is_empty() {
-                            oauth::copy_client(&self.registry, &app, &cid);
-                        }
-                        return reply(&app);
-                    }
-                }
-                reply(&self.registry)
-            }
+            ("GET" | "POST", "/oauth/authorize") => reply(&self.registry),
             // An administrator's console token makes an invitation code for a person: `{"name": "<person>"}`.
             // Like the rest of the control plane, never to a request that came through Funnel.
             ("POST", "/admin/api/users/invite") => {
                 if !self.registry.console_admin || memcp_server::app::through_funnel(req) {
                     return err(404, "not found");
                 }
+                let now = memcp_core::util::now();
+                let from = App::console_guard_key(req);
+                if self.registry.console_blocked(now, &from) {
+                    return err(429, "too many attempts").with("Retry-After", "900");
+                }
                 if self.console_admin_of(req) {
                     self.make_invite(req)
                 } else {
+                    if memcp_server::http::bearer_of(req.header("authorization")).is_some() {
+                        self.registry.fail(now, &from);
+                    }
                     err(401, "an administrator's console token is required")
                 }
             }

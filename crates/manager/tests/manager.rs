@@ -314,8 +314,7 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
         .ok_or("client")?
         .to_string();
     let q = authorize_path(&client);
-    // Lou, on the tailnet, gets the code form, and with the code the administrator made, the consent page of Lou's
-    // vaults and nobody else's.
+    // A tailnet account gets the invitation form. The invitation selects Lou even from Alice’s browser.
     let form_page = m.handle(&tailnet("lou@example.org", "GET", &q, ""));
     assert_eq!(form_page.status, 200);
     assert!(String::from_utf8_lossy(&form_page.body).contains("invitation code"));
@@ -331,12 +330,16 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
         .split_once('?')
         .map(|(_, b)| format!("{b}&invite={invite}"))
         .ok_or("form")?;
-    let page = m.handle(&tailnet(
-        "lou@example.org",
-        "POST",
-        "/oauth/authorize",
-        &with_code,
-    ));
+    let post = |body: &str, origin: &str| {
+        let mut request = tailnet("alice@example.org", "POST", "/oauth/authorize", body);
+        request.headers.insert("origin".into(), origin.into());
+        request
+            .headers
+            .insert("sec-fetch-site".into(), "same-origin".into());
+        m.handle(&request)
+    };
+    assert_eq!(post(&with_code, "https://memory.example.net").status, 403);
+    let page = post(&with_code, "https://memory.example.net:8792");
     assert_eq!(page.status, 200, "{}", String::from_utf8_lossy(&page.body));
     let html = String::from_utf8(page.body.clone())?;
     assert!(
@@ -353,12 +356,7 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
         .split_once('?')
         .map(|(_, b)| format!("{b}&decision=allow&nonce={nonce}&v_lou-me=1"))
         .ok_or("form")?;
-    let done = m.handle(&tailnet(
-        "lou@example.org",
-        "POST",
-        "/oauth/authorize",
-        &form,
-    ));
+    let done = post(&form, "https://memory.example.net:8792");
     assert_eq!(done.status, 302, "{}", String::from_utf8_lossy(&done.body));
     let loc = done
         .headers
@@ -1003,7 +1001,10 @@ fn a_person_off_the_tailnet_connects_claude_with_a_code_the_administrator_makes(
             .map(|(_, b)| format!("{b}{extra}"))
             .unwrap_or_default()
     };
-    let site = [("origin", "https://memory.example.net")];
+    let site = [
+        ("origin", "https://memory.example.net"),
+        ("sec-fetch-site", "same-origin"),
+    ];
     assert_eq!(m.handle(&rq("GET", &q, &[], "")).status, 200);
     let consent = m.handle(&rq(
         "POST",
@@ -1115,5 +1116,59 @@ fn the_invitation_endpoint_takes_an_administrators_console_token_and_never_funne
         "a member is not an administrator"
     );
     assert_eq!(post("not-a-token", false).status, 401);
+    for _ in 0..10 {
+        post("not-a-token", false);
+    }
+    assert_eq!(post(&admin, false).status, 429);
+    let app = m.person_app("alice").ok_or("person")?;
+    let vault = app.brain.add_vault(users::OWNER, "alice", "me")?;
+    let key = key(&m, "alice", "valid-key", &format!("{vault}:r"))?;
+    let mcp = rq(
+        "POST",
+        "/mcp/alice/valid-key",
+        &[("authorization", &format!("Bearer {key}"))],
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+    );
+    assert!(
+        !m.registry()
+            .blocked(memcp_core::util::now(), mcp.ip.as_deref().unwrap_or("?"))
+    );
+    assert_eq!(m.handle(&mcp).status, 200);
+    Ok(())
+}
+
+#[test]
+fn a_restored_manager_keeps_the_name_already_stored_in_its_memory() -> Res {
+    let old = Dir::new("before-import");
+    let restored = Dir::new("after-import");
+    let first = Manager::open(old.path(), options()).map_err(|e| e.1)?;
+    assert_eq!(first.node_name(), "Silice");
+    assert_eq!(
+        memcp_core::directory::stored_own_name(&first.registry().brain)?.as_deref(),
+        Some("Silice"),
+    );
+    let mut explicit = options();
+    explicit.node_name = Some("Atelier".into());
+    drop(first);
+    let named = Manager::open(old.path(), explicit).map_err(|e| e.1)?;
+    assert_eq!(named.node_name(), "Atelier");
+    let ctl = named.registry().brain.open_control()?;
+    ctl.execute_batch("PRAGMA wal_checkpoint(TRUNCATE)")?;
+    drop(ctl);
+    drop(named);
+
+    // The add-on imports the manager's existing registry and data directories.
+    let registry = restored.path().join("registry");
+    fs::create_dir_all(&registry)?;
+    for entry in fs::read_dir(old.path().join("registry"))? {
+        let entry = entry?;
+        if entry.file_type()?.is_file() {
+            fs::copy(entry.path(), registry.join(entry.file_name()))?;
+        }
+    }
+    for _ in 0..2 {
+        let restarted = Manager::open(restored.path(), options()).map_err(|e| e.1)?;
+        assert_eq!(restarted.node_name(), "Atelier");
+    }
     Ok(())
 }

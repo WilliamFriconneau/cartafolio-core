@@ -78,9 +78,6 @@ fn local_address(listen: &str) -> String {
 
 /// Where setup writes the settings: the one named; else the system's with `--system`; else the user's.
 fn target_config(a: &SetupArgs) -> PathBuf {
-    if let Some(c) = &a.config {
-        return c.clone();
-    }
     if a.system {
         return PathBuf::from("/etc/memcp/memcp.toml");
     }
@@ -99,7 +96,11 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         Some(p) => Settings::load(p).map_err(bad_text)?,
         None => Settings::default(),
     };
-    let cfg_path = existing.unwrap_or_else(|| target_config(&a));
+    let cfg_path = a
+        .config
+        .clone()
+        .or(existing)
+        .unwrap_or_else(|| target_config(&a));
 
     println!("Silice setup\n");
     let default_data = a

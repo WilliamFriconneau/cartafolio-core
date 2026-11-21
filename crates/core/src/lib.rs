@@ -107,13 +107,15 @@ pub mod env {
             .strip_prefix("MEMCP_")
             .or_else(|| name.strip_prefix("SILICE_"))
         {
-            get(&format!("SILICE_{suffix}")).or_else(|| get(&format!("MEMCP_{suffix}")))
+            get(&format!("SILICE_{suffix}"))
+                .filter(|value| !value.is_empty())
+                .or_else(|| get(&format!("MEMCP_{suffix}")).filter(|value| !value.is_empty()))
         } else {
             get(name)
         }
     }
 
-    /// Reads a variable, preferring its `SILICE_` spelling over `MEMCP_`.
+    /// Reads a variable, preferring a nonempty `SILICE_` value over `MEMCP_`.
     pub fn var_os(name: &str) -> Option<OsString> {
         lookup(name, |key| env::var_os(key))
     }
@@ -147,7 +149,7 @@ pub mod env {
                 (Some("new"), Some("old"), "new"),
                 (Some("new"), None, "new"),
                 (None, Some("old"), "old"),
-                (Some(""), Some("old"), ""),
+                (Some(""), Some("old"), "old"),
             ] {
                 for name in ["MEMCP_TEST", "SILICE_TEST"] {
                     assert_eq!(
@@ -170,10 +172,11 @@ pub fn program_name(
     legacy: &'static str,
     alias: &'static str,
 ) -> &'static str {
-    if argv0
-        .file_name()
-        .is_some_and(|name| name.to_string_lossy().starts_with("silice"))
-    {
+    if argv0.file_stem().is_some_and(|name| {
+        name.to_string_lossy()
+            .to_ascii_lowercase()
+            .starts_with("silice")
+    }) {
         alias
     } else {
         legacy
@@ -199,6 +202,7 @@ mod program_name_tests {
         ] {
             for (argv0, expected) in [
                 (format!("/bin/{alias}.exe"), alias),
+                (format!("/bin/{}.EXE", alias.to_ascii_uppercase()), alias),
                 ("silice-custom".into(), alias),
                 (format!("/silice/{legacy}"), legacy),
                 ("renamed".into(), legacy),

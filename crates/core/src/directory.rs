@@ -23,6 +23,9 @@ const TOUCH_EVERY: i64 = 30;
 /// Entries taken from one exchange: a directory is small, anything bigger is not one.
 const MAX_ENTRIES: usize = 10_000;
 
+/// The name stored on first use if no name was given.
+pub const DEFAULT_NODE_NAME: &str = "Silice";
+
 const NAME_KEY: &str = "node_name";
 
 /// The version of this program, as peers tell each other.
@@ -213,7 +216,7 @@ pub fn stored_own_name(brain: &Brain) -> Result<Option<String>> {
     meta_get(&brain.open_control()?, NAME_KEY)
 }
 
-/// This node's name in the directory: the one the person gave it, else one made once and kept.
+/// This node's stored name, defaulting to Silice on first use.
 pub fn own_name(brain: &Brain) -> Result<String> {
     let ctl = brain.open_control()?;
     own_name_in(&ctl)
@@ -225,10 +228,7 @@ fn own_name_in(ctl: &Connection) -> Result<String> {
     }
     ctl.execute(
         "INSERT OR IGNORE INTO meta (k, v) VALUES (?1, ?2)",
-        params![
-            NAME_KEY,
-            format!("node-{}", util::random_base32(8).to_lowercase())
-        ],
+        params![NAME_KEY, DEFAULT_NODE_NAME],
     )?;
     meta_get(ctl, NAME_KEY)?.ok_or_else(|| Error::Schema("node name not written".into()))
 }

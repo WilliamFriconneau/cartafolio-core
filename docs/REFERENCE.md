@@ -149,18 +149,16 @@ nothing is exposed on the network.
    folder (mounted folders, [SPACES.md](SPACES.md)), and a file rewritten by hand is a new version, not a correction with its
    old text kept. Use it for a library you only read, not for the memory.
 
-### Hermes Agent
+### Other MCP clients
 
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) connects like any MCP client: add the connection's address and key as an MCP server in its configuration, or `memcp mcp` for a Hermes on the same computer. Silice has no plugin of its own for it: one way in, the MCP, for every assistant.
+For a client that takes a key, add the connection address and key as an MCP server. A client on the same computer can also run `memcp mcp` over standard input and output.
 
-### Claude on the web (OAuth)
+### Assistants that sign in (OAuth)
 
-Claude's web and mobile apps connect with OAuth from their own servers, so the MCP address must be public (Tailscale Funnel, for instance) while the consent page stays private:
+An assistant that signs in connects to the public HTTPS address and opens its consent page. Put that address behind an HTTPS proxy such as Tailscale Funnel and tell the node its public URL:
 
 ```sh
-memcp serve --public-url https://memory.example.net \
-  --identity-listen 127.0.0.1:8792 --login-url https://memory.example.net:8792 \
-  --tailnet-user you@example.org=you
+memcp serve --public-url https://memory.example.net
 ```
 
 The consent page is on the public address, and every new connection starts with a one-time invitation code (twelve letters, `XXXX-XXXX-XXXX`, good for one hour and one use): the person makes it on their own page (« Connect an assistant » shows it in the steps) or an administrator makes it for them (the « claude.ai code » button of their tile). The code opens the consent page of that person alone, where they tick the spaces and approve the client. No Tailscale is needed to connect. Each approval is a normal connection named `oauth-<person>-<client>` (or the name the address gives), listed and revoked like the others. A consent only ever renews a connection a consent made for the same person: when the name is held by any other connection (an app's, a machine's, a key made by hand), even one made between the consent and the exchange of its code, the client gets `<name>-2` (then `-3`…) and the other connection is left as it was. An address whose name starts with `peer-` or `console-` gets no connector. A connection made by OAuth is never offered `folder_set`. The identity listener believes the Tailscale login header of requests from the loopback, or from the one address given with `--identity-trust` (the add-on uses it); run it on a host whose local accounts you trust.

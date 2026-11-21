@@ -12,6 +12,19 @@ Pick one.
 
 **From source.** `cargo install --path crates/server` and `cargo install --path crates/janitor`.
 
+To check installer path quoting on a Linux machine with a systemd user session, run this from an unpacked release archive:
+
+```sh
+check_dir=$(mktemp -d "$HOME/silice-install-check.XXXXXX")
+XDG_CONFIG_HOME="$check_dir/config files" MEMCP_SERVICE=yes \
+  sh ./install.sh --yes --port 18791 --prefix "$check_dir/bin & tools" --data "$check_dir/my memory"
+systemctl --user status memcp
+curl -fsS http://127.0.0.1:18791/health
+"$check_dir/bin & tools/silice" --data "$check_dir/my memory" doctor
+```
+
+Use a test account without an existing MemCP service. If the user manager does not load the temporary configuration directory, run `systemd-analyze --user verify "$check_dir/config files/systemd/user/memcp.service"` and test the generated unit from the user manager's regular unit directory.
+
 ## First run
 
 ```sh
@@ -30,7 +43,7 @@ memcp setup --system --yes --person "Ana" --node-name atelier --language fr \
 It makes the data folder (mode `0700`, its files `0600`, owned by the service user), the first memory with its spaces, `memcp.toml` (only when there is none; `--force` writes it again), and then prints two things, once:
 
 - the address of **your page**, on this machine only (`http://127.0.0.1:8791/admin`), and a **console key** that opens it;
-- **one address for an assistant with its key in it** (`https://.../mcp/assistant?key=...`), and the same as a `claude mcp add` line. Paste it in the assistant and it is connected. The key reaches the spaces that were made and nothing else; shrink it later with `memcp regrant assistant --grant health:rw`.
+- **one address for an assistant that takes a key, with the key in it** (`https://.../mcp/assistant?key=...`), and the same as a `claude mcp add` line. Paste it in the assistant and it is connected. The key reaches the spaces that were made and nothing else; shrink it later with `memcp regrant assistant --grant health:rw`.
 
 Run again, `setup` leaves an existing memory and settings alone.
 
@@ -47,7 +60,7 @@ The node page (`/admin`) is the same page as in Home Assistant, outside Home Ass
    tailnet_users = ["you@example.org=owner"]
    ```
 
-   and `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8792`. The identity listener believes the `Tailscale-User-Login` header only from the loopback (or from the one address in `identity_trust`), so any other caller gets 403; a login that is not in `tailnet_users` is refused. This listener also serves the consent page of Claude on the web. Never put it behind Funnel.
+   and `sudo tailscale serve --bg --https=8443 http://127.0.0.1:8792`. The identity listener believes the `Tailscale-User-Login` header only from the loopback (or from the one address in `identity_trust`), so any other caller gets 403; a login that is not in `tailnet_users` is refused. Keep this listener private. Assistants that sign in open the consent page on the public HTTPS address and use a one-time invitation code from **Connect an assistant**. Devices use their own pairing keys.
 
 Both are checked by tests: `crates/server/tests/admin.rs` (console keys open the page, MCP keys do not, the page is not served through Funnel, failed keys are blocked), `crates/server/tests/oauth.rs` (the page on the tailnet knows the owner, a stranger is refused) and `crates/server/tests/linux.rs` (the same through the real program, started from `memcp.toml`).
 

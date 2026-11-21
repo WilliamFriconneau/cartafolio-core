@@ -1216,6 +1216,28 @@ fn an_invitation_code_is_good_once_and_wrong_ones_are_counted() -> Res {
     let fresh = invite(&e)?;
     let held = public_post(&e, &form_of(&q, &format!("&invite={fresh}")), &SITE);
     assert_eq!(held.status, 429);
+    assert_ne!(
+        token(&e, "grant_type=refresh_token&refresh_token=invalid").status,
+        429
+    );
+    let ctl = e.app.brain.open_control()?;
+    let key = access::connect_for(
+        &ctl,
+        users::OWNER,
+        "valid-key",
+        &access::Rights::parse("personal:r")?,
+        None,
+        false,
+        false,
+    )?;
+    let req = rq(
+        "POST",
+        "/mcp/personal",
+        &[("authorization", &format!("Bearer {key}"))],
+        r#"{"jsonrpc":"2.0","id":1,"method":"tools/list"}"#,
+        None,
+    );
+    assert_eq!(e.app.handle(&req).status, 200);
     Ok(())
 }
 
@@ -1347,5 +1369,164 @@ fn a_person_cannot_fill_the_places_of_the_others() -> Res {
         assert!(oauth::invite_create(&e.app, "owner", util_now()).is_some());
     }
     assert!(oauth::invite_create(&e.app, "owner", util_now()).is_none());
+    Ok(())
+}
+
+#[test]
+fn a_consent_target_cannot_change_from_connection_to_space() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = format!(
+        "{}&resource={}/mcp/later",
+        authorize_query(&client),
+        e.app.public_url
+    );
+    let n = nonce(&e, &q)?;
+    e.app.brain.add_space(&Space::new("later")?)?;
+    assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 400);
+    assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 403);
+    Ok(())
+}
+
+#[test]
+fn consent_binds_state_and_scope() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = format!("{}&scope=read", authorize_query(&client));
+    for (old, new) in [("state=xyz", "state=other"), ("scope=read", "scope=write")] {
+        let n = nonce(&e, &q)?;
+        assert_eq!(
+            decide(&e, &q.replace(old, new), &n, "allow", &SITE).status,
+            400
+        );
+        assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 403);
+    }
+    Ok(())
+}
+
+#[test]
+fn an_invitation_survives_an_unavailable_connection_name() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let code = invite(&e)?;
+    let q = authorize_query(&client);
+    let ok = form_of(&q, &format!("&invite={code}"));
+    let reserved = format!("{ok}&resource={}/mcp/console-reserved", e.app.public_url);
+    let rejected = public_post(&e, &reserved, &SITE);
+    assert_eq!(rejected.status, 403);
+    assert!(String::from_utf8_lossy(&rejected.body).contains("already used"));
+    assert_eq!(public_post(&e, &ok, &SITE).status, 200);
+    Ok(())
+}
+
+#[test]
+fn an_approval_survives_a_storage_failure_and_succeeds_once() -> Res {
+    let e = env()?;
+    let q = authorize_query(&register(&e)?);
+    let n = nonce(&e, &q)?;
+    let ctl = e.app.brain.open_control()?;
+    ctl.execute_batch(
+        "CREATE TRIGGER fail_code BEFORE INSERT ON oauth_codes
+         BEGIN SELECT RAISE(ABORT, 'test storage failure'); END;",
+    )?;
+    assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 500);
+    ctl.execute_batch("DROP TRIGGER fail_code")?;
+
+    let barrier = std::sync::Barrier::new(2);
+    let statuses = std::thread::scope(|scope| {
+        let approve = || {
+            barrier.wait();
+            decide(&e, &q, &n, "allow", &SITE).status
+        };
+        let first = scope.spawn(approve);
+        let second = scope.spawn(approve);
+        Ok::<_, Box<dyn Error>>([
+            first.join().map_err(|_| "first approval panicked")?,
+            second.join().map_err(|_| "second approval panicked")?,
+        ])
+    })?;
+    let mut statuses = statuses;
+    statuses.sort_unstable();
+    assert_eq!(statuses, [302, 403]);
+    let count: i64 = ctl.query_row("SELECT count(*) FROM oauth_codes", [], |r| r.get(0))?;
+    assert_eq!(count, 1);
+    Ok(())
+}
+
+#[test]
+fn client_capacity_also_applies_to_clients_copied_by_the_manager() -> Res {
+    let source = env()?;
+    let destination = env()?;
+    let existing_id = register(&destination)?;
+    let new_id = register(&source)?;
+    let ctl = destination.app.brain.open_control()?;
+    ctl.execute(
+        "WITH RECURSIVE ids(n) AS (VALUES (1) UNION ALL SELECT n + 1 FROM ids WHERE n < 199)
+         INSERT INTO oauth_clients (client_id, name, redirect_uris, created_at)
+         SELECT 'recent-' || n, 'Recent client', '[]', ?1 FROM ids",
+        [util_now()],
+    )?;
+    let refused = destination.app.handle(&rq(
+        "POST",
+        "/oauth/register",
+        &[],
+        &json!({ "redirect_uris": [CALLBACK] }).to_string(),
+        None,
+    ));
+    assert_eq!(refused.status, 400);
+    assert!(!oauth::copy_client(&source.app, &destination.app, &new_id));
+    assert!(oauth::copy_client(
+        &destination.app,
+        &destination.app,
+        &existing_id
+    ));
+    let count: i64 = ctl.query_row("SELECT count(*) FROM oauth_clients", [], |r| r.get(0))?;
+    assert_eq!(count, 200);
+    Ok(())
+}
+
+#[test]
+fn a_browser_can_use_the_identity_listener_without_a_login_url() -> Res {
+    let mut e = env()?;
+    e.app.login_url = None;
+    let q = authorize_query(&register(&e)?);
+    let post = |extra: &str, site: &str| {
+        e.app.handle(&rq(
+            "POST",
+            "/oauth/authorize",
+            &[
+                ("origin", "https://identity.example.net"),
+                ("sec-fetch-site", site),
+            ],
+            &form_of(&q, extra),
+            Some("owner@example.org"),
+        ))
+    };
+    let body = format!("&invite={}", invite(&e)?);
+    assert_eq!(post(&body, "same-site").status, 403);
+    let page = post(&body, "same-origin");
+    assert_eq!(page.status, 200);
+    let n = nonce_from(&String::from_utf8(page.body)?)?;
+    assert_eq!(
+        post(
+            &format!("&nonce={n}&decision=allow&v_personal=1"),
+            "same-origin"
+        )
+        .status,
+        302
+    );
+    Ok(())
+}
+
+#[test]
+fn approval_checks_that_the_person_still_reaches_the_space() -> Res {
+    let e = env()?;
+    let q = authorize_query(&register(&e)?);
+    let n = nonce(&e, &q)?;
+    let ctl = e.app.brain.open_control()?;
+    ctl.execute("DELETE FROM space_members WHERE space = 'personal'", [])?;
+    assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 400);
+    let count: i64 = ctl.query_row("SELECT count(*) FROM oauth_codes", [], |r| r.get(0))?;
+    assert_eq!(count, 0);
     Ok(())
 }

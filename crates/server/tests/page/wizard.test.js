@@ -30,7 +30,12 @@ const mockFetch = async (url, opts = {}) => {
   calls.push([opts.method || "GET", path, opts.body]);
   const ok = body => ({ ok: true, status: 200, json: async () => body });
   if (path === "state") return ok(state());
-  if (path === "invite") return ok({ code: "ABCD-EFGH-JKMN" });
+  if (path === "invite") {
+    const number = calls.filter(([, route]) => route === "invite").length;
+    if (number === 1) await new Promise(resolve => { world.releaseFirstInvite = resolve; });
+    const code = ["", "LATE-CODE-TEST", "ABCD-EFGH-JKMN", "NPQR-STUV-WXYZ"][number];
+    return ok({ code, expires_at: Math.floor(Date.now() / 1000) + 3600 });
+  }
   if (path.startsWith("guide?scope=")) {
     const scope = decodeURIComponent(path.split("=")[1]);
     return ok({ scope, max_chars: 16384, versions: guides[scope] ? 2 : 0, current: guides[scope] ? { body: guides[scope], author: "u1", written_at: "x" } : null });
@@ -84,6 +89,11 @@ const dom = new JSDOM(html, {
 const w = dom.window, d = w.document;
 const $ = s => d.querySelector(s), $$ = s => [...d.querySelectorAll(s)];
 const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function until(condition, timeout = 5000) {
+  const end = Date.now() + timeout;
+  while (!condition() && Date.now() < end) await sleep(25);
+  return condition();
+}
 const text = s => ($(s) ? $(s).textContent : "");
 const click = el => el.dispatchEvent(new w.MouseEvent("click", { bubbles: true }));
 let failed = 0;
@@ -168,12 +178,19 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("no vault box for an OAuth platform", $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").length === 0);
   check("it waits", text("#w-wait").includes("Waiting"));
   check("the internet warning shows", text("#w-steps").includes("from the internet"));
-  await sleep(50);
-  check("the steps show the invitation code issued by the node", calls.some(([method, path]) => method === "POST" && path === "invite") && $$("#w-steps pre").some(p => p.textContent === "ABCD-EFGH-JKMN"));
+  const hasCode = code => $$("#w-steps pre").some(p => p.textContent === code);
+  check("the steps show the invitation code and its expiry", await until(() => hasCode("ABCD-EFGH-JKMN"))
+    && /Code expires at.*\d/.test(text("#w-steps")) && !$("#w-new-code").disabled);
+  world.releaseFirstInvite();
+  await new Promise(resolve => setImmediate(resolve));
+  check("a late invitation cannot update the reopened wizard", hasCode("ABCD-EFGH-JKMN"));
+  const beforeNewCode = calls.length;
+  click($("#w-new-code"));
+  check("a new code replaces the old one", await until(() => hasCode("NPQR-STUV-WXYZ")));
+  check("issuing a code does not reload the page state", calls.slice(beforeNewCode).every(([, path]) => path !== "state"));
   // the consent happens elsewhere: a new oauth connection appears
   world.connections.push({ agent: "claudeai", user: "u1", rights: "work:rw", upstream: "none", read_only: false, revoked: false, created_at: "x", last_used_at: null, expires_at: "t2" });
-  await sleep(3400);
-  check("it notices the connection", text("#w-wait").includes("Connected: claudeai") && text("#w-wait").includes("work:rw"), text("#w-wait"));
+  check("it notices the connection", await until(() => text("#w-wait").includes("Connected: claudeai")) && text("#w-wait").includes("work:rw"), text("#w-wait"));
   click($("#wizard form button"));
 
   // --- keep my instructions from a connection

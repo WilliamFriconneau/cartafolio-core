@@ -6,7 +6,7 @@
 #
 # It downloads the release archive, checks it against the published SHA256SUMS, installs the programs, then lets
 # `memcp setup` make the memory (private data folder, first person, default spaces, memcp.toml) and prints the
-# address of the page and the address with the key for an assistant. Nothing leaves this machine except the download.
+# address of the page and a key for an assistant that takes one. Nothing leaves this machine except the download.
 # Read it first if you like: it is this file. Inside an unpacked archive it installs from the archive, offline.
 #
 # Options (or the same words as environment variables, in capitals, prefixed MEMCP_):
@@ -121,6 +121,7 @@ else
 fi
 
 mkdir -p "$PREFIX"
+PREFIX=$(cd "$PREFIX" && pwd)
 for prog in memcp memcp-janitor; do
   install -m 755 "$SRC/bin/$prog" "$PREFIX/$prog"
 done
@@ -145,16 +146,25 @@ if [ "$SYSTEM" = 1 ]; then
   install -d -m 755 /etc/memcp
   CONF=/etc/memcp/memcp.toml
   [ -e "$CONF" ] || install -m 644 "$SRC/memcp.toml" "$CONF.example"
-  SETUP="$PREFIX/memcp setup --system --listen $LISTEN --language $LANGUAGE"
+  set -- "$PREFIX/memcp" setup --system
 else
   CONF="${XDG_CONFIG_HOME:-$HOME/.config}/memcp/memcp.toml"
-  SETUP="$PREFIX/memcp setup --listen $LISTEN --language $LANGUAGE"
+  set -- "$PREFIX/memcp" setup
 fi
-SETUP="$SETUP --data $DATA --config $CONF"
-[ -z "$SPACES" ] || SETUP="$SETUP --spaces $SPACES"
-[ "$YES" = 1 ] && SETUP="$SETUP --yes"
-# `memcp setup` asks its own questions on the terminal; here they are asked on /dev/tty when piped from curl.
-if [ "$YES" != 1 ] && [ -r /dev/tty ]; then $SETUP </dev/tty; else $SETUP --yes; fi
+set -- "$@" --listen "$LISTEN" --language "$LANGUAGE" --data "$DATA" --config "$CONF"
+[ -z "$SPACES" ] || set -- "$@" --spaces "$SPACES"
+# With curl piped to sh, setup reads its answers from the terminal.
+if [ "$YES" != 1 ] && ( : </dev/tty ) 2>/dev/null; then "$@" </dev/tty; else "$@" --yes; fi
+
+# Quote one systemd word and escape literal specifiers. Unit values are single-line.
+unit_word() {
+  case "$1" in *'
+'*) die "a systemd path cannot contain a newline" ;; esac
+  printf '"'
+  printf '%s' "$1" | sed 's/[\\"]/\\&/g; s/%/%%/g'
+  printf '"'
+}
+sed_replacement() { printf '%s' "$1" | sed 's/[\\&#]/\\&/g'; }
 
 # --- the service -----------------------------------------------------------------------------------------------
 step "3/4  Run it"
@@ -169,9 +179,15 @@ if [ "$SYSTEM" = 1 ]; then
   install -m 644 "$SRC/units/memcp.tmpfiles" /usr/lib/tmpfiles.d/memcp.conf
   install -m 644 "$SRC/units/memcp.sysusers" /usr/lib/sysusers.d/memcp.conf
   if have systemd-tmpfiles; then systemd-tmpfiles --create /usr/lib/tmpfiles.d/memcp.conf || true; fi
-  # The units start the binaries in /usr/bin: point them at the prefix chosen.
+  # Change only the executable word in the service units shipped with this archive.
   if [ "$PREFIX" != /usr/bin ]; then
-    for u in "$UNIT_DIR"/memcp*.service; do sed -i "s#/usr/bin/memcp#$PREFIX/memcp#g" "$u"; done
+    server=$(unit_word "$PREFIX/memcp")
+    janitor=$(unit_word "$PREFIX/memcp-janitor")
+    for u in "$SRC"/units/*.service; do
+      sed -i -e "s#^\(ExecStart[A-Za-z]*=\)/usr/bin/memcp #\1$(sed_replacement "$server") #" \
+        -e "s#^\(ExecStart[A-Za-z]*=\)/usr/bin/memcp-janitor #\1$(sed_replacement "$janitor") #" \
+        "$UNIT_DIR/$(basename "$u")"
+    done
   fi
   if [ "$SERVICE" = yes ]; then
     systemctl daemon-reload
@@ -189,6 +205,9 @@ else
     else SERVICE=no; fi
   fi
   if [ "$SERVICE" = yes ]; then
+    executable=$(unit_word "$PREFIX/memcp")
+    environment=$(unit_word "MEMCP_CONFIG=$CONF")
+    writable=$(unit_word "$DATA")
     mkdir -p "$UNIT_DIR"
     cat >"$UNIT_DIR/memcp.service" <<EOF
 [Unit]
@@ -196,13 +215,13 @@ Description=MemCP, a durable memory for AI assistants
 After=network-online.target
 
 [Service]
-Environment=MEMCP_CONFIG=$CONF
-ExecStart=$PREFIX/memcp serve
+Environment=$environment
+ExecStart=$executable serve
 Restart=on-failure
 RestartSec=5
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=$DATA
+ReadWritePaths=$writable
 PrivateTmp=true
 
 [Install]
@@ -213,16 +232,19 @@ EOF
     have loginctl && loginctl enable-linger "$USER" 2>/dev/null || say "tip: run 'loginctl enable-linger $USER' to keep it running when you are logged out."
     say "service started: systemctl --user status memcp"
   else
-    say "Start it by hand when you want:  MEMCP_CONFIG=$CONF $PREFIX/memcp serve"
+    say "Start it by hand when you want:  MEMCP_CONFIG=\"$CONF\" \"$PREFIX/memcp\" serve"
   fi
 fi
 
 step "4/4  Next"
 cat <<EOF
-Check the installation:   $PREFIX/memcp doctor
+Check the installation:   "$PREFIX/silice" doctor
+Aliases: silice, silice-manager and silice-sync are installed in $PREFIX alongside the memcp commands.
 Backups, TLS, upgrade:    docs/LINUX.md  (https://github.com/$REPO/blob/main/docs/LINUX.md)
 Put HTTPS in front of port $PORT before an assistant outside this machine connects (keys travel in clear on plain HTTP):
   Tailscale:  tailscale serve --bg $PORT      (private, your devices only)
   Caddy:      memory.example.net { reverse_proxy 127.0.0.1:$PORT }
+For an assistant that signs in, use Connect an assistant on your page and enter its one-time code on the public consent page.
+Assistants that take a key and devices use their own keys.
 Update:  run this installer again; your memory and your memcp.toml are left alone.
 EOF

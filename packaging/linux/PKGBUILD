@@ -2,7 +2,7 @@
 # `makepkg -si` in this folder builds the source of the tag below. For a local checkout instead of a tag,
 # run it with MEMCP_SRC=/path/to/memcp-core (the sources are then not downloaded again).
 pkgname=memcp
-pkgver=20261117.0.8
+pkgver=20261121.2.0
 pkgrel=1
 pkgdesc='A durable memory for AI assistants over MCP, kept on your own machine'
 arch=('x86_64' 'aarch64')

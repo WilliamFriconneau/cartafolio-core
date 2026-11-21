@@ -1,5 +1,5 @@
 name: Silice
-version: "20261121.2.0"
+version: "20261121.3.0"
 slug: memcp
 description: Silice, durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/silice-core
@@ -32,7 +32,6 @@ map:
 hassio_api: false
 homeassistant_api: false
 options:
-  node_name: Silice
   language: en
   admins: []
   strict_write_agents: []

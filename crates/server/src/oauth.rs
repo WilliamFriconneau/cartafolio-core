@@ -4,8 +4,7 @@
 //! - Discovery: `/.well-known/oauth-protected-resource/mcp/<name>` and
 //!   `/.well-known/oauth-authorization-server`; a 401 on `/mcp/<name>` points to them.
 //! - Registration (RFC 7591): only redirect addresses on the allow list.
-//! - Authorization: the consent page is served on the identity listener only
-//!   (reached through Tailscale, which tells who is there), never on the public one.
+//! - Authorization: an invitation opens the consent page on either listener.
 //! - Token: authorization code with PKCE S256, then refresh tokens that rotate.
 //!
 //! An access token is a normal MCP connection of the person
@@ -65,6 +64,7 @@ const MAX_CLIENTS: i64 = 200;
 const INVITE_TTL: i64 = 3600;
 /// Invitations waiting at the same time.
 const MAX_INVITES: usize = 20;
+const MAX_INVITE_FAILURES: usize = 10;
 /// Invitations waiting for one person: a member cannot fill the places of the others.
 const MAX_INVITES_PER_PERSON: usize = 5;
 /// Crockford's base32: no I, L, O or U, so a code read aloud or typed on a phone is not misread.
@@ -177,23 +177,47 @@ pub fn challenge(app: &App, address: &str) -> String {
 /// What an authorization request's `resource` (RFC 8707, the address the person gave their
 /// assistant) names after `/mcp/`: a vault, or the name of the connection to make. `None` for
 /// the general address or no resource.
+#[derive(PartialEq, Eq)]
 enum Named {
     Vault(Space),
     Connection(String),
 }
 
-fn resource_named(app: &App, resource: &str) -> Option<Named> {
-    let rest = resource.strip_prefix(app.public_url.as_str())?;
-    let seg = rest.strip_prefix("/mcp/")?.trim_end_matches('/');
-    if let Some(v) = app
-        .brain
-        .spaces()
-        .ok()
-        .and_then(|l| l.into_iter().find(|s| s.as_str() == seg))
+#[derive(PartialEq, Eq)]
+enum ConsentMode {
+    ChooseSpaces,
+    OneSpace,
+}
+
+pub(crate) struct Consent {
+    person: String,
+    expires: i64,
+    digest: String,
+    target: Option<Named>,
+    mode: ConsentMode,
+}
+
+fn resource_named(
+    ctl: &Connection,
+    public_url: &str,
+    resource: &str,
+) -> memcp_core::Result<Option<Named>> {
+    let Some(seg) = resource
+        .strip_prefix(public_url)
+        .and_then(|rest| rest.strip_prefix("/mcp/"))
+        .map(|seg| seg.trim_end_matches('/'))
+    else {
+        return Ok(None);
+    };
+    if let Ok(space) = Space::new(seg)
+        && ctl
+            .query_row("SELECT 1 FROM spaces WHERE name = ?1", [seg], |_| Ok(()))
+            .optional()?
+            .is_some()
     {
-        return Some(Named::Vault(v));
+        return Ok(Some(Named::Vault(space)));
     }
-    access::valid_agent(seg).then(|| Named::Connection(seg.to_string()))
+    Ok(access::valid_agent(seg).then(|| Named::Connection(seg.to_string())))
 }
 
 /// `POST /oauth/register` (dynamic client registration).
@@ -229,30 +253,6 @@ pub fn register(app: &App, req: &Request) -> Response {
     let Ok(ctl) = app.brain.open_control() else {
         return err(500, "server_error", "storage failed");
     };
-    let count = |ctl: &Connection| -> i64 {
-        ctl.query_row("SELECT count(*) FROM oauth_clients", [], |r| r.get(0))
-            .unwrap_or(MAX_CLIENTS)
-    };
-    if count(&ctl) >= MAX_CLIENTS {
-        // Clients never used make room, the oldest first: registering many, from many addresses, cannot keep a real
-        // connector out (it registers and signs in within minutes).
-        let _ = ctl.execute(
-            "DELETE FROM oauth_clients WHERE client_id IN (
-               SELECT client_id FROM oauth_clients
-               WHERE client_id NOT IN (SELECT client_id FROM oauth_codes)
-                 AND client_id NOT IN (SELECT client_id FROM oauth_refresh)
-                 AND created_at < ?1
-               ORDER BY created_at LIMIT 20)",
-            [now - 600],
-        );
-    }
-    if count(&ctl) >= MAX_CLIENTS {
-        return err(
-            400,
-            "invalid_client_metadata",
-            "too many registered clients",
-        );
-    }
     let name: String = body
         .get("client_name")
         .and_then(Value::as_str)
@@ -262,14 +262,16 @@ pub fn register(app: &App, req: &Request) -> Response {
         .take(60)
         .collect();
     let client_id = format!("hcpo_{}", hex(&util::random_bytes::<12>()));
-    if ctl
-        .execute(
-            "INSERT INTO oauth_clients (client_id, name, redirect_uris, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![client_id, name, json!(uris).to_string(), now],
-        )
-        .is_err()
-    {
-        return err(500, "server_error", "storage failed");
+    match insert_client(&ctl, &client_id, &name, &json!(uris).to_string(), now) {
+        Ok(true) => {}
+        Ok(false) => {
+            return err(
+                400,
+                "invalid_client_metadata",
+                "too many registered clients",
+            );
+        }
+        Err(_) => return err(500, "server_error", "storage failed"),
     }
     Response::json(
         201,
@@ -380,7 +382,7 @@ pub fn invite_create(app: &App, person: &str, now: i64) -> Option<(String, i64)>
     ))
 }
 
-/// The person an invitation code was made for. The code is spent: it opens one consent page.
+/// Spends an invitation when its consent page is ready.
 fn invite_take(app: &App, code: &str, now: i64) -> Option<String> {
     let key = invite_key(code)?;
     let mut m = app.invites.lock().unwrap_or_else(|e| e.into_inner());
@@ -412,90 +414,53 @@ pub fn holds_consent(app: &App, body: &[u8]) -> bool {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(n)
-            .is_some_and(|(_, exp, _)| *exp > now)
+            .is_some_and(|consent| consent.expires > now)
     })
 }
 
 /// A POST comes from the consent page itself, never from another site.
 fn origin_ok(app: &App, req: &Request) -> bool {
     let origin = req.header("origin");
+    let site = req.header("sec-fetch-site");
     let expected = if req.tailnet_login.is_some() {
-        app.login_url.as_deref().map(origin_of)
+        app.login_url.as_deref()
     } else {
-        Some(origin_of(&app.public_url))
+        Some(app.public_url.as_str())
     };
-    req.header("sec-fetch-site") != "cross-site" && (origin.is_empty() || Some(origin) == expected)
+    site != "cross-site"
+        && (origin.is_empty()
+            || match expected {
+                Some(url) => origin == origin_of(url),
+                // Without a configured address, the browser can still attest to the actual origin.
+                None => site == "same-origin",
+            })
 }
 
-/// The digest of what a consent page was opened for: the client, where it goes back, its PKCE challenge and the address
-/// it asked for. The approval must carry the same, so one nonce is one transaction.
+const CONSENT_FIELDS: [&str; 8] = [
+    "client_id",
+    "redirect_uri",
+    "state",
+    "code_challenge",
+    "code_challenge_method",
+    "response_type",
+    "scope",
+    "resource",
+];
+
+/// Binds all OAuth request fields carried from the form to its approval.
 fn transaction(q: &std::collections::HashMap<String, String>) -> String {
-    let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
-    hex(&sha(&format!(
-        "{}\n{}\n{}\n{}",
-        get("client_id"),
-        get("redirect_uri"),
-        get("code_challenge"),
-        get("resource")
-    )))
+    let mut digest = Sha256::new();
+    for key in CONSENT_FIELDS {
+        let field = q.get(key).map(String::as_bytes).unwrap_or_default();
+        digest.update((field.len() as u64).to_be_bytes());
+        digest.update(field);
+    }
+    hex(&digest.finalize())
 }
 
-/// A request to the consent page that is not on the tailnet: the person is the one an invitation code was made for. The
-/// code is checked, and spent, only for a client and a redirect address that are registered (a bad link does not burn
-/// it), and wrong codes are counted per address like wrong keys. The second request (the approval) carries the nonce
-/// the first one was given.
-fn invited_person(app: &App, req: &Request, now: i64) -> Option<User> {
-    if req.method != "POST" {
-        return None;
-    }
-    let q = form(&req.body);
-    let ctl = app.brain.open_control().ok()?;
-    let person = |id: &str| users::user(&ctl, id).ok().flatten().filter(|u| !u.disabled);
-    if let Some(n) = q.get("nonce").filter(|n| !n.is_empty()) {
-        let id = app
-            .consents
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get(n)
-            .filter(|(_, exp, _)| *exp > now)
-            .map(|(id, _, _)| id.clone())?;
-        return person(&id);
-    }
-    let code = q.get("invite")?;
-    let who = req.ip.clone().unwrap_or_else(|| "?".into());
-    if app.blocked(now, &who) {
-        return None;
-    }
-    let (_, uris) = client(&ctl, q.get("client_id").map(String::as_str).unwrap_or(""))?;
-    if !uris.iter().any(|u| Some(u) == q.get("redirect_uri")) {
-        return None;
-    }
-    // A request that would be refused afterwards does not spend the code: its origin and its PKCE parameters are checked
-    // first.
-    let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
-    if !origin_ok(app, req)
-        || get("response_type") != "code"
-        || get("code_challenge_method") != "S256"
-        || get("code_challenge").len() < 43
-    {
-        return None;
-    }
-    match invite_take(app, code, now).and_then(|id| person(&id)) {
-        Some(u) => {
-            access::auth_event(
-                &ctl,
-                Some(&u.name),
-                req.ip.as_deref(),
-                "oauth_invite_used",
-                "",
-            );
-            Some(u)
-        }
-        None => {
-            app.fail(now, &who);
-            None
-        }
-    }
+/// The invitation guard also backs the manager's routing decisions.
+pub fn invite_blocked(app: &App, req: &Request, now: i64) -> bool {
+    app.blocked_with_limit(now, &App::invite_guard_key(req), MAX_INVITE_FAILURES)
 }
 
 /// What the public consent page shows to someone with no code yet, or a wrong one.
@@ -535,10 +500,9 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
             ),
         );
     }
-    let who = req.ip.clone().unwrap_or_else(|| "?".into());
     let (status, note) = if req.method != "POST" {
         (200, "")
-    } else if app.blocked(now, &who) {
+    } else if !q.contains_key("nonce") && invite_blocked(app, req, now) {
         (
             429,
             "<p><b>Too many tries.</b> Wait a little, then start again from your assistant.</p>",
@@ -549,19 +513,10 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
             "<p><b>This code is not valid, or it has expired.</b> Ask for a new one.</p>",
         )
     };
-    let hidden: String = [
-        "client_id",
-        "redirect_uri",
-        "state",
-        "code_challenge",
-        "code_challenge_method",
-        "response_type",
-        "scope",
-        "resource",
-    ]
-    .iter()
-    .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
-    .collect();
+    let hidden: String = CONSENT_FIELDS
+        .iter()
+        .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
+        .collect();
     page(
         app,
         status,
@@ -580,31 +535,95 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
 /// consent page of that person alone; the approval carries the nonce the page gave.
 pub fn authorize(app: &App, req: &Request) -> Response {
     let now = util::now();
-    let Some(me) = invited_person(app, req, now) else {
+    if req.method != "POST" {
         return invite_form(app, req, now);
-    };
-    if req.method == "POST" && !origin_ok(app, req) {
+    }
+    if !origin_ok(app, req) {
         return page(
             app,
             403,
             "<p>This approval did not come from the consent page.</p>",
         );
     }
-    let q = if req.method == "POST" {
-        form(&req.body)
-    } else {
-        req.query.clone()
-    };
+    let q = form(&req.body);
     let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
-    let Ok(ctl) = app.brain.open_control() else {
-        return page(app, 500, "<p>Storage failed.</p>");
+    let held = get("nonce");
+    let approval = q.contains_key("nonce");
+    if !approval && (!q.contains_key("invite") || invite_blocked(app, req, now)) {
+        return invite_form(app, req, now);
+    }
+
+    let storage_failed = || page(app, 500, "<p>Storage failed.</p>");
+    let expired = || {
+        page(
+            app,
+            400,
+            "<p>This page has expired. Start again from your assistant.</p>",
+        )
     };
-    let Some((name, uris)) = client(&ctl, get("client_id")) else {
-        return page(app, 400, "<p>Unknown client.</p>");
+    let bind = transaction(&q);
+    let mut consents = approval.then(|| app.consents.lock().unwrap_or_else(|e| e.into_inner()));
+    let approved_person = if let Some(m) = consents.as_mut() {
+        let Some(consent) = m.get(held) else {
+            return page(app, 403, "<p>This approval is no longer available.</p>");
+        };
+        if consent.expires <= util::now() || consent.digest != bind {
+            m.remove(held);
+            return expired();
+        }
+        Some(consent.person.clone())
+    } else {
+        None
+    };
+    let Ok(db) = app.brain.open_control() else {
+        return storage_failed();
+    };
+    // Read the target and current grants in the same transaction that records the authorization.
+    let tx = if approval {
+        match rusqlite::Transaction::new_unchecked(&db, rusqlite::TransactionBehavior::Immediate) {
+            Ok(tx) => Some(tx),
+            Err(_) => return storage_failed(),
+        }
+    } else {
+        None
+    };
+    let ctl = tx.as_deref().unwrap_or(&db);
+    let person = if let Some(person) = approved_person {
+        person
+    } else {
+        let person = invite_key(get("invite")).and_then(|key| {
+            app.invites
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(&key)
+                .filter(|(_, exp)| *exp > now)
+                .map(|(id, _)| id.clone())
+        });
+        let Some(person) = person else {
+            // Only guesses on valid OAuth links count against this address.
+            if client(ctl, get("client_id"))
+                .is_some_and(|(_, uris)| uris.iter().any(|u| u == get("redirect_uri")))
+                && get("response_type") == "code"
+                && get("code_challenge_method") == "S256"
+                && get("code_challenge").len() >= 43
+            {
+                app.fail(now, &App::invite_guard_key(req));
+            }
+            return invite_form(app, req, now);
+        };
+        person
+    };
+    let me = match users::user(ctl, &person) {
+        Ok(Some(me)) if !me.disabled => me,
+        Ok(_) => return page(app, 403, "<p>This person cannot connect an assistant.</p>"),
+        Err(_) => return storage_failed(),
+    };
+    let Some((name, uris)) = client(ctl, get("client_id")) else {
+        return invite_form(app, req, now);
     };
     let redirect = get("redirect_uri");
     if !uris.iter().any(|u| u == redirect) {
-        return page(app, 400, "<p>This redirect address was not registered.</p>");
+        return invite_form(app, req, now);
     }
     let state = get("state");
     let back = |extra: &str| {
@@ -626,9 +645,25 @@ pub fn authorize(app: &App, req: &Request) -> Response {
     }
     // The page lists what the person reaches, with nothing ticked: a connection gets only
     // what was ticked, and nothing at all if nothing was.
-    let reach = users::access_of(&ctl, &me.id).unwrap_or_default();
+    let Ok(reach) = users::access_of(ctl, &me.id) else {
+        return storage_failed();
+    };
     // A connector added with an address that names a vault is for that vault only.
-    let named = resource_named(app, get("resource"));
+    let Ok(named) = resource_named(ctl, &app.public_url, get("resource")) else {
+        return storage_failed();
+    };
+    let mode = if matches!(named, Some(Named::Vault(_))) {
+        ConsentMode::OneSpace
+    } else {
+        ConsentMode::ChooseSpaces
+    };
+    if let Some(m) = consents.as_mut()
+        && m.get(held)
+            .is_some_and(|c| c.target != named || c.mode != mode)
+    {
+        m.remove(held);
+        return expired();
+    }
     let scoped = match &named {
         Some(Named::Vault(v)) => Some(v.clone()),
         _ => None,
@@ -640,7 +675,9 @@ pub fn authorize(app: &App, req: &Request) -> Response {
         _ => None,
     };
     if let Some(n) = &connection_name {
-        let owner = access::owner_of(&ctl, n).unwrap_or(None);
+        let Ok(owner) = access::owner_of(ctl, n) else {
+            return storage_failed();
+        };
         if owner.as_deref().is_some_and(|o| o != me.id) {
             return page(
                 app,
@@ -650,15 +687,18 @@ pub fn authorize(app: &App, req: &Request) -> Response {
         }
         // A console key is never handed to a connector; and a connection made another way (an app's key, a key by hand,
         // a device) is not taken over by signing in at its address: that would cut the app off and give its rights away.
-        let made_by_signing_in = ctl
+        let Ok(made_by_signing_in) = ctl
             .query_row(
                 "SELECT 1 FROM oauth_refresh WHERE agent = ?1 AND user_id = ?2 LIMIT 1",
                 rusqlite::params![n, me.id],
                 |_| Ok(()),
             )
-            .is_ok();
+            .optional()
+        else {
+            return storage_failed();
+        };
         let kept = n.starts_with("console-") || n.starts_with(memcp_core::sync::PEER_PREFIX);
-        if kept || (owner.is_some() && !made_by_signing_in) {
+        if kept || (owner.is_some() && made_by_signing_in.is_none()) {
             return page(
                 app,
                 403,
@@ -675,47 +715,14 @@ pub fn authorize(app: &App, req: &Request) -> Response {
             "<p>You do not have access to this space, so an assistant cannot be connected to it.</p>",
         );
     }
-    let bind = transaction(&q);
-    // The nonce of an approval that is shown again (nothing ticked) stays the same: a page makes one nonce, and a
-    // nonce is spent once.
-    let held = get("nonce").to_string();
-    let consent_page = |status: u16, note: &str| -> Response {
-        let nonce = if held.is_empty() {
-            hex(&util::random_bytes::<16>())
-        } else {
-            held.clone()
-        };
-        if held.is_empty() {
-            let mut m = app.consents.lock().unwrap_or_else(|e| e.into_inner());
-            m.retain(|_, (_, exp, _)| *exp > now);
-            if m.len() > 1000 {
-                return page(
-                    app,
-                    429,
-                    "<p>Too many pending approvals, try again later.</p>",
-                );
-            }
-            m.insert(
-                nonce.clone(),
-                (me.id.clone(), now + CONSENT_TTL, bind.clone()),
-            );
-        }
-        let hidden: String = [
-            "client_id",
-            "redirect_uri",
-            "state",
-            "code_challenge",
-            "code_challenge_method",
-            "response_type",
-            "scope",
-            "resource",
-        ]
-        .iter()
-        .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
-        .chain(std::iter::once(format!(
-            "<input type=hidden name=nonce value={nonce}>"
-        )))
-        .collect();
+    let consent_page = |status: u16, note: &str, nonce: &str| -> Response {
+        let hidden: String = CONSENT_FIELDS
+            .iter()
+            .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
+            .chain(std::iter::once(format!(
+                "<input type=hidden name=nonce value={nonce}>"
+            )))
+            .collect();
         let boxes: String = if let Some(v) = &scoped {
             format!(
                 "<p>This connector was added for the space <b>{v}</b>. It will reach that space and nothing else.</p><input type=hidden name=v_{v} value=1>"
@@ -765,11 +772,42 @@ pub fn authorize(app: &App, req: &Request) -> Response {
             ),
         )
     };
-    // A code just opened the page: the form that carried it is answered with the consent page, as a GET is.
-    let opened_by_code = q.contains_key("invite") && !q.contains_key("nonce");
-    if req.method == "GET" || opened_by_code {
-        return consent_page(200, "");
-    }
+    let Some(mut consents) = consents else {
+        let nonce = hex(&util::random_bytes::<16>());
+        let response = consent_page(200, "", &nonce);
+        let mut m = app.consents.lock().unwrap_or_else(|e| e.into_inner());
+        let now = util::now();
+        m.retain(|_, consent| consent.expires > now);
+        if m.len() >= 1000 {
+            return page(
+                app,
+                429,
+                "<p>Too many pending approvals, try again later.</p>",
+            );
+        }
+        if invite_take(app, get("invite"), now).is_none() {
+            return invite_form(app, req, now);
+        }
+        m.insert(
+            nonce,
+            Consent {
+                person: me.id.clone(),
+                expires: now + CONSENT_TTL,
+                digest: bind,
+                target: named,
+                mode,
+            },
+        );
+        drop(m);
+        access::auth_event(
+            ctl,
+            Some(&me.name),
+            req.ip.as_deref(),
+            "oauth_invite_used",
+            "",
+        );
+        return response;
+    };
     let chosen: Vec<String> = reach
         .iter()
         .filter(|(space, _)| match &scoped {
@@ -786,46 +824,22 @@ pub fn authorize(app: &App, req: &Request) -> Response {
         })
         .collect();
     let everything = scoped.is_none() && q.contains_key("all");
-    let for_this = |m: &std::collections::HashMap<String, (String, i64, String)>| {
-        m.get(get("nonce"))
-            .is_some_and(|(id, exp, b)| *id == me.id && *exp > now && *b == bind)
-    };
-    if !opened_by_code && !for_this(&app.consents.lock().unwrap_or_else(|e| e.into_inner())) {
-        // Not the page this approval was made for: the nonce is spent, whatever else happens.
-        app.consents
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .remove(get("nonce"));
-        return page(
-            app,
-            400,
-            "<p>This page has expired. Start again from your assistant.</p>",
-        );
-    }
     if get("decision") == "allow" && chosen.is_empty() && !everything {
         return consent_page(
             400,
             "<p><b>Tick at least one space.</b> Without one, this assistant gets nothing.</p>",
-        );
-    }
-    let fresh = app
-        .consents
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .remove(get("nonce"))
-        .is_some_and(|(id, exp, b)| id == me.id && exp > now && b == bind);
-    if !fresh {
-        return page(
-            app,
-            400,
-            "<p>This page has expired. Start again from your assistant.</p>",
+            held,
         );
     }
     if get("decision") != "allow" {
+        consents.remove(held);
         return back("error=access_denied");
     }
     let code = hex(&util::random_bytes::<24>());
-    if ctl
+    let Some(tx) = tx else {
+        return storage_failed();
+    };
+    if tx
         .execute(
             "INSERT INTO oauth_codes (hash, client_id, user_id, redirect_uri, challenge, expires_at, rights, read_only, agent) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
@@ -840,12 +854,14 @@ pub fn authorize(app: &App, req: &Request) -> Response {
                 connection_name.clone().unwrap_or_default()
             ],
         )
-        .is_err()
+        .is_err() || tx.commit().is_err()
     {
-        return page(app, 500, "<p>Storage failed.</p>");
+        return storage_failed();
     }
+    consents.remove(held);
+    drop(consents);
     access::auth_event(
-        &ctl,
+        &db,
         Some(&me.name),
         req.ip.as_deref(),
         "oauth_allow",
@@ -1009,11 +1025,59 @@ pub fn copy_client(from: &App, to: &App, client_id: &str) -> bool {
     let Some((name, uris, at)) = row else {
         return false;
     };
-    b.execute(
-        "INSERT OR IGNORE INTO oauth_clients (client_id, name, redirect_uris, created_at) VALUES (?1, ?2, ?3, ?4)",
-        rusqlite::params![client_id, name, uris, at],
-    )
-    .is_ok()
+    match b
+        .query_row(
+            "SELECT 1 FROM oauth_clients WHERE client_id = ?1",
+            [client_id],
+            |_| Ok(()),
+        )
+        .optional()
+    {
+        Ok(Some(())) => return true,
+        Ok(None) => {}
+        Err(_) => return false,
+    }
+    insert_client(&b, client_id, &name, &uris, at).unwrap_or(false)
+}
+
+fn insert_client(
+    ctl: &Connection,
+    id: &str,
+    name: &str,
+    uris: &str,
+    at: i64,
+) -> rusqlite::Result<bool> {
+    // Evict older unused clients when the table fills, including on a managed installation.
+    if ctl.query_row("SELECT count(*) FROM oauth_clients", [], |row| {
+        row.get::<_, i64>(0)
+    })? >= MAX_CLIENTS
+    {
+        ctl.execute(
+            "DELETE FROM oauth_clients WHERE client_id IN (
+               SELECT client_id FROM oauth_clients
+               WHERE client_id <> ?2
+                 AND client_id NOT IN (SELECT client_id FROM oauth_codes)
+                 AND client_id NOT IN (SELECT client_id FROM oauth_refresh)
+                 AND created_at < ?1
+               ORDER BY created_at LIMIT 20)",
+            params![util::now() - 600, id],
+        )?;
+    }
+    // SQLite serializes the count and insert with other writes, including copies from the manager.
+    let inserted = ctl.execute(
+        "INSERT OR IGNORE INTO oauth_clients (client_id, name, redirect_uris, created_at)
+         SELECT ?1, ?2, ?3, ?4 WHERE (SELECT count(*) FROM oauth_clients) < ?5",
+        params![id, name, uris, at, MAX_CLIENTS],
+    )?;
+    Ok(inserted == 1
+        || ctl
+            .query_row(
+                "SELECT 1 FROM oauth_clients WHERE client_id = ?1",
+                [id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
 }
 
 /// `POST /oauth/token`, guarded like the key routes: a code or a refresh token that is refused is a guess, counted

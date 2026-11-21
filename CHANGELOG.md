@@ -1,8 +1,21 @@
 # Changelog
 
-## Unreleased
+## 20261121.3.0
 
+- **Trace or drop keeps drafts.** Filtering, opening a note, attaching files and recording audio preserve the draft. A confirmed save clears the submitted text.
+- **Assistant invitation codes show when they expire.** The wizard can request a new code, displays it as soon as it is issued, and ignores replies from a closed dialog.
+- **Linux and Windows installer fixes.** Linux quotes custom paths in setup and service units. Windows waits for installed executables and aliases to exit and checks destinations before copying.
+- **Release checks and connection guides.** Desktop CI builds the release programs and checks the aliases. The Arch package version follows the workspace version. The guides explain public OAuth consent, invitation codes and keys.
+- **More reliable tests.** Page tests wait for visible results and check pagination by note ID. SQLite race tests synchronize the reader's first measurement and report participant errors.
 - **Read before write.** `strict_write_agents` (a list of connection names, or `*`) makes a connection read (`recall`…) before it may write; a write with no read in the last 30 minutes is refused with a message that says what to do. Off by default.
+- Explicit configuration paths are used as given, including when setup rewrites a file. Automatic discovery still prefers `silice.toml` in the same directory.
+- Empty environment aliases fall back to the other spelling. The command recognizes the Silice filename regardless of case.
+- OAuth approval checks that the request and the target still match the consent page and that the person still has access.
+- Invitations stay usable until the consent page is ready, and approvals can be retried if saving the authorization code fails.
+- Invitation guesses and administrator token failures are counted separately from MCP traffic. OAuth client registration has a fixed capacity.
+- Both listeners route consent by invitation or approval nonce and check browser requests against their own address.
+- Home Assistant leaves the node name unset by default. The server keeps a stored name or saves Silice on first use.
+- The administrator invitation route is documented with separate page and console authentication modes.
 
 ## 20261121.2.0
 
@@ -23,7 +36,7 @@
 ## 20261120.12.0
 
 - **Every new connection of an assistant that signs in starts with an invitation code, on the tailnet too.** The consent page (`/oauth/authorize`) is the same on the public address and on the identity listener: it asks for a one-time code (twelve letters, `XXXX-XXXX-XXXX`) and shows the consent page of the person the code was made for; there is no more shortcut for a person Tailscale recognises. The person makes the code on their own page (`POST /admin/api/invite`, and the « Connect an assistant » steps of Claude, ChatGPT and Le Chat now show it), or an administrator makes it for them. Keys for assistants that take a key, and the pairing codes of devices, are unchanged.
-- **A code is one transaction.** The nonce the consent page gives is bound to the OAuth request it was opened for (client, return address, PKCE challenge, address asked), is shown again unchanged when nothing was ticked, and is spent once. A request the server would refuse (another site, a PKCE method it does not take) does not spend the code. At most five codes wait per person. The administrator's route needs `X-Requested-With: memcp` and a bearer token (never the address). The answer that carries a code is `no-store`.
+- **A code is one transaction.** The nonce the consent page gives is bound to the OAuth request it was opened for (client, return address, PKCE challenge, address asked), is shown again unchanged when nothing was ticked, and is spent once. A request the server would refuse (another site, a PKCE method it does not take) does not spend the code. At most five codes wait per person. The administrator's route accepts an authenticated page request with `X-Requested-With: memcp` or an administrator's console token as a bearer. The console token route is never available through Funnel. The answer that carries a code is `no-store`.
 - **The page tests pass again.** The capture form of « Trace or drop » is back, a click in the Journal opens its note, and the people tiles and the timeline are translated.
 
 ## 20261120.11.3

@@ -26,6 +26,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
 
 // English sentences (or their openings) that must never be visible in French mode.
 const ENGLISH = [
+  "New code", "Code expires at", "Could not create an invitation code", "Too many invitation codes are waiting",
   "Once the assistant is connected", "You are connected to my memory", "Waiting for the assistant", "Nothing is connected",
   "Nothing waits here", "Nothing yet", "No other machine yet", "Looking for nodes", "Each person has a memory", "Waiting to be let in",
   "Tick what goes together", "Hold the red button", "Shown once", "Pick the assistant", "Give it a name", "Create the connection",
@@ -133,7 +134,7 @@ async function leftovers(page, rootSel) {
   await page.locator("#home details.fold > summary").evaluateAll(s => s.forEach(x => x.parentElement.open = true));
   await sleep(200);
   await scan("the settings with every fold open");
-  await page.evaluate(() => { location.hash = "#note"; }); await page.waitForSelector("#space-body textarea"); await sleep(400);
+  await page.evaluate(() => { location.hash = "#note"; }); await page.waitForSelector("#inbox-capture textarea"); await sleep(400);
   await scan("trace or drop");
   await page.evaluate(() => { location.hash = "#journal"; }); await sleep(600);
   await scan("the journal");

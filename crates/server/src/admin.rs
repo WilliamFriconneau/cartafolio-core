@@ -193,14 +193,12 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
     let Ok(ctl) = app.brain.open_control() else {
         return err(500, "storage failed");
     };
-    // A console token is guessed at like any other secret: failures are counted per
-    // address, with the same guard as the MCP endpoint.
     let by_token = !req.via_ingress && req.tailnet_login.is_none();
     // Counted apart from the MCP guard: a page that is merely opened (no token yet) must not lock the
     // assistants behind the same address out.
-    let from = format!("console:{}", req.ip.as_deref().unwrap_or("?"));
+    let from = App::console_guard_key(req);
     let token_given = crate::http::bearer_of(req.header("authorization")).is_some();
-    if by_token && app.blocked(now, &from) {
+    if by_token && app.console_blocked(now, &from) {
         return err(429, "too many attempts").with("Retry-After", "900");
     }
     // An account the installation does not know yet, holding a recovery key, takes its person back.

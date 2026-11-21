@@ -70,8 +70,15 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .get("--data")
         .map(PathBuf::from)
         .or_else(|| memcp_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
-    let cfg_path = match named {
-        Some(f) if a.pos[0] == "setup" && !config::named_path(PathBuf::from(f)).is_file() => None,
+    let setup_target = if a.pos[0] == "setup" {
+        named
+            .map(PathBuf::from)
+            .or_else(|| memcp_core::env::var_os("MEMCP_CONFIG").map(PathBuf::from))
+    } else {
+        None
+    };
+    let cfg_path = match &setup_target {
+        Some(path) => path.is_file().then(|| path.clone()),
         _ => config::locate_with_data(named, data_hint.as_deref()).map_err(|e| (2, e))?,
     };
     let settings = match &cfg_path {
@@ -87,7 +94,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
         return setup::setup(
             setup::SetupArgs {
                 data: f("--data").map(PathBuf::from),
-                config: f("--config").map(PathBuf::from),
+                config: setup_target,
                 node_name: f("--node-name"),
                 language: f("--language"),
                 listen: f("--listen"),
@@ -143,14 +150,6 @@ fn start_intake(
     }
 }
 
-fn apply_node_name(app: &mut app::App, name: Option<&str>) {
-    // The name the node goes by in the peer directory: the one given, else the one it made for itself once.
-    if let Some(n) = name {
-        app.node_name = n.to_string();
-        let _ = memcp_core::directory::set_own_name(&app.brain, n);
-    }
-}
-
 fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Result<(), Failure> {
     let flag = |name: &str| a.flags.get(name).map(String::as_str);
     // Tokens travel in clear between the client and this process: only a local TLS
@@ -174,7 +173,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         Ok(r) => eprintln!("{}", r.summary()),
         Err(e) => eprintln!("recovery: not finished yet: {e}"),
     }
-    let mut app = app::App::new(brain);
+    let mut app = app::App::new_with_name(brain, flag("--node-name")).map_err(cli::fail)?;
     app.allowed_origins.extend(list(flag("--allow-origin")));
     // The admin page on this listener (console token): by default only on the loopback.
     app.console_admin = a.switches.iter().any(|s| s == "--console-admin") || loopback;
@@ -198,7 +197,6 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         // No address given: the one it listens on (the connections it makes name it).
         app.public_url = u;
     }
-    apply_node_name(&mut app, flag("--node-name"));
     // How this node can be reached, from its settings: told to the other nodes in its directory entry.
     let tailnet = flag("--identity-listen")
         .map(String::from)
@@ -282,15 +280,19 @@ mod tests {
                 &mut args.flags,
                 &mut args.switches,
             );
-            let mut app = app::App::new(Brain::open(&dir).map_err(|e| e.to_string())?);
-            apply_node_name(&mut app, args.flags.get("--node-name").map(String::as_str));
-            Ok(app)
+            app::App::new_with_name(
+                Brain::open(&dir).map_err(|e| e.to_string())?,
+                args.flags.get("--node-name").map(String::as_str),
+            )
+            .map_err(|e| e.to_string())
         };
 
         assert_eq!(start(&["serve"], "")?.node_name, "Silice");
         assert_eq!(
-            directory::stored_own_name(&brain).map_err(|e| e.to_string())?,
-            None
+            directory::stored_own_name(&brain)
+                .map_err(|e| e.to_string())?
+                .as_deref(),
+            Some("Silice")
         );
 
         let settings = r#"node_name = "MemCP""#;

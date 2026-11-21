@@ -1,6 +1,6 @@
 # Silice
 
-The installers provide both the `silice` and `memcp` commands.
+Release installers put `silice`, `silice-manager`, and `silice-sync` alongside their `memcp` counterparts. On Linux this is `~/.local/bin` for a user install, `/usr/local/bin` for `--system`, or `/usr/bin` for a package. On macOS it is `~/Library/Application Support/MemCP/bin`. On Windows the aliases are `.exe` files in `%LOCALAPPDATA%\MemCP\bin`. A custom install location takes precedence.
 
 **The external hard drive for your AIs.**
 
@@ -28,7 +28,7 @@ I am a nurse. I am a much better nurse than developer, so this project is **buil
 - **Spaces.** What you keep is organised in spaces (health, home, work, anything you create), as folders you can nest, rename and drag around. An assistant opened on one space cannot reach another.
 - **A web cockpit for you.** Open any space on its **Targets** (figures, progress, and the tasks to tick in Home and Hobbies), its **Journal** (one filterable chronology of notes and structured entries, with their provenance and time), its **Stats** and its **File inventory**. One + button adds a note, a photo or a file. Correct a note and the old text stays in its history; nothing is overwritten.
 - **Voice notes and attachments** on that page, the same everywhere: record in the browser, attach photos and PDFs. A recording becomes text through a speech model on one of your computers, or a speech service you choose.
-- **Assistants.** Each one gets an address and a key of its own, with rights on the spaces you tick, nothing more.
+- **Assistants.** Each one gets its own address and access to the spaces you choose. Assistants that sign in use a one-time invitation code on the public consent page. Keys are for assistants that take one and for devices.
 - **Joining without typing.** A node shows a QR code; a phone or a computer scans it, or finds the node on your network and asks to join, and you answer with one tap after comparing three words.
 - **Everything you own travels with you.** One click exports it all, with fingerprints, in a form another installation can take in.
 
@@ -96,7 +96,7 @@ The releases carry `memcp`, `memcp-janitor` and `memcp-sync` for macOS and Windo
 
 ## Connect an assistant
 
-On the page, press **Connect an assistant**: it gives an address and a key, and the line to paste into your assistant. For an assistant that runs a command on the same computer, `memcp mcp` talks on standard input and output, with nothing exposed on the network. [docs/REFERENCE.md](docs/REFERENCE.md) has every route (Claude Code, Claude on the web, Hermes, any MCP client).
+On the page, press **Connect an assistant**: the wizard gives you the address and the steps. For an assistant that signs in, enter the one-time invitation code on the public consent page and choose its spaces there. For an assistant that takes a key, choose its spaces in the wizard and use the address and key it gives you. For an assistant that runs a command on the same computer, `memcp mcp` talks on standard input and output, with nothing exposed on the network. [docs/REFERENCE.md](docs/REFERENCE.md) has every route (local and web assistants, and other MCP clients).
 
 ## Join a node
 
