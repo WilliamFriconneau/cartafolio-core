@@ -1,5 +1,11 @@
 # Changelog
 
+## 20261120.12.0
+
+- **Every new connection of an assistant that signs in starts with an invitation code, on the tailnet too.** The consent page (`/oauth/authorize`) is the same on the public address and on the identity listener: it asks for a one-time code (twelve letters, `XXXX-XXXX-XXXX`) and shows the consent page of the person the code was made for; there is no more shortcut for a person Tailscale recognises. The person makes the code on their own page (`POST /admin/api/invite`, and the « Connect an assistant » steps of Claude, ChatGPT and Le Chat now show it), or an administrator makes it for them. Keys for assistants that take a key, and the pairing codes of devices, are unchanged.
+- **A code is one transaction.** The nonce the consent page gives is bound to the OAuth request it was opened for (client, return address, PKCE challenge, address asked), is shown again unchanged when nothing was ticked, and is spent once. A request the server would refuse (another site, a PKCE method it does not take) does not spend the code. At most five codes wait per person. The administrator's route needs `X-Requested-With: memcp` and a bearer token (never the address). The answer that carries a code is `no-store`.
+- **The page tests pass again.** The capture form of « Trace or drop » is back, a click in the Journal opens its note, and the people tiles and the timeline are translated.
+
 ## 20261120.11.3
 
 - **The administrator's page makes the invitation code.** Each person's tile has a « claude.ai code » button: it shows the one-time code, the address to paste in Claude's connector settings (`<public address>/mcp/<person>-claude`) and the two steps. The answer of `POST /admin/api/users/invite` carries that address as `connector_url`.

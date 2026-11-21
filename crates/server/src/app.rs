@@ -50,8 +50,8 @@ pub struct App {
     pub tailnet_users: std::collections::HashMap<String, String>,
     fails: Mutex<VecDeque<(i64, String)>>,
     rates: Mutex<HashMap<String, VecDeque<i64>>>,
-    /// One-time consent nonces: nonce → (person id, expiry).
-    pub(crate) consents: Mutex<HashMap<String, (String, i64)>>,
+    /// One-time consent nonces: nonce → (person id, expiry, digest of the OAuth request it was given for).
+    pub(crate) consents: Mutex<HashMap<String, (String, i64, String)>>,
     /// One-time invitation codes for the consent page, for a person who is not on the tailnet: hash of the code to
     /// (person id, end of validity). In memory only: a restart forgets them, and a code is made just before it is used.
     pub(crate) invites: Mutex<HashMap<String, (String, i64)>>,
@@ -168,9 +168,7 @@ impl App {
         if req.tailnet_login.is_some() {
             // The identity listener: the OAuth consent page and the admin page, nothing else.
             return match (req.method.as_str(), path) {
-                ("GET" | "POST", "/oauth/authorize") => {
-                    crate::oauth::authorize(self, req, crate::admin::tailnet_person(self, req))
-                }
+                ("GET" | "POST", "/oauth/authorize") => crate::oauth::authorize(self, req),
                 ("GET", "" | "/admin") => crate::admin::page(),
                 (_, p) if p.starts_with("/admin/api/") => crate::admin::handle(self, req, now),
                 _ => Response::json(404, &json!({ "error": "not found" })),
@@ -208,8 +206,8 @@ impl App {
             ("GET", p) if p.starts_with("/join/") => {
                 crate::join::poll(self, req, &p["/join/".len()..])
             }
-            // The consent page is only served where Tailscale tells who is there.
-            ("GET" | "POST", "/oauth/authorize") => crate::oauth::authorize(self, req, None),
+            // The consent page: an invitation code opens it, here as on the identity listener.
+            ("GET" | "POST", "/oauth/authorize") => crate::oauth::authorize(self, req),
             // The control plane is never served to a request that came through Funnel.
             ("GET", "/admin") if self.console_admin && !through_funnel(req) => crate::admin::page(),
             (_, p)

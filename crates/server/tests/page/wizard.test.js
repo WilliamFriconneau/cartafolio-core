@@ -30,6 +30,7 @@ const mockFetch = async (url, opts = {}) => {
   calls.push([opts.method || "GET", path, opts.body]);
   const ok = body => ({ ok: true, status: 200, json: async () => body });
   if (path === "state") return ok(state());
+  if (path === "invite") return ok({ code: "ABCD-EFGH-JKMN" });
   if (path.startsWith("guide?scope=")) {
     const scope = decodeURIComponent(path.split("=")[1]);
     return ok({ scope, max_chars: 16384, versions: guides[scope] ? 2 : 0, current: guides[scope] ? { body: guides[scope], author: "u1", written_at: "x" } : null });
@@ -151,7 +152,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("no error is left on the page", text("#code-note") === "");
   $("#secret").removeAttribute("open");
 
-  // --- OAuth platform: nothing to create, the steps show the address, then it waits
+  // --- OAuth platform: the steps show the address and invitation code, then it waits
   click($("#open-wizard"));
   click($$("#w-platforms button").find(b => b.textContent === "Claude Code"));
   check("opened from the button, nothing is ticked at all", $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").every(b => !b.checked), $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").map(b => b.checked).join());
@@ -167,6 +168,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("no vault box for an OAuth platform", $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all").length === 0);
   check("it waits", text("#w-wait").includes("Waiting"));
   check("the internet warning shows", text("#w-steps").includes("from the internet"));
+  await sleep(50);
+  check("the steps show the invitation code issued by the node", calls.some(([method, path]) => method === "POST" && path === "invite") && $$("#w-steps pre").some(p => p.textContent === "ABCD-EFGH-JKMN"));
   // the consent happens elsewhere: a new oauth connection appears
   world.connections.push({ agent: "claudeai", user: "u1", rights: "work:rw", upstream: "none", read_only: false, revoked: false, created_at: "x", last_used_at: null, expires_at: "t2" });
   await sleep(3400);

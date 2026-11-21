@@ -65,6 +65,8 @@ const MAX_CLIENTS: i64 = 200;
 const INVITE_TTL: i64 = 3600;
 /// Invitations waiting at the same time.
 const MAX_INVITES: usize = 20;
+/// Invitations waiting for one person: a member cannot fill the places of the others.
+const MAX_INVITES_PER_PERSON: usize = 5;
 /// Crockford's base32: no I, L, O or U, so a code read aloud or typed on a phone is not misread.
 const CODE_ALPHABET: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 /// Access tokens last 30 days; the client refreshes them.
@@ -143,9 +145,7 @@ pub fn protected_resource(app: &App, address: &str) -> Response {
 }
 
 pub fn authorization_server(app: &App) -> Response {
-    // The consent page is the public one: it asks for an invitation code, and sends a person who is on the tailnet on to
-    // the private page, where Tailscale says who they are. A client cannot be told two addresses, and the private one
-    // cannot be reached by a person who is not on the tailnet.
+    // The consent page is the public one: it asks for an invitation code, whoever the person is and wherever they are.
     Response::json(
         200,
         &json!({
@@ -366,7 +366,9 @@ pub fn invite_create(app: &App, person: &str, now: i64) -> Option<(String, i64)>
     {
         let mut m = app.invites.lock().unwrap_or_else(|e| e.into_inner());
         m.retain(|_, (_, exp)| *exp > now);
-        if m.len() >= MAX_INVITES {
+        if m.len() >= MAX_INVITES
+            || m.values().filter(|(id, _)| *id == user.id).count() >= MAX_INVITES_PER_PERSON
+        {
             return None;
         }
         m.insert(hex(&sha(&code)), (user.id.clone(), end));
@@ -410,8 +412,32 @@ pub fn holds_consent(app: &App, body: &[u8]) -> bool {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(n)
-            .is_some_and(|(_, exp)| *exp > now)
+            .is_some_and(|(_, exp, _)| *exp > now)
     })
+}
+
+/// A POST comes from the consent page itself, never from another site.
+fn origin_ok(app: &App, req: &Request) -> bool {
+    let origin = req.header("origin");
+    let expected = if req.tailnet_login.is_some() {
+        app.login_url.as_deref().map(origin_of)
+    } else {
+        Some(origin_of(&app.public_url))
+    };
+    req.header("sec-fetch-site") != "cross-site" && (origin.is_empty() || Some(origin) == expected)
+}
+
+/// The digest of what a consent page was opened for: the client, where it goes back, its PKCE challenge and the address
+/// it asked for. The approval must carry the same, so one nonce is one transaction.
+fn transaction(q: &std::collections::HashMap<String, String>) -> String {
+    let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
+    hex(&sha(&format!(
+        "{}\n{}\n{}\n{}",
+        get("client_id"),
+        get("redirect_uri"),
+        get("code_challenge"),
+        get("resource")
+    )))
 }
 
 /// A request to the consent page that is not on the tailnet: the person is the one an invitation code was made for. The
@@ -431,8 +457,8 @@ fn invited_person(app: &App, req: &Request, now: i64) -> Option<User> {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .get(n)
-            .filter(|(_, exp)| *exp > now)
-            .map(|(id, _)| id.clone())?;
+            .filter(|(_, exp, _)| *exp > now)
+            .map(|(id, _, _)| id.clone())?;
         return person(&id);
     }
     let code = q.get("invite")?;
@@ -442,6 +468,16 @@ fn invited_person(app: &App, req: &Request, now: i64) -> Option<User> {
     }
     let (_, uris) = client(&ctl, q.get("client_id").map(String::as_str).unwrap_or(""))?;
     if !uris.iter().any(|u| Some(u) == q.get("redirect_uri")) {
+        return None;
+    }
+    // A request that would be refused afterwards does not spend the code: its origin and its PKCE parameters are checked
+    // first.
+    let get = |k: &str| q.get(k).map(String::as_str).unwrap_or("");
+    if !origin_ok(app, req)
+        || get("response_type") != "code"
+        || get("code_challenge_method") != "S256"
+        || get("code_challenge").len() < 43
+    {
         return None;
     }
     match invite_take(app, code, now).and_then(|id| person(&id)) {
@@ -479,9 +515,26 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
         return page(
             app,
             403,
-            "<p>Open this page from one of your devices, with Tailscale on.</p>",
+            "<p>This link is not valid. Start again from your assistant.</p>",
         );
     };
+    // A request the server refuses (no code, or a PKCE method it does not take) goes back to the client with the error,
+    // naming its issuer (RFC 9207), before any code is spent.
+    if get("response_type") != "code"
+        || get("code_challenge_method") != "S256"
+        || get("code_challenge").len() < 43
+    {
+        let redirect = get("redirect_uri");
+        let sep = if redirect.contains('?') { '&' } else { '?' };
+        return Response::empty(302).with(
+            "Location",
+            &format!(
+                "{redirect}{sep}error=invalid_request&state={}&iss={}",
+                enc(get("state")),
+                enc(&app.public_url)
+            ),
+        );
+    }
     let who = req.ip.clone().unwrap_or_else(|| "?".into());
     let (status, note) = if req.method != "POST" {
         (200, "")
@@ -509,28 +562,6 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
     .iter()
     .map(|k| format!("<input type=hidden name={k} value=\"{}\">", esc(get(k))))
     .collect();
-    // On your own devices with Tailscale on: the same request on the private page, where no code is needed.
-    let private = app.login_url.as_deref().map_or(String::new(), |login| {
-        let query: Vec<String> = [
-            "response_type",
-            "client_id",
-            "redirect_uri",
-            "state",
-            "code_challenge",
-            "code_challenge_method",
-            "scope",
-            "resource",
-        ]
-        .iter()
-        .filter(|k| !get(k).is_empty())
-        .map(|k| format!("{k}={}", enc(get(k))))
-        .collect();
-        format!(
-            "<p class=mute>On one of your own devices with Tailscale on? <a href=\"{}/oauth/authorize?{}\">Continue here</a>, no code needed.</p>",
-            esc(login),
-            esc(&query.join("&"))
-        )
-    });
     page(
         app,
         status,
@@ -538,49 +569,26 @@ fn invite_form(app: &App, req: &Request, now: i64) -> Response {
             "<h1>Connect {n}</h1><p>{n} asks to use a memory. Enter the invitation code you were given.</p>{note}\
              <form method=post>{hidden}<p><input name=invite autocomplete=off autocapitalize=characters \
              spellcheck=false placeholder=\"XXXX-XXXX-XXXX\" size=18 required autofocus></p><button>Continue</button></form>\
-             <p class=mute>The code is good once, for an hour.</p>{private}",
+             <p class=mute>The code is good once, for an hour.</p>",
             n = esc(&name)
         ),
     )
 }
 
-/// `GET` (consent page) and `POST` (approval) `/oauth/authorize`: on the identity listener, where Tailscale tells who
-/// is there; on the public address, for a person who has an invitation code.
-pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
+/// `GET` (consent page) and `POST` (approval) `/oauth/authorize`, on the public address and on the identity listener
+/// alike: every new connection starts from an invitation code an administrator made for the person. The code opens the
+/// consent page of that person alone; the approval carries the nonce the page gave.
+pub fn authorize(app: &App, req: &Request) -> Response {
     let now = util::now();
-    let public = req.tailnet_login.is_none();
-    let who = match who {
-        Some(u) => Some(u),
-        None if public => invited_person(app, req, now),
-        None => None,
+    let Some(me) = invited_person(app, req, now) else {
+        return invite_form(app, req, now);
     };
-    let Some(me) = who else {
-        if public {
-            return invite_form(app, req, now);
-        }
+    if req.method == "POST" && !origin_ok(app, req) {
         return page(
             app,
             403,
-            "<p>Open this page from one of your devices, with Tailscale on.</p>",
+            "<p>This approval did not come from the consent page.</p>",
         );
-    };
-    if req.method == "POST" {
-        // The approval comes from the consent page itself, never from another site.
-        let origin = req.header("origin");
-        let expected = if public {
-            Some(origin_of(&app.public_url))
-        } else {
-            app.login_url.as_deref().map(origin_of)
-        };
-        if req.header("sec-fetch-site") == "cross-site"
-            || (!origin.is_empty() && Some(origin) != expected)
-        {
-            return page(
-                app,
-                403,
-                "<p>This approval did not come from the consent page.</p>",
-            );
-        }
     }
     let q = if req.method == "POST" {
         form(&req.body)
@@ -667,11 +675,19 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
             "<p>You do not have access to this space, so an assistant cannot be connected to it.</p>",
         );
     }
+    let bind = transaction(&q);
+    // The nonce of an approval that is shown again (nothing ticked) stays the same: a page makes one nonce, and a
+    // nonce is spent once.
+    let held = get("nonce").to_string();
     let consent_page = |status: u16, note: &str| -> Response {
-        let nonce = hex(&util::random_bytes::<16>());
-        {
+        let nonce = if held.is_empty() {
+            hex(&util::random_bytes::<16>())
+        } else {
+            held.clone()
+        };
+        if held.is_empty() {
             let mut m = app.consents.lock().unwrap_or_else(|e| e.into_inner());
-            m.retain(|_, (_, exp)| *exp > now);
+            m.retain(|_, (_, exp, _)| *exp > now);
             if m.len() > 1000 {
                 return page(
                     app,
@@ -679,7 +695,10 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
                     "<p>Too many pending approvals, try again later.</p>",
                 );
             }
-            m.insert(nonce.clone(), (me.id.clone(), now + CONSENT_TTL));
+            m.insert(
+                nonce.clone(),
+                (me.id.clone(), now + CONSENT_TTL, bind.clone()),
+            );
         }
         let hidden: String = [
             "client_id",
@@ -747,7 +766,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         )
     };
     // A code just opened the page: the form that carried it is answered with the consent page, as a GET is.
-    let opened_by_code = public && q.contains_key("invite") && !q.contains_key("nonce");
+    let opened_by_code = q.contains_key("invite") && !q.contains_key("nonce");
     if req.method == "GET" || opened_by_code {
         return consent_page(200, "");
     }
@@ -767,6 +786,22 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         })
         .collect();
     let everything = scoped.is_none() && q.contains_key("all");
+    let for_this = |m: &std::collections::HashMap<String, (String, i64, String)>| {
+        m.get(get("nonce"))
+            .is_some_and(|(id, exp, b)| *id == me.id && *exp > now && *b == bind)
+    };
+    if !opened_by_code && !for_this(&app.consents.lock().unwrap_or_else(|e| e.into_inner())) {
+        // Not the page this approval was made for: the nonce is spent, whatever else happens.
+        app.consents
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(get("nonce"));
+        return page(
+            app,
+            400,
+            "<p>This page has expired. Start again from your assistant.</p>",
+        );
+    }
     if get("decision") == "allow" && chosen.is_empty() && !everything {
         return consent_page(
             400,
@@ -778,7 +813,7 @@ pub fn authorize(app: &App, req: &Request, who: Option<User>) -> Response {
         .lock()
         .unwrap_or_else(|e| e.into_inner())
         .remove(get("nonce"))
-        .is_some_and(|(id, exp)| id == me.id && exp > now);
+        .is_some_and(|(id, exp, b)| id == me.id && exp > now && b == bind);
     if !fresh {
         return page(
             app,

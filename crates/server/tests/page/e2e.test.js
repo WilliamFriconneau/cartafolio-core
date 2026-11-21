@@ -129,15 +129,17 @@ function clean(name, text) {
   check("Trace or drop has its three buttons", await until(() => ["Ajouter au journal", "Joindre des fichiers", "● Enregistrer"].every(t => buttons().includes(t))), buttons().join(" | "));
   const box = $("#space-body textarea");
   check("Trace or drop has a box to write", !!box && shown(w, box));
-  box.value = "Une idée pour le projet alpha, à creuser";
-  $$("#space-body button").find(b => b.textContent.trim() === "Ajouter au journal").click();
-  check("the note written appears in the list", await until(() => $$("#space-body .note").some(n => /projet alpha, à creuser/.test(n.textContent))),
-    $("#space-body").textContent.slice(0, 300) + " " + $("#err").textContent);
-  check("the box is emptied once the note is kept", box.isConnected ? box.value === "" : $("#space-body textarea").value === "");
+  const add = $$("#space-body button").find(b => b.textContent.trim() === "Ajouter au journal");
+  if (box && add) {
+    box.value = "Une idée pour le projet alpha, à creuser";
+    add.click();
+    check("the note written appears in the list", await until(() => $$("#space-body .note").some(n => /projet alpha, à creuser/.test(n.textContent))),
+      $("#space-body").textContent.slice(0, 300) + " " + $("#err").textContent);
+    check("the box is emptied once the note is kept", $("#space-body textarea")?.value === "");
+  }
   clean("Trace or drop", visibleText(w));
 
-  // A note written straight into each space, to see the journal gather every space. (The journal reads the spaces,
-  // not the sorting box: what waits in Inbox is shown in Trace or drop.)
+  // A note written straight into each space, to see the journal gather every space, including Inbox.
   const gardenName = $$("#spaces .tile[data-space]").find(t => /Jardin/.test(t.textContent)).getAttribute("data-space");
   run("note", "add", workName, "Réunion projet alpha : envoyer le devis");
   run("note", "add", gardenName, "Tailler les rosiers avant l'hiver");
@@ -154,6 +156,7 @@ function clean(name, text) {
   const devis = rows.find(n => /envoyer le devis/.test(n.textContent));
   const roses = rows.find(n => /Tailler les rosiers/.test(n.textContent));
   check("each note shows its own space", chip(devis) === "Atelier" && chip(roses) === "Jardin", chip(devis) + " / " + chip(roses));
+  check("the captured note is in Inbox", chip(rows.find(n => /projet alpha, à creuser/.test(n.textContent))) === "Inbox");
   check("every note of the journal has its space", rows.length >= 2 && rows.every(n => n.querySelector(".chip.sp")), String(rows.length));
   clean("Journal", visibleText(w));
 

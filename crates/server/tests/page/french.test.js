@@ -40,6 +40,8 @@ const ENGLISH = [
   "No space yet", "No note here", "Nothing here yet", "Nothing proposed", "No change yet", "No target yet", "None yet",
   "Add a space", "Connect an assistant", "Read-only", "My instructions", "my instructions", "Sort them", "Save the correction",
   "signed out", "select and copy by hand", "expired: get a new code", "QR code to join", "The microphone is not allowed",
+  "search the chronology", "Start date", "End date", "Nothing in this window", "linked to Home Assistant", "not linked",
+  "The page that opens asks for this code", "Type it, tick the spaces", "A one-time code that lets this person",
 ];
 // Words that make a text read as English; two of them in one text and the translator having left it alone is a miss.
 const STOP = /\b(the|and|you|your|is|are|this|that|with|for|will|can|from|nothing|not|it|its|to|of|has|have|was|were|here|then|once|only|until)\b/gi;
@@ -170,7 +172,6 @@ async function leftovers(page, rootSel) {
   await scan("the wizard with a name that is a space", "#wizard");
   await page.click("#wizard form button");
   await page.evaluate(() => { location.hash = ""; }); await sleep(300);
-  await page.locator("#spaces .tile[data-space] button", { hasText: "Instructions" }).first().click().catch(() => {});
   await page.locator("#spaces .tile[data-space] button", { hasText: "Consignes" }).first().click(); await sleep(400);
   await scan("the instructions of a space", "#guide-dlg");
   await page.click("#guide-dlg form button:last-child");

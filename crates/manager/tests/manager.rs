@@ -299,9 +299,30 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
         .ok_or("client")?
         .to_string();
     let q = authorize_path(&client);
-    // Lou, on the tailnet, gets the consent page of Lou's vaults and nobody else's.
-    let page = m.handle(&tailnet("lou@example.org", "GET", &q, ""));
-    assert_eq!(page.status, 200);
+    // Lou, on the tailnet, gets the code form, and with the code the administrator made, the consent page of Lou's
+    // vaults and nobody else's.
+    let form_page = m.handle(&tailnet("lou@example.org", "GET", &q, ""));
+    assert_eq!(form_page.status, 200);
+    assert!(String::from_utf8_lossy(&form_page.body).contains("invitation code"));
+    let made = m.handle(&ingress(
+        "ha-w",
+        "alice",
+        "POST",
+        "/admin/api/users/invite",
+        r#"{"name":"lou"}"#,
+    ));
+    let invite = made.body_json()["code"].as_str().ok_or("code")?.to_string();
+    let with_code = q
+        .split_once('?')
+        .map(|(_, b)| format!("{b}&invite={invite}"))
+        .ok_or("form")?;
+    let page = m.handle(&tailnet(
+        "lou@example.org",
+        "POST",
+        "/oauth/authorize",
+        &with_code,
+    ));
+    assert_eq!(page.status, 200, "{}", String::from_utf8_lossy(&page.body));
     let html = String::from_utf8(page.body.clone())?;
     assert!(
         html.contains("lou-me") && !html.contains("alice-me"),

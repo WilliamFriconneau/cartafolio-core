@@ -358,6 +358,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         action(app, &ctl, &me, path, &body)
     };
     match done {
+        // A code is shown once: nothing keeps a copy of it.
+        Ok(v) if path == "/invite" => Response::json(200, &v).with("Cache-Control", "no-store"),
         Ok(v) => Response::json(200, &v),
         Err(r) => r,
     }
@@ -680,6 +682,13 @@ fn action(
                 "link": link,
                 "qr": qr_svg(&link),
             }))
+        }
+        "/invite" => {
+            // A one-time code for this person to connect an assistant that signs in (Claude on the web, ChatGPT, Le Chat):
+            // the consent page asks for it. Made here for oneself; an administrator makes one for another person.
+            let (code, ends) = crate::oauth::invite_create(app, &me.name, util::now())
+                .ok_or_else(|| fail(Error::Invalid("too many invitations are waiting".into())))?;
+            Ok(json!({ "code": code, "expires_at": ends, "valid_minutes": 60 }))
         }
         "/triage/send" => {
             // The person decides where a capture of Inbox goes: the inbox of one of their vaults.

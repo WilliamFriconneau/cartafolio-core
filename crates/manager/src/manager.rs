@@ -442,6 +442,12 @@ impl Manager {
             return r;
         }
         if path == "/admin/api/users/invite" {
+            if req.method != "POST" {
+                return Response::empty(405).with("Allow", "POST");
+            }
+            if req.header("x-requested-with") != "memcp" {
+                return err(403, "missing X-Requested-With: memcp");
+            }
             if !u.admin {
                 return err(403, "only an administrator of the installation does this");
             }
@@ -582,7 +588,7 @@ impl Manager {
 
     /// Whether the request carries the console token of an administrator of the installation.
     fn console_admin_of(&self, req: &Request) -> bool {
-        let Some(token) = req.key() else {
+        let Some(token) = memcp_server::http::bearer_of(req.header("authorization")) else {
             return false;
         };
         let Ok(ctl) = self.registry.brain.open_control() else {
@@ -748,7 +754,12 @@ impl Handler for Manager {
             ("GET" | "POST", "/oauth/authorize") => {
                 let now = memcp_core::util::now();
                 let who = req.ip.clone().unwrap_or_else(|| "?".into());
-                if req.method == "POST" && !self.registry.blocked(now, &who) {
+                // Only a code is a guess: an approval that carries its nonce is not held off with the guessers.
+                let guess = {
+                    let q = oauth::form(&req.body);
+                    q.contains_key("invite") && !q.contains_key("nonce")
+                };
+                if req.method == "POST" && !(guess && self.registry.blocked(now, &who)) {
                     let found =
                         self.holder(|a| a.holds_invite(&req.body) || a.holds_consent(&req.body));
                     if let Some(app) = found.filter(|a| !Arc::ptr_eq(a, &self.registry)) {

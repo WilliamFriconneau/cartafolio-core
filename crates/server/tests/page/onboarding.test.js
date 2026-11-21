@@ -240,10 +240,11 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   await sleep(600);
   check("« Older notes » loads the next page, without a repeat", before === 2 && (await page.locator("#gj-list .note").count()) > before && (await page.locator("#gj-list .note").count()) <= jrows);
   await page.unroute("**/admin/api/journal?*");
-  await page.click("#gj-list .note");
-  await page.waitForSelector("#space-tabs button");
-  await sleep(900);
-  check("a click on an entry opens that note in its space", /^#space\//.test(location_hash(await page.url())) && (await page.locator("#space-body textarea").count()) >= 1);
+  const note = "Walked four kilometres by the river";
+  await page.locator("#gj-list .note", { hasText: note }).click();
+  const editor = page.locator("#space-body .editor textarea");
+  await editor.waitFor({ timeout: 5000 });
+  check("a click on an entry opens that note in its space", location_hash(page.url()) === "#space/owner-health" && await editor.inputValue() === note);
 
   // ---- The graph ----
   await page.evaluate(() => { location.hash = "#graph"; });

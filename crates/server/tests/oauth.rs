@@ -105,11 +105,10 @@ fn authorize_query(client: &str) -> String {
     )
 }
 
-/// The consent page's one-time nonce.
+/// The consent page's one-time nonce: an invitation code opens the page of the person it was made for.
 fn nonce(e: &Env, q: &str) -> Result<String, Box<dyn Error>> {
-    let page = e
-        .app
-        .handle(&rq("GET", q, &[], "", Some("owner@example.org")));
+    let code = invite(e)?;
+    let page = public_post(e, &form_of(q, &format!("&invite={code}")), &SITE);
     assert_eq!(page.status, 200);
     let html = String::from_utf8(page.body.clone())?;
     assert!(html.contains("Allow"));
@@ -138,13 +137,8 @@ fn decide_with(
         .split_once('?')
         .map(|(_, b)| format!("{b}&decision={decision}&nonce={nonce}{extra}"))
         .unwrap_or_default();
-    e.app.handle(&rq(
-        "POST",
-        "/oauth/authorize",
-        headers,
-        &body,
-        Some("owner@example.org"),
-    ))
+    e.app
+        .handle(&rq("POST", "/oauth/authorize", headers, &body, None))
 }
 
 /// Consent on the tailnet, then the code from the redirect.
@@ -160,7 +154,7 @@ fn code_with(e: &Env, client: &str, extra: &str) -> Result<String, Box<dyn Error
         &q,
         &n,
         "allow",
-        &[("origin", "https://memory.example.net:8792")],
+        &[("origin", "https://memory.example.net")],
         extra,
     );
     assert_eq!(r.status, 302);
@@ -286,31 +280,30 @@ fn only_allowed_redirects_register() -> Res {
 }
 
 #[test]
-fn the_consent_page_needs_the_tailnet_and_a_known_person() -> Res {
+fn the_consent_page_needs_an_invitation_code_wherever_the_person_is() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let q = authorize_query(&client);
-    let public = e.app.handle(&rq("GET", &q, &[], "", None));
-    assert_eq!(public.status, 200, "public listener: a form for a code");
-    let html = String::from_utf8(public.body.clone())?;
-    assert!(html.contains("invitation code") && !html.contains("Allow"));
-    // A person on the tailnet is led to the private page with the same request.
-    assert!(
-        html.contains("href=\"https://memory.example.net:8792/oauth/authorize?")
-            && html.contains(&format!("client_id={client}")),
-        "{html}"
-    );
+    // On the public address, on the identity listener, with a known or an unknown tailnet login: always the code form.
+    for login in [
+        None,
+        Some(""),
+        Some("owner@example.org"),
+        Some("stranger@example.org"),
+    ] {
+        let r = e.app.handle(&rq("GET", &q, &[], "", login));
+        assert_eq!(r.status, 200, "{login:?}");
+        let html = String::from_utf8(r.body.clone())?;
+        assert!(
+            html.contains("invitation code") && !html.contains("Allow"),
+            "{login:?}"
+        );
+    }
+    // A request from an unknown client is no consent page at all.
+    let unknown = q.replace(&client, "hcpo_unknown");
     assert_eq!(
-        e.app.handle(&rq("GET", &q, &[], "", Some(""))).status,
-        403,
-        "no tailnet login"
-    );
-    assert_eq!(
-        e.app
-            .handle(&rq("GET", &q, &[], "", Some("stranger@example.org")))
-            .status,
-        403,
-        "unknown login"
+        e.app.handle(&rq("GET", &unknown, &[], "", None)).status,
+        403
     );
     // A denial goes back with an error.
     let n = nonce(&e, &q)?;
@@ -324,7 +317,7 @@ fn an_approval_needs_the_page_it_came_from() -> Res {
     let e = env()?;
     let client = register(&e)?;
     let q = authorize_query(&client);
-    assert_eq!(decide(&e, &q, "", "allow", &[]).status, 400, "no nonce");
+    assert_eq!(decide(&e, &q, "", "allow", &[]).status, 403, "no nonce");
     let n = nonce(&e, &q)?;
     let other_site = [("origin", "https://evil.example")];
     assert_eq!(decide(&e, &q, &n, "allow", &other_site).status, 403);
@@ -333,13 +326,12 @@ fn an_approval_needs_the_page_it_came_from() -> Res {
     assert_eq!(decide(&e, &q, &n, "allow", &[]).status, 302);
     assert_eq!(
         decide(&e, &q, &n, "allow", &[]).status,
-        400,
+        403,
         "a nonce works once"
     );
     // The form may post to the page and be redirected to Claude, ChatGPT or Le Chat.
-    let page = e
-        .app
-        .handle(&rq("GET", &q, &[], "", Some("owner@example.org")));
+    let code = invite(&e)?;
+    let page = public_post(&e, &form_of(&q, &format!("&invite={code}")), &SITE);
     let csp = page
         .headers
         .iter()
@@ -543,13 +535,12 @@ fn connection_of(e: &Env, client: &str) -> Result<access::ConnectionInfo, Box<dy
 fn the_consent_page_lists_the_vaults_with_nothing_ticked() -> Res {
     let e = env()?;
     let client = register(&e)?;
-    let page = e.app.handle(&rq(
-        "GET",
-        &authorize_query(&client),
-        &[],
-        "",
-        Some("owner@example.org"),
-    ));
+    let code = invite(&e)?;
+    let page = public_post(
+        &e,
+        &form_of(&authorize_query(&client), &format!("&invite={code}")),
+        &SITE,
+    );
     let html = String::from_utf8(page.body)?;
     assert!(html.contains("name=v_personal") && html.contains("name=v_health"));
     assert!(html.contains("name=readonly"));
@@ -695,9 +686,10 @@ fn authorize_query_for(client: &str, resource: &str) -> String {
 }
 
 fn page_of(e: &Env, q: &str) -> (u16, String) {
-    let r = e
-        .app
-        .handle(&rq("GET", q, &[], "", Some("owner@example.org")));
+    let Ok(code) = invite(e) else {
+        return (500, String::new());
+    };
+    let r = public_post(e, &form_of(q, &format!("&invite={code}")), &SITE);
     (r.status, String::from_utf8_lossy(&r.body).to_string())
 }
 
@@ -726,7 +718,7 @@ fn an_address_that_names_a_vault_gives_a_connector_for_that_vault_only() -> Res 
         &q,
         &n,
         "allow",
-        &[("origin", "https://memory.example.net:8792")],
+        &[("origin", "https://memory.example.net")],
         "&v_personal=1&v_health=1&all=1",
     );
     assert_eq!(r.status, 302);
@@ -1099,7 +1091,7 @@ fn every_authorization_response_names_its_issuer() -> Res {
         &q,
         &n,
         "allow",
-        &[("origin", "https://memory.example.net:8792")],
+        &[("origin", "https://memory.example.net")],
     );
     assert!(location(&ok).contains(iss), "{}", location(&ok));
     // A refusal.
@@ -1109,7 +1101,7 @@ fn every_authorization_response_names_its_issuer() -> Res {
         &q,
         &n,
         "deny",
-        &[("origin", "https://memory.example.net:8792")],
+        &[("origin", "https://memory.example.net")],
     );
     let loc = location(&no);
     assert!(
@@ -1117,13 +1109,15 @@ fn every_authorization_response_names_its_issuer() -> Res {
         "{loc}"
     );
     // A bad request.
-    let bad = e.app.handle(&rq(
-        "GET",
-        &q.replace("code_challenge_method=S256", "code_challenge_method=plain"),
-        &[],
-        "",
-        Some("owner@example.org"),
-    ));
+    let code = invite(&e)?;
+    let bad = public_post(
+        &e,
+        &form_of(
+            &q.replace("code_challenge_method=S256", "code_challenge_method=plain"),
+            &format!("&invite={code}"),
+        ),
+        &SITE,
+    );
     let loc = location(&bad);
     assert!(
         loc.contains("error=invalid_request") && loc.contains(iss),
@@ -1239,12 +1233,6 @@ fn an_expired_code_and_an_unknown_person_give_nothing() -> Res {
         public_post(&e, &form_of(&q, "&invite=not-a-code"), &SITE).status,
         403
     );
-    // No more than twenty wait at the same time.
-    let e2 = env()?;
-    for _ in 0..20 {
-        assert!(oauth::invite_create(&e2.app, "owner", util_now()).is_some());
-    }
-    assert!(oauth::invite_create(&e2.app, "owner", util_now()).is_none());
     Ok(())
 }
 
@@ -1279,5 +1267,85 @@ fn the_public_approval_needs_its_nonce_and_its_own_site() -> Res {
         403,
         "a nonce works once"
     );
+    Ok(())
+}
+
+#[test]
+fn a_person_makes_their_own_invitation_code_from_their_page() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let headers = [
+        ("x-requested-with", "memcp"),
+        ("content-type", "application/json"),
+    ];
+    // Not for anyone who is not signed in.
+    let anon = e.app.handle(&rq(
+        "POST",
+        "/admin/api/invite",
+        &headers,
+        "{}",
+        Some("x@example.org"),
+    ));
+    assert_eq!(anon.status, 401);
+    let made = e.app.handle(&rq(
+        "POST",
+        "/admin/api/invite",
+        &headers,
+        "{}",
+        Some("owner@example.org"),
+    ));
+    assert_eq!(made.status, 200, "{}", made.body_json());
+    let code = made.body_json()["code"].as_str().ok_or("code")?.to_string();
+    assert_eq!(code.len(), 14);
+    // The code opens the consent page of that person.
+    let page = public_post(&e, &form_of(&q, &format!("&invite={code}")), &SITE);
+    assert_eq!(page.status, 200);
+    assert!(String::from_utf8(page.body.clone())?.contains("Allow"));
+    Ok(())
+}
+
+#[test]
+fn a_rejected_request_does_not_spend_the_code() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let code = invite(&e)?;
+    let ok = form_of(&q, &format!("&invite={code}"));
+    // From another site, or with a PKCE method the server refuses: no page, and the code is still good.
+    let evil = [("origin", "https://evil.example")];
+    assert_eq!(public_post(&e, &ok, &evil).status, 403);
+    let plain = ok.replace("code_challenge_method=S256", "code_challenge_method=plain");
+    let refused = public_post(&e, &plain, &SITE);
+    assert!(location(&refused).contains("error=invalid_request"));
+    assert_eq!(public_post(&e, &ok, &SITE).status, 200);
+    Ok(())
+}
+
+#[test]
+fn a_nonce_is_one_transaction_and_is_spent_once() -> Res {
+    let e = env()?;
+    let client = register(&e)?;
+    let q = authorize_query(&client);
+    let n = nonce(&e, &q)?;
+    // Nothing ticked: the page is shown again with the same nonce, not a new one.
+    let again = decide_with(&e, &q, &n, "allow", &SITE, "");
+    assert_eq!(again.status, 400);
+    let html = String::from_utf8(again.body.clone())?;
+    assert_eq!(nonce_from(&html)?, n, "the nonce is the same");
+    // The same nonce with another challenge (another transaction) is refused, and spent.
+    let other = q.replace(&challenge(), "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    assert_eq!(decide(&e, &other, &n, "allow", &SITE).status, 400);
+    assert_eq!(decide(&e, &q, &n, "allow", &SITE).status, 403, "spent");
+    Ok(())
+}
+
+#[test]
+fn a_person_cannot_fill_the_places_of_the_others() -> Res {
+    let e = env()?;
+    for _ in 0..5 {
+        assert!(oauth::invite_create(&e.app, "owner", util_now()).is_some());
+    }
+    assert!(oauth::invite_create(&e.app, "owner", util_now()).is_none());
     Ok(())
 }
