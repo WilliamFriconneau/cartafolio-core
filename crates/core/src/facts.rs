@@ -841,19 +841,33 @@ pub(crate) fn supersede_as(
     reason: Option<&str>,
     action: &str,
 ) -> Result<Fact> {
+    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
+    let fact = supersede_in(&tx, space, author, old_id, new, reason, action)?;
+    tx.commit()?;
+    Ok(fact)
+}
+
+pub(crate) fn supersede_in(
+    tx: &rusqlite::Transaction<'_>,
+    space: &Space,
+    author: &str,
+    old_id: &str,
+    new: NewFact,
+    reason: Option<&str>,
+    action: &str,
+) -> Result<Fact> {
     check_kind(new.kind.as_deref())?;
     let t = check_text(&new.text)?;
     check_size(&t)?;
     let given_tags = normalize_tags(&new.tags)?;
-    let tx = rusqlite::Transaction::new_unchecked(conn, rusqlite::TransactionBehavior::Immediate)?;
-    let old = read_fact(&tx, old_id)?.ok_or_else(|| Error::UnknownFact(old_id.into()))?;
+    let old = read_fact(tx, old_id)?.ok_or_else(|| Error::UnknownFact(old_id.into()))?;
     if old.status != "active" {
         return Err(Error::Invalid(format!(
             "fact {old_id} is {}: only an active fact can be replaced",
             old.status
         )));
     }
-    refuse_while_moving(&tx, old_id)?;
+    refuse_while_moving(tx, old_id)?;
     let hash = text::text_hash(&t);
     // The same text is a change only when it is filed elsewhere (sorting a note of the inbox under its real tags) or
     // when its kind changes (a fact that turns out to be a decision).
@@ -870,7 +884,7 @@ pub(crate) fn supersede_as(
             ));
         }
     }
-    if let Some(other) = active_by_hash(&tx, &hash)?.filter(|o| o.id != old_id) {
+    if let Some(other) = active_by_hash(tx, &hash)?.filter(|o| o.id != old_id) {
         return Err(Error::Invalid(format!(
             "this text already exists, active, as {}",
             other.id
@@ -905,7 +919,7 @@ pub(crate) fn supersede_as(
             "fact {old_id} was just replaced or retired by another call"
         )));
     }
-    let fact = insert_unlogged(&tx, space, author, &staged, &t, Some(old_id), None)?;
+    let fact = insert_unlogged(tx, space, author, &staged, &t, Some(old_id), None)?;
     tx.execute(
         "UPDATE facts SET replaced_by = ?2 WHERE id = ?1",
         params![old_id, fact.id],
@@ -916,18 +930,17 @@ pub(crate) fn supersede_as(
             params![fact.id, r],
         )?;
     }
-    crate::sync::record_fact_created(&tx, &fact.id)?;
-    crate::sync::record_fact_superseded(&tx, old_id, &fact.id, author, reason)?;
+    crate::sync::record_fact_created(tx, &fact.id)?;
+    crate::sync::record_fact_superseded(tx, old_id, &fact.id, author, reason)?;
     event(
-        &tx,
+        tx,
         old_id,
         author,
         action,
         json!({ "by": fact.id, "reason": reason }),
     )?;
-    crate::sync::settle_disputes(&tx)?;
-    tx.commit()?;
-    read_fact(conn, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
+    crate::sync::settle_disputes(tx)?;
+    read_fact(tx, &fact.id)?.ok_or_else(|| Error::UnknownFact(fact.id))
 }
 
 /// A note a move has begun to take to another space is left to the move (see `crate::moves`): replaced or retired

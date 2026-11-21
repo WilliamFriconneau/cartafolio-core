@@ -25,6 +25,7 @@ pub(crate) static LEASES: std::sync::LazyLock<
     std::sync::Mutex<std::collections::HashMap<String, (String, i64)>>,
 > = std::sync::LazyLock::new(Default::default);
 
+mod derived;
 mod disputes;
 mod folder;
 mod health;
@@ -478,6 +479,16 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                 "required": ["id"]
             }),
         });
+        if visible(caller, "derived_deposit") {
+            out.push(ToolDef {
+                name: "derived_deposit",
+                description: "Publish derived JSON records at the memory’s designated authority. A record is keyed by its stable origin and is updated atomically.".into(),
+                schema: json!({"type": "object", "required": ["space", "records"], "properties": {
+                    "space": {"type": "string"}, "records": {"type": "array", "minItems": 1, "maxItems": 200,
+                        "items": {"type": "object", "required": ["origin", "text", "tags"]}}
+                }}),
+            });
+        }
         out.push(ToolDef {
             name: "deposit",
             description:
@@ -739,6 +750,9 @@ fn vault_guide_spaces(caller: &Caller) -> Vec<Space> {
 }
 
 fn visible(caller: &Caller, name: &str) -> bool {
+    if name == "derived_deposit" {
+        return caller.kind == crate::access::Kind::Peer && caller.can_write_anywhere();
+    }
     // A dispute is read and resolved on a space whole; a machine of the person never resolves one.
     if name == "disputes" {
         return !caller.is_scoped() && !caller.readable().is_empty();
@@ -1766,6 +1780,7 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             }
             Ok(Value::Object(m))
         }
+        "derived_deposit" => derived::deposit(brain, caller, args),
         "deposit" => {
             let records = args
                 .get("records")

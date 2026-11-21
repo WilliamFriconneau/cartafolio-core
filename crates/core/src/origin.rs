@@ -208,6 +208,17 @@ impl Origin {
         self.tag()
     }
 
+    pub(crate) fn versions(&self, conn: &Connection) -> Result<Vec<String>> {
+        let mut query = conn.prepare(
+            "SELECT fact_id FROM fact_origin WHERE app = ?1 AND ext_id = ?2 AND layer = ?3",
+        )?;
+        Ok(query
+            .query_map(params![self.app, self.id, self.layer.word()], |row| {
+                row.get(0)
+            })?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
     fn tag(&self) -> String {
         format!("{}/{}", self.layer.tag_root(), self.app)
     }
@@ -234,7 +245,7 @@ fn held(conn: &Connection, o: &Origin) -> Result<Option<Fact>> {
     }
 }
 
-fn record(conn: &Connection, fact_id: &str, o: &Origin, now: i64) -> Result<()> {
+pub(crate) fn record(conn: &Connection, fact_id: &str, o: &Origin, now: i64) -> Result<()> {
     let at = o.at.clone().unwrap_or_else(|| util::iso(now));
     conn.execute(
         "INSERT OR REPLACE INTO fact_origin (fact_id, app, ext_id, at, layer) VALUES (?1, ?2, ?3, ?4, ?5)",
