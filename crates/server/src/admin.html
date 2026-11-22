@@ -2460,7 +2460,8 @@ async function renderLayout() {
   renderSpaceTiles();
 }
 function kids(parent) {
-  return FT.l.filter(x => (x.parent || "") === (parent || "")).sort((a, b) => (a.position - b.position) || a.label.localeCompare(b.label));
+  // Alphabetical, in the words the person reads (the labels as translated); a tie keeps the stored order.
+  return FT.l.filter(x => (x.parent || "") === (parent || "")).sort((a, b) => tr(a.label).localeCompare(tr(b.label), loc(), { sensitivity: "base" }) || (a.position - b.position));
 }
 function drawTree() {
   const rows = [];
