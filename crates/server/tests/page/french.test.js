@@ -47,7 +47,7 @@ const ENGLISH = [
 // Words that make a text read as English; two of them in one text and the translator having left it alone is a miss.
 const STOP = /\b(the|and|you|your|is|are|this|that|with|for|will|can|from|nothing|not|it|its|to|of|has|have|was|were|here|then|once|only|until)\b/gi;
 // Things that are English on purpose: product names, commands, protocol words.
-const ALLOWED = [/^Pensine\b/, /^Claude\b/, /^ChatGPT/, /^Kalios/, /^Home Assistant/, /^Tailscale/, /^OAuth/, /^MCP/, /^Authorization/, /^claude mcp/, /^https?:/];
+const ALLOWED = [/^Pensine\b/, /^Claude\b/, /^ChatGPT/, /^Home Assistant/, /^Tailscale/, /^OAuth/, /^MCP/, /^Authorization/, /^claude mcp/, /^https?:/];
 
 async function node(prepare) {
   const D = fs.mkdtempSync(path.join(os.tmpdir(), "memcp-fr-"));
@@ -179,7 +179,7 @@ async function leftovers(page, rootSel) {
     await page.locator("#w-platforms button", { hasText: b }).first().click(); await sleep(200);
     await scan("the wizard, " + b, "#wizard");
     if (!(await page.locator("#w-create").count())) continue;
-    if (!/Kalios/.test(b)) await page.fill("#w-name", "fr-test-" + i);
+    await page.fill("#w-name", "fr-test-" + i);
     const box = page.locator("#w-access input[type=checkbox]:not(#w-all):not(#w-ro)").first();
     if (await box.count()) await box.check();
     if (await page.locator("#w-create").isDisabled()) continue;

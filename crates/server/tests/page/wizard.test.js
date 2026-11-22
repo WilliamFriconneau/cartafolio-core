@@ -373,21 +373,6 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("the name of a revoked connection is free again", text("#w-name-note").includes("/mcp/my-laptop") && !text("#w-name-note").includes("already"), text("#w-name-note"));
   click($("#wizard form button"));
 
-  // --- an app with its own paths, preselected, and a configuration to paste
-  click($("#open-wizard"));
-  click($$("#w-platforms button").find(b => b.textContent.startsWith("Kalios")));
-  check("Kalios is a platform of its own, named kalios", $("#w-name").value === "kalios");
-  check("nothing to tick: its paths are preselected", $$("#w-access input[type=checkbox]").length === 0 && text("#w-access").includes("health/sources/kalios") && text("#w-access").includes("health/dossier/kalios") && text("#w-access").includes("health/proposals/kalios") && text("#w-access").includes("health/guide"), text("#w-access"));
-  click($("#w-create"));
-  await sleep(300);
-  const kal = calls.filter(c => c[1] === "connections").pop();
-  const kb = kal && JSON.parse(kal[2]);
-  check("it creates exactly those paths, and nothing else", kb && kb.agent === "kalios" && kb.rights.split(",").sort().join() === "health/dossier/kalios:rw,health/guide:rw,health/proposals/kalios:rw,health/sources/kalios:rw", kal && kal[2]);
-  const cfg = $$("#w-steps pre").map(p => p.textContent).find(t => t.includes("mcpServers"));
-  const parsed = cfg && JSON.parse(cfg);
-  check("it gives a configuration to paste: one server, its address, its key", parsed && Object.keys(parsed.mcpServers).join() === "kalios" && parsed.mcpServers.kalios.url === "https://memory.example.net/mcp/kalios" && parsed.mcpServers.kalios.headers.Authorization === "Bearer hcp_secret_token", cfg);
-  click($("#wizard form button"));
-
   // --- a note in dispute: counted and listed in Machines, every version shown as text; the person picks one
   await w.pollSync(true);
   await sleep(100);

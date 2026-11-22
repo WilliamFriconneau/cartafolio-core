@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **A phone joins with a code.** Settings has a « Connect a phone » button that shows the one-time code and its QR, for the app's « Join a memory ».
+- **The old Kalios entry is gone** from the choices when connecting an assistant.
+
+## 20261122.7.1
+
 - **No keyed address in the onboarding.** The guided start shows only the same assistant choices as Settings: the platform opens the same wizard, and a keyed address appears there only for an assistant that takes one. The one-time code copies by a click.
 - **Releases under the product name.** The release files are `pensine-...` (and `pensine.exe` on Windows) instead of the old names, with a Mac DMG; the installers fetch the new names and still accept the old ones.
 

@@ -93,40 +93,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const web = await page.locator("#w-steps pre").first().innerText();
   check("a web connector gets an address named after it", web === "https://memory.example.net/mcp/claudeai", web);
   if (SHOTS) await page.screenshot({ path: path.join(SHOTS, "ui-wizard-web.png") });
-  // an app with its own paths: preselected, a configuration to paste, then its guide approved here
-  await page.click("#w-platforms button:has-text('Kalios')");
-  check("Kalios is preselected with its paths and nothing to tick", (await page.inputValue("#w-name")) === "kalios" && (await page.locator("#w-access input[type=checkbox]").count()) === 0 && (await page.locator("#w-access").innerText()).includes("owner-health/sources/kalios"));
-  await page.click("#w-create");
-  await page.waitForSelector("#w-steps pre", { timeout: 5000 });
-  const cfgText = await page.locator("#w-steps pre", { hasText: "mcpServers" }).first().innerText();
-  const cfg = JSON.parse(cfgText).mcpServers.kalios;
-  check("the configuration to paste holds the address and the key", cfg.url === "https://memory.example.net/mcp/kalios" && /^Bearer hcp_/.test(cfg.headers.Authorization), cfgText.slice(0, 80));
-  const rpc = async (method, params, id) => (await (await fetch(BASE + "/mcp/kalios", { method: "POST", headers: { Authorization: cfg.headers.Authorization, "Content-Type": "application/json", Accept: "application/json, text/event-stream" }, body: JSON.stringify({ jsonrpc: "2.0", id, method, params }) })).json());
-  await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kalios", version: "1" } }, 1);
-  const tl = await rpc("tools/list", {}, 2);
-  const names = tl.result.tools.map(t => t.name);
-  check("Kalios gets its tools, with the one to propose its guide", ["recall", "remember", "retire", "stats", "guide_propose"].every(n => names.includes(n)), names.join());
-  const kdep = await rpc("tools/call", { name: "remember", arguments: { text: "[Kalios] note e1: {}", origin: { app: "kalios", id: "note/e1", at: "2026-11-02" } } }, 3);
-  check("it deposits under its own paths", kdep.result && !kdep.result.isError, JSON.stringify(kdep).slice(0, 120));
-  const kguide = await rpc("tools/call", { name: "guide_propose", arguments: { text: "Records are one JSON object per measure, under sources/kalios." } }, 4);
-  check("it proposes its guide", kguide.result && !kguide.result.isError, JSON.stringify(kguide).slice(0, 120));
   await page.click("#wizard form button");
-  await page.reload();
-  await page.waitForSelector("#app-guides-section:not([hidden])", { timeout: 5000 });
-  const prop = await page.locator("#app-guides").innerText();
-  check("the proposal waits on the page, as text, for the person", prop.includes("kalios") && prop.includes("one JSON object per measure") && prop.includes("waiting for you"), prop);
-  const before = (await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kalios", version: "1" } }, 5)).result.instructions;
-  check("until it is approved, no assistant is told it", !before.includes("one JSON object per measure"));
-  await page.locator("#app-guides button:has-text('Approve')").click();
-  await page.waitForFunction(() => { const t = document.querySelector("#app-guides").innerText; return t.includes("approved") && !t.includes("waiting for you"); }, null, { timeout: 5000 });
-  const after = (await rpc("initialize", { protocolVersion: "2025-03-26", capabilities: {}, clientInfo: { name: "kalios", version: "1" } }, 6)).result.instructions;
-  check("an app's own key, limited to its paths, is not told what lies outside them", !after.includes("one JSON object per measure"));
-  // an assistant that reaches the whole space is told it, framed with who approved it
-  const mk = await (await fetch(BASE + "/admin/api/connections", { method: "POST", headers: { Authorization: "Bearer " + console_token, "X-Requested-With": "memcp", "Content-Type": "application/json" }, body: JSON.stringify({ agent: "whole-reader", rights: "owner-health:r" }) })).json();
-  const whole = await (await fetch(BASE + "/mcp/whole-reader", { method: "POST", headers: { Authorization: "Bearer " + mk.token, "Content-Type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 7, method: "initialize", params: {} }) })).json();
-  const told2 = (whole.result || {}).instructions || JSON.stringify(whole);
-  check("once approved, an assistant reaching the whole space is told it, framed with who approved it", told2.includes("GUIDE of the app \"kalios\"") && told2.includes("one JSON object per measure") && told2.includes("Form only"), told2.slice(-300));
-
   // instructions: the person's own are written here; a space's are read-only on the page (its assistants keep them)
   await section(page, "");
   await page.locator("#spaces .tile[data-space=owner-work]").locator("button:has-text('Instructions')").click();
