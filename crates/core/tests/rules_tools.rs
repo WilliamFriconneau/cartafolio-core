@@ -57,3 +57,37 @@ fn writing_the_rules_a_space_already_has_changes_nothing_and_is_not_an_error() -
     assert_eq!(again["rules"]["keywords"], json!(["plumber"]));
     Ok(())
 }
+
+#[test]
+fn a_space_can_name_the_apps_whose_notes_always_go_to_it() -> Res {
+    let t = Temp::new("rules-sources");
+    let b = brain(&t)?;
+    let space = triage::ensure(&b, OWNER, "owner")?;
+    let ctl = b.open_control()?;
+    let rights = Rights::parse(&format!("{}:rw", space.as_str()))?;
+    let tok = access::connect_for(&ctl, OWNER, "sorter", &rights, None, false, false)?;
+    let c = access::authenticate(&ctl, &tok, 1_900_000_000)?.ok_or("refused")?;
+    let s = space.as_str();
+    tools::call(
+        &b,
+        &c,
+        "rules_set",
+        &json!({ "space": s, "sources": ["Chrome"], "keywords": ["plumber"] }),
+    )?;
+    let got = tools::call(&b, &c, "rules_get", &json!({ "space": s }))?;
+    assert_eq!(got["rules"]["sources"], json!(["chrome"]));
+    // A later list left out keeps the sources.
+    tools::call(
+        &b,
+        &c,
+        "rules_set",
+        &json!({ "space": s, "keywords": ["roof"] }),
+    )?;
+    let got = tools::call(&b, &c, "rules_get", &json!({ "space": s }))?;
+    assert_eq!(got["rules"]["sources"], json!(["chrome"]));
+    // An explicit empty list turns the rule off, and stays off.
+    tools::call(&b, &c, "rules_set", &json!({ "space": s, "sources": [] }))?;
+    let got = tools::call(&b, &c, "rules_get", &json!({ "space": s }))?;
+    assert_eq!(got["rules"]["sources"], json!([]));
+    Ok(())
+}

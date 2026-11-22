@@ -198,6 +198,7 @@ impl Janitor {
                     name: v.clone(),
                     label: text("label").unwrap_or_else(|| v.clone()),
                     parent: text("parent").filter(|p| vaults.contains(p)),
+                    kind: text("kind").unwrap_or_default(),
                 }
             })
             .collect();
@@ -225,6 +226,7 @@ impl Janitor {
             let rules = Rules {
                 tags: vec![],
                 keywords: keywords.into_iter().collect(),
+                sources: None,
             };
             if let Err(e) = self.write_rules(&place.name, &rules, "keywords of a sub-space") {
                 problems.push(format!("the rules of {} cannot be seeded: {e}", place.name));
@@ -560,6 +562,7 @@ mod tests {
             Rules {
                 keywords: vec!["orionstack".into()],
                 tags: vec![],
+                sources: None,
             },
         )]);
         assert!(!frequent(&samples, &known, 3).contains_key("work"));

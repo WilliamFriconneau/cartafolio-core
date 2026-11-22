@@ -1199,6 +1199,12 @@ const FR = {
   "last write": "dernière écriture",
   "Keywords": "Mots-clés",
   "A note that contains one of these words goes to this space.": "Une note qui contient l’un de ces mots va dans cet espace.",
+  "Sources": "Sources",
+  "A note an app sends goes to this space, before any keyword. By default, the notes of Chrome go to the Work space.": "Une note envoyée par une application arrive dans cet espace, avant tout mot-clé. Par défaut, les notes de Chrome vont dans l’espace Travail.",
+  "Chrome's notes come here by default. ": "Les notes de Chrome arrivent ici par défaut. ",
+  "Stop that": "Arrêter cela",
+  "The built-in rule (Chrome to Work) applies until a space lists a source.": "La règle par défaut (Chrome vers Travail) s’applique tant qu’aucun espace ne liste de source.",
+  "an app, such as chrome": "une application, par exemple chrome",
   "Filled chip: a word only this space has, so a note with it comes here at once. Plain chip: a word other spaces have too; it only scores a point.": "Pastille pleine : un mot que seul cet espace a, donc une note qui le contient arrive ici aussitôt. Pastille simple : un mot que d’autres espaces ont aussi ; il ne fait que marquer un point.",
   "Only this space has this word: a note that has it goes here at once.": "Seul cet espace a ce mot : une note qui le contient arrive ici aussitôt.",
   "None yet.": "Aucun pour l’instant.",
@@ -4411,6 +4417,12 @@ async function wordsView(body) {
   const tags = block("Tags", "A note with one of these tags, or a tag under it, goes to this space.",
     chipEditor(tg, { onRemove: k => save({ tags: tg.filter(x => x !== k) }), prefix: "" }),
     addRow("a new tag, such as project/atlas", v => save({ tags: [...tg, v] }), "tag-add"));
+  const apps = rules.sources === undefined || rules.sources === null ? null : (rules.sources || []);
+  const sources = block("Sources", "A note an app sends goes to this space, before any keyword. By default, the notes of Chrome go to the Work space.",
+    chipEditor(apps || [], { onRemove: k => save({ sources: (apps || []).filter(x => x !== k) }), prefix: "" }),
+    apps === null && ov.kind === "work" ? el("p", { class: "legend" }, "Chrome's notes come here by default. ", el("button", { type: "button", class: "link", onclick: () => save({ sources: [] }) }, "Stop that")) : null,
+    apps === null && ov.kind !== "work" ? el("p", { class: "legend" }, "The built-in rule (Chrome to Work) applies until a space lists a source.") : null,
+    addRow("an app, such as chrome", v => save({ sources: [...(apps || []), v] }), "src-add"));
   // targets: the cards of the board, with the signs counted over the period of their figure
   let living = null;
   try { living = await api("living?space=" + q(name) + "&page=targets"); } catch (_) {}
@@ -4455,7 +4467,7 @@ async function wordsView(body) {
       ...h.keywords_added.map(k => el("span", { class: "chip" }, "+ " + k)), ...h.keywords_removed.map(k => el("span", { class: "chip warn" }, "− " + k)),
       ...h.tags_added.map(k => el("span", { class: "chip" }, "+ tag " + k)), ...h.tags_removed.map(k => el("span", { class: "chip warn" }, "− tag " + k))))
       : [el("p", { class: "mute" }, "No change yet.")]));
-  body.replaceChildren(keywords, tags, targets, janitor, changed);
+  body.replaceChildren(keywords, tags, sources, targets, janitor, changed);
 }
 
 // ---- Language and theme ----

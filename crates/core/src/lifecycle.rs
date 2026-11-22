@@ -790,6 +790,7 @@ impl Brain {
                 let mut joined = Rules {
                     tags: before.tags,
                     keywords: before.keywords,
+                    sources: before.sources,
                 };
                 joined.tags.extend(strings(&j["tags"]));
                 joined.keywords.extend(strings(&j["keywords"]));

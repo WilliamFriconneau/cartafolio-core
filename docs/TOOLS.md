@@ -758,10 +758,10 @@ Example call and answer:
 
 ### `rules_set`
 
-Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.
+Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags`, `keywords` and `sources` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there; an app in `sources` sends its notes there before any keyword (an empty list turns off the built-in Chrome-to-work rule).
 
 - **Seen with:** write access on at least one space (a read-only key or a key forced to read-only does not see it); not offered to a key limited to paths.
-- **Answer:** `{ space, rules: {version, tags, keywords} }`.
+- **Answer:** `{ space, rules: {version, tags, keywords, sources?} }`.
 - **Errors:** `invalid` for a bad tag or keyword; `denied`.
 - **Effects:** Writes a new version of the space's `rules` note; the old one stays in the history.
 
@@ -769,6 +769,7 @@ Writes the filing rules of a space as a new version of its `rules` note (the old
 |---|---|---|---|
 | `keywords` | array of string | no | - |
 | `space` | string | yes | - |
+| `sources` | array of string | no | app names: lowercase letters, digits, `-`, `_` |
 | `tags` | array of string | no | - |
 
 Example call and answer:
@@ -1851,7 +1852,7 @@ Status: design, and the plan of the refactor. The aim is a memory that **humans 
 | `triage_waiting` / `triage_send` / `transcription_failed` | what waits in the person's Inbox for a decision with the reason it waits, sending a note or a file on, and the tag of a recording whose transcription failed | built |
 | `disputes` / `dispute_resolve` | the facts changed differently on two nodes, with every alternative, and the person's choice (an assistant only with `confirmed_by_person`, never a peer); `recall` and `read_fact` flag a fact in dispute | built (Unreleased) |
 | `triage_claim` / `triage_release` | a sorter outside the memory (an assistant on a device) reserves notes of Inbox for some minutes, and gives them back | built (20261116.0.3) |
-| `rules_get` / `rules_set` | read and write the filing rules (tags, keywords) of a space as versions of its `rules` note | built (20261116.0.4) |
+| `rules_get` / `rules_set` | read and write the filing rules (tags, keywords, source apps) of a space as versions of its `rules` note | built (20261116.0.4) |
 | `peers` | every peer of the memory, as the shared peer directory knows it (name, version, last seen, who told it, `behind`, exposures, direction and progress when direct), the assistant connections with `kind` `cloud` or `local` and `via`, and the window; the exact shape is in FEDERATION.md, "The list of peers is shared" | built |
 | `vocabulary_terms` | the terms of the vocabularies imported into a space, and the vocabularies with their source | built |
 | `tags_suggest` / `tags_set` | what the node's tagger gives a text (preview, no write), and the correction of the tags of a note (a `supersede` with the new set, reason recorded, history kept); see AUTOTAG.md | built |

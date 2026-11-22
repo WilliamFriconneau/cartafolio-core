@@ -864,14 +864,35 @@ fn clean_list(v: Option<&Value>, max: usize, tags: bool) -> Vec<String> {
 }
 
 /// Writes the rules of a space (a new version of the note, the old one kept in the history).
+/// The apps of a `sources` list: `None` when the list is absent (the built-in rule stays), `Some([])` when it is empty.
+fn clean_sources(v: Option<&Value>) -> Option<Vec<String>> {
+    let v = v?;
+    let mut out: Vec<String> = v
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .filter_map(memcp_core::rules::clean_source)
+        .collect();
+    out.sort();
+    out.dedup();
+    out.truncate(100);
+    Some(out)
+}
+
 fn write_rules(
     conn: &Connection,
     space: &Space,
     who: &str,
     tags: Vec<String>,
     keywords: Vec<String>,
+    sources: Option<Vec<String>>,
 ) -> Result<(), Response> {
-    let doc = json!({ "version": 1, "tags": tags, "keywords": keywords }).to_string();
+    let mut doc = json!({ "version": 1, "tags": tags, "keywords": keywords });
+    if let Some(sources) = &sources {
+        doc["sources"] = json!(sources);
+    }
+    let doc = doc.to_string();
     let mut new = NewFact::agent(&doc, "web-page");
     new.tags = vec!["rules".into()];
     match read_rules(conn).0 {
@@ -918,8 +939,16 @@ pub fn space_write(
                 .get("keywords")
                 .map(|v| clean_list(Some(v), 100, false))
                 .unwrap_or_else(|| clean_list(old.get("keywords"), 100, false));
-            if body.get("tags").is_some() || body.get("keywords").is_some() {
-                write_rules(&conn, &space, &who, tags, keywords)?;
+            let sources = if body.get("sources").is_some() {
+                clean_sources(body.get("sources"))
+            } else {
+                clean_sources(old.get("sources"))
+            };
+            if body.get("tags").is_some()
+                || body.get("keywords").is_some()
+                || body.get("sources").is_some()
+            {
+                write_rules(&conn, &space, &who, tags, keywords, sources)?;
             }
             let list = |k: &str| -> Vec<String> {
                 body.get(k)
@@ -937,6 +966,8 @@ pub fn space_write(
                 remove_tags: list("remove_tags"),
                 add_keywords: list("add_keywords"),
                 remove_keywords: list("remove_keywords"),
+                add_sources: list("add_sources"),
+                remove_sources: list("remove_sources"),
             };
             memcp_core::rules::edit(&conn, &space, &who, &edit).map_err(fail)?;
             Ok(json!({ "result": "ok" }))
@@ -968,7 +999,8 @@ pub fn space_write(
                 tags.sort();
                 tags.dedup();
                 let keywords = clean_list(old.get("keywords"), 100, false);
-                write_rules(&to_conn, &to, &who, tags, keywords)?;
+                let sources = clean_sources(old.get("sources"));
+                write_rules(&to_conn, &to, &who, tags, keywords, sources)?;
             }
             Ok(moved.to_json(&from, &to, tag, dry))
         }

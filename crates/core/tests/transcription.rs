@@ -167,6 +167,7 @@ fn tags_of_people_and_places_count_and_the_same_word_is_listed_once() -> Res {
         &Rules {
             tags: vec![],
             keywords: vec!["ZENDURE".into(), "garage".into()],
+            sources: None,
         },
     )?;
     let h = hints(&b, &c, &json!({}))?;
@@ -228,6 +229,7 @@ fn the_keywords_of_the_rules_and_the_vocabulary_terms_are_ordered_by_use_then_le
         &Rules {
             tags: vec![],
             keywords: vec!["devis".into(), "chaudière".into(), "facture client".into()],
+            sources: None,
         },
     )?;
     let h = hints(&b, &c, &json!({"space": "work"}))?;
@@ -442,6 +444,7 @@ fn the_answer_is_cached_and_rebuilt_when_notes_rules_or_vocabulary_changed() -> 
         &Rules {
             tags: vec![],
             keywords: vec!["jardinage".into()],
+            sources: None,
         },
     )?;
     let fifth = hints(&b, &c, &json!({"space": "personal"}))?;

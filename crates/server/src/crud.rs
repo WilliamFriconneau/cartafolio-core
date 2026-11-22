@@ -255,6 +255,8 @@ fn spaces_update(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result
             remove_tags: strings(body.get("remove_tags")),
             add_keywords: strings(body.get("add_keywords")),
             remove_keywords: strings(body.get("remove_keywords")),
+            add_sources: strings(body.get("add_sources")),
+            remove_sources: strings(body.get("remove_sources")),
         },
     };
     let info = app

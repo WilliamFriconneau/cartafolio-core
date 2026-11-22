@@ -180,6 +180,7 @@ fn the_keywords_tags_and_vocabularies_of_the_space() {
     let rules = Rules {
         tags: vec!["home/energie".into()],
         keywords: vec!["zendure".into(), "chaudière".into(), "volets".into()],
+        sources: None,
     };
     let s = suggest(
         &home(),
@@ -207,6 +208,7 @@ fn the_tags_are_bounded() {
     let rules = Rules {
         tags: vec![],
         keywords: (0..40).map(|i| format!("mot{i}")).collect(),
+        sources: None,
     };
     let text: String = (0..40).map(|i| format!("mot{i} ")).collect();
     let s = suggest(&home(), &rules, &[], &text);

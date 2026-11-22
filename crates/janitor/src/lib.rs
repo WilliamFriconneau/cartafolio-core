@@ -117,6 +117,25 @@ fn tags_of(fact: &Value) -> Vec<&str> {
         .collect()
 }
 
+/// Whether the note comes from the browser extension: its connection is named `chrome` (or `chrome-…`).
+fn from_chrome(note: &Value) -> bool {
+    let agent = note["author"]
+        .as_str()
+        .or_else(|| note["source"]["agent"].as_str())
+        .unwrap_or_default()
+        .to_lowercase();
+    agent == "chrome" || agent.starts_with("chrome-") || agent.starts_with("chrome_")
+}
+
+/// The tags the router reads, plus the app of a note from Chrome (the built-in source rule).
+fn routing_tags(note: &Value) -> Vec<&str> {
+    let mut tags = tags_of(note);
+    if from_chrome(note) && !tags.iter().any(|t| t.starts_with("sources/")) {
+        tags.push("sources/chrome");
+    }
+    tags
+}
+
 /// Whether a fact belongs to a library (the tag `library`, or a path under it): what was raised from a mounted folder
 /// is the person's to keep as it is, and the janitor never sends, files, rewrites or retires it, whatever else the
 /// fact is tagged.
@@ -504,10 +523,15 @@ impl Janitor {
                 let routed: Vec<String> = if copy {
                     vec![]
                 } else {
-                    router::route(text, &tags_of(note), &self.routing_rules(), &self.layout)
-                        .into_iter()
-                        .filter(|t| vaults.contains(t))
-                        .collect()
+                    router::route(
+                        text,
+                        &routing_tags(note),
+                        &self.routing_rules(),
+                        &self.layout,
+                    )
+                    .into_iter()
+                    .filter(|t| vaults.contains(t))
+                    .collect()
                 };
                 let others: Vec<String> = routed.iter().filter(|t| **t != vault).cloned().collect();
                 if !others.is_empty() {
@@ -698,12 +722,16 @@ impl Janitor {
                 } else if let Some(v) = self.people_route(&tags_of(note), triage, vaults) {
                     (vec![v], "the people of the note")
                 } else {
-                    let routed =
-                        router::decide(text, &tags_of(note), &self.routing_rules(), &self.layout)
-                            .unwrap_or_else(|reason| {
-                                why = reason;
-                                vec![]
-                            });
+                    let routed = router::decide(
+                        text,
+                        &routing_tags(note),
+                        &self.routing_rules(),
+                        &self.layout,
+                    )
+                    .unwrap_or_else(|reason| {
+                        why = reason;
+                        vec![]
+                    });
                     (
                         routed
                             .into_iter()
@@ -855,7 +883,7 @@ impl Janitor {
                     String::new()
                 };
             let text = format!("{name}\n{note}\n{body}");
-            let tags: Vec<&str> = tags_of(file);
+            let tags: Vec<&str> = routing_tags(file);
             let mut why = String::new();
             let mut to: Vec<String> = if vaults.iter().any(|v| v == work_rule::WORK)
                 && work_rule::applies(&text, &self.config.work_words)

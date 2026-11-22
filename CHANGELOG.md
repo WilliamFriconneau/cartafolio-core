@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Source apps.** A space can list the apps whose notes always go to it (`sources` in its rules); by default the notes of Chrome go to the Work space, and listing a source turns that built-in rule off. Editable on the space's keywords page.
+
+## 20261122.3.0
+
 - **One interface.** The node page uses the four shared sections, with Folders and Bento views and the organisation tools in Spaces.
 - **Built-in space labels.** Common spaces have French and English labels, including Moi and Me, and custom labels keep the person’s wording.
 - **Unique space labels.** New duplicates are refused among a person's spaces and across folders, ignoring case, accents and surrounding spaces.

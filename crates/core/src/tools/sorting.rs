@@ -163,9 +163,26 @@ pub(super) fn rules(
         v.truncate(100);
         v
     };
-    let doc =
-        json!({ "version": 1, "tags": clean("tags", true), "keywords": clean("keywords", false) })
-            .to_string();
+    let sources = || -> Option<Vec<String>> {
+        let src = args.get("sources").or_else(|| current.get("sources"))?;
+        let mut v: Vec<String> = src
+            .as_array()
+            .into_iter()
+            .flatten()
+            .filter_map(Value::as_str)
+            .filter_map(crate::rules::clean_source)
+            .collect();
+        v.sort();
+        v.dedup();
+        v.truncate(100);
+        Some(v)
+    };
+    let mut doc =
+        json!({ "version": 1, "tags": clean("tags", true), "keywords": clean("keywords", false) });
+    if let Some(sources) = sources() {
+        doc["sources"] = json!(sources);
+    }
+    let doc = doc.to_string();
     let mut new = NewFact::agent(&doc, &caller.agent);
     new.tags = vec!["rules".into()];
     let unchanged =

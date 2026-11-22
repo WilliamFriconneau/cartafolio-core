@@ -26,6 +26,8 @@ pub const MAX_ITEMS: usize = 100;
 pub struct Rules {
     pub tags: Vec<String>,
     pub keywords: Vec<String>,
+    /// The apps whose notes go to this space whatever they say (`None`: the built-in rule).
+    pub sources: Option<Vec<String>>,
 }
 
 impl Rules {
@@ -45,15 +47,34 @@ impl Rules {
                 .filter(|s| !s.is_empty())
                 .collect()
         };
+        let sources = doc.get("sources").map(|_| {
+            doc.get("sources")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .map(|s| s.trim().to_lowercase())
+                .filter(|s| {
+                    !s.is_empty()
+                        && s.chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                })
+                .collect()
+        });
         Some(Rules {
             tags: list("tags"),
             keywords: list("keywords"),
+            sources,
         })
     }
 
     /// The text of the note, in the format the person's page reads and writes.
     pub fn render(&self) -> String {
-        json!({ "version": 1, "tags": self.tags, "keywords": self.keywords }).to_string()
+        let mut doc = json!({ "version": 1, "tags": self.tags, "keywords": self.keywords });
+        if let Some(sources) = &self.sources {
+            doc["sources"] = json!(sources);
+        }
+        doc.to_string()
     }
 
     /// These rules with `keywords` and `tags` added (sorted, each once, within the bound); `None` when nothing is new.
@@ -70,6 +91,7 @@ impl Rules {
         let next = Rules {
             tags: grow(&self.tags, tags),
             keywords: grow(&self.keywords, keywords),
+            sources: self.sources.clone(),
         };
         (next != *self).then_some(next)
     }
@@ -81,6 +103,8 @@ pub struct Place {
     pub name: String,
     pub label: String,
     pub parent: Option<String>,
+    /// The kind of space (a catalogue key: `work`, `health`…), of the spaces listing.
+    pub kind: String,
 }
 
 /// A letter without its accent (the ligatures stay as they are).
@@ -239,6 +263,40 @@ pub fn decide(
     layout: &[Place],
 ) -> Result<Vec<String>, String> {
     let words = tokens(text);
+    // The source rule: an app some space names sends its notes there, before any keyword.
+    if let Some(app) = tags.iter().find_map(|t| t.strip_prefix("sources/")) {
+        let app = app.to_lowercase();
+        let mut takes: Vec<&str> = rules
+            .iter()
+            .filter(|(_, r)| {
+                r.sources
+                    .as_ref()
+                    .is_some_and(|s| s.iter().any(|x| x == &app))
+            })
+            .map(|(name, _)| name.as_str())
+            .collect();
+        takes.sort_unstable();
+        if let [only] = takes[..] {
+            return Ok(vec![only.to_string()]);
+        }
+        if !takes.is_empty() {
+            return Err(format!(
+                "two spaces take the notes of {app}: {}",
+                takes.join(", ")
+            ));
+        }
+        // The built-in rule: Chrome sends everything to the work space, unless the person set `sources` somewhere.
+        if app == "chrome" && !rules.values().any(|r| r.sources.is_some()) {
+            let work: Vec<&str> = layout
+                .iter()
+                .filter(|p| p.kind == "work")
+                .map(|p| p.name.as_str())
+                .collect();
+            if let [only] = work[..] {
+                return Ok(vec![only.to_string()]);
+            }
+        }
+    }
     let known = names(layout);
     let named = named_spaces(&words, &known);
     if !named.is_empty() {
@@ -350,6 +408,7 @@ mod tests {
             name: name.into(),
             label: label.into(),
             parent: parent.map(String::from),
+            kind: String::new(),
         }
     }
 
@@ -361,6 +420,7 @@ mod tests {
                     Rules {
                         keywords: k.iter().map(|x| (*x).to_string()).collect(),
                         tags: t.iter().map(|x| (*x).to_string()).collect(),
+                        sources: None,
                     },
                 )
             })
@@ -492,5 +552,74 @@ mod tests {
         assert_eq!(go("le budget", &[]), ["sam-finances"]);
         // A tag of a child counts the same way.
         assert_eq!(go("le budget", &["cars"]), ["sam-cars"]);
+    }
+
+    fn with_sources(_name: &str, apps: &[&str]) -> Rules {
+        Rules {
+            tags: vec![],
+            keywords: vec![],
+            sources: Some(apps.iter().map(|a| (*a).to_string()).collect()),
+        }
+    }
+
+    #[test]
+    fn a_note_from_chrome_goes_to_the_work_space_before_any_keyword() {
+        let mut rules = rules(&[("sam-work", &["facture"], &[]), ("sam-home", &[], &[])]);
+        rules.insert(
+            "sam-work".into(),
+            Rules {
+                keywords: vec!["facture".into()],
+                ..Default::default()
+            },
+        );
+        let layout = vec![
+            Place {
+                name: "sam-work".into(),
+                label: "Work".into(),
+                parent: None,
+                kind: "work".into(),
+            },
+            Place {
+                name: "sam-home".into(),
+                label: "Home".into(),
+                parent: None,
+                kind: "home".into(),
+            },
+        ];
+        assert_eq!(
+            route("a page", &["sources/chrome", "inbox"], &rules, &layout),
+            ["sam-work"]
+        );
+    }
+
+    #[test]
+    fn the_person_can_point_an_app_at_another_space_or_turn_the_rule_off() {
+        let layout = vec![
+            Place {
+                name: "sam-work".into(),
+                label: "Work".into(),
+                parent: None,
+                kind: "work".into(),
+            },
+            Place {
+                name: "sam-home".into(),
+                label: "Home".into(),
+                parent: None,
+                kind: "home".into(),
+            },
+        ];
+        let mut rules = BTreeMap::new();
+        rules.insert("sam-work".into(), with_sources("sam-work", &[]));
+        rules.insert("sam-home".into(), with_sources("sam-home", &["chrome"]));
+        assert_eq!(
+            route("a page", &["sources/chrome"], &rules, &layout),
+            ["sam-home"]
+        );
+        // An explicit empty list on every space turns the built-in rule off: the note stays where it is.
+        let rules: BTreeMap<String, Rules> =
+            [("sam-work".to_string(), with_sources("sam-work", &[]))]
+                .into_iter()
+                .collect();
+        assert!(route("a page", &["sources/chrome"], &rules, &layout).is_empty());
     }
 }

@@ -41,13 +41,18 @@ filed, not a recording given up on (`failed_transcription`, reported on its own)
 
 ## Keywords
 
-Each space keeps its filing rules in one note tagged `rules`: `{"version":1,"tags":[…],"keywords":[…]}`, the note the
-person's page writes (`POST /space/rules`). The janitor reads it with `recall` (tag `rules`) and writes it with
+Each space keeps its filing rules in one note tagged `rules`: `{"version":1,"tags":[…],"keywords":[…]}`, plus an
+optional `sources` list of apps whose notes always go to that space, the note the person's page writes
+(`POST /space/rules`). The janitor reads it with `recall` (tag `rules`) and writes it with
 `supersede` (or `remember` for the first one), so every change is a new version and the history keeps the old ones. Nothing
 is erased.
 
 The router, for one note:
 
+- **The notes of an app go where the person pointed it.** A note filed under `sources/<app>` goes to the space whose
+  `sources` names that app, before any keyword; two spaces naming it is an ambiguity. When no space names the app,
+  the built-in rule sends the notes of `chrome` to the space of kind `work`; the built-in rule is off as soon as any
+  space lists a `sources` list.
 - A **unique** keyword (listed by a single space: a project, a colleague, a device) sends the note there at once. Unique
   keywords of two spaces in one note are an ambiguity: the note stays where it is.
 - **Ordinary** keywords (listed by several spaces) and tags (a note tag under a rule tag) each score one point per space.

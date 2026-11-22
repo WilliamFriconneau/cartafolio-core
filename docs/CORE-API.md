@@ -196,7 +196,7 @@ Rights: The owner of the objects (an administrator for `people`).
 | `Brain::update_space` | Changes label, parent, position, kind, keywords and tags | `Error::Invalid` for a malformed value |
 | `Brain::delete_space` | Deletes a space with a choice (into another, or archive), with a dry run; never destroys | `Error::Invalid` for a space that is not theirs, the Inbox, a bad choice |
 | `Brain::archived_spaces`, `Brain::restore_space` | Lists the archive; brings an archived space back | `Error::Invalid` for an unknown archive or a name in use |
-| `rules::read`, `rules::write`, `rules::edit` | The keywords and tags of a space, one new version of the `rules` note per change | `Error::Invalid` for a malformed tag |
+| `rules::read`, `rules::write`, `rules::edit` | The keywords, tags and source apps of a space, one new version of the `rules` note per change | `Error::Invalid` for a malformed tag |
 | `peers::list`, `peers::get`, `peers::update`, `peers::set_paused`, `peers::revoke`, `peers::forget` | A person's machines: read, rename and note, pause and resume, revoke, forget | `Error::Invalid` for a machine that is not theirs or still in use |
 | `people::retire_person` | Removes a person = disables them and exports their memory | `Error::Invalid` for a non-administrator, oneself, the last administrator |
 

@@ -91,8 +91,10 @@ ignoring surrounding spaces. It checks the default labels in both supported lang
 | `people` | Proches | People |
 
 In the node page, **More** in a space holds its boards, notes, keywords and targets, tag tree, graph, assistant
-connections, read-only connections and instructions. The whole-memory graph is also reachable from Settings.
-The existing tile shortcuts remain available in Bento.
+connections, read-only connections and instructions. The keywords page also lists the **Sources**: the apps whose notes
+always go to that space, before any keyword. By default, the notes of Chrome go to the Work space; a space that lists
+a source turns that built-in rule off. The whole-memory graph is also reachable from Settings. The existing tile
+shortcuts remain available in Bento.
 
 ### Health: a space, inside Spaces
 

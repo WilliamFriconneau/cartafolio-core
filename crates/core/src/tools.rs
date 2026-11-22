@@ -244,7 +244,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "rules_get",
-            description: "The filing rules of a space: the tags and the keywords that send a note there (the note tagged `rules`, `{\"version\":1,\"tags\":[…],\"keywords\":[…]}`), and the id of the note that holds them.".into(),
+            description: "The filing rules of a space: the tags and the keywords that send a note there, and the apps whose notes always go there (`sources`), from the note tagged `rules` (`{\"version\":1,\"tags\":[…],\"keywords\":[…],\"sources\":[…]}`), with the id of the note that holds them. A missing `sources` leaves the built-in rule: the notes of Chrome go to the work space.".into(),
             schema: json!({ "type": "object", "properties": { "space": { "type": "string" } }, "required": ["space"] }),
         });
         out.push(ToolDef {
@@ -316,8 +316,8 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "rules_set",
-            description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags` and `keywords` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there.".into(),
-            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } }, "keywords": { "type": "array", "items": { "type": "string" } } }, "required": ["space"] }),
+            description: "Writes the filing rules of a space as a new version of its `rules` note (the old one stays in the history). `tags`, `keywords` and `sources` replace the lists given; one left out stays as it is. A keyword that belongs to one space sends the notes that carry it there; an app in `sources` sends its notes there before any keyword (an empty list turns off the built-in Chrome-to-work rule).".into(),
+            schema: json!({ "type": "object", "properties": { "space": { "type": "string" }, "tags": { "type": "array", "items": { "type": "string" } }, "keywords": { "type": "array", "items": { "type": "string" } }, "sources": { "type": "array", "items": { "type": "string" }, "description": "App names (lowercase, letters, digits, - and _) whose notes always go to this space; [] turns the built-in rule off." } }, "required": ["space"] }),
         });
         out.push(ToolDef {
             name: "triage_claim",

@@ -19,6 +19,9 @@ pub struct Rules {
     pub tags: Vec<String>,
     /// The keywords.
     pub keywords: Vec<String>,
+    /// The apps whose notes go to this space whatever they say (`chrome`, say). `None` leaves the built-in rule
+    /// (the notes of Chrome go to the work space); `Some([])` turns it off.
+    pub sources: Option<Vec<String>>,
 }
 
 /// What to add and what to remove. Words and tags are normalised; unknown ones to remove are ignored.
@@ -32,12 +35,25 @@ pub struct Edit {
     pub add_keywords: Vec<String>,
     /// The remove keywords.
     pub remove_keywords: Vec<String>,
+    /// The apps to add.
+    pub add_sources: Vec<String>,
+    /// The apps to remove.
+    pub remove_sources: Vec<String>,
 }
 
 /// Clean keyword.
 pub fn clean_keyword(raw: &str) -> Option<String> {
     let k = raw.trim().trim_start_matches('#').to_lowercase();
     (!k.is_empty() && k.chars().count() <= MAX_KEYWORD).then_some(k)
+}
+
+/// Clean app name: lowercase letters, digits, `-` and `_`.
+pub fn clean_source(raw: &str) -> Option<String> {
+    let s = raw.trim().to_lowercase();
+    (!s.is_empty()
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+    .then_some(s)
 }
 
 fn tidy(mut v: Vec<String>) -> Vec<String> {
@@ -78,11 +94,23 @@ pub fn read(conn: &Connection) -> (Option<String>, Rules) {
                     .collect(),
             )
         };
+        let sources = doc.get("sources").map(|_| {
+            tidy(
+                doc.get("sources")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .filter_map(clean_source)
+                    .collect(),
+            )
+        });
         return (
             Some(id),
             Rules {
                 tags: list("tags", true),
                 keywords: list("keywords", false),
+                sources,
             },
         );
     }
@@ -95,12 +123,17 @@ pub fn write(conn: &Connection, space: &Space, who: &str, rules: &Rules) -> Resu
     let rules = Rules {
         tags: tidy(rules.tags.clone()),
         keywords: tidy(rules.keywords.clone()),
+        sources: rules.sources.clone().map(tidy),
     };
     let (current, old) = read(conn);
     if current.is_some() && old == rules {
         return Ok(rules);
     }
-    let doc = json!({ "version": 1, "tags": rules.tags, "keywords": rules.keywords }).to_string();
+    let mut doc = json!({ "version": 1, "tags": rules.tags, "keywords": rules.keywords });
+    if let Some(sources) = &rules.sources {
+        doc["sources"] = json!(sources);
+    }
+    let doc = doc.to_string();
     let mut new = NewFact::agent(&doc, who);
     new.tags = vec!["rules".into()];
     let kept = match &current {
@@ -152,5 +185,16 @@ pub fn edit(conn: &Connection, space: &Space, who: &str, e: &Edit) -> Result<Rul
     r.keywords.retain(|k| !rk.contains(k));
     r.tags.extend(tags(&e.add_tags));
     r.keywords.extend(words(&e.add_keywords));
+    let apps = |v: &[String]| -> Vec<String> { v.iter().filter_map(|s| clean_source(s)).collect() };
+    match &mut r.sources {
+        Some(list) => {
+            let (add, rem) = (apps(&e.add_sources), apps(&e.remove_sources));
+            list.retain(|s| !rem.contains(s));
+            list.extend(add);
+            *list = tidy(list.clone());
+        }
+        None if !e.add_sources.is_empty() => r.sources = Some(tidy(apps(&e.add_sources))),
+        None => {}
+    }
     write(conn, space, who, &r)
 }
