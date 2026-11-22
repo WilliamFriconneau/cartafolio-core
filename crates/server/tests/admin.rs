@@ -137,10 +137,20 @@ fn the_page_is_served_and_self_contained() -> Res {
     ] {
         assert_eq!(r.status, 200, "{label}");
         let html = String::from_utf8(r.body.clone())?;
-        assert!(
-            html.contains("memcp") && !html.contains("http://") && !html.contains("https://"),
-            "no external resource"
-        );
+        assert!(html.contains("memcp"));
+        // Outbound links (the apps, the site) are fine; nothing is loaded from outside: no script, image,
+        // stylesheet or font comes from another host.
+        for external in [
+            "<script src=\"http",
+            "<script src='http",
+            "<img src=\"http",
+            "<img src='http",
+            "url(http",
+            "@import",
+            "rel=\"stylesheet\"",
+        ] {
+            assert!(!html.contains(external), "external resource: {external}");
+        }
         assert!(
             r.headers
                 .iter()
