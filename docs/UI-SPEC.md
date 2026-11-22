@@ -1,7 +1,7 @@
 # Interface specification
 
 **One app, the same everywhere**: iPhone, iPad, Mac, Windows, Linux and the node page in a browser show the same
-four sections, in the same order, with the same words. A platform differs only where its device differs:
+three sections, in the same order, with the same words. A platform differs only where its device differs:
 
 | Platform | What is its own, and nothing else |
 |---|---|
@@ -23,12 +23,11 @@ Home Assistant app. Vulgar or slang words are never used in the interface.
 
 ## Navigation
 
-Four sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
+Three sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
 
 ```
 ┌─────────────────┬─────────────────────────────────────────────────────────────┐
-│ ● Trace or drop │  the section selected                                       │
-│ ● Journal       │                                                             │
+│ ● Journal       │  the section selected                                       │
 │ ● Spaces        │                                                             │
 │ ● Settings      │                                                             │
 │─────────────────│                                                             │
@@ -36,30 +35,26 @@ Four sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the i
 └─────────────────┴─────────────────────────────────────────────────────────────┘
 ```
 
-At the foot of the sidebar (or at the top of the iPhone's Note screen), one line: the state of the machines (in step,
+At the foot of the sidebar (or at the top of the iPhone's Journal screen), one line: the state of the machines (in step,
 syncing with its percent, offline, key refused with « Reconnect »). Proposals waiting (« 2 to confirm ») show as a
-badge on Trace or drop.
+badge on Journal.
 
-### 1. Trace or drop
+### 1. Journal (with the capture at its top)
 
-More than a note: a trace (said, written, measured) or anything dropped (a file, a photo, a document). The
-image is unloading the mind: a thought drawn out of the head and put somewhere safe.
+**The capture.** More than a note: a trace (said, written, measured) or anything dropped (a file, a photo, a document).
+The image is unloading the mind: a thought drawn out of the head and put somewhere safe. The microphone, large, in the
+middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice note starts on a tap or on
+« Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**. Before sending, the person
+chooses the space the trace goes to and the tags it carries; the janitor keeps those tags when it files the note.
 
+**Below it, the journal.** Every note of every space the person reads, by day, newest first, each with its time, its
+space and its tags; a structured trace (an app's day of measures) reads as values, never as JSON. Each day carries one
+line of summary: how many entries, which spaces, and the health figures the day holds (sleep, heart-rate variability,
+steps). Filter by space, tag or words; a **Health** chip narrows the journal to the health space. With Pensine Health
+the days also carry the health journal (feelings, measures, Apple Health). « Context for an assistant » makes a PDF of
+one space, with its dates.
 
-The microphone, large, in the middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice
-note starts on a tap or on « Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**.
-Before sending, the person chooses the space the trace goes to and the tags it carries; the janitor keeps those tags
-when it files the note. Under the buttons, today's captures, newest first, each with the space it went to and its tags
-(`#home #shopping`), or « To sort » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
-
-### 2. Journal
-
-Every note of every space the person reads, by day, newest first, each with its time, its space and its tags; a
-structured trace (an app's day of measures) reads as values, never as JSON. Filter by space, tag or words. With
-Pensine Health the days also carry the health journal (feelings, measures, Apple Health). « Context for an assistant »
-makes a PDF of one space, with its dates.
-
-### 3. Spaces
+### 2. Spaces
 
 Every app has the same **Folders** / **Bento** switch in the Spaces toolbar and remembers the selection on that
 device. Folders shows one tree with disclosure controls, a folder or space icon, the label and its note count.
@@ -110,7 +105,7 @@ appointment » (a PDF laid out as nurses hand over, SBAR) is free, on every app.
 **What is sold**: the iPhone app's synchronisation with Apple Health (Pensine Health: 3 € a month or 9,90 € once). Nothing
 else is paid. An ended subscription only pauses that synchronisation, and says so.
 
-### 4. Settings
+### 3. Settings
 
 Machines (see below), Assistants
 (connect one: address and key, or the line for Claude Code; rights per space), Engines (transcription: the device's
@@ -185,7 +180,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 
 ## Acceptance
 
-1. The same four sections, in the same order, on every platform; a function missing on one is a defect.
+1. The same three sections, in the same order, on every platform; a function missing on one is a defect.
 2. No screen shows a technical name, JSON, a forbidden word or a vulgar word.
 3. The golden paths above pass on the iPhone, the Mac and the page.
 4. Every text exists in French, English and Spanish.

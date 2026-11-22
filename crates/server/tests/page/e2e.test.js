@@ -96,10 +96,10 @@ function clean(name, text) {
   $("#login-form").dispatchEvent(new w.Event("submit", { bubbles: true, cancelable: true }));
   check("signed in: the memory opens", await until(() => shown(w, $("#app")) && !shown(w, $("#login"))), $("#login-err").textContent);
 
-  // The four sections, in order, in French.
-  await until(() => $$("#sections button").length === 4);
+  // The three sections, in order, in French.
+  await until(() => $$("#sections button").length === 3);
   const labels = $$("#sections button").map(b => b.textContent.trim());
-  check("four sections in order, in French", JSON.stringify(labels) === JSON.stringify(["Tracer ou déposer", "Journal", "Espaces", "Réglages"]), labels.join(" | "));
+  check("three sections in order, in French", JSON.stringify(labels) === JSON.stringify(["Journal", "Espaces", "Réglages"]), labels.join(" | "));
 
   // Spaces (the empty hash): the tiles, then a space opens on its boards.
   check("Spaces is the section shown first", $("#sections button.on") && $("#sections button.on").textContent.trim() === "Espaces");
@@ -120,30 +120,20 @@ function clean(name, text) {
   check("the boards have loaded", await until(() => $$("#space-body .boardbox").length === 2));
   clean("Boards of a space", visibleText(w));
 
-  // Trace or drop: the Inbox in its simple view; a note written there is in the list.
-  w.location.hash = "#note";
-  check("Trace or drop opens its own view", await until(() => shown(w, $("#view-space")) && $("#space-title").textContent === "Tracer ou déposer"), $("#space-title").textContent);
-  check("the browser tab names Trace or drop", /^Pensine · (Tracer ou déposer|Trace or drop)$/.test(d.title), d.title);
-  check("Trace or drop hides the tabs of a space", !shown(w, $("#space-tabs")));
-  const buttons = () => $$("#inbox-capture button").filter(b => shown(w, b));
-  const list = () => $("#space-body [data-journal-list]");
-  const listed = () => list() && list().textContent.trim() !== "…";
-  const ready = await until(() => $("#inbox-capture textarea") && shown(w, $("#inbox-capture textarea"))
-    && ["Ajouter au journal", "Joindre des fichiers", "● Enregistrer"].every(t => buttons().some(b => b.textContent.trim() === t))
-    && listed());
-  if (!ready) throw new Error("Trace or drop did not show the capture form and list");
+  // The capture sits at the top of the Journal; a note written there waits in the Inbox.
+  w.location.hash = "#journal";
+  check("the journal opens on its capture", await until(() => shown(w, $("#view-global")) && $("#journal-capture textarea") && shown(w, $("#journal-capture textarea"))));
+  const buttons = () => $$("#journal-capture button").filter(b => shown(w, b));
+  const listed = () => $("#gj-list") && $("#gj-list").textContent.trim() !== "…";
+  const ready = await until(() => buttons().some(b => b.textContent.trim() === "Ajouter au journal") && listed());
+  if (!ready) throw new Error("the journal did not show its capture and its list");
   const draft = "Une idée pour le projet alpha, à creuser";
-  $("#inbox-capture textarea").value = draft;
-  const firstRow = list().firstChild;
-  $("#space-body select").value = "note";
-  $("#space-body select").dispatchEvent(new w.Event("change"));
-  check("filtering refreshes the journal", await until(() => listed() && list().firstChild !== firstRow));
-  if ($("#inbox-capture textarea")?.value !== draft) throw new Error("filtering erased the draft");
+  $("#journal-capture textarea").value = draft;
   buttons().find(b => b.textContent.trim() === "Ajouter au journal").click();
-  check("the note written appears in the list", await until(() => $$("#space-body .note").some(n => n.textContent.includes(draft))),
-    $("#space-body").textContent.slice(0, 300) + " " + $("#err").textContent);
-  check("the box is emptied once the note is kept", $("#inbox-capture textarea")?.value === "");
-  clean("Trace or drop", visibleText(w));
+  check("the note written at the top of the journal waits in the Inbox", await until(() => $$("#gj-list .note").some(n => n.textContent.includes(draft) && n.querySelector(".chip.sp") && n.querySelector(".chip.sp").textContent.trim() === "À trier")),
+    $("#gj-list").textContent.slice(0, 300) + " " + $("#err").textContent);
+  check("the box is emptied once the note is kept", $("#journal-capture textarea")?.value === "");
+  clean("Journal and its capture", visibleText(w));
 
   // A note written straight into each space, to see the journal gather every space, including Inbox.
   const gardenName = $$("#spaces .tile[data-space]").find(t => /Jardin/.test(t.textContent)).getAttribute("data-space");
@@ -151,6 +141,8 @@ function clean(name, text) {
   run("note", "add", gardenName, "Tailler les rosiers avant l'hiver");
 
   // Journal: every note of every space, each with its space.
+  w.location.hash = "";
+  await sleep(50);
   w.location.hash = "#journal";
   check("the journal opens", await until(() => shown(w, $("#view-global")) && $("#sections button.on").textContent.trim() === "Journal"));
   check("the journal lists the notes of every space", await until(() => {
@@ -177,7 +169,7 @@ function clean(name, text) {
   check("Settings hides the spaces' tiles", $$("#spaces .tile").every(t => !shown(w, t)) && !shown(w, $("#layout-section")));
   const empty = ["#attention-section", "#app-guides-section", "#revoked-section", "#internal-section"].filter(s => shown(w, $(s)));
   check("Settings shows no empty section (nothing to look at, nothing proposed, nothing revoked)", empty.length === 0, empty.join(" "));
-  check("Settings hides Trace or drop and the journal", !shown(w, $("#view-space")) && !shown(w, $("#view-global")));
+  check("Settings hides the journal and its capture", !shown(w, $("#view-global")) && (!$("#journal-capture") || !shown(w, $("#journal-capture"))));
   for (const s of $$("#view-memory details.fold")) s.open = true;
   await sleep(200);
   clean("Settings, every fold open", visibleText(w));

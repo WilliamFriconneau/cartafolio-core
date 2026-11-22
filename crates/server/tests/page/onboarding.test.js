@@ -61,6 +61,7 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   // ---- A node with no memory: two choices, a guided path ----
   let empty = await node();
   let page = await open(browser, empty, { width: 1280, height: 900 });
+  check("the console key is kept on this device", await page.evaluate(() => !!localStorage.getItem("pensine-console")));
   check("an empty node shows the start screen, not a blank page", await page.locator("#onboard").isVisible() && !(await page.locator("#home").isVisible()));
   const choices = await page.locator("#ob-body .choice").allInnerTexts();
   check("exactly two choices: Start a memory, Join a memory", choices.length === 2 && /Start a memory/.test(choices[0]) && /Join a memory/.test(choices[1]), choices.join("|"));
@@ -80,7 +81,7 @@ const FORBIDDEN = /\b(bridges?|capture (app|program)s?|prox(y|ies)|vaults?)\b/i;
   await page.click("#ob-next");
   check("step 4 says it is ready, with the default spaces", /Your memory is ready/.test(await page.locator("#ob-body").innerText()) && /6 spaces/.test(await page.locator("#ob-body").innerText()));
   await page.click("#ob-open");
-  check("then the memory opens on its spaces, under the four sections", await page.locator("#home").isVisible() && (await page.locator("#sections button").count()) === 4 && !(await page.locator("#machines-section").isVisible()));
+  check("then the memory opens on its spaces, under the three sections", await page.locator("#home").isVisible() && (await page.locator("#sections button").count()) === 3 && !(await page.locator("#machines-section").isVisible()));
   const names = await page.locator("#spaces .tile h3").allInnerTexts();
   check("six spaces are made, shown by label", names.length === 6 && !names.some(n => /owner-/.test(n)), names.join("|"));
   check("no technical step left: nothing logged", page.problems.length === 0, page.problems.join(" | "));

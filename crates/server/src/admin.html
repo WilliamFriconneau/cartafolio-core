@@ -353,6 +353,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
   #layout-section.organising .tree-wrap:has(.fside:not([hidden])){grid-template-columns:minmax(0,1fr)}
 }
 .brand{width:22px;height:22px;border-radius:6px;vertical-align:-5px;margin-right:6px}
+#journal-capture{margin-bottom:14px}
+.day-sum{margin:-2px 0 8px}
 </style>
 </head>
 <body>
@@ -758,8 +760,9 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 <script>
 "use strict";
 const base = location.pathname.replace(/\/admin\/?$/, "/").replace(/[^/]*$/, "");
+// The console key is kept on this device, so coming back to the page does not ask for it again.
 let token = null;
-try { token = sessionStorage.getItem("memcp-console"); } catch (_) {}
+try { token = localStorage.getItem("pensine-console") || sessionStorage.getItem("memcp-console"); } catch (_) {}
 let S = null;
 let renaming = null;
 let regranting = null; // { agent, all, spaces: Map(name -> "r"|"rw"), paths: [..] } while rights are edited
@@ -1201,6 +1204,7 @@ const FR = {
   "last write": "dernière écriture",
   "Keywords": "Mots-clés",
   "A note that contains one of these words goes to this space.": "Une note qui contient l’un de ces mots va dans cet espace.",
+  "entry": "entrée", "entries": "entrées", "Sleep": "Sommeil", "HRV": "VFC", "steps": "pas",
   "Space this note goes to": "Espace de cette note",
   "Inbox (to sort)": "À trier",
   "tags, such as #home #shopping": "étiquettes, par exemple #maison #courses",
@@ -1730,11 +1734,15 @@ const ago = t => {
 };
 const fmt = t => t ? t.replace("T", " ").replace(/:\d\d\+00:00$/, " UTC") : "never";
 
-function showLogin() { $("#app").hidden = true; $("#login").hidden = false; }
+function showLogin() {
+  token = null;
+  try { localStorage.removeItem("pensine-console"); sessionStorage.removeItem("memcp-console"); } catch (_) {}
+  $("#app").hidden = true; $("#login").hidden = false;
+}
 $("#login-form").addEventListener("submit", async e => {
   e.preventDefault();
   token = $("#login-token").value.trim();
-  try { sessionStorage.setItem("memcp-console", token); } catch (_) {}
+  try { localStorage.setItem("pensine-console", token); sessionStorage.setItem("memcp-console", token); } catch (_) {}
   $("#login-err").textContent = "";
   try { await load(); } catch (x) { $("#login-err").textContent = x.message; }
 });
@@ -1965,6 +1973,8 @@ function noteRows(facts, o) {
   const rows = [];
   for (const { d, items } of days.values()) {
     rows.push(el("h3", { style: "margin:18px 0 4px" }, dayTitle(d)));
+    const summary = daySummary(items);
+    if (summary) rows.push(summary);
     for (const f of items) {
       const hm = new Date(atOf(f)).toLocaleTimeString(loc(), { hour: "2-digit", minute: "2-digit" });
       const tags = (f.tags || []).filter(t => !HIDDEN_TAGS.has(t.split("/")[0]));
@@ -1980,6 +1990,35 @@ function noteRows(facts, o) {
     }
   }
   return rows;
+}
+// The day as one line: how many entries, which spaces, and the health figures Kalios left that day.
+function kaliosDay(items) {
+  const hit = items
+    .filter(f => /^\[Kalios\]\s*day\b/.test(f.text || ""))
+    .map(f => /^\[Kalios\]\s*day\s+[0-9-]+:\s*(\{.*\})$/s.exec(f.text || ""))
+    .find(Boolean);
+  if (!hit) return "";
+  let data;
+  try { data = JSON.parse(hit[1]); } catch (e) { return ""; }
+  const night = data.night || {}, morning = data.morning || {}, evening = data.evening || {};
+  const bits = [];
+  if (night.asleep_min != null) bits.push(tr("Sleep") + " " + fmtHours(night.asleep_min) + (night.start && night.end ? " (" + night.start + "–" + night.end + ")" : ""));
+  if (morning.hrv_ms != null) bits.push(tr("HRV") + " " + fmtVal(morning.hrv_ms) + " ms");
+  if (evening.steps != null) bits.push(fmtVal(evening.steps) + " " + tr("steps"));
+  return bits.length ? tr("Health") + " : " + bits.join(" · ") : "";
+}
+function fmtHours(min) {
+  const h = Math.floor(min / 60), m = Math.round(min % 60);
+  return h + " h" + (m ? " " + String(m).padStart(2, "0") : "");
+}
+function daySummary(items) {
+  const spaces = [...new Set(items.map(f => f.space).filter(Boolean))].map(spaceLabel).filter(Boolean);
+  const bits = [items.length + " " + tr(items.length === 1 ? "entry" : "entries")];
+  if (spaces.length) bits.push(spaces.join(", "));
+  const health = kaliosDay(items);
+  if (health) bits.push(health);
+  const line = el("div", { class: "mute small day-sum" }, bits.join(" · "));
+  return line;
 }
 function journalView(body) {
   const space = SP.name;
@@ -2048,12 +2087,13 @@ function journalView(body) {
   refresh();
 }
 
-function inboxCapture() {
-  const space = SP.name;
+function inboxCapture(inboxSpace = SP.name, after = null) {
+  const space = inboxSpace;
   const text = el("textarea", { placeholder: "the note" });
   const files = el("input", { type: "file", multiple: true, hidden: true, accept: $("#fab-input").accept });
   const refresh = () => {
-    if (location.hash === "#note" && SP.name === space && SP.refreshJournal) SP.refreshJournal();
+    if (after) after();
+    else if (location.hash === "#note" && SP.name === space && SP.refreshJournal) SP.refreshJournal();
   };
   files.addEventListener("change", async () => {
     try {
@@ -2938,7 +2978,7 @@ $("#layout-add").addEventListener("submit", async e => {
 // own line, on their memory.
 /// The four sections, the same on every app: a bar under the header (docs/UI-SPEC.md, Navigation).
 function renderSections(on) {
-  const items = [["#note", "Trace or drop", "note"], ["#journal", "Journal", "journal"], ["", "Spaces", "spaces"], ["#settings", "Settings", "settings"]];
+  const items = [["#journal", "Journal", "journal"], ["", "Spaces", "spaces"], ["#settings", "Settings", "settings"]];
   $("#sections").replaceChildren(...items.map(([h, t, id]) => el("button", { type: "button", class: id === on ? "on" : "",
     "aria-current": id === on ? "page" : null, onclick: () => { location.hash = h; } }, t)));
 }
@@ -2947,17 +2987,18 @@ function renderSections(on) {
 function settingsPart(n, empty) { n.dataset.empty = empty ? "1" : ""; n.hidden = empty || !/^#(settings|admin)$/.test(location.hash); }
 
 function route() {
+  // The capture is the top of the Journal (the owner grouped them); an old link to it lands there.
+  if (location.hash === "#note") history.replaceState(null, "", "#journal");
   // Everyone lands in their own memory. The other people (an administrator only) are on a page of their own.
   const admin = !!(S && S.installation && S.installation.admin);
   const inSpace = location.hash.match(/^#space\/([a-z][a-z0-9-]*)$/);
   const inFolder = location.hash.match(/^#folder\/([a-z][a-z0-9-]*)$/);
   const global = location.hash === "#journal" || location.hash === "#graph";
-  // The four sections of every app (docs/UI-SPEC.md): Note, Journal, Spaces, Settings. Note opens Inbox, where a
-  // capture lands; health is a space among the others; Settings is the machines, the assistants and the rest.
-  const triage = S && S.triage && S.triage.space ? { name: S.triage.space } : null;
-  const section = ["#note", "#triage"].includes(location.hash) ? "note" : location.hash === "#journal" ? "journal"
+  // The three sections of every app (docs/UI-SPEC.md): Journal (with the capture at its top), Spaces, Settings.
+  // Health is a space among the others; Settings is the machines, the assistants and the rest.
+  const section = ["#journal", "#triage"].includes(location.hash) ? "journal"
     : ["#settings", "#admin", "#graph"].includes(location.hash) ? "settings" : inSpace || inFolder || location.hash === "" ? "spaces" : "";
-  const page = inSpace || (location.hash === "#note" && triage) ? "space" : global ? "global"
+  const page = inSpace ? "space" : global ? "global"
     : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
   renderSections(section);
   document.querySelectorAll('#view-memory [data-part="settings"]').forEach(n => { n.hidden = section !== "settings" || n.dataset.empty === "1"; });
@@ -2971,7 +3012,6 @@ function route() {
   if (page === "global") renderGlobal();
   if (page === "memory" && S) { const f = inFolder ? inFolder[1] : ""; if (f !== HOME.folder) { HOME.folder = f; renderSpaceTiles(); } }
   if (inSpace) loadSpace(inSpace[1]);
-  else if (location.hash === "#note" && triage) loadSpace(triage.name);
   $("#view-people").hidden = page !== "admin";
   $("#view-memory").hidden = page !== "memory";
   $("#view-triage").hidden = page !== "triage";
@@ -4567,8 +4607,15 @@ async function globalJournal(body) {
   const go = () => { GL.q = search.value.trim(); pull(true); };
   search.addEventListener("keydown", e => { if (e.key === "Enter") go(); });
   clear.addEventListener("click", () => { GL.space = GL.tag = GL.q = ""; spaceSel.value = ""; tagSel.value = ""; search.value = ""; pull(true); });
-  body.replaceChildren(el("div", { class: "fbar" }, search, el("button", { type: "button", onclick: go }, "Search"), spaceSel, tagSel, clear),
-    el("p", { class: "mute small" }, "The notes of every space you read, newest first. A tag also takes the tags under it."), list);
+  const healthSpace = (S.spaces || []).find(v => v.kind === "health");
+  const health = healthSpace ? el("button", { type: "button", class: "chip", id: "gj-health", onclick: () => { GL.space = healthSpace.name; spaceSel.value = healthSpace.name; pull(true); } }, tr("Health")) : null;
+  const capture = S && S.triage && S.triage.space ? el("div", { id: "journal-capture" }, inboxCapture(S.triage.space, () => pull(true))) : null;
+  body.replaceChildren(...[
+    capture,
+    el("div", { class: "fbar" }, search, el("button", { type: "button", onclick: go }, "Search"), spaceSel, tagSel, health, clear),
+    el("p", { class: "mute small" }, "The notes of every space you read, newest first. A tag also takes the tags under it."),
+    list,
+  ].filter(Boolean));
   clear.hidden = !filtered();
   await pull(true);
 }

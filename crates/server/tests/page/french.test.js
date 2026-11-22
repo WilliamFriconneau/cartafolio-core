@@ -151,8 +151,8 @@ async function leftovers(page, rootSel) {
   await page.locator("#home details.fold > summary").evaluateAll(s => s.forEach(x => x.parentElement.open = true));
   await sleep(200);
   await scan("the settings with every fold open");
-  await page.evaluate(() => { location.hash = "#note"; }); await page.waitForSelector("#inbox-capture textarea"); await sleep(400);
-  await scan("trace or drop");
+  await page.evaluate(() => { location.hash = "#journal"; }); await page.waitForSelector("#journal-capture textarea"); await sleep(400);
+  await scan("the journal and its capture");
   await page.evaluate(() => { location.hash = "#journal"; }); await sleep(600);
   await scan("the journal");
   await page.evaluate(() => { location.hash = "#triage"; }); await sleep(300);
