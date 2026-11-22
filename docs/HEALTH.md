@@ -76,6 +76,17 @@ let d = memcp_health::detect("Mal de tête 6/10, tension 12/8", Lang::Fr);
 
 `signe/<tag>`, `mesure/<tag>`, `alerte/<id>` (see [AUTOTAG.md](AUTOTAG.md)). The tag of a sign is its id, except for the 19 signs of the source that the first tagger already named, which keep that name so that the notes already tagged stay consistent: `pain`=`douleur`, `chest_pain`=`douleur-thoracique`, `abdominal_cramps`=`douleur-abdominale`, `lower_back_pain`=`douleur-dos`, `sore_throat`=`douleur-gorge`, `headache`=`cephalee`, `nausea`=`nausee`, `vomiting`=`vomissement`, `dizziness`=`vertige`, `coughing`=`toux`, `shortness_of_breath`=`essoufflement`, `palpitations`, `diarrhea`=`diarrhee`, `constipation`, `sleep_changes`=`insomnie`, `anxiety`=`anxiete`, `chills`=`frissons`, `fever`=`fievre`, `fatigue` and the two added signs, `itching`=`demangeaison` and `rash`=`eruption`. The `tag` field of `manifestations.json` says it.
 
+## Editing a health target
+
+A card on the `targets` board groups signs and symptoms (`sign/<slug>`) and favouring factors
+(`factor/<slug>`). The `targets` view returns these as `signs` and `factors` on each item.
+Suggest signs from `health_referential` (`kind: "manifestations"`) and allow free text.
+
+Call `target_set` with the space and the card's stable `id` to edit it. A supplied `signs` or
+`factors` array replaces that list, an empty list clears it, and an omitted list keeps it.
+Referential signs use their canonical IDs. Free entries are stored as normalized slugs.
+The card keeps its text when `problem` is omitted, and its identity and history on every edit.
+
 ## Differences with the reference, on purpose
 
 - No `sucre` keyword for glucose (it read `2 sucres dans mon café` as 2 g/L).

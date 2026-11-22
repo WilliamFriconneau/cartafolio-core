@@ -345,6 +345,10 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
         crate::explore::space_write(app, &ctl, &me, path, &body)
     } else if path.starts_with("/layout/") {
         crate::explore::layout_write(app, &me, path, &body)
+    } else if path == "/target/set" {
+        living(app, &ctl, &me, "target_set", &body)
+    } else if path == "/health/referential" {
+        living(app, &ctl, &me, "health_referential", &body)
     } else if path == "/living" {
         living(app, &ctl, &me, "living_set", &body)
     } else if path == "/sync/policy" {
@@ -1295,7 +1299,15 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                     .ok()
                     .flatten()
                     .is_some();
-                json!({ "name": s.as_str(), "kind": kind, "guide": has_guide,
+                let label: Option<String> = ctl
+                    .query_row(
+                        "SELECT label FROM spaces WHERE name = ?1",
+                        [s.as_str()],
+                        |r| r.get(0),
+                    )
+                    .unwrap_or_default();
+                json!({ "name": s.as_str(), "kind": kind, "guide": has_guide, "label": label,
+                    "custom_label": label.is_some(),
                     "stats": vault_stats(app, &s) })
             })
             .collect();

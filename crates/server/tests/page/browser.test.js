@@ -132,6 +132,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.locator("#spaces .tile[data-space=owner-work]").locator("button:has-text('Instructions')").click();
   check("a space's instructions open read-only", await page.locator("#guide-text").evaluate(t => t.readOnly) && !(await page.locator("#guide-save").isVisible()));
   await page.click("#guide-dlg form button:last-child");
+  await section(page, "#settings");
   await page.click("#my-guide");
   await page.fill("#guide-text", "Formal tone at work.");
   await page.click("#guide-save");

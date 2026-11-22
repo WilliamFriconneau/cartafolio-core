@@ -299,6 +299,8 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             ),
         ));
     }
+    std::fs::create_dir_all(data).map_err(memcp_server::cli::fail)?;
+    let _instance = net::lock_node(data)?;
     let manager = Arc::new(Manager::open(data, options(a)?)?);
     // Voice notes, watched folders and absorbed folders work for one person of this node: tasks of the node itself.
     let _intake = start_intake(&manager, settings);

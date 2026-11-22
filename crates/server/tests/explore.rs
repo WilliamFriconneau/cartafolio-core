@@ -263,6 +263,19 @@ fn the_layout_is_read_changed_and_a_space_is_made_with_a_label() -> Res {
         .ok_or("not listed")?;
     assert_eq!(row["label"], "Pro journal");
     assert_eq!(row["parent"], "notes");
+    let refused = post(
+        &e,
+        "layout/set",
+        SAM,
+        json!({ "space": name, "label": " NÓTES ", "parent": null }),
+    );
+    assert_eq!(refused.status, 400, "{}", refused.body_json());
+    assert_eq!(
+        refused.body_json()["error"],
+        "A space called NÓTES already exists."
+    );
+    let unchanged = get(&e, "layout", &[], SAM).body_json();
+    assert_eq!(unchanged, l, "the move and label change were both refused");
     // Back to the top level with an empty parent.
     let up = post(
         &e,

@@ -117,25 +117,45 @@ pub(crate) fn living(
         if !health_targets {
             return Some(slug);
         }
-        let slug = memcp_health::text::fold(&slug);
+        let folded = memcp_health::text::fold(&slug);
         memcp_health::builtin()
             .manifestations()
             .iter()
             .find(|m| {
-                slug == sign_slug(&m.id)
-                    || slug == sign_slug(&m.tag)
+                folded == sign_slug(&m.id)
+                    || folded == sign_slug(&m.tag)
                     || m.labels
                         .values()
-                        .any(|label| slug == sign_slug(&memcp_health::text::fold(label)))
+                        .any(|label| folded == sign_slug(&memcp_health::text::fold(label)))
             })
             .map(|m| m.id.clone())
+            .or_else(|| {
+                Some(name.trim().to_string())
+                    .filter(|s| s.contains('_') && facts::normalize_tag(s).is_ok())
+            })
+            .or(Some(slug))
     };
-    let sign_tags = |signs: &[String]| {
-        signs
-            .iter()
-            .filter_map(|s| sign_id(s))
-            .filter_map(|id| facts::normalize_tag(&format!("sign/{id}")).ok())
-            .collect::<Vec<_>>()
+    let traits = |patch: &Value, tags: &[String]| {
+        let mut out = Vec::new();
+        for (field, prefix) in [("signs", "sign/"), ("factors", "factor/")] {
+            if let Some(values) = patch[field].as_array() {
+                out.extend(values.iter().filter_map(Value::as_str).filter_map(|value| {
+                    let existing = format!("{prefix}{value}");
+                    if tags.contains(&existing) {
+                        return Some(existing);
+                    }
+                    let slug = if field == "signs" {
+                        sign_id(value)?
+                    } else {
+                        sign_slug(value)
+                    };
+                    facts::normalize_tag(&format!("{prefix}{slug}")).ok()
+                }));
+            } else {
+                out.extend(tags.iter().filter(|tag| tag.starts_with(prefix)).cloned());
+            }
+        }
+        out
     };
     let field_tags = |fields: &Value| {
         fields
@@ -220,6 +240,12 @@ pub(crate) fn living(
                     .filter_map(|t| t.strip_prefix("sign/").and_then(sign_id))
                     .collect();
                 card["signs"] = json!(signs);
+                card["factors"] = json!(
+                    fact.tags
+                        .iter()
+                        .filter_map(|t| t.strip_prefix("factor/"))
+                        .collect::<Vec<_>>()
+                );
                 card["card_id"] = json!(card_id_of(&conn, &fact));
                 card["fact_id"] = json!(fact_id);
                 card["fields"] = crate::autotag::fields_json(&fact.tags);
@@ -281,42 +307,47 @@ pub(crate) fn living(
     let write_card = |text: &str,
                       col: &str,
                       replacing: Option<&str>,
-                      signs: &[String],
+                      traits: Vec<String>,
                       fields: &Value|
      -> Result<String, ToolError> {
         let mut new = NewFact::agent(text, &caller.agent);
-        let card_id = replacing
-            .and_then(|old| facts::read_fact(&conn, old).ok().flatten())
-            .map(|f| card_id_of(&conn, &f))
+        let old = replacing.and_then(|id| facts::read_fact(&conn, id).ok().flatten());
+        let card_id = old
+            .as_ref()
+            .map(|f| card_id_of(&conn, f))
             .unwrap_or_else(|| crate::util::random_base32(8));
         new.tags = vec![
             format!("living/{page}/{col}"),
             format!("living-card/{card_id}"),
         ];
         // A target groups signs and symptoms: `sign/<name>`, the same tags the notes carry.
-        new.tags.extend(sign_tags(signs));
+        new.tags.extend(traits);
         // The figures of a target (a deadline, a target amount, a realized amount) are fields.
         new.tags.extend(field_tags(fields));
-        if let Some(old) = replacing {
+        if let Some(previous) = old {
+            let mut tags = facts::normalize_tags(&new.tags)?;
+            let mut previous_tags = previous.tags;
+            tags.sort();
+            previous_tags.sort();
+            if tags == previous_tags && crate::text::normalize(text) == previous.text {
+                return Ok(previous.id);
+            }
             return Ok(facts::supersede(
                 &conn,
                 &space,
                 &caller.agent,
-                old,
+                &previous.id,
                 new,
                 Some(&format!("moved to {col}")),
             )?
             .id);
         }
         // A card is its own note, even next to a similar one.
-        match facts::remember(&conn, &space, &caller.agent, new, &[])? {
+        match facts::remember(&conn, &space, &caller.agent, new.clone(), &[])? {
             facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
             facts::Remembered::NeedsDecision(c) => {
                 let ids: Vec<String> = c.into_iter().map(|c| c.id).collect();
-                let mut again = NewFact::agent(text, &caller.agent);
-                again.tags = vec![format!("living/{page}/{col}")];
-                again.tags.extend(sign_tags(signs));
-                match facts::remember(&conn, &space, &caller.agent, again, &ids)? {
+                match facts::remember(&conn, &space, &caller.agent, new, &ids)? {
                     facts::Remembered::Created(f) | facts::Remembered::Duplicate(f) => Ok(f.id),
                     facts::Remembered::NeedsDecision(_) => {
                         Err(ToolError::Invalid("the card could not be written".into()))
@@ -352,14 +383,13 @@ pub(crate) fn living(
         }
         let col = card["column"].as_str().unwrap_or(columns[0]).to_string();
         valid(&col)?;
-        let signs: Vec<String> = card["signs"]
-            .as_array()
-            .into_iter()
-            .flatten()
-            .filter_map(Value::as_str)
-            .map(String::from)
-            .collect();
-        added.push(write_card(&text, &col, None, &signs, &card["fields"])?);
+        added.push(write_card(
+            &text,
+            &col,
+            None,
+            traits(&card, &[]),
+            &card["fields"],
+        )?);
     }
     let mut moved = 0;
     for m in args
@@ -379,21 +409,14 @@ pub(crate) fn living(
         if let Some((text, now_in)) = card_column(id)
             && now_in != col
         {
-            let old = facts::read_fact(&conn, id)?;
-            let signs: Vec<String> = old
-                .as_ref()
-                .map(|f| {
-                    f.tags
-                        .iter()
-                        .filter_map(|t| t.strip_prefix("sign/").map(String::from))
-                        .collect()
-                })
-                .unwrap_or_default();
-            let fields: Value = old
-                .as_ref()
-                .map(|f| crate::autotag::fields_json(&f.tags))
-                .unwrap_or(Value::Null);
-            write_card(&text, col, Some(id), &signs, &fields)?;
+            let fields = crate::autotag::fields_json(&card.tags);
+            write_card(
+                &text,
+                col,
+                Some(id),
+                traits(&Value::Null, &card.tags),
+                &fields,
+            )?;
             moved += 1;
         }
     }
@@ -421,18 +444,6 @@ pub(crate) fn living(
             .unwrap_or(old_text);
         let col = u["column"].as_str().unwrap_or(&old_col).to_string();
         valid(&col)?;
-        let signs: Vec<String> = match u["signs"].as_array() {
-            Some(a) => a
-                .iter()
-                .filter_map(Value::as_str)
-                .map(String::from)
-                .collect(),
-            None => card
-                .tags
-                .iter()
-                .filter_map(|t| t.strip_prefix("sign/").map(String::from))
-                .collect(),
-        };
         // The figures it had stay unless the call gives them again.
         let mut fields = crate::autotag::fields_json(&card.tags);
         if let (Some(f), Some(new)) = (fields.as_object_mut(), u["fields"].as_object()) {
@@ -440,7 +451,7 @@ pub(crate) fn living(
                 f.insert(k.clone(), v.clone());
             }
         }
-        write_card(&text, &col, Some(&card.id), &signs, &fields)?;
+        write_card(&text, &col, Some(&card.id), traits(&u, &card.tags), &fields)?;
         updated += 1;
     }
     let mut dropped = 0;

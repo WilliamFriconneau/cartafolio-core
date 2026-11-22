@@ -56,6 +56,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await openAll();
 
   // ---- a space: create with a kind and keywords, then delete with a choice
+  await page.click("#organise-spaces");
+  await page.click("#add-space");
   await page.fill("#layout-add input[name=label]", "Cars");
   await page.fill("#layout-add input[name=keywords]", "garage, tyres");
   await page.click("#layout-add button.primary");
@@ -161,7 +163,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await api("fact/retire", { space: "owner-work", id: f.fact.id, reason: "typo" });
   await page.evaluate(() => { location.hash = "#space/owner-work"; });
   await page.waitForSelector("#space-tabs button");
-  await page.locator("#space-tabs button", { hasText: "Notes" }).click();
+  await page.locator("#space-more").evaluate(d => { d.open = true; });
+  await page.locator("#space-tools button", { hasText: "Notes" }).click();
   await page.locator("#space-body button:has-text('Show removed notes')").click();
   await page.locator("#space-body", { hasText: "Pay the garage" }).waitFor();
   await page.locator("#space-body .bubble", { hasText: "Pay the garage" }).first().click();
@@ -173,13 +176,47 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   // ---- a vocabulary is removed from the side panel (the people of a node are covered by the HTTP tests)
   await page.evaluate(() => { location.hash = ""; });
   await openAll();
-  await page.locator("#ftree .frow", { hasText: "health" }).click();
+  await page.locator("#ftree .frow[data-space-row=owner-health]").click();
   await page.waitForSelector("#side-vocab [data-vocabulary=signs]");
   await page.locator("#side-vocab [data-vocabulary=signs] button:has-text('remove')").click();
   check("removing a vocabulary shows its preview", /signs/.test(await confirmText()));
   await hold();
   await page.waitForFunction(() => !document.querySelector("#side-vocab [data-vocabulary=signs]"));
   check("the vocabulary is gone", true);
+
+  // ---- Edit a health target and check the stored card after browser reloads.
+  await page.evaluate(() => { location.hash = "#space/owner-health"; });
+  await page.waitForSelector("#tgt-add");
+  await page.fill("#tgt-add", "Sleep");
+  await page.press("#tgt-add", "Enter");
+  const card = page.locator("#space-body .card").filter({ hasText: "Sleep" });
+  const dialog = page.locator("#target-dialog");
+  await card.getByRole("button", { name: "Edit target" }).click();
+  const signs = dialog.locator('[data-trait="signs"]');
+  const factors = dialog.locator('[data-trait="factors"]');
+  check("target signs suggest the shared referential", (await signs.locator('datalist option').count()) > 0);
+  await signs.locator("input[list]").fill("Headache");
+  await signs.getByRole("button", { name: "Add", exact: true }).click();
+  await signs.locator("input[list]").fill("Heavy legs");
+  await signs.getByRole("button", { name: "Add", exact: true }).click();
+  await factors.getByRole("textbox").fill("Late coffee");
+  await factors.getByRole("button", { name: "Add", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByText("late coffee", { exact: true }).waitFor();
+
+  await card.getByRole("button", { name: "Edit target" }).click();
+  await signs.getByRole("button", { name: "Remove heavy legs" }).click();
+  await factors.getByRole("button", { name: "Rename late coffee" }).click();
+  await factors.locator('input[aria-label="Rename"]').fill("Morning coffee");
+  await factors.getByRole("button", { name: "Save", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save", exact: true }).click();
+  await card.getByText("morning coffee", { exact: true }).waitFor();
+
+  await page.reload();
+  await card.getByText("Headache", { exact: true }).waitFor();
+  await card.getByText("morning coffee", { exact: true }).waitFor();
+  check("a reload keeps the sign and the renamed factor and leaves the removed sign out",
+    await card.getByText("heavy legs", { exact: true }).count() === 0);
 
   check("not one browser dialog was used", native.length === 0, native.join(" | "));
   check("no error or warning in the console", problems.length === 0, problems.join(" | "));

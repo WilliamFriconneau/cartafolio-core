@@ -30,6 +30,8 @@ pub struct Place {
     pub space: Space,
     /// What is shown: the label, or the name when none was given.
     pub label: String,
+    /// Whether the label was set explicitly.
+    pub custom_label: bool,
     /// Its parent in the tree, `None` at the top. A parent the person does not own is not shown: the space is at the top.
     pub parent: Option<Space>,
     /// Order among its brothers (smaller first; ties by label).
@@ -58,6 +60,122 @@ pub(crate) fn clean_label(label: &str) -> Result<String> {
         )));
     }
     Ok(l.to_string())
+}
+
+/// Default display labels, in English and French. An explicit label takes precedence.
+pub fn builtin_labels(kind: &str) -> Option<(&'static str, &'static str)> {
+    Some(match kind {
+        "inbox" | "a-trier" => ("To sort", "À trier"),
+        "health" => ("Health", "Santé"),
+        "home" => ("Home", "Maison"),
+        "hobbies" => ("Hobbies", "Loisirs"),
+        "me" => ("Me", "Moi"),
+        "work" => ("Work", "Travail"),
+        "money" => ("Finances", "Finances"),
+        "people" => ("People", "Proches"),
+        _ => return None,
+    })
+}
+
+pub(crate) fn visible_labels(name: &str, kind: &str, label: Option<&str>) -> (String, String) {
+    if let Some(label) = label {
+        return (label.into(), label.into());
+    }
+    if let Some((en, fr)) = builtin_labels(kind) {
+        return (en.into(), fr.into());
+    }
+    let mut words = name.replace('-', " ");
+    if let Some(first) = words.get_mut(..1) {
+        first.make_ascii_uppercase();
+    }
+    (words.clone(), words)
+}
+
+/// Check within the transaction that writes the label, so simultaneous writes cannot both pass.
+/// Browser language is per device, so compare labels in each supported language.
+pub(crate) fn check_unique_label(
+    ctl: &Connection,
+    space: &Space,
+    kind: &str,
+    label: Option<&str>,
+    owner: &str,
+) -> Result<()> {
+    let default_inbox = label.is_none() && crate::catalogue::is_inbox_kind(kind);
+    let (en, fr) = visible_labels(space.as_str(), kind, label);
+    let key = |s: &str| crate::text::fold(s.trim());
+    let (en_key, fr_key) = (key(&en), key(&fr));
+    let mut st = ctl.prepare(
+        "SELECT s.name, s.kind, s.label FROM spaces s
+         JOIN space_members m ON m.space = s.name AND m.owner = 1 AND m.user_id = ?2
+         WHERE s.name != ?1",
+    )?;
+    let rows = st.query_map(rusqlite::params![space.as_str(), owner], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, String>(1)?,
+            r.get::<_, Option<String>>(2)?,
+        ))
+    })?;
+    for row in rows {
+        let (name, kind, label) = row?;
+        // The internal routing queues of other accounts or peers are outside the space tree.
+        if default_inbox && label.is_none() && crate::catalogue::is_inbox_kind(&kind) {
+            continue;
+        }
+        let (other_en, other_fr) = visible_labels(&name, &kind, label.as_deref());
+        let duplicate = if key(&other_en) == en_key {
+            Some(&en)
+        } else if key(&other_fr) == fr_key {
+            Some(&fr)
+        } else {
+            None
+        };
+        if let Some(duplicate) = duplicate {
+            return Err(Error::Invalid(format!(
+                "A space called {duplicate} already exists."
+            )));
+        }
+    }
+    Ok(())
+}
+
+/// The person who owns a space.
+pub(crate) fn owner_of(ctl: &Connection, space: &Space) -> Result<String> {
+    ctl.query_row(
+        "SELECT user_id FROM space_members WHERE space = ?1 AND owner = 1",
+        [space.as_str()],
+        |r| r.get(0),
+    )
+    .optional()?
+    .ok_or_else(|| Error::UnknownSpace(space.to_string()))
+}
+
+/// Checks an actual display label change, allowing existing duplicates to stay as they are.
+pub(crate) fn check_label_change(
+    ctl: &Connection,
+    space: &Space,
+    kind: Option<&str>,
+    label: Option<Option<&str>>,
+    owner: &str,
+) -> Result<()> {
+    let (old_kind, old_label): (String, Option<String>) = ctl
+        .query_row(
+            "SELECT kind, label FROM spaces WHERE name = ?1",
+            [space.as_str()],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .optional()?
+        .ok_or_else(|| Error::UnknownSpace(space.to_string()))?;
+    let kind = kind.unwrap_or(&old_kind);
+    let label = label.unwrap_or(old_label.as_deref());
+    let before = visible_labels(space.as_str(), &old_kind, old_label.as_deref());
+    let after = visible_labels(space.as_str(), kind, label);
+    let folded =
+        |(en, fr): (String, String)| (crate::text::fold(en.trim()), crate::text::fold(fr.trim()));
+    if folded(before) != folded(after) {
+        check_unique_label(ctl, space, kind, label, owner)?;
+    }
+    Ok(())
 }
 
 /// A lowercase ASCII slug of a label, for the name of a new space.
@@ -112,7 +230,8 @@ impl Brain {
             };
             places.push(Place {
                 space: Space::new(name)?,
-                label: label.clone().unwrap_or_else(|| name.clone()),
+                label: visible_labels(name, kind, label.as_deref()).0,
+                custom_label: label.is_some(),
                 parent,
                 position: *position,
                 kind: kind.clone(),
@@ -156,8 +275,23 @@ impl Brain {
     /// Renames, moves or reorders one of a person's spaces. Only its owner may; nothing but layout
     /// changes.
     pub fn set_layout(&self, user_id: &str, space: &Space, change: &Change) -> Result<()> {
+        self.set_layout_and_kind(user_id, space, change, None)
+    }
+
+    pub(crate) fn set_layout_and_kind(
+        &self,
+        user_id: &str,
+        space: &Space,
+        change: &Change,
+        kind: Option<&str>,
+    ) -> Result<()> {
+        if let Some(kind) = kind {
+            self.validate_space_kind(kind)?;
+        }
         let ctl = self.open_control()?;
-        if !is_space_owner(&ctl, space, user_id)? {
+        let tx =
+            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+        if !is_space_owner(&tx, space, user_id)? {
             return Err(Error::Invalid(format!(
                 "{space} is not a space of this person"
             )));
@@ -207,8 +341,15 @@ impl Brain {
                 )));
             }
         }
-        let tx =
-            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+        if label.is_some() || kind.is_some() {
+            check_label_change(&tx, space, kind, label.as_deref().map(Some), user_id)?;
+        }
+        if let Some(kind) = kind {
+            tx.execute(
+                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
+                params![space.as_str(), kind],
+            )?;
+        }
         if let Some(l) = &label {
             tx.execute(
                 "UPDATE spaces SET label = ?2 WHERE name = ?1",

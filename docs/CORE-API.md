@@ -8,6 +8,19 @@ What `memcp-core` offers, by module. Every public item has a doc comment (`cargo
 
 The "Errors" column shows the documented `Error` variants (`Invalid`, `UnknownFact`...); any function that opens a file or a database can also fail with `Io`/`Sqlite` (kind `internal`).
 
+## Space layout and health targets
+
+Space creation and label changes, including layout moves and peer updates, check unique visible labels.
+The comparison folds case and accents and trims surrounding spaces. Built-in labels are checked in both
+English and French, including when a caller supplies a custom label. Existing duplicates are left in place.
+The internal routing queues of different accounts or peers may share the default Inbox label.
+
+`target_set` requires write access to a health space. With a card `id`, omit `problem` to keep its text.
+`signs` accepts referential IDs, tags, labels or free text. `factors` accepts free text as favouring factors.
+Each supplied array replaces that list. Empty clears it, omitted keeps it. The `targets` view exposes
+`signs` and `factors` in each target item, with entries backed by `sign/<slug>` and `factor/<slug>` tags.
+Unknown card IDs and non-health spaces are refused. See [HEALTH.md](HEALTH.md).
+
 ## `facts`: Facts: write, correct, retire, read, search
 
 Rights: None in the module: the tools check the connection's right (`remember`, `supersede`, `retire` need write on the space; `recall`, `read_fact`, `history` need read). Append-only: no function here erases a fact.

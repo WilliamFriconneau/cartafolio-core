@@ -109,7 +109,7 @@ async function leftovers(page, rootSel) {
 }
 
 (async () => {
-  const n = await node(run => { run("space", "add", "owner-health", "--user", "owner", "--kind", "health"); run("space", "add", "owner-work", "--user", "owner", "--kind", "work"); });
+  const n = await node(run => { run("space", "add", "owner-health", "--user", "owner", "--kind", "health"); run("space", "add", "owner-work", "--user", "owner", "--kind", "work"); run("space", "add", "owner-me", "--user", "owner", "--kind", "me"); });
   const browser = await chromium.launch({ executablePath: CHROMIUM, args: ["--no-sandbox"], headless: true });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 1600 }, locale: "fr-FR" });
   const page = await ctx.newPage();
@@ -129,6 +129,23 @@ async function leftovers(page, rootSel) {
   const all = [];
   const scan = async (name, sel) => { const l = await leftovers(page, sel || "#app"); check("French: no English left in " + name, l.length === 0, "\n    " + l.join("\n    ")); all.push(...l); };
 
+  check("the me kind is labelled Moi", await page.locator('#spaces [data-space="owner-me"] h3').innerText() === "Moi");
+  await page.evaluate(() => api("layout/add", { label: "Home" }));
+  await page.click("#refresh-spaces");
+  await page.locator("#spaces .tile h3", { hasText: /^Home$/ }).waitFor();
+  check("a typed label stays as entered in French", await page.locator("#spaces .tile h3", { hasText: /^Home$/ }).count() === 1);
+  // Give the fixture a French label before checking the interface for untranslated UI strings.
+  await page.evaluate(async () => {
+    const custom = (await api("layout")).spaces.find(s => s.label === "Home");
+    await api("layout/set", { space: custom.space, label: "Maison d’été" });
+  });
+  await page.click("#refresh-spaces");
+  await page.locator("#spaces .tile h3", { hasText: "Maison d’été" }).waitFor();
+  await page.click('[data-space-view="folders"]');
+  const ordered = await page.locator("#ftree .nm").allTextContents();
+  check("Folders sorts the translated labels", JSON.stringify(ordered) === JSON.stringify(["Maison d’été", "Moi", "Santé", "Travail"]), ordered.join(" | "));
+  await page.click('[data-space-view="bento"]');
+
   await scan("the home page");
   await page.evaluate(() => { location.hash = "#settings"; }); await sleep(300);
   await page.locator("#home details.fold > summary").evaluateAll(s => s.forEach(x => x.parentElement.open = true));
@@ -146,8 +163,10 @@ async function leftovers(page, rootSel) {
   await page.evaluate(() => { location.hash = "#admin"; }); await sleep(400);
   await scan("the people of this node");
   await page.evaluate(() => { location.hash = "#space/owner-work"; }); await page.waitForSelector("#space-tabs button"); await sleep(400);
-  for (const tab of await page.locator("#space-tabs button").allInnerTexts()) {
-    await page.locator("#space-tabs button", { hasText: tab }).first().click(); await sleep(500);
+  await page.locator("#space-more").evaluate(d => { d.open = true; });
+  const tabs = "#space-tabs button, #space-tools [aria-current], #space-tools button:nth-child(-n+5)";
+  for (const tab of await page.locator(tabs).allInnerTexts()) {
+    await page.locator(tabs, { hasText: tab }).first().click(); await sleep(500);
     await scan("the space tab " + tab, "#view-space");
   }
   await page.evaluate(() => { location.hash = ""; }); await sleep(300);
@@ -176,6 +195,7 @@ async function leftovers(page, rootSel) {
   await page.locator("#spaces .tile[data-space] button", { hasText: "Consignes" }).first().click(); await sleep(400);
   await scan("the instructions of a space", "#guide-dlg");
   await page.click("#guide-dlg form button:last-child");
+  await page.evaluate(() => { location.hash = "#settings"; }); await sleep(300);
   await page.click("#my-guide"); await sleep(400);
   await scan("my instructions", "#guide-dlg");
   await page.click("#guide-dlg form button:last-child");

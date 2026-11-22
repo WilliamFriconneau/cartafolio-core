@@ -166,6 +166,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         ));
     }
     let brain = Brain::open(data).map_err(cli::fail)?;
+    let _instance = net::lock_node(data)?;
     text::set_language(brain.language().map_err(cli::fail)?);
     // What a crash cut off is finished or undone before anything else is served (see core recover.rs).
     match brain.recover() {
@@ -264,6 +265,23 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
 mod tests {
     use super::*;
     use memcp_core::directory;
+
+    #[test]
+    fn a_running_node_holds_its_data_directory() -> Result<(), Failure> {
+        let dir = std::env::temp_dir().join(format!(
+            "pensine-instance-{}",
+            memcp_core::util::random_base32(16)
+        ));
+        std::fs::create_dir(&dir).map_err(cli::fail)?;
+        let first = net::lock_node(&dir)?;
+        let error = net::lock_node(&dir)
+            .err()
+            .ok_or((1, "A second lock was acquired.".into()))?;
+        assert!(error.1.contains("A node is already running"));
+        drop(first);
+        drop(net::lock_node(&dir)?);
+        std::fs::remove_dir_all(dir).map_err(cli::fail)
+    }
 
     #[test]
     fn node_name_defaults_only_when_no_name_is_given_or_stored() -> Result<(), String> {

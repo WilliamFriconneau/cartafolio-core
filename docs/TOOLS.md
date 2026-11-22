@@ -678,12 +678,13 @@ Makes a space of the person, or a sub-space inside another (`parent`, the name o
 
 - **Seen with:** a connection that reaches all the person's spaces and is not read-only.
 - **Answer:** `{ result: "created", space: { name, label, parent, kind, position } }`.
-- **Errors:** `invalid` for an unknown parent, a bad label (64 characters at most) or a depth beyond eight levels; `denied`.
+- **Errors:** `invalid` for an unknown parent, a bad or duplicate label (64 characters at most) or a depth beyond eight levels; `denied`.
 - **Effects:** adds the space to the layout; writes its `rules` note when keywords or tags are given; syncs to the other nodes of the person.
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `keywords` | array of string | no | - |
+| `kind` | string | no | catalogue kind, or `folder` for an empty folder |
 | `label` | string | yes | 64 characters |
 | `parent` | string | no | an existing space of the person |
 | `tags` | array of string | no | - |
@@ -1383,20 +1384,21 @@ Corrects the signs and symptoms of a note: `add` the signs it lacks, `remove` th
 
 ### `target_set`
 
-Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… », « Stop… ») is refused. `signs` are signs of the shared referential (by id, tag or label); an unknown one is refused with the closest ones. Changing a target keeps its card id and its history (it is `living_set` `update` underneath).
+Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… », « Stop… ») is refused. `signs` accepts signs by referential ID, tag, label or free text. `factors` accepts free text for favouring factors. Each array replaces that list, an empty array clears it, and an omitted array leaves it unchanged. Changing a target keeps its card id and its history (it is `living_set` `update` underneath).
 
 - **Seen with:** write access on at least one space.
-- **Answer:** `{ result: "created" | "updated", space, card, text, signs: [{ id, label }], notice }`.
-- **Errors:** `invalid` (a title that states an aim, a sign outside the referential, not a health space, no such target); `denied`.
+- **Answer:** `{ result: "created" | "updated", space, card, text, signs: [{ id, label }], factors, notice }`.
+- **Errors:** `invalid` (a title that states an aim, not a health space, no such target); `denied`.
 - **Effects:** Writes a board note (history kept).
 
 | Field | Type | Required | Limits |
 |---|---|---|---|
 | `column` | string | no | `open` or `reached` |
+| `factors` | array of string | no | free-text favouring factors |
 | `id` | string | no | the target to change (its card id or fact id); left out, a target is made |
 | `precision` | string | no | - |
-| `problem` | string | yes | five words at most, never an aim |
-| `signs` | array of string | no | signs of the referential |
+| `problem` | string | for creation | five words at most, never an aim |
+| `signs` | array of string | no | signs of the referential or free text |
 | `space` | string | no | a health space; by default the first you write |
 
 ### `tags_set`

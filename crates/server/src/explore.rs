@@ -746,6 +746,7 @@ pub fn layout_get(app: &App, me: &User) -> Response {
             &json!({ "spaces": places.iter().map(|p| json!({
                 "space": p.space.as_str(),
                 "label": p.label,
+                "custom_label": p.custom_label,
                 "parent": p.parent.as_ref().map(|s| s.as_str()),
                 "position": p.position,
                 "kind": p.kind,

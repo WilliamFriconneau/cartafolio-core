@@ -154,8 +154,8 @@ fn a_person_makes_a_space_with_any_label() -> Res {
     let t = Temp::new("layout");
     let b = brain(&t)?;
     let a = b.add_custom_space(OWNER, "owner", "Éléments Dev", Some(&sp("work")))?;
-    let c = b.add_custom_space(OWNER, "owner", "Éléments Dev", Some(&sp("work")))?;
-    assert_ne!(a, c, "names are made unique");
+    let c = b.add_custom_space(OWNER, "owner", "Éléments-Dev", Some(&sp("work")))?;
+    assert_ne!(a, c, "different labels may map to the same slug");
     assert!(a.as_str().starts_with("owner-elements-dev"));
     let l = b.layout(OWNER)?;
     let made = l.iter().find(|p| p.space == a).ok_or("made")?;

@@ -24,14 +24,14 @@ Words never used: *bridge*, *capture program*, *capture app*, *proxy*, *vault* (
 Four sections, a sidebar on a large screen (Mac, iPad, page), a tab bar on the iPhone:
 
 ```
-┌──────────────┬─────────────────────────────────────────────────────────────┐
-│ ● Trace/drop │  the section selected                                       │
-│ ● Journal    │                                                             │
-│ ● Spaces     │                                                             │
-│ ● Settings   │                                                             │
-│──────────────│                                                             │
-│ ● in step    │                                                             │
-└──────────────┴─────────────────────────────────────────────────────────────┘
+┌─────────────────┬─────────────────────────────────────────────────────────────┐
+│ ● Trace or drop │  the section selected                                       │
+│ ● Journal       │                                                             │
+│ ● Spaces        │                                                             │
+│ ● Settings      │                                                             │
+│─────────────────│                                                             │
+│ ● in step       │                                                             │
+└─────────────────┴─────────────────────────────────────────────────────────────┘
 ```
 
 At the foot of the sidebar (or at the top of the iPhone's Note screen), one line: the state of the machines (in step,
@@ -47,7 +47,7 @@ image is unloading the mind: a thought drawn out of the head and put somewhere s
 The microphone, large, in the middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice
 note starts on a tap or on « Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**.
 Under the buttons, today's captures, newest first, each with the space it went to and its tags (`#home #shopping`),
-or « Inbox » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
+or « To sort » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
 
 ### 2. Journal
 
@@ -58,7 +58,13 @@ makes a PDF of one space, with its dates.
 
 ### 3. Spaces
 
-The tree of spaces (folders open in place, drag and drop, labels never technical names). A space opens on
+Every app has the same **Folders** / **Bento** switch in the Spaces toolbar and remembers the selection on that
+device. Folders shows one tree with disclosure controls, a folder or space icon, the label and its note count.
+Bento shows the tiles at their existing sizes and opens a folder onto its own tiles. Both order each level
+alphabetically by the visible label in the interface language. The toolbar has **Organise**, **+**, and **Refresh**.
+Organise lets people rename, move, add and drag to nest. A folder can be created empty.
+
+A space opens on
 **Targets**, its home: the targets with their signs, their figures and their progress; in Home and Hobbies, the
 tasks to tick. Then **Journal** (one filterable chronology of notes and structured entries, with their time and
 provenance), **Stats** and the **Inventory** of files. One **+** button, bottom right of every view, writes a note
@@ -69,11 +75,31 @@ folder), a mode (notes and files both ways, or read only for search), the last p
 cloud service (iCloud Drive, Google Drive, OneDrive, Dropbox) is allowed and flagged with the node's advice to keep it on the
 device. The setting is this machine's own and never goes to the others ([FOLDERS.md](FOLDERS.md)).
 
+A person’s label is shown as entered. When a label was never set, the kind supplies a built-in label.
+The node refuses new duplicates among the spaces one person owns, comparing case- and accent-insensitively and
+ignoring surrounding spaces. It checks the default labels in both supported languages.
+
+| Kind | Français | English |
+|---|---|---|
+| `inbox` | À trier | To sort |
+| `health` | Santé | Health |
+| `home` | Maison | Home |
+| `hobbies` | Loisirs | Hobbies |
+| `me` | Moi | Me |
+| `work` | Travail | Work |
+| `money` | Finances | Finances |
+| `people` | Proches | People |
+
+In the node page, **More** in a space holds its boards, notes, keywords and targets, tag tree, graph, assistant
+connections, read-only connections and instructions. The whole-memory graph is also reachable from Settings.
+The existing tile shortcuts remain available in Bento.
+
 ### Health: a space, inside Spaces
 
 Health is not a section of its own: it is the health space, in Spaces, with the boards every space has by default
 (What's next, Ideas, Targets with their signs, lists) and its dashboard. Its sub-space *HealthApp* keeps the history of the
-original health journal, apart from dictated notes, so one always knows where a measure comes from. « Prepare an
+original health journal, apart from dictated notes, so one always knows where a measure comes from. A writable health
+target lets the person add, remove and rename signs and symptoms and favouring factors. « Prepare an
 appointment » (a PDF laid out as nurses hand over, SBAR) is free, on every app.
 
 **What is sold**: the iPhone app's synchronisation with Apple Health (Pensine Health: 3 € a month or 9,90 € once). Nothing
@@ -128,7 +154,7 @@ Then, once, every permission the app will need, each with why. Then the use case
 9. *An appointment*: Spaces › Health › Prepare an appointment → the SBAR PDF of the period, shared with the professional.
 10. *The subscription ends*: Health stays, Apple Health pauses, said in one line with how to resume.
 
-**The tinkerer (the node page, Obsidian-like)**
+**Exploring and managing the node page**
 11. *Explore*: the graph of the whole memory, a tag clicked, the journal filtered, a note opened with its history.
 12. *Organise*: a space created inside a folder, its keywords set, a note refiled by hand and the router learning it.
 13. *Connect*: Claude Code on the same computer through `memcp mcp`; Home Assistant Assist through its MCP integration.

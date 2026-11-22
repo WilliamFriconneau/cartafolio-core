@@ -125,6 +125,14 @@ fn the_vault_of_a_kind_is_the_one_the_caller_owns() -> Res {
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
     let sam_health = b.add_vault(&sam.id, "sam", "health")?;
+    b.set_layout(
+        &sam.id,
+        &sam_health,
+        &memcp_core::layout::Change {
+            label: Some("Sam’s health".into()),
+            ..Default::default()
+        },
+    )?;
     let alex_health = b.add_vault(&alex.id, "alex", "health")?;
     let token = |user: &str, agent: &str, spec: &str| -> Result<access::Caller, Box<dyn Error>> {
         let r = Rights::parse(spec)?;

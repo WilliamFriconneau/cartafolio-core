@@ -39,10 +39,7 @@ pub fn ensure(brain: &Brain, user_id: &str, person: &str) -> Result<Space> {
         && crate::users::is_space_owner(&brain.open_control()?, &space, user_id)?
         && brain.space_kind(&space)? == catalogue::CUSTOM
     {
-        brain.open_control()?.execute(
-            "UPDATE spaces SET kind = ?2 WHERE name = ?1",
-            [space.as_str(), TRIAGE],
-        )?;
+        brain.write_space_kind(&space, TRIAGE)?;
         return Ok(space);
     }
     // Made a box in the one transaction that makes it: never a `custom` space left by a crash.

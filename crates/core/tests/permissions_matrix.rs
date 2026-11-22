@@ -692,6 +692,14 @@ fn peers_lists_only_the_peers_of_the_person_and_is_open_to_any_reader() -> Res {
     let w = world()?;
     let ctl = w.brain.open_control()?;
     let other = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
+    w.brain.set_layout(
+        OWNER,
+        &sp("personal"),
+        &memcp_core::layout::Change {
+            label: Some("Owner’s personal space".into()),
+            ..Default::default()
+        },
+    )?;
     w.brain.add_vault(&other, "ann", "me")?;
     access::connect_peer(
         &ctl,
@@ -806,6 +814,14 @@ fn rights_never_go_beyond_the_person_and_a_regrant_takes_effect_at_once() -> Res
     let w = world()?;
     let ctl = w.brain.open_control()?;
     let ann = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
+    w.brain.set_layout(
+        OWNER,
+        &sp("personal"),
+        &memcp_core::layout::Change {
+            label: Some("Owner’s personal space".into()),
+            ..Default::default()
+        },
+    )?;
     w.brain.add_vault(&ann, "ann", "me")?;
     // Ann asks for `work` (Owner's space) and for her own: only her own is reached.
     let tok = access::connect_for(

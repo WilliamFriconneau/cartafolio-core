@@ -577,6 +577,65 @@ fn a_connection_to_all_spaces_makes_and_moves_a_sub_space() -> Res {
 }
 
 #[test]
+fn space_labels_are_unique_across_folders_and_languages() -> Res {
+    let t = Temp::new("unique-spaces");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let call = |tool, args: Value| tools::call(&b, &c, tool, &args);
+    let made = call("space_create", json!({ "label": "Équipe" }))?;
+    let first = made["space"]["space"].as_str().ok_or("space")?;
+    let made = call(
+        "space_create",
+        json!({ "label": "Atelier", "parent": "work" }),
+    )?;
+    let second = made["space"]["space"].as_str().ok_or("space")?;
+    for (tool, args, label) in [
+        (
+            "space_create",
+            json!({ "label": "  EQUIPE  ", "parent": "work" }),
+            "EQUIPE",
+        ),
+        ("space_create", json!({ "label": "sante" }), "sante"),
+        ("space_create", json!({ "label": "moi" }), "moi"),
+        (
+            "space_move",
+            json!({ "space": second, "label": "équipe" }),
+            "équipe",
+        ),
+        (
+            "space_move",
+            json!({ "space": second, "label": "Équipe", "parent": "health" }),
+            "Équipe",
+        ),
+    ] {
+        let err = call(tool, args)
+            .err()
+            .ok_or("duplicate display label was accepted")?;
+        assert!(
+            err.to_string()
+                .contains(&format!("A space called {label} already exists.")),
+            "{err}"
+        );
+    }
+    let current = b.space_info(OWNER, &sp(second))?;
+    assert_eq!(current.label, "Atelier");
+    assert_eq!(current.parent, Some(sp("work")));
+
+    // Simulate a duplicate from before enforcement. An unchanged label and a plain move still work.
+    b.open_control()?.execute(
+        "UPDATE spaces SET label = 'Équipe' WHERE name = ?1",
+        [second],
+    )?;
+    call(
+        "space_move",
+        json!({ "space": second, "label": "Équipe", "parent": "health" }),
+    )?;
+    assert_eq!(b.space_info(OWNER, &sp(first))?.label, "Équipe");
+    assert_eq!(b.space_info(OWNER, &sp(second))?.parent, Some(sp("health")));
+    Ok(())
+}
+
+#[test]
 fn notes_move_previews_then_moves_the_notes_of_a_tag_and_keeps_the_originals() -> Res {
     let t = Temp::new("notes-move");
     let b = brain(&t)?;

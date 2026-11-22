@@ -58,10 +58,10 @@ async function until(cond, ms = 5000) {
 // The words the interface never says (docs/UI-SPEC.md), and no technical leftovers.
 function clean(name, text) {
   check(name + ": no « null » or « undefined »", !/\b(null|undefined|NaN)\b/.test(text), (text.match(/.{0,40}\b(null|undefined|NaN)\b.{0,40}/) || [""])[0]);
-  check(name + ": no forbidden word (bridge, capture program, capture app, vault)", !/\bbridge|capture (app|program)|\bvaults?\b/i.test(text), (text.match(/.{0,40}(bridge|capture (app|program)|vaults?).{0,40}/i) || [""])[0]);
-  // Every node is equal: none is « the server » or « the administration », and the box of captures is the Inbox.
-  const old = /à trier|a-trier|\bhemcp\b|administration|\b(server|serveur)\b(?! MCP)/i;
-  check(name + ": no old word (À trier, administration, server, HemCP)", !old.test(text), (text.match(new RegExp(".{0,40}(" + old.source + ").{0,40}", "i")) || [""])[0]);
+  check(name + ": no forbidden word (bridge, capture program, capture app, vault)", !/\bbridge|capture (app|program)|\bprox(y|ies)\b|\bvaults?\b/i.test(text), (text.match(/.{0,40}(bridge|capture (app|program)|vaults?).{0,40}/i) || [""])[0]);
+  // Every node is equal: none is « the server » or « the administration », and the box of captures is À trier.
+  const old = /a-trier|\bhemcp\b|administration|\b(server|serveur)\b(?! MCP)/i;
+  check(name + ": no old terminology", !old.test(text), (text.match(new RegExp(".{0,40}(" + old.source + ").{0,40}", "i")) || [""])[0]);
 }
 
 (async () => {
@@ -113,9 +113,10 @@ function clean(name, text) {
   const workName = work.getAttribute("data-space");
   w.location.hash = "#space/" + workName;
   check("a space opens", await until(() => shown(w, $("#view-space")) && $("#space-title").textContent === "Atelier"), $("#space-title").textContent);
-  check("a space has its Boards tab", await until(() => $$("#space-tabs button").some(b => b.textContent.trim() === "Tableaux" && shown(w, b))),
-    $$("#space-tabs button").map(b => b.textContent).join(" | "));
-  $$("#space-tabs button").find(b => b.textContent.trim() === "Tableaux").click();
+  $("#space-more").open = true;
+  check("a space has Boards under More", await until(() => $$("#space-tools button").some(b => b.textContent.trim() === "Tableaux" && shown(w, b))),
+    $$("#space-tools button").map(b => b.textContent).join(" | "));
+  $$("#space-tools button").find(b => b.textContent.trim() === "Tableaux").click();
   check("the boards have loaded", await until(() => $$("#space-body .boardbox").length === 2));
   clean("Boards of a space", visibleText(w));
 
@@ -161,7 +162,7 @@ function clean(name, text) {
   const devis = rows.find(n => /envoyer le devis/.test(n.textContent));
   const roses = rows.find(n => /Tailler les rosiers/.test(n.textContent));
   check("each note shows its own space", chip(devis) === "Atelier" && chip(roses) === "Jardin", chip(devis) + " / " + chip(roses));
-  check("the captured note is in Inbox", chip(rows.find(n => /projet alpha, à creuser/.test(n.textContent))) === "Inbox");
+  check("the captured note is in Inbox", chip(rows.find(n => /projet alpha, à creuser/.test(n.textContent))) === "À trier");
   check("every note of the journal has its space", rows.length >= 2 && rows.every(n => n.querySelector(".chip.sp")), String(rows.length));
   clean("Journal", visibleText(w));
 

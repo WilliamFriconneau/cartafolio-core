@@ -87,7 +87,8 @@ pub(super) fn spaces(
         let recordings = crate::files::recordings_waiting(&conn).unwrap_or_default();
         out.push(json!({
             "name": s.as_str(),
-            "label": label.unwrap_or_else(|| s.as_str().into()),
+            "label": crate::layout::visible_labels(s.as_str(), &kind, label.as_deref()).0,
+            "custom_label": label.is_some(),
             "parent": parent,
             "position": position,
             "kind": kind,

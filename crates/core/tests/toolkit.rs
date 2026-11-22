@@ -77,17 +77,6 @@ fn a_target_is_set_as_a_nurse_writes_it() -> Res {
     .err()
     .ok_or("refused")?;
     assert!(err.to_string().contains("precision"), "{err}");
-    // A sign outside the referential is refused with the closest ones.
-    let err = call(
-        &b,
-        &c,
-        "target_set",
-        json!({ "problem": "Sommeil", "signs": ["fatigue", "not_a_sign"] }),
-    )
-    .err()
-    .ok_or("refused")?;
-    assert!(err.to_string().contains("referential"), "{err}");
-
     // Changing it keeps its card id and its history.
     let up = call(
         &b,
@@ -107,6 +96,47 @@ fn a_target_is_set_as_a_nurse_writes_it() -> Res {
         .ok_or("updated")?;
     assert_eq!(again["id"], json!(card), "the card keeps its id");
     assert!(!again["signs"].to_string().contains("fatigue"), "{again}");
+    Ok(())
+}
+
+#[test]
+fn target_traits_can_be_replaced_cleared_and_left_alone() -> Res {
+    let t = Temp::new("target-traits");
+    let b = brain(&t)?;
+    let c = caller(&b, "assistant", "all")?;
+    let set = |args| call(&b, &c, "target_set", args);
+    set(json!({ "space": "health", "problem": "Sommeil" }))?;
+    let before = targets(&b, &c)?;
+    let id = before[0]["id"].as_str().ok_or("card id")?;
+    set(json!({ "id": id, "signs": ["Mal de tête", "Heavy legs"], "factors": ["Late coffee"] }))?;
+    let added = targets(&b, &c)?;
+    assert_eq!(added[0]["signs"], json!(["headache", "heavy-legs"]));
+    assert_eq!(added[0]["factors"], json!(["late-coffee"]));
+    assert_eq!(added[0]["text"], "Sommeil");
+
+    set(json!({ "id": id, "factors": ["Night shifts"], "column": "reached" }))?;
+    let changed = targets(&b, &c)?;
+    assert_eq!(changed[0]["id"], id);
+    assert_eq!(changed[0]["signs"], added[0]["signs"]);
+    assert_eq!(changed[0]["factors"], json!(["night-shifts"]));
+
+    call(
+        &b,
+        &c,
+        "living_set",
+        json!({ "space": "health", "page": "targets",
+        "move": [{ "id": id, "column": "open" }] }),
+    )?;
+    assert_eq!(targets(&b, &c)?[0]["factors"], json!(["night-shifts"]));
+    set(json!({ "id": id, "signs": ["fatigue"], "factors": [] }))?;
+    let removed = targets(&b, &c)?;
+    assert_eq!(removed[0]["signs"], json!(["fatigue"]));
+    assert_eq!(removed[0]["factors"], json!([]));
+    set(json!({ "id": id, "signs": [] }))?;
+    assert_eq!(targets(&b, &c)?[0]["signs"], json!([]));
+
+    assert!(set(json!({ "id": "unknown", "factors": ["coffee"] })).is_err());
+    assert!(set(json!({ "space": "work", "id": id, "signs": [] })).is_err());
     Ok(())
 }
 
@@ -356,6 +386,14 @@ fn a_profession_for_a_game_master_is_proposed_accepted_and_applies_to_its_space_
     let t = Temp::new("toolkit-gamemaster");
     let b = brain(&t)?;
     b.set_space_kind(&sp("personal"), "hobbies")?;
+    b.set_layout(
+        OWNER,
+        &sp("work"),
+        &memcp_core::layout::Change {
+            label: Some("Other hobbies".into()),
+            ..Default::default()
+        },
+    )?;
     b.set_space_kind(&sp("work"), "hobbies")?;
     let c = caller(&b, "assistant", "all")?;
     let profile = json!({

@@ -10,6 +10,26 @@ use std::time::{Duration, Instant};
 use crate::cli::Failure;
 use crate::http::{self, Request, Response};
 
+/// Holds the node's data directory for the life of the server. Keep the open file until shutdown.
+pub fn lock_node(data: &std::path::Path) -> Result<std::fs::File, Failure> {
+    use std::fs::{OpenOptions, TryLockError};
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(data.join(".node.lock"))
+        .map_err(crate::cli::fail)?;
+    match lock.try_lock() {
+        Ok(()) => Ok(lock),
+        Err(TryLockError::WouldBlock) => Err((
+            1,
+            format!("A node is already running in {}.", data.display()),
+        )),
+        Err(TryLockError::Error(e)) => Err(crate::cli::fail(e)),
+    }
+}
+
 /// Whatever turns a request into a response: one engine, or the manager that holds several.
 pub trait Handler: Send + Sync + 'static {
     fn handle(&self, req: &Request) -> Response;

@@ -833,6 +833,25 @@ fn http(port: u16, raw: &str) -> Result<(String, String), Box<dyn Error>> {
 }
 
 #[test]
+fn a_second_server_refuses_the_same_data_directory() -> Res {
+    let dir = temp("node-instance");
+    Brain::init(&dir, &[], memcp_core::text::Language::English)?;
+    let bin = env!("CARGO_BIN_EXE_memcp");
+    let (first, port) = serve_on_a_free_port(bin, &dir, &[])?;
+    let _first = Child(first, dir.clone());
+    // Use the first server's address so a regression still exits on bind, with a different error.
+    let second = std::process::Command::new(bin)
+        .arg("--data")
+        .arg(&dir)
+        .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
+        .output()?;
+    let error = String::from_utf8_lossy(&second.stderr);
+    assert!(!second.status.success());
+    assert!(error.contains("A node is already running"), "{error}");
+    Ok(())
+}
+
+#[test]
 fn the_real_server_on_a_real_socket() -> Res {
     let dir = temp("socket");
     let bin = env!("CARGO_BIN_EXE_memcp");

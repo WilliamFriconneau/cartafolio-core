@@ -16,6 +16,9 @@ use crate::space::Space;
 /// of their own. It carries no built-in tools.
 pub const CUSTOM: &str = "custom";
 
+/// An explicitly created folder, including when it has no children yet.
+pub const FOLDER: &str = "folder";
+
 /// The kind of the person's Inbox: the one box every capturing device writes to, which belongs to no vault. The
 /// janitor sends what lands there to the inbox of a vault, or leaves it for the person to decide. Never in a catalogue.
 pub const TRIAGE: &str = "inbox";
@@ -105,7 +108,7 @@ pub fn default_catalogue() -> Vec<Kind> {
         ),
         kind(
             "money",
-            "Money",
+            "Finances",
             "Accounts, bank statements, budgets",
             Some(Feature::Money),
         ),
@@ -138,8 +141,8 @@ pub fn parse(text: &str) -> Result<Vec<Kind>> {
         Space::new(key).map_err(|_| {
             at("the key is lowercase letters, digits and dashes, starting with a letter")
         })?;
-        if key == CUSTOM || is_inbox_kind(key) {
-            return Err(at("`custom` and `inbox` are reserved"));
+        if matches!(key, CUSTOM | FOLDER) || is_inbox_kind(key) {
+            return Err(at("`custom`, `folder` and `inbox` are reserved"));
         }
         if out.iter().any(|k| k.key == key) {
             return Err(at("this key is already defined"));

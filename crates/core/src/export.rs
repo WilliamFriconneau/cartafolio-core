@@ -15,7 +15,7 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -407,8 +407,16 @@ fn export_vaults(
         write_private(&root.join(&rel), md.as_bytes())?;
         hashes.insert(rel, sha_of(md.as_bytes()));
 
+        let stored_label: Option<String> = ctl
+            .query_row(
+                "SELECT label FROM spaces WHERE name = ?1",
+                [space.as_str()],
+                |r| r.get::<_, Option<String>>(0),
+            )
+            .optional()?
+            .flatten();
         entries.push(json!({
-            "name": space.as_str(), "kind": kind,
+            "name": space.as_str(), "kind": kind, "label": stored_label,
             "schema": conn.query_row("PRAGMA user_version", [], |r| r.get::<_, i64>(0))?,
             "facts": fact_counts(&conn)?,
             "files": count(&conn, "SELECT count(*) FROM files")?,
@@ -550,6 +558,7 @@ pub fn adopt(
         orig: String,
         target: Space,
         kind: String,
+        label: Option<String>,
         entry: &'a Value,
     }
     let mut plan = vec![];
@@ -569,15 +578,20 @@ pub fn adopt(
             taken.push(target.to_string());
         }
         let kind = v["kind"].as_str().unwrap_or("custom");
-        let kind = if catalogue.iter().any(|k| k.key == kind) {
+        let kind = if kind == crate::catalogue::FOLDER || catalogue.iter().any(|k| k.key == kind) {
             kind
         } else {
             crate::catalogue::CUSTOM
         };
+        let label = v["label"]
+            .as_str()
+            .map(str::to_string)
+            .filter(|l| crate::layout::clean_label(l).is_ok());
         plan.push(Plan {
             orig,
             target,
             kind: kind.to_string(),
+            label,
             entry: v,
         });
     }
@@ -694,9 +708,16 @@ pub fn adopt(
         let tx =
             rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
         for p in &plan {
+            crate::layout::check_unique_label(
+                &tx,
+                &p.target,
+                &p.kind,
+                p.label.as_deref(),
+                &owner.id,
+            )?;
             tx.execute(
-                "INSERT INTO spaces (name, created_at, kind) VALUES (?1, ?2, ?3)",
-                rusqlite::params![p.target.as_str(), util::now(), p.kind],
+                "INSERT INTO spaces (name, created_at, kind, label) VALUES (?1, ?2, ?3, ?4)",
+                rusqlite::params![p.target.as_str(), util::now(), p.kind, p.label],
             )?;
             tx.execute(
                 "INSERT INTO space_members (space, user_id, can_write, owner) VALUES (?1, ?2, 1, 1)",

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **One interface.** The node page uses the four shared sections, with Folders and Bento views and the organisation tools in Spaces.
+- **Built-in space labels.** Common spaces have French and English labels, including Moi and Me, and custom labels keep the person’s wording.
+- **Unique space labels.** New duplicates are refused among a person's spaces and across folders, ignoring case, accents and surrounding spaces.
+- **Editable health targets.** Add, rename and remove signs, symptoms and favouring factors on the target card.
+- **One node per data directory.** A second process on the same directory is refused at startup.
+
 ## 20261122.2.0
 
 - **Derived records at one memory authority.** `deposit` writes records an app derived from a note (a training load, say) only on a node that holds the authority file, one record per origin; a second authority or an unbound legacy history is refused with `authority_unavailable` or `retry`, never merged silently.

@@ -218,44 +218,75 @@ pub(super) fn target_set(
     args: &Value,
 ) -> Result<Value, ToolError> {
     let space = health_space(brain, caller, args, true)?;
-    let problem = check_problem(str_arg(args, "problem")?)?;
-    let precision = args
-        .get("precision")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|p| !p.is_empty());
-    let signs = signs_arg(args, "signs")?;
-    let text = match precision {
-        Some(p) => format!("{problem} — {p}"),
-        None => problem,
-    };
-    let ids: Vec<&str> = signs.iter().map(|m| m.id.as_str()).collect();
-    let column = args.get("column").and_then(Value::as_str);
     let id = args.get("id").and_then(Value::as_str);
-    let call = match id {
-        Some(id) => {
-            let mut u = json!({ "id": id, "text": text });
-            if args.get("signs").is_some() {
-                u["signs"] = json!(ids);
+    let text = if id.is_none() || args.get("problem").is_some() {
+        let problem = check_problem(str_arg(args, "problem")?)?;
+        let precision = args
+            .get("precision")
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|p| !p.is_empty());
+        Some(match precision {
+            Some(p) => format!("{problem} — {p}"),
+            None => problem,
+        })
+    } else {
+        None
+    };
+    let mut card = json!({});
+    if let Some(text) = &text {
+        card["text"] = json!(text);
+    }
+    for key in ["signs", "factors"] {
+        if let Some(values) = args.get(key) {
+            let values = values
+                .as_array()
+                .ok_or_else(|| ToolError::Invalid(format!("{key}: expected a list of texts")))?;
+            let mut entries = Vec::new();
+            for value in values {
+                let value = value
+                    .as_str()
+                    .filter(|s| !s.trim().is_empty())
+                    .ok_or_else(|| {
+                        ToolError::Invalid(format!("{key}: expected a non-empty text"))
+                    })?;
+                let entry = if key == "signs" {
+                    sign_named(value).map(|m| m.id.as_str()).unwrap_or(value)
+                } else {
+                    value
+                };
+                let slug = sign_slug(entry);
+                facts::normalize_tag(&slug)?;
+                entries.push(entry);
             }
-            if let Some(c) = column {
-                u["column"] = json!(c);
-            }
-            json!({ "space": space.as_str(), "page": "targets", "update": [u] })
+            card[key] = json!(entries);
         }
-        None => {
-            let mut c = json!({ "text": text, "signs": ids });
-            if let Some(col) = column {
-                c["column"] = json!(col);
-            }
-            json!({ "space": space.as_str(), "page": "targets", "add": [c] })
-        }
+    }
+    if let Some(col) = args.get("column") {
+        card["column"] = col.clone();
+    }
+    let signs = card["signs"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter_map(Value::as_str)
+        .map(|s| match sign_named(s) {
+            Some(m) => json!({ "id": m.id, "label": m.label(Lang::Fr) }),
+            None => json!({ "id": sign_slug(s), "label": s }),
+        })
+        .collect::<Vec<_>>();
+    let factors = card["factors"].clone();
+    let call = if let Some(id) = id {
+        card["id"] = json!(id);
+        json!({ "space": space.as_str(), "page": "targets", "update": [card] })
+    } else {
+        json!({ "space": space.as_str(), "page": "targets", "add": [card] })
     };
     let done = run(brain, caller, "living_set", &call)?;
     let card = if id.is_some() {
         if done["updated"].as_u64().unwrap_or(0) == 0 {
             return Err(ToolError::Invalid(
-                "id: no open target with this id in the space".into(),
+                "id: no target with this id in the space".into(),
             ));
         }
         json!(id)
@@ -267,7 +298,8 @@ pub(super) fn target_set(
         "space": space.as_str(),
         "card": card,
         "text": text,
-        "signs": signs.iter().map(|m| json!({ "id": m.id, "label": m.label(Lang::Fr) })).collect::<Vec<_>>(),
+        "signs": signs,
+        "factors": factors,
         "notice": NOTICE,
     }))
 }

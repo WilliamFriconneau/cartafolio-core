@@ -301,7 +301,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
             out.push(ToolDef {
                 name: "space_create",
                 description: "Makes a space of the person, or a sub-space inside another (`parent`, the name of an existing space), with its label and, if wanted, the keywords and tags that file notes there. Every node of the person gets it at the next exchange. Returns the space with its name.".into(),
-                schema: json!({ "type": "object", "properties": { "label": { "type": "string" }, "parent": { "type": "string", "description": "The space it goes inside; left out for the top level." }, "keywords": { "type": "array", "items": { "type": "string" } }, "tags": { "type": "array", "items": { "type": "string" } } }, "required": ["label"] }),
+                schema: json!({ "type": "object", "properties": { "label": { "type": "string" }, "kind": { "type": "string", "description": "Optional catalogue kind, or folder for an empty folder." }, "parent": { "type": "string", "description": "The space it goes inside; left out for the top level." }, "keywords": { "type": "array", "items": { "type": "string" } }, "tags": { "type": "array", "items": { "type": "string" } } }, "required": ["label"] }),
             });
             out.push(ToolDef {
                 name: "space_move",
@@ -678,7 +678,7 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
         });
         out.push(ToolDef {
             name: "target_set",
-            description: "Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… ») is refused. `signs` are signs of the shared referential (by id, tag or label); an unknown one is refused with the closest ones. Changing a target keeps its card id and its history.".into(),
+            description: "Sets a target of a health space as a nurse writes it, or changes one (`id`). A target is a problem in one or two words (`problem`, five at most: « Sommeil », « Achats impulsifs »), then a precision (`precision`: « court et décalé », « arrêter, <raison> »). What is aimed at goes in the precision, never in the title: a problem that starts with an aim (« Arrêter… », « Réduire… ») is refused. `signs` accepts the shared referential (by id, tag or label) and free text. `factors` lists favouring factors as free text. Either list replaces that list when supplied (empty clears it); omission keeps it. An update by id can omit the problem. Changing a target keeps its card id and its history.".into(),
             schema: json!({
                 "type": "object",
                 "properties": {
@@ -686,10 +686,11 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "problem": { "type": "string" },
                     "precision": { "type": "string" },
                     "signs": { "type": "array", "items": { "type": "string" } },
+                    "factors": { "type": "array", "items": { "type": "string" } },
                     "column": { "type": "string", "enum": ["open", "reached"] },
                     "id": { "type": "string", "description": "The target to change (its card id or fact id); left out, a target is made." }
                 },
-                "required": ["problem"]
+                "anyOf": [{ "required": ["problem"] }, { "required": ["id"] }]
             }),
         });
         out.push(ToolDef {
@@ -2184,7 +2185,7 @@ fn space_layout(
     };
     if name == "space_create" {
         let new = crate::lifecycle::SpaceNew {
-            kind: None,
+            kind: args.get("kind").and_then(Value::as_str).map(String::from),
             label: str_arg(args, "label")?.to_string(),
             parent: parent("parent")?.flatten(),
             keywords: strings("keywords"),

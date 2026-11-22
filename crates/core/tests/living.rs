@@ -134,7 +134,7 @@ fn a_named_list_holds_what_to_buy_from_notes_of_any_space() -> Res {
 }
 
 #[test]
-fn health_targets_only_return_referential_signs() -> Res {
+fn health_targets_return_referential_ids_and_free_signs() -> Res {
     let t = Temp::new("living-health");
     let b = brain(&t)?;
     let space = memcp_core::Space::new("health")?;
@@ -161,7 +161,7 @@ fn health_targets_only_return_referential_signs() -> Res {
     )?;
     assert_eq!(
         read["board"]["open"][0]["signs"],
-        json!(["anxiety", "headache"])
+        json!(["anxiety", "apres-une-longue-journee", "headache"])
     );
     Ok(())
 }

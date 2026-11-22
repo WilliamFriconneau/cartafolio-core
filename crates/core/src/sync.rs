@@ -1804,10 +1804,27 @@ fn apply_layout(brain: &Brain, space: &Space, conn: &Connection, ev: &Event) -> 
                 }
                 None => None,
             };
-            ctl.execute(
+            let tx = rusqlite::Transaction::new_unchecked(
+                &ctl,
+                rusqlite::TransactionBehavior::Immediate,
+            )?;
+            let owner = crate::layout::owner_of(&tx, space).map_err(Fault::from)?;
+            match crate::layout::check_label_change(
+                &tx,
+                space,
+                None,
+                Some(label.as_deref()),
+                &owner,
+            ) {
+                Ok(()) => {}
+                Err(crate::Error::Invalid(message)) => return Ok(Step::Refused(message)),
+                Err(e) => return Err(Fault::from(e)),
+            }
+            tx.execute(
                 "UPDATE spaces SET label = ?2 WHERE name = ?1",
                 params![space.as_str(), label],
             )?;
+            tx.commit()?;
         }
         "position" => {
             let n = value

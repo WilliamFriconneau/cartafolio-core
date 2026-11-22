@@ -30,6 +30,7 @@ const mockFetch = async (url, opts = {}) => {
   calls.push([opts.method || "GET", path, opts.body]);
   const ok = body => ({ ok: true, status: 200, json: async () => body });
   if (path === "state") return ok(state());
+  if (path === "layout") return ok({ spaces: [] });
   if (path === "invite") {
     const number = calls.filter(([, route]) => route === "invite").length;
     if (number === 1) await new Promise(resolve => { world.releaseFirstInvite = resolve; });
@@ -116,12 +117,12 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   $("#pair-dlg").removeAttribute("open");
 
   // --- Inbox: what waits, shown as text, sent to the space the person chooses
-  check("Inbox shows what waits on the home page", !$("#triage-tile").hidden && text("#triage-count") === "1");
-  check("the tile is called Inbox", /^Inbox\b/.test(text("#triage-tile h3")), text("#triage-tile h3"));
+  check("the sorting queue counts what waits", text("#triage-count") === "1");
+  check("the tile is called To sort", /^To sort\b/.test(text("#triage-label")), text("#triage-label"));
   w.location.hash = "#triage";
   await sleep(50);
   check("the Inbox view lists what waits", !$("#view-triage").hidden && $$("#tr-list .trrow").length === 1);
-  check("the view is called Inbox", text("#view-triage h2") === "Inbox", text("#view-triage h2"));
+  check("the view is called To sort", text("#view-triage h2") === "To sort", text("#view-triage h2"));
   check("a capture is text, never markup", $("#tr-list b") === null && text("#tr-list").includes("<b>rappeler</b>"));
   check("Inbox is not among the spaces", !$$("#spaces .tile h3").some(h => h.textContent.includes("inbox")));
   check("nothing picked: send is disabled", $("#tr-send").disabled);
@@ -207,8 +208,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   // --- a connection made under an older name keeps it (its address is that name); the page shows it without the old prefix
   world.connections.push({ agent: "bridge-laptop", user: "u1", rights: "work:rw", upstream: "none", read_only: false, revoked: false, created_at: "x", last_used_at: null, expires_at: "t3" });
   await w.load();
-  const old = $$("#connections h3").find(h => h.title === "bridge-laptop");
-  check("an old connection is shown without its old prefix and keeps its real name as a hint", !!old && old.textContent.startsWith("laptop") && !/bridge/i.test(text("#connections")), text("#connections"));
+  const old = $$("#connections h3").find(h => h.title === "laptop");
+  check("an old connection is shown without its old prefix in the text and tooltip", !!old && old.textContent.startsWith("laptop") && !/bridge/i.test(text("#connections")), text("#connections"));
   world.connections.splice(world.connections.findIndex(c => c.agent === "bridge-laptop"), 1);
   await w.load();
 
@@ -218,7 +219,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   click($$("#w-platforms button").find(b => b.textContent === "Claude Code"));
   const boxes = $$("#w-access input[type=checkbox]").filter(i => i.id !== "w-all");
   const vaultBoxes = boxes.filter(b => b.id !== "w-ro");
-  check("the readable vaults are listed and only the one asked is ticked", vaultBoxes.length === 3 && vaultBoxes.filter(b => b.checked).length === 1 && vaultBoxes.find(b => b.checked).closest("label").textContent.trim().startsWith("health"), vaultBoxes.map(b => b.checked).join());
+  check("the readable vaults are listed and only the one asked is ticked", vaultBoxes.length === 3 && vaultBoxes.filter(b => b.checked).length === 1 && vaultBoxes.find(b => b.checked).closest("label").textContent.trim().startsWith("Health"), vaultBoxes.map(b => b.checked).join());
   check("read only is ticked because it was asked", $("#w-ro").checked);
   check("steps wait for the connection", text("#w-steps").includes("Create the connection"));
   check("the name is asked first, with a suggestion", $("#w-name").value === "claude-code");
@@ -234,7 +235,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const ticked = vaultBoxes.find(b => b.checked); ticked.checked = false; ticked.dispatchEvent(new w.Event("change"));
   check("create is disabled with nothing ticked", $("#w-create").disabled);
   // tick health and work, not read-only
-  const byName = n => $$("#w-access label").find(l => l.textContent.trim().startsWith(n)).querySelector("input");
+  const byName = n => $$("#w-access label").find(l => l.textContent.trim().toLowerCase().startsWith(n)).querySelector("input");
   for (const n of ["health", "work"]) { const i = byName(n); i.checked = true; i.dispatchEvent(new w.Event("change")); }
   const ro = $("#w-ro"); ro.checked = false; ro.dispatchEvent(new w.Event("change"));
   click($("#w-create"));
@@ -243,7 +244,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   const body = post && JSON.parse(post[2]);
   check("it created one connection with exactly what was ticked", body && body.agent === "my-laptop" && body.rights.split(",").sort().join() === "health:rw,work:rw" && body.upstream === undefined, JSON.stringify(body));
   check("the command carries the name, the key and the address of the connection", text("#w-steps").includes("http my-laptop https://memory.example.net/mcp/my-laptop") && text("#w-steps").includes("Authorization: Bearer hcp_secret_token"), text("#w-steps"));
-  check("the access step summarises it", text("#w-access").includes("health") && text("#w-access").includes("work"));
+  check("the access step summarises it", /health/i.test(text("#w-access")) && /work/i.test(text("#w-access")));
   check("it waits for the first call", text("#w-wait").includes("Waiting"));
   world.connections.find(c => c.agent === body.agent).last_used_at = "2026-11-01T12:00:00+00:00";
   await sleep(3400);
@@ -260,10 +261,10 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
 
   // --- instructions (the guide)
   const guideBtn = n => $$("#spaces .tile[data-space]").find(r => r.textContent.startsWith(n)) && [...$$("#spaces .tile[data-space]").find(r => r.textContent.startsWith(n)).querySelectorAll("button")].find(b => b.textContent.startsWith("Instructions"));
-  check("the owner sees the instructions button, ticked when there are some", guideBtn("health") && guideBtn("health").textContent === "Instructions ✓", guideBtn("health") && guideBtn("health").textContent);
-  check("a vault without any shows it plainly", guideBtn("work") && guideBtn("work").textContent === "Instructions");
+  check("the owner sees the instructions button, ticked when there are some", guideBtn("Health") && guideBtn("Health").textContent === "Instructions ✓", guideBtn("Health") && guideBtn("Health").textContent);
+  check("a vault without any shows it plainly", guideBtn("Work") && guideBtn("Work").textContent === "Instructions");
   check("the person has a button of their own", $("#my-guide") && $("#my-guide").textContent === "my instructions");
-  click(guideBtn("health"));
+  click(guideBtn("Health"));
   await sleep(200);
   check("the editor opens with the text in force", $("#guide-dlg").hasAttribute("open") && $("#guide-text").value === "Compare with my usual range.", $("#guide-text").value);
   check("it says who it is for and that it is read here, not edited", text("#guide-lead").includes("only on it") && text("#guide-lead").includes("read here, not edited"));
@@ -277,7 +278,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("saving sends the scope and the text", saved && JSON.parse(saved[2]).scope === "space:health" && JSON.parse(saved[2]).body.startsWith("Compare with my usual range, and"), saved && saved[2]);
   check("the editor closes after a save", !$("#guide-dlg").hasAttribute("open"));
   // a refusal stays on screen
-  click(guideBtn("work"));
+  click(guideBtn("Work"));
   await sleep(200);
   check("an empty vault opens an empty editor", $("#guide-text").value === "" && text("#guide-versions").includes("no instructions yet"));
   $("#guide-text").value = "FAIL please";
@@ -286,7 +287,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   check("a refusal is shown and the editor stays open", $("#guide-dlg").hasAttribute("open") && text("#guide-err").includes("empty"), text("#guide-err"));
   click($("#guide-dlg form button:last-child"));
   // clearing, and the person's own
-  click(guideBtn("health"));
+  click(guideBtn("Health"));
   await sleep(200);
   click($("#guide-clear"));
   await sleep(300);
@@ -357,7 +358,7 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   world.exportFails = true;
   click($("#export-mine"));
   await sleep(250);
-  check("a refusal is said plainly and nothing is downloaded", text("#err").includes("owns no vault") && downloads.length === 1, text("#err"));
+  check("a refusal is said plainly and nothing is downloaded", text("#err").includes("owns no space") && downloads.length === 1, text("#err"));
 
   // --- the name is the address; a name in use is refused, a revoked one is free again
   click($$("#spaces button").find(b => b.textContent === "Connect"));

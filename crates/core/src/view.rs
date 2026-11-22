@@ -131,7 +131,7 @@ fn capabilities(
     );
     item_types.insert(
         "target".into(),
-        json!({ "id": "the fact id", "fields": ["column", "signs", "metrics"], "description": "A card of the living board `targets`; `metrics` carries a deadline, a target amount, a realized amount and the progress." }),
+        json!({ "id": "the fact id", "fields": ["column", "signs", "factors", "metrics"], "description": "A card of the living board `targets`; `metrics` carries a deadline, a target amount, a realized amount and the progress." }),
     );
     item_types.insert(
         "dashboard".into(),
@@ -257,7 +257,7 @@ fn capabilities(
         "items": {
             "note": { "id": "string", "type": "note", "at": "datetime", "created_at": "integer", "text": "string", "tags": "string[]", "fields": "object", "provenance": "provenance" },
             "file": { "id": "string", "type": "file", "at": "datetime", "created_at": "integer", "name": "string", "mime": "string", "size": "integer", "fact_id": "string|null", "provenance": "provenance" },
-            "target": { "id": "string", "type": "target", "column": "string", "text": "string", "signs": "string[]", "metrics": "target_metrics", "provenance": "provenance" },
+            "target": { "id": "string", "type": "target", "column": "string", "text": "string", "signs": "string[]", "factors": "string[]", "metrics": "target_metrics", "provenance": "provenance" },
             "task": { "id": "string", "type": "task", "column": "string", "done": "boolean", "text": "string", "provenance": "provenance" },
             "sign": { "id": "string", "type": "sign", "sign": "string|null", "level": "string|null", "label": "string|null", "provenance": "provenance" },
             "measure": { "id": "string", "type": "measure", "measure": "string|null", "value": "string|number|null", "unit": "string|null", "label": "string|null", "provenance": "provenance" },
@@ -344,6 +344,7 @@ fn targets(
                 "created_at": card["created_at"],
                 "author": card["author"],
                 "signs": card["signs"],
+                "factors": card["factors"],
                 "metrics": target_metrics(&card["fields"]),
                 "fields": card["fields"],
                 "tags": card["tags"],

@@ -156,9 +156,10 @@ impl Brain {
         .ok_or_else(|| Error::UnknownSpace(space.to_string()))
     }
 
-    /// Gives a space a kind of the catalogue (or back to `custom`).
-    pub fn set_space_kind(&self, space: &Space, kind: &str) -> Result<()> {
-        if kind != crate::catalogue::CUSTOM && !self.catalogue()?.iter().any(|k| k.key == kind) {
+    pub(crate) fn validate_space_kind(&self, kind: &str) -> Result<()> {
+        if !matches!(kind, crate::catalogue::CUSTOM | crate::catalogue::FOLDER)
+            && !self.catalogue()?.iter().any(|k| k.key == kind)
+        {
             return Err(Error::Invalid(format!(
                 "unknown kind {kind:?}; the catalogue has: {}",
                 self.catalogue()?
@@ -168,12 +169,27 @@ impl Brain {
                     .join(", ")
             )));
         }
+        Ok(())
+    }
+
+    /// Gives a space a kind of the catalogue (or back to `custom`).
+    pub fn set_space_kind(&self, space: &Space, kind: &str) -> Result<()> {
+        self.validate_space_kind(kind)?;
+        self.write_space_kind(space, kind)
+    }
+
+    pub(crate) fn write_space_kind(&self, space: &Space, kind: &str) -> Result<()> {
         let ctl = self.open_control()?;
-        let n = ctl.execute(
+        let tx =
+            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+        let owner = crate::layout::owner_of(&tx, space)?;
+        crate::layout::check_label_change(&tx, space, Some(kind), None, &owner)?;
+        let n = tx.execute(
             "UPDATE spaces SET kind = ?2 WHERE name = ?1",
             [space.as_str(), kind],
         )?;
         if n == 1 {
+            tx.commit()?;
             Ok(())
         } else {
             Err(Error::UnknownSpace(space.to_string()))
@@ -183,16 +199,17 @@ impl Brain {
     /// Creates a person's vault of a kind of the catalogue, named after the person and the
     /// kind. A person has one vault of each kind.
     pub fn add_vault(&self, user_id: &str, person: &str, kind: &str) -> Result<Space> {
-        if !self.catalogue()?.iter().any(|k| k.key == kind) {
+        let catalogue = self.catalogue()?;
+        let Some(entry) = catalogue.iter().find(|entry| entry.key == kind) else {
             return Err(Error::Invalid(format!(
                 "unknown kind {kind:?}; the catalogue has: {}",
-                self.catalogue()?
+                catalogue
                     .iter()
                     .map(|k| k.key.as_str())
                     .collect::<Vec<_>>()
                     .join(", ")
             )));
-        }
+        };
         // One of each kind per person, however the vault got its kind.
         let owned: Option<String> = self
             .open_control()?
@@ -218,6 +235,9 @@ impl Brain {
         // paired before Inbox existed writes to the inbox of this one too).
         let mut new = NewSpace::owned_by(user_id);
         new.kind = kind.to_string();
+        if crate::layout::builtin_labels(kind).is_none() {
+            new.label = Some(entry.label.clone());
+        }
         new.inbox_grants = true;
         self.make_space(&space, &new, &|_| Ok(()))?;
         Ok(space)
@@ -340,6 +360,7 @@ impl Brain {
         let ctl = self.open_control()?;
         let tx =
             rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+        crate::layout::check_unique_label(&tx, space, &new.kind, new.label.as_deref(), &new.owner)?;
         tx.execute(
             "INSERT INTO spaces (name, created_at, kind, label, parent, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             rusqlite::params![

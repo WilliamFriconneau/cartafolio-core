@@ -339,16 +339,14 @@ fn adopt_placed(
         }
         // A box that an earlier version made `custom` here is put right.
         if crate::catalogue::is_inbox_kind(kind) && brain.space_kind(space)? == CUSTOM {
-            brain.open_control()?.execute(
-                "UPDATE spaces SET kind = ?2 WHERE name = ?1",
-                [space.as_str(), TRIAGE],
-            )?;
+            brain.write_space_kind(space, TRIAGE)?;
         }
         return Ok(false);
     }
     // Inbox is not in the catalogue, yet it must stay one here; a kind this node's catalogue does not know stays
     // `custom`.
     let kind = if crate::catalogue::is_inbox_kind(kind)
+        || kind == crate::catalogue::FOLDER
         || brain.catalogue()?.iter().any(|k| k.key == kind)
     {
         kind.to_string()

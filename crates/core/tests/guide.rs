@@ -30,7 +30,15 @@ fn world() -> Result<World, Box<dyn Error>> {
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?.id;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?.id;
-    brain.add_vault(&sam, "sam", "work")?;
+    let work = brain.add_vault(&sam, "sam", "work")?;
+    brain.set_layout(
+        &sam,
+        &work,
+        &memcp_core::layout::Change {
+            label: Some("Sam’s work".into()),
+            ..Default::default()
+        },
+    )?;
     brain.add_vault(&sam, "sam", "health")?;
     brain.add_vault(&alex, "alex", "work")?;
     Ok(World {

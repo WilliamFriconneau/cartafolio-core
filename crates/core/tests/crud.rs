@@ -156,6 +156,14 @@ fn removing_a_person_disables_and_exports_and_never_loses_the_memory() -> Res {
     let admin = users::user(&ctl, OWNER)?.ok_or("owner")?;
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
     let bob = users::create_user(&ctl, OWNER, "bob", "Bob", false)?;
+    b.set_layout(
+        OWNER,
+        &sp("personal"),
+        &memcp_core::layout::Change {
+            label: Some("Owner’s personal space".into()),
+            ..Default::default()
+        },
+    )?;
     let s = b.add_vault(&alex.id, "alex", "me")?;
     {
         let conn = b.open_space(&s)?;

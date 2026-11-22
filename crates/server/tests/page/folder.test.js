@@ -47,7 +47,8 @@ const check = (name, cond, extra = "") => { console.log((cond ? "ok   " : "FAIL 
   await page.click("#login-form button");
   await page.waitForSelector("#app:not([hidden])", { timeout: 5000 });
   await page.evaluate(() => document.querySelectorAll("details").forEach(d => { d.open = true; }));
-  await page.locator("#ftree .frow", { hasText: "work" }).click();
+  await page.click('[data-space-view="folders"]');
+  await page.locator("#ftree .frow", { hasText: "Work" }).locator(".cnt").click();
   await page.waitForSelector("#side-folder [data-folder-path]");
 
   const block = () => page.locator("#side-folder").innerText();

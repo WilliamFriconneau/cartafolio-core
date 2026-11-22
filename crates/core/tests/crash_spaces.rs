@@ -541,6 +541,14 @@ fn a_merge_cut_off_is_finished_at_start_and_doubles_nothing() -> Res {
 fn an_adoption_cut_off_leaves_nothing_and_its_retry_adopts_whole() -> Res {
     let t = Temp::new("crash-adopt");
     let (mine, kim, exported) = two_memories(&t)?;
+    mine.set_layout(
+        &kim.id,
+        &sp("kim-work"),
+        &Change {
+            label: Some("Kim’s work".into()),
+            ..Default::default()
+        },
+    )?;
     let (mine, r) = crash(&mine, at::ADOPT_FILES, || {
         export::adopt(&mine, &exported, &kim, Some("old"))
     })?;

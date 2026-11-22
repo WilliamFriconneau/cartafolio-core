@@ -331,7 +331,26 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 .gnodes{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}
 @media (max-width:640px){.note{flex-wrap:wrap}.note .meta{flex-direction:row;flex-wrap:wrap;align-items:center;width:100%}}
 .not-here{display:none!important}
-.sections{margin:6px 0 14px}
+@media (min-width:641px){main:has(#app:not([hidden])){max-width:1352px}}
+.app-layout{display:grid;grid-template-columns:156px minmax(0,1fr);gap:16px}
+.app-content{min-width:0}
+.sections{position:sticky;top:88px;align-self:start;display:flex;flex-direction:column;align-items:stretch;margin:0}
+.sections button{text-align:left}
+#spaces-toolbar{justify-content:space-between;margin-bottom:12px}
+#layout-section .tree-wrap{grid-template-columns:minmax(0,1fr)}
+#layout-section.organising .tree-wrap:has(.fside:not([hidden])){grid-template-columns:minmax(0,1fr) minmax(0,340px)}
+.target-editor form{display:block}
+.target-editor fieldset{margin:8px 0;border:1px solid var(--outline-var);border-radius:12px;min-width:0}
+.target-editor .chip button{margin-left:4px;padding:0 4px}
+@media (max-width:640px){
+  main{padding-bottom:calc(120px + env(safe-area-inset-bottom))}
+  .app-layout{display:block}
+  .sections{position:fixed;z-index:25;inset:auto 0 0;flex-direction:row;flex-wrap:nowrap;justify-content:space-around;gap:0;padding:6px 3px calc(6px + env(safe-area-inset-bottom));background:var(--surface);border-top:1px solid var(--outline-var)}
+  .sections button{flex:1;min-height:44px;text-align:center;padding:4px;font-size:12px}
+  .fab{bottom:calc(72px + env(safe-area-inset-bottom))}
+  .fab-menu{bottom:calc(136px + env(safe-area-inset-bottom))}
+  #layout-section.organising .tree-wrap:has(.fside:not([hidden])){grid-template-columns:minmax(0,1fr)}
+}
 </style>
 </head>
 <body>
@@ -357,7 +376,9 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <h1>Pensine <button type="button" class="link" id="back-people" hidden>← My memory</button></h1>
       <div class="mute small"><span id="who"></span> <button type="button" class="link" id="nav-admin" hidden title="The people of this node, who is waiting to be let in">People of this node</button> <button type="button" class="link" id="my-guide">my instructions</button> <button type="button" class="link" id="export-mine" title="A copy of every space you own, with a readable version. No key, connection or right in it.">export my data</button> <span class="switches" data-switches></span></div>
     </header>
+    <div class="app-layout">
     <nav class="tabs sections" id="sections" aria-label="Sections"></nav>
+    <div class="app-content">
     <p class="err" id="err" role="alert"></p>
     <div id="toast" role="status" aria-live="polite" hidden></div>
 
@@ -391,7 +412,6 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     </section>
     <div id="home">
     <div class="hero" id="hero"></div>
-    <div class="tabs" id="home-nav"></div>
     <div id="join-banner" hidden></div>
     <section id="machines-section" data-part="settings">
       <h2>Machines</h2>
@@ -413,36 +433,41 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     <div class="bento" id="actions" style="margin-bottom:16px" data-part="settings">
       <div class="tile t2">
         <h3>Connect an assistant</h3>
-        <p class="mute small" style="margin:0">Claude, ChatGPT, OpenCode… One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.</p>
+        <p class="mute small" style="margin:0">One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.</p>
         <div class="acts"><button type="button" class="primary" id="open-wizard">Connect an assistant</button></div>
-      </div>
-      <div class="tile t3" id="triage-tile" hidden>
-        <h3>Inbox <span class="badge" id="triage-count"></span></h3>
-        <p class="mute small" style="margin:0">What waits for your decision: what your devices sent and the janitor could not place.</p>
-        <div class="acts"><button type="button" class="primary" onclick="location.hash='#triage'">Sort them</button></div>
       </div>
     </div>
 
-    <section>
+    <section id="spaces-section">
       <h2>Your spaces</h2>
-      <p class="mute small">What you keep. A folder holds other spaces: open it to see them, drag a space onto it to put it inside. Connect a space to an assistant on its own, or write its instructions.</p>
+      <div class="row" id="spaces-toolbar">
+        <div class="tabs" role="group" aria-label="Space view">
+          <button type="button" data-space-view="folders">Folders</button>
+          <button type="button" data-space-view="bento">Bento</button>
+        </div>
+        <div class="row">
+          <button type="button" id="organise-spaces" aria-controls="layout-section">Organise</button>
+          <button type="button" id="add-space" aria-controls="layout-add" aria-label="Add a folder or space">+</button>
+          <button type="button" id="refresh-spaces">Refresh</button>
+        </div>
+      </div>
       <nav class="crumb" id="spaces-crumb" aria-label="Where you are"></nav>
       <div id="spaces" class="bento"></div>
-    </section>
-
-    <section id="layout-section">
-      <h2>Organise your spaces</h2>
-      <p class="mute small">Drag a space onto another to put it inside, or between two to reorder. Click a space to see its tags and keywords; a tag can be dragged onto another space to send its notes there. Only the layout changes when you move a space: no note moves and no right changes.</p>
-      <div class="tree-wrap">
-        <div id="ftree" class="ftree"></div>
-        <aside id="fside" class="fside" hidden></aside>
+      <div id="layout-section" hidden>
+        <h3 id="organise-heading" hidden>Organise your spaces</h3>
+        <p id="organise-help" class="mute small" hidden>Drag a space onto another to put it inside, or between two to reorder. Click a space to see its tags and keywords; a tag can be dragged onto another space to send its notes there. Only the layout changes when you move a space: no note moves and no right changes.</p>
+        <div class="tree-wrap">
+          <div id="ftree" class="ftree"></div>
+          <aside id="fside" class="fside" hidden></aside>
+        </div>
       </div>
-      <form id="layout-add" class="row" style="margin-top:10px">
+      <form id="layout-add" class="row" style="margin-top:10px" hidden>
         <input name="label" placeholder="a new space, in any words" size="26" required>
-        <select name="parent" id="layout-parent"></select>
+        <select name="parent" id="layout-parent" aria-label="Parent folder"></select>
         <select name="kind" id="layout-kind" title="The kind of space"></select>
         <input name="keywords" placeholder="keywords, comma separated" size="22">
-        <button class="primary">Add a space</button>
+        <button class="primary">Add</button>
+        <button type="button" id="cancel-space-add">Cancel</button>
       </form>
     </section>
 
@@ -546,6 +571,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
       <p class="err small" id="code-note" role="alert"></p>
 
+      <button type="button" onclick="location.hash='#graph'">Graph</button>
+
       <h3 class="sub">New space</h3>
       <form data-act="spaces">
         <select name="kind" data-kinds required></select>
@@ -566,13 +593,21 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
     </div>
 
     <div id="view-space" hidden>
-      <nav class="spacebar" id="spacebar" aria-label="Spaces"></nav>
       <section>
         <nav class="crumb" id="space-crumb" aria-label="Where you are"></nav>
         <h2 id="space-title"></h2>
         <p class="mute small" id="space-sub"></p>
         <div class="ruleline" id="space-rules"></div>
         <div class="tabs" id="space-tabs"></div>
+        <details id="space-more">
+          <summary>More</summary>
+          <div class="tabs" id="space-tools"></div>
+          <nav class="spacebar" id="spacebar" aria-label="Spaces"></nav>
+        </details>
+        <div id="triage-tile" class="row" hidden>
+          <span id="triage-label">To sort</span><span class="badge" id="triage-count"></span>
+          <button type="button" class="link" onclick="location.hash='#triage'">Sort them</button>
+        </div>
         <div id="inbox-capture" hidden></div>
         <div id="space-body"></div>
       </section>
@@ -607,7 +642,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 
     <div id="view-triage" hidden>
     <section>
-      <h2>Inbox</h2>
+      <h2 id="triage-title">To sort</h2>
       <p class="mute small">What your devices sent and the janitor has not sent on yet. Tick what goes together, choose the space, send: each capture lands in that space as it is, and the janitor files it there.</p>
       <div class="bar" id="triage-bar">
         <label class="inline"><input type="checkbox" id="tr-all"> <span id="tr-all-lbl">Select all</span></label>
@@ -622,6 +657,8 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       <p class="mute small" id="tr-empty" hidden>Nothing waits here.</p>
       <div id="tr-failed"></div>
     </section>
+    </div>
+    </div>
     </div>
   </div>
 </main>
@@ -654,6 +691,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 </dialog>
 
 
+<dialog id="target-dialog" class="target-editor"></dialog>
 <dialog id="del-dlg"></dialog>
 <dialog id="ask-dlg">
   <form id="ask-form" method="dialog">
@@ -887,19 +925,26 @@ const FR = {
   "Remove this word": "Retirer ce mot",
   "Join a memory: this machine asks another one to let it in, and keeps a copy in step. Add a machine: show a code that a computer or a phone types or scans to join this memory.": "Rejoindre une mémoire : cette machine demande à une autre de l’accueillir et garde une copie à jour. Ajouter une machine : afficher un code qu’un ordinateur ou un téléphone saisit ou scanne pour rejoindre cette mémoire.",
   "Connect an assistant": "Connecter un assistant",
-  "Claude, ChatGPT, OpenCode… One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.": "Claude, ChatGPT, OpenCode… Une seule adresse porte la clé. Chaque assistant n’obtient que les espaces que vous cochez. Vous pourrez changer cela plus tard sans rien refaire.",
-  "Inbox": "Inbox",
+  "One address carries the key. Each assistant gets only the spaces you tick. Change that later without redoing anything.": "Une seule adresse porte la clé. Chaque assistant n’obtient que les espaces que vous cochez. Vous pourrez changer cela plus tard sans rien refaire.",
+  "Inbox": "À trier",
   "What your devices sent and the janitor has not sent on yet.": "Ce que vos appareils ont envoyé et que le rangeur n’a pas encore classé.",
   "Sort them": "Les trier",
   "What waits for your decision: what your devices sent and the janitor could not place.": "Ce qui attend votre décision : ce que vos appareils ont envoyé et que le rangeur n’a pas su classer.",
   "Your spaces": "Vos espaces",
   "What you keep. A folder holds other spaces; open the space inside it. Connect one to an assistant on its own, or write its instructions.": "Ce que vous gardez. Un dossier contient d’autres espaces : ouvrez l’espace qui est dedans. Connectez-en un seul à un assistant, ou écrivez ses consignes.",
+  "its own notes": "ses propres notes",
+  "Folders": "Dossiers", "Refresh": "Actualiser", "Organise": "Organiser", "Space view": "Vue des espaces",
+  "Add a folder or space": "Ajouter un dossier ou un espace", "Parent folder": "Dossier parent",
+  "Move into": "Déplacer dans", "More": "Plus", "Rename": "Renommer",
+  "Edit target": "Modifier la cible", "Signs and symptoms": "Signes et symptômes",
+  "Favouring factors": "Facteurs favorisants", "Target saved": "Cible enregistrée",
+  "To sort": "À trier", "Me": "Moi", "Finances": "Finances",
   "Organise your spaces": "Organiser vos espaces",
   "Drag a space onto another to put it inside, or between two to reorder. Click a space to see its tags and keywords; a tag can be dragged onto another space to send its notes there. Only the layout changes when you move a space: no note moves and no right changes.": "Glissez un espace sur un autre pour le ranger dedans, ou entre deux pour changer l’ordre. Cliquez sur un espace pour voir ses étiquettes et ses mots-clés ; une étiquette peut être glissée sur un autre espace pour y envoyer ses notes. Seule la disposition change quand vous déplacez un espace : aucune note ne bouge et aucun droit ne change.",
   "a new space, in any words": "un nouvel espace, avec vos mots",
   "— top level —": "— niveau supérieur —",
   "Add a space": "Ajouter un espace",
-  "Personal": "Personnel", "Health": "Santé", "Home": "Maison", "Money": "Argent", "Hobbies": "Loisirs", "Work": "Travail", "People": "Proches",
+  "Health": "Santé", "Home": "Maison", "Money": "Argent", "Hobbies": "Loisirs", "Work": "Travail", "People": "Proches",
   "Timeline": "Chronologie",
   "What each space received, over the last hours. Counts only, never content.": "Ce que chaque espace a reçu ces dernières heures. Des nombres seulement, jamais le contenu.",
   "Scale": "Échelle",
@@ -1037,7 +1082,7 @@ const FR = {
   "Tree": "Arbre",
   "Boards": "Tableaux",
   "Keywords and targets": "Mots-clés et cibles",
-  "Inbox": "Inbox",
+  "Inbox": "À trier",
   "Filter…": "Filtrer…",
   "Everything": "Tout",
   "Select all": "Tout sélectionner",
@@ -1089,10 +1134,10 @@ const FR = {
   "Set up": "Installer",
   "Connect": "Connecter",
   "What is your name?": "Comment vous appelez-vous ?",
-  "It is how this memory greets you and signs what you write. The spaces are made now: personal, health, home, finances, hobbies and work.": "C’est ainsi que cette mémoire vous salue et signe ce que vous écrivez. Les espaces sont créés maintenant : personnel, santé, maison, finances, loisirs et travail.",
+  "It is how this memory greets you and signs what you write. The spaces are made now: Me, Health, Home, Finances, Hobbies and Work.": "C’est ainsi que cette mémoire vous salue et signe ce que vous écrivez. Les espaces sont créés maintenant : Moi, Santé, Maison, Finances, Loisirs et Travail.",
   "Start my memory": "Démarrer ma mémoire",
   "Back": "Retour",
-  "Claude, ChatGPT, OpenCode… One address is all it needs, and it can reach all your spaces. You can cut that later.": "Claude, ChatGPT, OpenCode… Une adresse suffit, et il peut atteindre tous vos espaces. Vous pourrez le restreindre plus tard.",
+  "One address is all it needs, and it can reach all your spaces. You can cut that later.": "Une adresse suffit, et il peut atteindre tous vos espaces. Vous pourrez le restreindre plus tard.",
   "Make the address": "Créer l’adresse",
   "Later": "Plus tard",
   "In your assistant, add a connector (a remote MCP server) and paste this address. It carries the key, so keep it private: whoever holds it can read your memory. You can revoke it from the list of connected assistants.": "Dans votre assistant, ajoutez un connecteur (un serveur MCP distant) et collez cette adresse. Elle porte la clé : gardez-la privée, quiconque la détient peut lire votre mémoire. Vous pourrez la révoquer dans la liste des assistants connectés.",
@@ -1144,7 +1189,6 @@ const FR = {
   "Folder": "Dossier",
   "Empty": "Vide",
   "No space yet.": "Aucun espace pour l’instant.",
-  "No space yet. Open “Advanced” below and make one under “New space”: for instance “me”, for who you are and what you value, then “health”, “work”, “home”.": "Aucun espace pour l’instant. Ouvrez « Avancé » ci-dessous et créez-en un sous « Nouvel espace » : par exemple « moi », pour qui vous êtes et ce qui compte pour vous, puis « santé », « travail », « maison ».",
   "Good morning": "Bonjour",
   "Good afternoon": "Bon après-midi",
   "Good evening": "Bonsoir",
@@ -1487,6 +1531,9 @@ const FRX = [
   [/^Kalios files its journal under sources\/kalios in your (.+) space, writes its sorted summary under dossier\/kalios and reads only the proposals tagged proposals\/kalios\. This key reaches nothing else, and can propose its own guide, which you approve on this page\.$/, n => "Kalios range son journal sous sources/kalios dans votre espace " + n + ", écrit son résumé trié sous dossier/kalios et ne lit que les propositions étiquetées proposals/kalios. Cette clé n’atteint rien d’autre, et peut proposer son propre guide, que vous approuvez sur cette page."],
   [/^Preselected, nothing to tick\. This key reaches only these paths of your (.+) space:$/, n => "Présélectionné, rien à cocher. Cette clé n’atteint que ces chemins de votre espace " + n + " :"],
   [/^Your heir is (.+)\. After (\d+) days without you opening this page, they can attach your memory to another account\. Until then they see nothing of it\.$/, (n, d) => "Votre héritier est " + n + ". Après " + d + " jours sans que vous ouvriez cette page, il peut rattacher votre mémoire à un autre compte. D’ici là, il n’en voit rien."],
+  [/^Rename (.+)$/, n => "Renommer " + n],
+  [/^Remove (.+)$/, n => "Retirer " + n],
+  [/^A space called (.+) already exists\.$/, n => "Un espace nommé " + n + " existe déjà."],
   [/^Nobody\. Pick someone you trust: after (\d+) days without you opening this page, they can attach your memory to another account\. Until then they see nothing of it\.$/, d => "Personne. Choisissez quelqu’un de confiance : après " + d + " jours sans que vous ouvriez cette page, il peut rattacher votre mémoire à un autre compte. D’ici là, il n’en voit rien."],
   [/^Connected: (.+), access (.+?)(, read only)?$/, (a, r, ro) => "Connecté : " + a + ", accès " + r + (ro ? ", lecture seule" : "")],
   [/^Attach a waiting account to them:$/, () => "Rattacher un compte en attente à cette personne :"],
@@ -1595,7 +1642,12 @@ function frAgo(s) {
   return String(s).replace(/^(\d+) s ago$/, "il y a $1 s").replace(/^(\d+) min ago$/, "il y a $1 min").replace(/^(\d+) h ago$/, "il y a $1 h").replace(/^(\d+) days ago$/, "il y a $1 jours").replace(/^today /, "aujourd’hui ").replace(/^yesterday /, "hier ").replace(/^never$/, "jamais");
 }
 
-const ORIG = new WeakMap(), ORIG_ATTR = new WeakMap();
+const ORIG = new WeakMap(), ORIG_ATTR = new WeakMap(), DISPLAY_TEXT = new WeakSet();
+function displayText(value) {
+  const node = document.createTextNode(value);
+  DISPLAY_TEXT.add(node);
+  return node;
+}
 const ATTRS = ["placeholder", "title", "aria-label", "alt"];
 function tr(text) {
   if (LANG !== "fr") return text;
@@ -1606,6 +1658,7 @@ function tr(text) {
   return text;
 }
 function xText(n) {
+  if (DISPLAY_TEXT.has(n)) return;
   const v = n.nodeValue;
   if (!/\S/.test(v)) return;
   let o = ORIG.get(n);
@@ -1634,6 +1687,13 @@ new MutationObserver(list => {
     else if (r.type === "attributes") xAttr(r.target, r.attributeName);
   }
 }).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+// The words the person reads, never the old names of the program.
+function plainMessage(message) {
+  if (/^A space called .* already exists\.$/.test(message)) return message;
+  return message.replace(/\bvaults\b/gi, "spaces").replace(/\bvault\b/gi, "space")
+    .replace(/\bcapture (apps?|programs?)\b/gi, "$1")
+    .replace(/\bbridges?\b/gi, "connection").replace(/\bprox(?:y|ies)\b/gi, "network service");
+}
 async function api(path, body) {
   const headers = { "X-Requested-With": "memcp" };
   if (token) headers.Authorization = "Bearer " + token;
@@ -1642,7 +1702,7 @@ async function api(path, body) {
   const r = await fetch(base + "admin/api/" + path, opts);
   const j = await r.json().catch(() => ({}));
   if (r.status === 401) { showLogin(); throw new Error(j.error || "signed out"); }
-  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  if (!r.ok) throw new Error(plainMessage(j.error || ("HTTP " + r.status)));
   return j;
 }
 // The people of this installation: those the manager holds (one memory each) when it is the
@@ -1677,7 +1737,7 @@ async function loadTimeline() {
   const rows = t.spaces.map(v => {
     const max = Math.max(1, ...v.counts), total = v.counts.reduce((a, b) => a + b, 0);
     return el("div", { class: "tl-row" },
-      el("span", { class: "nm", title: spacePath(v.name) }, spacePath(v.name)),
+      el("span", { class: "nm", title: spacePath(v.name) }, displayText(spacePath(v.name))),
       el("div", { class: "tl-bars" }, ...v.counts.map((n, i) => {
         const b = el("i", { class: n ? "" : "z", style: "height:" + (n ? Math.max(8, Math.round(100 * n / max)) : 0) + "%" });
         b.title = n + (n === 1 ? " note" : " notes") + " · " + new Date(Date.parse(t.from) + i * t.bucket_secs * 1000).toLocaleString(loc(), { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false });
@@ -1791,7 +1851,7 @@ async function loadSpace(name) {
 // The persistent bar of spaces: the top-level ones, and the current one when it lives inside another.
 function renderSpaceBar() {
   if (!SP) return;
-  const top = (FT.l || []).filter(s => !s.parent);
+  const top = kids("");
   const current = (FT.l || []).find(s => s.space === SP.name);
   const rows = [...top];
   if (current && !rows.some(s => s.space === current.space)) rows.push(current);
@@ -1799,14 +1859,14 @@ function renderSpaceBar() {
   $("#spacebar").replaceChildren(...rows.map(s => el("button", {
     type: "button", class: s.space === SP.name ? "on" : "", "aria-current": s.space === SP.name ? "page" : null,
     onclick: () => { location.hash = "#space/" + s.space; },
-  }, s.label)));
+  }, displayText(spaceLabel(s.space)))));
 }
 // What files notes into this space (its tags and keywords), or the spaces inside it: shown under the title, on every tab.
 function renderRuleLine(ov) {
   const r = ov.rules || {}, kw = r.keywords || [], rt = r.tags || [], inner = kids(ov.space);
   const toNotes = (tag, word) => () => { SP.filters.tag = tag || ""; SP.filters.q = word || ""; SP.tab = "journal"; renderSpace(); };
   const out = [];
-  if (inner.length) out.push(el("span", { class: "mute" }, "Spaces inside:"), ...inner.map(c => el("button", { type: "button", class: "chip", onclick: () => { location.hash = "#space/" + c.space; } }, c.label)));
+  if (inner.length) out.push(el("span", { class: "mute" }, "Spaces inside:"), ...inner.map(c => el("button", { type: "button", class: "chip", onclick: () => { location.hash = "#space/" + c.space; } }, displayText(visibleLabel(c)))));
   if (inner.length && (kw.length || rt.length)) out.push(el("span", { style: "flex-basis:100%" }));
   if (kw.length || rt.length) out.push(el("span", { class: "mute" }, "Files here:"),
     ...rt.map(t => el("button", { type: "button", class: "chip tg", title: "Show the notes with this tag", onclick: toNotes(t, "") }, "tag " + t)),
@@ -1821,9 +1881,8 @@ function renderSpace() {
   // Note (docs/UI-SPEC.md): Inbox as the place a capture lands, without the inside of a space: a title, the box to
   // write, record or attach, and what came in.
   const note = location.hash === "#note";
-  $("#space-crumb").hidden = $("#space-sub").hidden = $("#space-tabs").hidden = note;
+  $("#space-crumb").hidden = $("#space-sub").hidden = $("#space-tabs").hidden = $("#space-more").hidden = note;
   $("#space-rules").hidden = note;
-  $("#spacebar").hidden = note;
   $("#fab").hidden = note || !(SP.cap && SP.cap.writable);
   $("#fab-menu").hidden = true;
   const capture = $("#inbox-capture");
@@ -1832,6 +1891,7 @@ function renderSpace() {
     capture.replaceChildren(inboxCapture());
     capture.dataset.space = SP.name;
   }
+  $("#triage-tile").hidden = !note || (!trItems().length && !S.triage?.failed_transcription?.length);
   if (note) {
     $("#space-title").textContent = "Trace or drop";
     SP.tab = "journal";
@@ -1839,14 +1899,16 @@ function renderSpace() {
     return;
   }
   renderSpaceBar();
-  $("#space-title").textContent = spaceLabel(ov.space);
+  $("#space-title").replaceChildren(displayText(spaceLabel(ov.space)));
   crumbs($("#space-crumb"), ancestors(ov.space), null);
-  const kl = (S.catalogue || []).find(x => x.key === ov.kind);
-  $("#space-sub").textContent = (kl ? kl.label : ov.kind === "custom" ? "Space" : ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes");
+  $("#space-sub").textContent = kindLabel(ov.kind) + " · " + Number(ov.counts.active || 0).toLocaleString(loc()) + (Number(ov.counts.active || 0) === 1 ? " note" : " notes");
   renderRuleLine(ov);
-  $("#space-tabs").replaceChildren(...[["targets", "Targets"], ["journal", "Journal"], ["stats", "Stats"], ["files", "Inventory"],
-    ["boards", "Boards"], ["notes", "Notes"], ["words", "Keywords and targets"], ["tree", "Tree"], ["graph", "Graph"]].map(([k, t]) =>
-    el("button", { type: "button", class: SP.tab === k ? "on" : "", "aria-current": SP.tab === k ? "page" : null, onclick: () => { SP.tab = k; SP.open = null; renderSpace(); } }, t)));
+  const tabButton = ([k, t]) => el("button", { type: "button", class: SP.tab === k ? "on" : "",
+    "aria-current": SP.tab === k ? "page" : null, onclick: () => { SP.tab = k; SP.open = null; renderSpace(); } }, t);
+  $("#space-tabs").replaceChildren(...[["targets", "Targets"], ["journal", "Journal"], ["stats", "Stats"], ["files", "Inventory"]].map(tabButton));
+  if (["boards", "notes", "words", "tree", "graph"].includes(SP.tab)) $("#space-more").open = true;
+  $("#space-tools").replaceChildren(...[["boards", "Boards"], ["notes", "Notes"], ["words", "Keywords and targets"], ["tree", "Tree"], ["graph", "Graph"]].map(tabButton),
+    ...spaceActions(ov.space, spaceLabel(ov.space)));
   const body = $("#space-body");
   if (SP.tab === "targets") targetsView(body);
   else if (SP.tab === "stats") statsTab(body);
@@ -1899,7 +1961,7 @@ function noteRows(facts, o) {
       const prov = f.provenance && (f.provenance.app || f.provenance.author) ? el("span", { class: "mute", style: "font-size:11.5px" }, " · " + (f.provenance.app || f.provenance.author)) : null;
       const amount = f.type === "movement" ? el("div", { class: "mute small" }, (Number(f.amount) > 0 ? "+" : "") + Number(f.amount).toFixed(2) + " · " + (f.account || "")) : null;
       rows.push(el("div", { class: "note", "data-id": f.id, onclick: () => o.open(f) },
-        el("div", { class: "meta" }, hm, kind, prov, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, spaceLabel(f.space)) : null),
+        el("div", { class: "meta" }, hm, kind, prov, o.space ? el("button", { type: "button", class: "chip sp", style: "--gc:" + spaceColor(f.space), title: spacePath(f.space), onclick: e => { e.stopPropagation(); o.onSpace(f.space); } }, displayText(spaceLabel(f.space))) : null),
         el("div", { class: "tx" },
           ...(isTrace(f.text) ? traceBody(f.text) : [...withHashtags(f.file ? (f.extract || "") : f.text, o.onHash), f.file ? attachmentLine(f.file, f.voice) : null]),
           amount,
@@ -2014,15 +2076,113 @@ async function dashboardTab(body) {
     body.replaceChildren(...dashboardView(v.dashboard || {}));
   } catch (x) { fail(x); }
 }
+const signLists = new Map();
+function targetSigns(lang) {
+  if (!signLists.has(lang)) {
+    signLists.set(lang, api("health/referential", { kind: "manifestations", lang })
+      .then(result => result.manifestations || [])
+      .catch(error => { signLists.delete(lang); throw error; }));
+  }
+  return signLists.get(lang);
+}
+const traitLabel = (id, signs = []) => signs.find(sign => sign.id === id)?.label || id.replace(/[-_]/g, " ");
+function editTarget(space, card, body, known) {
+  const dialog = $("#target-dialog");
+  const original = { signs: card.signs || [], factors: card.factors || [] };
+  const lists = { signs: [...original.signs], factors: [...original.factors] };
+  const fields = [
+    ["signs", "Signs and symptoms", known],
+    ["factors", "Favouring factors", []]
+  ];
+  const error = el("p", { class: "err", role: "alert" });
+  const editors = fields.map(([key, label, suggestions]) => {
+    let finishRename = null;
+    const chips = el("div", { class: "row" });
+    const input = el("input", { "aria-label": label, list: suggestions.length ? "target-suggestions" : null });
+    const options = suggestions.length ? el("datalist", { id: "target-suggestions" },
+      ...suggestions.map(item => el("option", { value: item.label }))) : null;
+    const update = () => chips.replaceChildren(...lists[key].map((value, index) => {
+      const title = traitLabel(value, suggestions);
+      const remove = () => {
+        if (finishRename) finishRename();
+        lists[key].splice(index, 1);
+        update();
+        input.focus();
+      };
+      const rename = () => {
+        const edit = el("input", { value: title, "aria-label": "Rename", list: input.getAttribute("list") });
+        if (finishRename) return;
+        const save = () => {
+          finishRename = null;
+          const next = edit.value.trim();
+          if (next && next !== title) lists[key][index] = suggestions.find(item => item.label === next)?.id || next;
+          update();
+        };
+        finishRename = save;
+        chip.replaceChildren(edit, el("button", { type: "button", onclick: save }, "Save"));
+        edit.addEventListener("keydown", e => {
+          if (e.key === "Enter") { e.preventDefault(); save(); }
+          if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); finishRename = null; update(); }
+        });
+        edit.focus();
+        edit.select();
+      };
+      const chip = el("span", { class: "chip" }, displayText(title),
+        el("button", { type: "button", "aria-label": "Rename " + title, title: "Rename", onclick: rename }, "✎"),
+        el("button", { type: "button", "aria-label": "Remove " + title, title: "Remove", onclick: remove }, "×"));
+      return chip;
+    }));
+    const add = () => {
+      if (finishRename) finishRename();
+      const text = input.value.trim();
+      const value = suggestions.find(item => item.label === text)?.id || text;
+      if (value && !lists[key].includes(value)) lists[key].push(value);
+      input.value = "";
+      update();
+    };
+    input.addEventListener("keydown", e => { if (e.key === "Enter") { e.preventDefault(); add(); } });
+    update();
+    return { add, element: el("fieldset", { "data-trait": key }, el("legend", {}, label), chips,
+      el("div", { class: "row" }, input, el("button", { type: "button", onclick: add }, "Add")), options) };
+  });
+  const save = el("button", { type: "submit", class: "primary" }, "Save");
+  const form = el("form", { onsubmit: async e => {
+    e.preventDefault();
+    editors.forEach(editor => editor.add());
+    save.disabled = true;
+    error.textContent = "";
+    try {
+      const patch = { space, id: card.id };
+      for (const key of ["signs", "factors"]) {
+        if (JSON.stringify(lists[key]) !== JSON.stringify(original[key])) patch[key] = lists[key];
+      }
+      if (patch.signs || patch.factors) await api("target/set", patch);
+      dialog.close();
+      toast("Target saved");
+      if (SP?.name === space && SP.tab === "targets") targetsView(body);
+    } catch (x) { error.textContent = x.message; }
+    finally { save.disabled = false; }
+  } }, ...editors.map(editor => editor.element), error,
+    el("div", { class: "row" }, save, el("button", { type: "button", onclick: () => dialog.close() }, "Cancel")));
+  dialog.replaceChildren(el("h2", {}, "Edit target"), el("p", {}, displayText(card.text)), form);
+  dialog.showModal();
+}
 async function targetsView(body) {
   body.replaceChildren(el("p", { class: "mute" }, "…"));
+  const state = SP;
+  const space = state.name;
+  const kind = state.cap?.kind || state.ov.kind;
   let v;
-  try { v = await api("space/view?space=" + q(SP.name) + "&view=targets"); } catch (x) { return fail(x); }
-  const kind = (SP.cap && SP.cap.kind) || SP.ov.kind;
+  try { v = await api("space/view?space=" + q(space) + "&view=targets"); } catch (x) { return fail(x); }
+  let known = [];
+  if (kind === "health") {
+    try { known = await targetSigns(loc()); } catch (_) {}
+  }
   let tasks = [];
   if (kind === "home" || kind === "hobbies") {
-    try { const t = await api("space/view?space=" + q(SP.name) + "&view=tasks"); tasks = t.items || []; } catch (_) {}
+    try { const t = await api("space/view?space=" + q(space) + "&view=tasks"); tasks = t.items || []; } catch (_) {}
   }
+  if (SP !== state || SP.tab !== "targets") return;
   const cols = v.columns || ["open", "reached"], items = v.items || [];
   const when = v.last_pass && v.last_pass.at ? "last pass " + ago(v.last_pass.at) + (v.last_pass.by ? " by " + v.last_pass.by : "") : "no pass yet";
   const money = (n, cur) => Number(n).toLocaleString(loc(), { maximumFractionDigits: 2 }) + (cur ? " " + String(cur).toUpperCase() : "");
@@ -2048,8 +2208,11 @@ async function targetsView(body) {
     ...items.filter(i => i.column === col).map(card => el("div", { class: "card" },
       el("div", {}, card.text),
       metric(card),
-      ...((card.signs || []).length ? [el("div", {}, ...card.signs.map(s => el("span", { class: "chip" }, s)))] : []),
-      el("div", { class: "moves" }, ...cols.filter(c => c !== col).map(c =>
+      ...[["signs", "Signs and symptoms", known], ["factors", "Favouring factors", []]].filter(([key]) => card[key]?.length)
+        .map(([key, label, suggestions]) => el("div", { "data-target-trait": key },
+          el("span", { class: "mute small" }, label), ...card[key].map(id => el("span", { class: "chip" }, displayText(traitLabel(id, suggestions)))))),
+      el("div", { class: "moves" }, kind === "health" && SP.cap?.writable ? el("button", { type: "button", class: "mini link",
+        onclick: () => editTarget(space, card, body, known) }, "Edit target") : null, ...cols.filter(c => c !== col).map(c =>
         el("button", { type: "button", class: "mini link", onclick: async () => {
           try { await api("living", { space: SP.name, page: "targets", move: [{ id: card.fact_id || card.id, column: c }] }); targetsView(body); } catch (x) { fail(x); }
         } }, "→ " + (COLUMN[c] || c)))))))));
@@ -2450,25 +2613,68 @@ async function openNote(body, id) {
 }
 
 // ---- The spaces as folders: a tree, drag and drop, tags and keywords at each level ----
-const FT = { l: [], open: new Set(), sel: null, info: null };
-async function renderLayout() {
-  try { FT.l = (await api("layout")).spaces.filter(x => !isInboxKind(x.kind)).map(x => ({ ...x, label: niceLabel(x, x.kind) })); } catch (x) { return; }
+const FT = { l: [], open: new Set(), sel: null, info: null, organising: false,
+  view: (() => { try { return localStorage.getItem("pensine-spaces-view") === "folders" ? "folders" : "bento"; } catch (_) { return "bento"; } })() };
+const isFolder = s => s.kind === "folder" || kids(s.space).length > 0;
+const visibleLabel = s => !s.custom_label && BUILTIN_LABELS[s.kind] ? tr(s.label) : s.label;
+const compareSpaces = (a, b) => visibleLabel(a).localeCompare(visibleLabel(b), loc(), { sensitivity: "base" }) || (a.position - b.position);
+const displayTree = () => FT.view === "folders" || FT.organising;
+function renderSpacesView() {
+  const tree = displayTree();
+  $("#spaces").hidden = tree;
+  $("#spaces-crumb").hidden = tree || !HOME.folder;
+  $("#layout-section").hidden = !tree;
+  $("#layout-section").classList.toggle("organising", FT.organising);
+  $("#organise-heading").hidden = $("#organise-help").hidden = !FT.organising;
+  $("#fside").hidden = !FT.sel;
+  $("#organise-spaces").setAttribute("aria-pressed", String(FT.organising));
+  for (const button of $$("[data-space-view]")) {
+    const selected = button.dataset.spaceView === (tree ? "folders" : "bento");
+    button.setAttribute("aria-pressed", String(selected));
+    button.classList.toggle("on", selected);
+  }
   drawTree();
-  $("#layout-kind").replaceChildren(el("option", { value: "" }, "no kind"), ...(S.catalogue || []).map(k => el("option", { value: k.key }, k.label)));
-  $("#layout-parent").replaceChildren(el("option", { value: "" }, "— top level —"), ...FT.l.map(x => el("option", { value: x.space }, x.label)));
-  if (FT.sel) loadSide();
   renderSpaceTiles();
 }
+for (const button of $$("[data-space-view]")) button.addEventListener("click", () => {
+  FT.view = button.dataset.spaceView;
+  FT.organising = false;
+  try { localStorage.setItem("pensine-spaces-view", FT.view); } catch (_) {}
+  renderSpacesView();
+});
+$("#organise-spaces").addEventListener("click", () => {
+  FT.organising = !FT.organising;
+  renderSpacesView();
+  if (FT.organising && FT.sel) loadSide();
+});
+$("#refresh-spaces").addEventListener("click", () => load().catch(fail));
+$("#add-space").addEventListener("click", () => addChild(HOME.folder ? spaceByName(HOME.folder) : null));
+$("#cancel-space-add").addEventListener("click", () => { $("#layout-add").hidden = true; });
+async function renderLayout() {
+  let owned;
+  try { owned = (await api("layout")).spaces; } catch (x) { return fail(x); }
+  const known = new Set(owned.map(s => s.space));
+  FT.l = [...owned.map(s => ({ ...s, owned: true })),
+    ...S.spaces.filter(s => !known.has(s.name)).map(s => ({ ...s, space: s.name, owned: false, position: 0 }))]
+    .map(s => ({ ...s, label: niceLabel(s, s.kind) }));
+  $("#layout-kind").replaceChildren(el("option", { value: "" }, "Space"), el("option", { value: "folder" }, "Folder"),
+    ...(S.catalogue || []).map(k => el("option", { value: k.key }, kindLabel(k.key))));
+  const parent = $("#layout-parent"), saved = parent.value;
+  parent.replaceChildren(el("option", { value: "" }, "— top level —"),
+    ...FT.l.filter(s => s.owned && !isInboxKind(s.kind)).sort(compareSpaces).map(s => el("option", { value: s.space }, displayText(visibleLabel(s)))));
+  parent.value = [...parent.options].some(o => o.value === saved) ? saved : "";
+  renderSpacesView();
+  if (FT.organising && FT.sel) loadSide();
+}
 function kids(parent) {
-  // Alphabetical, in the words the person reads (the labels as translated); a tie keeps the stored order.
-  return FT.l.filter(x => (x.parent || "") === (parent || "")).sort((a, b) => tr(a.label).localeCompare(tr(b.label), loc(), { sensitivity: "base" }) || (a.position - b.position));
+  return FT.l.filter(x => !isInboxKind(x.kind) && (x.parent || "") === (parent || "")).sort(compareSpaces);
 }
 function drawTree() {
   const rows = [];
   const walk = (parent, depth) => {
     for (const s of kids(parent)) {
-      const children = kids(s.space), open = FT.open.has(s.space);
-      rows.push(folderRow(s, depth, children.length > 0, open));
+      const open = FT.open.has(s.space);
+      rows.push(folderRow(s, depth, isFolder(s), open));
       if (open) walk(s.space, depth + 1);
     }
   };
@@ -2476,15 +2682,26 @@ function drawTree() {
   $("#ftree").replaceChildren(...(rows.length ? rows : [el("p", { class: "mute" }, "No space yet.")]));
 }
 function folderRow(s, depth, hasKids, open) {
-  const row = el("div", { class: "frow" + (FT.sel === s.space ? " sel" : ""), draggable: "true", style: "margin-left:" + depth * 22 + "px" });
-  const caret = el("span", { class: "caret", onclick: e => { e.stopPropagation(); open ? FT.open.delete(s.space) : FT.open.add(s.space); drawTree(); } }, hasKids ? (open ? "▾" : "▸") : "·");
-  const nm = el("span", { class: "nm", title: "Double-click to rename" }, s.label);
-  nm.addEventListener("dblclick", e => { e.stopPropagation(); renameInline(s, nm); });
-  row.append(caret, el("span", { class: "ico" }, hasKids ? (open ? "📂" : "📁") : "📄"), nm,
-    el("span", { class: "acts2" },
-      el("button", { type: "button", class: "mini link", title: "A space inside this one", onclick: e => { e.stopPropagation(); addChild(s); } }, "+"),
-      hasKids ? null : el("button", { type: "button", class: "mini link", title: "Open its notes", onclick: e => { e.stopPropagation(); location.hash = "#space/" + s.space; } }, "Open")));
+  const arranging = FT.organising && s.owned;
+  const row = el("div", { class: "frow" + (FT.sel === s.space ? " sel" : ""),
+    draggable: String(arranging), "data-space-row": s.space, style: "margin-left:" + Math.min(depth, 8) * 12 + "px" });
+  const toggle = () => { open ? FT.open.delete(s.space) : FT.open.add(s.space); drawTree(); };
+  const caret = hasKids ? el("button", { type: "button", class: "caret mini link", "aria-expanded": String(open),
+    "aria-label": visibleLabel(s), onclick: e => { e.stopPropagation(); toggle(); } }, open ? "▾" : "▸") : el("span", { class: "caret" }, "·");
+  const openSpace = e => { e.stopPropagation(); location.hash = "#space/" + s.space; };
+  const nm = el("button", { type: "button", class: "nm link", onclick: e => {
+    if (FT.organising && s.owned) return;
+    e.stopPropagation();
+    if (hasKids) toggle(); else openSpace(e);
+  } }, displayText(visibleLabel(s)));
+  const count = (S.spaces.find(x => x.name === s.space)?.stats || {}).facts;
+  row.append(...[caret, el("span", { class: "ico", "aria-hidden": "true" }, hasKids ? (open ? "📂" : "📁") : "📄"), nm,
+    el("span", { class: "cnt" }, count == null ? "—" : Number(count).toLocaleString(loc())),
+    hasKids || arranging ? el("button", { type: "button", class: "mini link", onclick: openSpace }, "Open") : null,
+    arranging ? el("button", { type: "button", class: "mini link", onclick: e => { e.stopPropagation(); renameInline(s, nm); } }, "Rename") : null,
+    arranging ? el("button", { type: "button", class: "mini link", title: "A space inside this one", onclick: e => { e.stopPropagation(); addChild(s); } }, "+") : null].filter(Boolean));
   row.addEventListener("click", () => { FT.sel = s.space; FT.open.add(s.space); drawTree(); loadSide(); });
+  if (!arranging) return row;
   // Drag a space, or drop a space or a tag on it.
   row.addEventListener("dragstart", e => { e.dataTransfer.setData("text/space", s.space); e.dataTransfer.effectAllowed = "move"; });
   const zone = e => { const r = row.getBoundingClientRect(), y = (e.clientY - r.top) / r.height; return y < 0.28 ? "before" : y > 0.72 ? "after" : "in"; };
@@ -2513,21 +2730,31 @@ function folderRow(s, depth, hasKids, open) {
   return row;
 }
 function renameInline(s, nm) {
-  const input = el("input", { value: s.label, style: "width:100%" });
-  nm.replaceChildren(input); input.focus(); input.select();
-  const done = async save => { if (save && input.value.trim() && input.value !== s.label) { try { await api("layout/set", { space: s.space, label: input.value }); } catch (x) { fail(x); } } renderLayout(); };
-  input.addEventListener("keydown", e => { if (e.key === "Enter") done(true); if (e.key === "Escape") done(false); });
+  const input = el("input", { value: visibleLabel(s), class: "nm", "aria-label": "Rename" });
+  nm.replaceWith(input);
+  input.focus();
+  input.select();
+  let finished = false;
+  const done = async save => {
+    if (finished) return;
+    finished = true;
+    if (save && input.value.trim() && input.value !== visibleLabel(s)) {
+      try { await api("layout/set", { space: s.space, label: input.value }); } catch (x) { fail(x); }
+    }
+    renderLayout();
+  };
+  input.addEventListener("click", e => e.stopPropagation());
+  input.addEventListener("keydown", e => {
+    if (e.key === "Enter") done(true);
+    if (e.key === "Escape") done(false);
+  });
   input.addEventListener("blur", () => done(true));
 }
-async function addChild(parent) {
-  const label = window.prompt ? null : null; // dialogs are not shown by the viewer: ask on the row instead
-  const row = el("div", { class: "row", style: "margin:6px 0 6px " + 28 + "px" });
-  const input = el("input", { placeholder: "name of the new space inside " + parent.label, size: 30 });
-  const go = async () => { if (!input.value.trim()) return; try { await api("layout/add", { label: input.value, parent: parent.space }); FT.open.add(parent.space); renderLayout(); } catch (x) { fail(x); } };
-  input.addEventListener("keydown", e => { if (e.key === "Enter") go(); if (e.key === "Escape") renderLayout(); });
-  row.append(input, el("button", { type: "button", class: "primary", onclick: go }, "Add"), el("button", { type: "button", class: "link", onclick: () => renderLayout() }, "Cancel"));
-  $("#ftree").prepend(row); input.focus();
-  if (row.scrollIntoView) row.scrollIntoView({ block: "center", behavior: "smooth" });
+function addChild(parent) {
+  const form = $("#layout-add");
+  form.hidden = false;
+  form.elements.parent.value = parent?.space || "";
+  form.elements.label.focus();
 }
 async function loadSide() {
   const side = $("#fside"); if (!FT.sel) { side.hidden = true; return; }
@@ -2540,7 +2767,14 @@ async function loadSide() {
   const kwInput = el("input", { placeholder: "add a keyword (#word)", size: 18 });
   kwInput.addEventListener("keydown", e => { if (e.key === "Enter" && kwInput.value.trim()) saveRules({ keywords: [...kw, kwInput.value.trim()] }); });
   side.replaceChildren(
-    el("h3", {}, (ov.label || ov.space)),
+    el("h3", {}, displayText(spaceLabel(ov.space))),
+    el("label", {}, "Move into", el("select", {
+      onchange: e => moveInto(ov.space, e.target.value)
+    }, el("option", { value: "", selected: !ov.parent }, "— top level —"),
+    ...FT.l.filter(s => s.owned && !isInboxKind(s.kind) && s.space !== ov.space &&
+      !ancestors(s.space).some(a => a.space === ov.space)).sort(compareSpaces).map(s =>
+      el("option", { value: s.space, selected: s.space === ov.parent }, displayText(visibleLabel(s)))))),
+
     kids(FT.sel).length ? el("div", { class: "mute small" }, "A folder: open the space inside it.") : el("div", { class: "mute small" }, Number(ov.counts.active || 0).toLocaleString(loc()) + " notes"),
     el("h3", { style: "margin-top:8px" }, "Tags"),
     el("p", { class: "mute small", style: "margin:0" }, "Drag a tag onto another space to send its notes there."),
@@ -2557,7 +2791,7 @@ async function loadSide() {
     el("h3", { style: "margin-top:8px" }, "Kind"),
     el("select", { id: "kind-select", onchange: e => spaceUpdate({ kind: e.target.value }) },
       el("option", { value: "custom", selected: ov.kind === "custom" ? "" : null }, "no kind"),
-      ...(S.catalogue || []).map(k => el("option", { value: k.key, selected: ov.kind === k.key ? "" : null }, k.label))),
+      ...(S.catalogue || []).map(k => el("option", { value: k.key, selected: ov.kind === k.key ? "" : null }, kindLabel(k.key)))),
     el("div", { id: "side-folder" }), el("div", { id: "side-vocab" }), el("div", { id: "side-lib" }),
     el("div", { class: "row", style: "margin-top:10px" },
       el("button", { type: "button", class: "link danger", id: "delete-space", onclick: () => deleteSpaceFlow(FT.sel) }, "Delete this space…")));
@@ -2615,7 +2849,7 @@ function deleteSpaceFlow(space) {
   const d = $("#del-dlg");
   const how = el("select", { id: "del-how" }, el("option", { value: "archive" }, "Archive it (a full copy is kept, it can be restored)"),
     ...(others.length ? [el("option", { value: "into" }, "Move everything into another space")] : []));
-  const into = el("select", { id: "del-into", hidden: true }, ...others.map(x => el("option", { value: x.space }, x.label)));
+  const into = el("select", { id: "del-into", hidden: true }, ...others.map(x => el("option", { value: x.space }, displayText(visibleLabel(x)))));
   how.addEventListener("change", () => { into.hidden = how.value !== "into"; });
   const children = el("select", { id: "del-children" }, el("option", { value: "grandparent" }, "Sub-spaces move up to the parent"), el("option", { value: "top" }, "Sub-spaces go to the top"));
   const body = () => ({ space, ...(how.value === "into" ? { into: into.value } : { archive: true }), children: children.value });
@@ -2672,7 +2906,8 @@ $("#layout-add").addEventListener("submit", async e => {
   try {
     await api("spaces/create", { label: f.label.value, parent: f.parent.value || null, kind: f.kind.value || undefined,
       keywords: f.keywords.value.split(",").map(k => k.trim()).filter(Boolean) });
-    f.reset(); await load();
+    if (f.parent.value) FT.open.add(f.parent.value);
+    f.reset(); f.hidden = true; await load();
   } catch (x) { fail(x); }
 });
 
@@ -2697,9 +2932,9 @@ function route() {
   // The four sections of every app (docs/UI-SPEC.md): Note, Journal, Spaces, Settings. Note opens Inbox, where a
   // capture lands; health is a space among the others; Settings is the machines, the assistants and the rest.
   const triage = S && S.triage && S.triage.space ? { name: S.triage.space } : null;
-  const section = location.hash === "#note" ? "note" : global ? "journal"
-    : location.hash === "#settings" || location.hash === "#admin" ? "settings" : inSpace || inFolder || location.hash === "" ? "spaces" : "";
-  const page = inSpace || (section === "note" && triage) ? "space" : global ? "global"
+  const section = ["#note", "#triage"].includes(location.hash) ? "note" : location.hash === "#journal" ? "journal"
+    : ["#settings", "#admin", "#graph"].includes(location.hash) ? "settings" : inSpace || inFolder || location.hash === "" ? "spaces" : "";
+  const page = inSpace || (location.hash === "#note" && triage) ? "space" : global ? "global"
     : location.hash === "#triage" ? "triage" : location.hash === "#admin" && admin ? "admin" : "memory";
   renderSections(section);
   document.querySelectorAll('#view-memory [data-part="settings"]').forEach(n => { n.hidden = section !== "settings" || n.dataset.empty === "1"; });
@@ -2713,15 +2948,15 @@ function route() {
   if (page === "global") renderGlobal();
   if (page === "memory" && S) { const f = inFolder ? inFolder[1] : ""; if (f !== HOME.folder) { HOME.folder = f; renderSpaceTiles(); } }
   if (inSpace) loadSpace(inSpace[1]);
-  else if (section === "note" && triage) loadSpace(triage.name);
+  else if (location.hash === "#note" && triage) loadSpace(triage.name);
   $("#view-people").hidden = page !== "admin";
   $("#view-memory").hidden = page !== "memory";
   $("#view-triage").hidden = page !== "triage";
   // The sections bar leads everywhere; « ← My memory » is only for the people's page of an administrator.
   $("#back-people").hidden = page !== "admin";
-  $("#nav-admin").hidden = !(admin && page === "memory");
-  $("#my-guide").hidden = $("#export-mine").hidden = page !== "memory";
-  document.title = page === "space" ? "Pensine · " + (inSpace ? spacePath(inSpace[1]) : tr("Trace or drop")) : page === "global" ? "Pensine · " + tr(location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "Pensine · " + tr("People of this node") : page === "triage" ? "Pensine · Inbox" : "Pensine";
+  $("#nav-admin").hidden = !(admin && section === "settings" && page === "memory");
+  $("#my-guide").hidden = $("#export-mine").hidden = section !== "settings" || page !== "memory";
+  document.title = page === "space" ? "Pensine · " + (inSpace ? spacePath(inSpace[1]) : tr("Trace or drop")) : page === "global" ? "Pensine · " + tr(location.hash === "#graph" ? "Graph" : "Journal") : page === "admin" ? "Pensine · " + tr("People of this node") : page === "triage" && S?.triage?.space ? "Pensine · " + spaceLabel(S.triage.space) : "Pensine";
 }
 $("#back-people").addEventListener("click", () => { location.hash = ""; });
 $("#nav-admin").addEventListener("click", () => { location.hash = "#admin"; });
@@ -2777,10 +3012,10 @@ function options(select) {
   if (select.hasAttribute("data-spaces")) {
     items = S.spaces.filter(s => !isInboxKind(s.kind)).map(s => [s.name, spaceLabel(s.name)]);
   } else if (select.hasAttribute("data-kinds")) {
-    items = (S.catalogue || []).map(k => [k.key, k.label + " (" + k.key + ")"]);
+    items = (S.catalogue || []).map(k => [k.key, kindLabel(k.key)]);
   }
   const keep = select.value;
-  select.replaceChildren(...items.map(([v, t]) => el("option", { value: v }, t)));
+  select.replaceChildren(...items.map(([v, t]) => el("option", { value: v }, select.hasAttribute("data-spaces") ? displayText(t) : t)));
   if (items.some(([v]) => v === keep)) select.value = keep;
 }
 
@@ -2796,7 +3031,7 @@ function renderTriage() {
   const all = trItems();
   $("#triage-count").textContent = String(all.length);
   const fails = (S.triage && S.triage.failed_transcription) || [];
-  $("#triage-tile").hidden = all.length === 0 && fails.length === 0;
+  $("#triage-tile").hidden = location.hash !== "#note" || (all.length === 0 && fails.length === 0);
   $("#tr-failed").replaceChildren(...(fails.length ? [el("p", { class: "mute small" }, fails.length + " recording(s) could not be transcribed after three tries; they do not wait for a decision (tag failed/transcription)."),
     ...fails.map(f => el("div", { class: "trrow" }, el("span", { class: "tx" }, f.name, " ", el("span", { class: "badge" }, "failed/transcription")),
       el("span", { class: "when" }, ago(f.created_at)),
@@ -2806,7 +3041,7 @@ function renderTriage() {
   const q = $("#tr-filter").value.trim().toLowerCase(), k = $("#tr-kind").value;
   const shown = all.filter(i => (!k || i.kind === k) && (!q || i.what.toLowerCase().includes(q)));
   const ssel = $("#tr-space"), keep = ssel.value;
-  ssel.replaceChildren(el("option", { value: "" }, "Send to…"), ...S.spaces.filter(v => !isInboxKind(v.kind)).map(v => el("option", { value: v.name }, spaceLabel(v.name))));
+  ssel.replaceChildren(el("option", { value: "" }, "Send to…"), ...S.spaces.filter(v => !isInboxKind(v.kind)).map(v => el("option", { value: v.name }, displayText(spaceLabel(v.name)))));
   if (S.spaces.some(v => v.name === keep)) ssel.value = keep;
   $("#tr-empty").hidden = shown.length > 0;
   $("#tr-list").replaceChildren(...shown.map((it, idx) => {
@@ -2862,8 +3097,6 @@ $("#tr-send").addEventListener("click", async () => {
 // The page takes the tone of the person who opened it, and greets them: it is their space they entered.
 const TONES = ["sage", "mist", "clay", "dusk"];
 function renderHero() {
-  $("#home-nav").replaceChildren(el("button", { type: "button", class: "on", onclick: () => { location.hash = ""; } }, "Spaces"),
-    el("button", { type: "button", onclick: () => { location.hash = "#graph"; } }, "Graph"));
   const me = S.me, name = me.display || me.name;
   let h = 0; for (const ch of String(me.id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
   document.documentElement.dataset.tone = TONES[h % TONES.length];
@@ -2888,6 +3121,8 @@ function render() {
 
   renderSpaceTiles();
   renderTriage();
+  const inboxLabel = S.triage?.space ? spaceLabel(S.triage.space) : tr("To sort");
+  for (const selector of ["#triage-label", "#triage-title"]) $(selector).replaceChildren(displayText(inboxLabel));
   renderMachines();
   const kindSel = $("select[data-kinds]");
   const hint = () => { const k = (S.catalogue || []).find(x => x.key === kindSel.value); $("#kind-hint").textContent = k ? k.description + (k.feature ? " · carries the " + k.feature + " tools" : "") : ""; };
@@ -2919,7 +3154,7 @@ function render() {
       el("div", {}, el("span", { class: "badge" + (u.admin ? " admin" : "") }, u.admin ? "administrator" : "member"),
         u.disabled ? el("span", { class: "badge off", style: "margin-left:4px" }, "disabled") : null),
       el("div", { class: "nums mute" }, (u.spaces === undefined ? "—" : u.spaces) + " spaces · " + (u.connections === undefined ? "—" : u.connections) + " connections"),
-      names.length ? el("div", { class: "minis" }, ...names.map(n => el("span", { class: "mini" }, n))) : null,
+      names.length ? el("div", { class: "minis" }, ...names.map(n => el("span", { class: "mini" }, displayText(mine ? spaceLabel(n) : n)))) : null,
       el("div", { class: "acts" },
         mine ? el("button", { class: "primary", onclick: () => { location.hash = ""; } }, "Open my memory") : null,
         mine ? el("button", { class: "link", onclick: () => askText("Your name as shown", u.display || "", v => act("users/update", { id: u.id, display: v })) }, "edit name") : null,
@@ -2948,7 +3183,7 @@ function render() {
   const standingWord = { waiting: "waiting for you", approved: "approved", changed: "changed since you approved it: waiting for you" };
   settingsPart($("#app-guides-section"), proposed.length === 0);
   $("#app-guides").replaceChildren(...proposed.map(g => el("div", { class: "space guide-proposal", "data-standing": g.standing },
-    el("h3", {}, g.app, el("span", { class: "mute small" }, " · space " + g.space + " · " + (standingWord[g.standing] || g.standing))),
+    el("h3", {}, g.app, el("span", { class: "mute small" }, " · space " + spaceLabel(g.space) + " · " + (standingWord[g.standing] || g.standing))),
     el("pre", { class: "proposal-text" }, g.text),
     el("div", { class: "acts" },
       g.standing === "approved" ? null : el("button", { class: "primary", onclick: () => act("app-guides/approve", { space: g.space, app: g.app, hash: g.hash }) }, g.standing === "changed" ? "Approve the new text" : "Approve"),
@@ -2956,7 +3191,7 @@ function render() {
   const att = S.attention || { idle: [], refused_24h: 0 };
   const worth = [];
   if (att.refused_24h > 0) worth.push(el("p", {}, att.refused_24h + (att.refused_24h === 1 ? " key was" : " keys were") + " refused in the last 24 hours. A wrong or revoked key trying this node; if it is not one of yours, nothing to do."));
-  for (const c of att.idle) worth.push(el("p", {}, el("b", { title: c.agent }, shownName(c.agent)), " is " + c.why + (c.last_used_at ? " (last used " + fmt(c.last_used_at) + ")" : " (made " + fmt(c.created_at) + ")") + ". ",
+  for (const c of att.idle) worth.push(el("p", {}, el("b", { title: shownName(c.agent) }, shownName(c.agent)), " is " + c.why + (c.last_used_at ? " (last used " + fmt(c.last_used_at) + ")" : " (made " + fmt(c.created_at) + ")") + ". ",
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke " + c.agent + "?", () => act("connections/revoke", { agent: c.agent })) }, "revoke")));
   if (att.idle.length > 1) worth.push(el("p", {},
     el("button", { class: "link danger", onclick: () => confirmThen("Revoke these " + att.idle.length + " connections?", async () => { for (const c of att.idle) await act("connections/revoke", { agent: c.agent }); }) }, "revoke all " + att.idle.length)));
@@ -2968,13 +3203,13 @@ function render() {
     el("tr", {}, el("th", {}, "File"), el("th", {}, "Space"), el("th", {}, "Added"), el("th", {}, "")),
     ...S.files.map(f => el("tr", {},
       el("td", {}, f.name, el("div", { class: "mute small" }, (f.note || "") + " · " + size(f.size))),
-      el("td", {}, spaceLabel(f.space)), el("td", { class: "small" }, fmt(f.created_at) + " · " + f.author),
+      el("td", {}, displayText(spaceLabel(f.space))), el("td", { class: "small" }, fmt(f.created_at) + " · " + f.author),
       el("td", {}, el("button", { class: "link", onclick: () => openFile(f) }, "open"),
         el("button", { class: "link danger", onclick: () => confirmThen("Retire " + f.name + "?", () => act("files/retire", { space: f.space, id: f.id, reason: "retired from the node page" })) }, "retire")))));
 
   const reach = c => {
     const r = c.rights === "all" ? ["all your spaces"] : c.rights.split(",").map(x => spaceLabel(x.split("/")[0].split(":")[0]) + (x.includes("/") ? "/" + x.split(":")[0].split("/").slice(1).join("/") : "") + (/:r$/.test(x) ? " (read only)" : ""));
-    return [...r.map(x => el("span", { class: "chip" }, x)),
+    return [...r.map(x => el("span", { class: "chip" }, c.rights === "all" ? x : displayText(x))),
       c.read_only ? el("span", { class: "chip" }, "read only") : null,
       c.person_guide === false ? el("span", { class: "chip" }, "not told your instructions") : null];
   };
@@ -2988,7 +3223,7 @@ function render() {
               el("button", { class: "link", onclick: () => act("connections/rename", { agent: c.agent, name: $("#rename-input").value.trim() }).then(() => { renaming = null; render(); }) }, "save"),
               el("button", { class: "link", onclick: () => { renaming = null; render(); } }, "cancel"),
               el("div", { class: "mute small" }, "lowercase letters, digits and dashes"))
-          : el("h3", { title: c.agent }, shownName(c.agent), " ", el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename")),
+          : el("h3", { title: shownName(c.agent) }, shownName(c.agent), " ", el("button", { class: "link", title: "Give it a name you will recognise", onclick: () => { renaming = c.agent; render(); setTimeout(() => $("#rename-input") && $("#rename-input").focus(), 0); } }, "rename")),
         el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at),
           connKind(c.agent) ? el("span", { class: "badge", style: "margin-left:8px", "data-kind": connKind(c.agent), title: connKind(c.agent) === "cloud" ? "Reaches your memory through a service" : "Runs on a machine of yours" }, connKind(c.agent)) : null))),
     regranting && regranting.agent === c.agent ? rightsEditor(c) : el("div", {}, reach(c),
@@ -3005,11 +3240,11 @@ function render() {
   const gone = [...S.connections, ...(S.internal || [])].filter(c => c.revoked);
   settingsPart($("#revoked-section"), gone.length === 0);
   $("#revoked").replaceChildren(...gone.map(c => el("div", { class: "row", "data-agent": c.agent },
-    el("span", { title: c.agent }, shownName(c.agent)), el("span", { class: "mute small" }, " revoked"),
+    el("span", { title: shownName(c.agent) }, shownName(c.agent)), el("span", { class: "mute small" }, " revoked"),
     el("button", { class: "link danger", title: "Remove it from the list; what the audit says about it stays", onclick: () => previewThen("connections/delete", { agent: c.agent }) }, "remove from the list"))));
   settingsPart($("#internal-section"), tools.length === 0);
   $("#internal").replaceChildren(...tools.map(c => el("div", { class: "tile" },
-    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", { title: c.agent }, shownName(c.agent)),
+    el("div", { class: "tilehead" }, el("div", { style: "min-width:0;flex:1" }, el("h3", { title: shownName(c.agent) }, shownName(c.agent)),
       el("div", { class: "state" + (c.last_used_at && Date.now() - new Date(c.last_used_at).getTime() < 3 * 86400000 ? "" : " cold") }, "last used " + ago(c.last_used_at)))),
     el("div", {}, reach(c)),
     el("div", { class: "acts" },
@@ -3037,7 +3272,7 @@ function rightsEditor(c) {
   return el("div", {},
     el("label", { class: "inline" }, el("input", { type: "checkbox", checked: g.all, onchange: e => { g.all = e.target.checked; render(); } }), "all spaces"),
     g.all ? null : el("div", {},
-      ...S.spaces.map(v => el("label", { class: "inline" }, el("span", { style: "min-width:9em" }, spaceLabel(v.name)), pick(v))),
+      ...S.spaces.map(v => el("label", { class: "inline" }, el("span", { style: "min-width:9em" }, displayText(spaceLabel(v.name))), pick(v))),
       el("div", { class: "small mute" }, "paths inside a space (for example health/journal:rw), one per line"),
       el("textarea", { rows: "2", cols: "28", onchange: e => { g.paths = e.target.value.split(/[\s,]+/).filter(Boolean); } }, g.paths.join("\n"))),
     el("div", {},
@@ -3353,7 +3588,7 @@ function renderWizard() {
   } else if (p.rights && !W.created) {
     const r = p.rights();
     acc.replaceChildren(
-      r ? el("div", { class: "small" }, "Preselected, nothing to tick. This key reaches only these paths of your " + healthSpace().name + " space:")
+      r ? el("div", { class: "small" }, "Preselected, nothing to tick. This key reaches only these paths of your " + spaceLabel(healthSpace().name) + " space:")
         : el("div", { class: "small warn" }, "You have no health space yet: make one first (Your whole memory, then the spaces)."),
       el("div", { style: "display:flex;flex-direction:column;gap:2px;margin:6px 0" }, ...(r ? r.split(",").map(x => el("span", { class: "chip" }, x.replace(/:rw$/, " (read and write)"))) : [])),
       el("div", { style: "margin-top:8px" },
@@ -3364,7 +3599,7 @@ function renderWizard() {
   } else {
     const boxes = S.spaces.map(v => el("label", { class: "inline" },
       el("input", { type: "checkbox", checked: W.spaces.has(v.name) ? "" : null, onchange: e => { e.target.checked ? W.spaces.add(v.name) : W.spaces.delete(v.name); refreshCreate(); } }),
-      " " + spaceLabel(v.name)));
+      displayText(" " + spaceLabel(v.name))));
     acc.replaceChildren(
       el("div", { class: "small mute" }, "It reaches only what you tick."),
       el("label", { class: "inline", style: "margin-top:6px" }, el("input", { type: "checkbox", id: "w-all", checked: W.all ? "" : null, onchange: e => { W.all = e.target.checked; refreshCreate(); } }), " ", el("b", {}, "All my spaces"), ", and the ones I make later"),
@@ -3522,7 +3757,7 @@ async function exportMine() {
     const a = el("a", { href: url, download: name });
     document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10000);
-  } catch (x) { $("#err").textContent = x.message; }
+  } catch (x) { $("#err").textContent = plainMessage(x.message); }
 }
 $("#export-mine").addEventListener("click", exportMine);
 $("#guide-save").addEventListener("click", async () => {
@@ -3558,7 +3793,7 @@ async function useCode(text) {
   if (!code) throw new Error("A code is eight characters, such as ABCD-EFGH.");
   const r = await fetch(base + "pair", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code, device: "this page" }) });
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || ("HTTP " + r.status));
+  if (!r.ok) throw new Error(plainMessage(j.error || ("HTTP " + r.status)));
   return j;
 }
 $("#code-form").addEventListener("submit", async e => {
@@ -3663,12 +3898,23 @@ $$("form[data-act]").forEach(f => f.addEventListener("submit", async e => {
 
 // ---- The spaces: a folder holds other spaces (no count, nothing to connect); only a space with no child is opened. ----
 // A space with no label of its own is shown by its kind (Health, Work…) or by its name in words: never "owner-health".
+const BUILTIN_LABELS = { inbox: "To sort", "a-trier": "To sort", health: "Health", home: "Home",
+  hobbies: "Hobbies", me: "Me", work: "Work", money: "Finances", people: "People" };
 function niceLabel(p, kind) {
-  if (p.label && p.label !== p.space) return p.label;
-  const c = kind && kind !== "custom" && (S && S.catalogue || []).find(x => x.key === kind);
-  if (c) return c.label;
-  const words = p.space.replace(/-/g, " ");
+  if (p.custom_label || (p.custom_label === undefined && p.label && p.label !== p.space)) return p.label;
+  if (BUILTIN_LABELS[kind]) return BUILTIN_LABELS[kind];
+  if (p.label) return p.label;
+  const words = String(p.space || "").replace(/-/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+const kindLabel = kind => BUILTIN_LABELS[kind] || (S.catalogue || []).find(x => x.key === kind)?.label ||
+  (kind === "folder" ? "Folder" : "Space");
+function spaceActions(name, label, hasGuide = S.spaces.find(s => s.name === name)?.guide) {
+  return [
+    el("button", { type: "button", class: "link", onclick: () => openWizard({ space: name }) }, "Connect"),
+    el("button", { type: "button", class: "link", onclick: () => openWizard({ space: name, readOnly: true }) }, "Read-only"),
+    el("button", { type: "button", class: "link", onclick: () => openGuide("space:" + name, tr("Instructions") + " · " + label) }, hasGuide ? "Instructions ✓" : "Instructions")
+  ];
 }
 // A machine that joined is a peer: its connection is shown on its card in Machines, never among the assistants.
 const isPeer = c => /^peer-/.test(c.agent);
@@ -3685,7 +3931,11 @@ function connKind(agent) {
   return { claudeai: "cloud", "claude-web": "cloud", chatgpt: "cloud", "claude-desktop": "local", "claude-code": "local", opencode: "local", kalios: "local" }[base] || "";
 }
 // The person's Inbox is shown by its label, never by its stored name (`<person>-inbox`, or `<person>-a-trier` in a memory made before).
-const spaceLabel = name => { const p = (FT.l || []).find(x => x.space === name); return p ? p.label : S && S.triage && S.triage.space === name ? "Inbox" : name; };
+const spaceLabel = name => {
+  const p = spaceByName(name);
+  if (p) return visibleLabel(p);
+  return S?.triage?.space === name ? tr("To sort") : niceLabel({ space: name }, null);
+};
 const spaceByName = n => (FT.l || []).find(x => x.space === n);
 // The folders above a space, outermost first.
 function ancestors(name) {
@@ -3695,10 +3945,10 @@ function ancestors(name) {
   return out;
 }
 // « Perso › Health »: a sub-space is always named with the folders above it.
-const spacePath = name => [...ancestors(name).map(x => x.label), spaceLabel(name)].join(" › ");
+const spacePath = name => [...ancestors(name).map(visibleLabel), spaceLabel(name)].join(" › ");
 // Every space of the person in tree order, with its depth.
 function orderedSpaces() {
-  const out = [], walk = (parent, depth) => { for (const s of kids(parent)) { out.push({ space: s.space, label: s.label, depth }); walk(s.space, depth + 1); } };
+  const out = [], walk = (parent, depth) => { for (const s of kids(parent)) { out.push({ space: s.space, label: visibleLabel(s), depth }); walk(s.space, depth + 1); } };
   walk("", 0);
   const placed = new Set(out.map(x => x.space));
   for (const v of (S ? S.spaces : []).filter(v => !isInboxKind(v.kind) && !placed.has(v.name))) out.push({ space: v.name, label: spaceLabel(v.name), depth: 0 });
@@ -3723,36 +3973,34 @@ async function moveInto(moved, target) {
 // « Your spaces › Perso › Health »: every folder above is a link, and a drop target to move a space up to it.
 function crumbs(box, chain, current) {
   const mk = (label, hash, target) => {
-    const b = el("button", { type: "button", class: "link", onclick: () => { location.hash = hash; } }, label);
+    const b = el("button", { type: "button", class: "link", onclick: () => { location.hash = hash; } }, hash ? displayText(label) : label);
     b.addEventListener("dragover", e => { e.preventDefault(); b.classList.add("over"); });
     b.addEventListener("dragleave", () => b.classList.remove("over"));
     b.addEventListener("drop", e => { e.preventDefault(); b.classList.remove("over"); moveInto(e.dataTransfer.getData("text/space"), target); });
     return b;
   };
   const parts = [mk("Your spaces", "", "")];
-  for (const a of chain) parts.push(el("span", { class: "sep" }, "›"), mk(a.label, "#folder/" + a.space, a.space));
-  if (current) parts.push(el("span", { class: "sep" }, "›"), el("span", { "aria-current": "page" }, current));
+  for (const a of chain) parts.push(el("span", { class: "sep" }, "›"), mk(visibleLabel(a), "#folder/" + a.space, a.space));
+  if (current) parts.push(el("span", { class: "sep" }, "›"), el("span", { "aria-current": "page" }, displayText(current)));
   box.replaceChildren(...parts);
 }
 function renderSpaceTiles() {
   if (!S) return;
-  const kindLabel = k => { const c = (S.catalogue || []).find(x => x.key === k); return c ? c.label : k; };
   const num = n => Number(n).toLocaleString(loc());
   const real = S.spaces.filter(v => !isInboxKind(v.kind));
   const byName = new Map(real.map(v => [v.name, v]));
-  const placed = new Set((FT.l || []).map(x => x.space));
-  if (HOME.folder && !kids(HOME.folder).length) HOME.folder = "";
+  if (HOME.folder && (!spaceByName(HOME.folder) || !isFolder(spaceByName(HOME.folder)))) HOME.folder = "";
   const folder = HOME.folder;
   // The top level shows top-level spaces only: a sub-space is found by opening its folder.
-  const level = folder ? kids(folder) : [...kids("").filter(x => byName.has(x.space) || kids(x.space).length), ...real.filter(v => !placed.has(v.name)).map(v => ({ space: v.name, label: v.name }))];
-  $("#spaces-crumb").hidden = !folder;
+  const level = kids(folder);
+  $("#spaces-crumb").hidden = displayTree() || !folder;
   if (folder) crumbs($("#spaces-crumb"), ancestors(folder), spaceLabel(folder));
   const biggest = real.reduce((m, x) => Math.max(m, x.stats ? x.stats.facts : 0), 0);
   const drag = (node, space) => { node.draggable = true; node.addEventListener("dragstart", e => { e.dataTransfer.setData("text/space", space); e.dataTransfer.effectAllowed = "move"; }); return node; };
   const leaf = (s, label, tone, large, own) => {
     const nFacts = s.stats ? s.stats.facts : 0, nFiles = s.stats ? s.stats.files : 0;
     const t = el("div", { class: "tile " + tone + (large ? " wide tall" : "") + (s.stats && !nFacts && !nFiles ? " empty" : ""), "data-space": s.name },
-      el("h3", { style: "cursor:pointer", onclick: () => { location.hash = "#space/" + s.name; } }, label),
+      el("h3", { style: "cursor:pointer", onclick: () => { location.hash = "#space/" + s.name; } }, displayText(label)),
       el("div", { class: "kind" }, s.kind && s.kind !== "custom" ? kindLabel(s.kind) : "Space"),
       el("div", { class: "big" }, !s.stats ? "—" : num(nFacts)),
       el("div", { class: "reach mute" }, (n => n === 0 ? "No assistant reaches it" : n === 1 ? "1 connection reaches it" : n + " connections reach it")(
@@ -3761,9 +4009,7 @@ function renderSpaceTiles() {
         s.stats && s.stats.last_write ? el("span", {}, " · ", el("span", {}, "last write"), " " + ago(s.stats.last_write)) : null),
       el("div", { class: "acts" },
         el("button", { class: "primary", onclick: () => { location.hash = "#space/" + s.name; } }, "Open"),
-        el("button", { class: "link", onclick: () => openWizard({ space: s.name }) }, "Connect"),
-        el("button", { class: "link", onclick: () => openWizard({ space: s.name, readOnly: true }) }, "Read-only"),
-        el("button", { class: "link", onclick: () => openGuide("space:" + s.name, "Instructions for the space " + label) }, s.guide ? "Instructions ✓" : "Instructions")));
+        ...spaceActions(s.name, label, s.guide)));
     if (!own) {
       t.addEventListener("dragover", e => { e.preventDefault(); t.classList.add("over-in"); });
       t.addEventListener("dragleave", () => t.classList.remove("over-in"));
@@ -3773,13 +4019,13 @@ function renderSpaceTiles() {
   };
   const cards = level.map((p, i) => {
     const tone = ["t1", "t2", "t3", ""][i % 4];
-    if (kids(p.space).length) {
+    if (isFolder(p)) {
       const inner = kids(p.space), n = inner.length;
       const open = () => { location.hash = "#folder/" + p.space; };
       const t = el("div", { class: "tile " + tone + " wide", "data-folder": p.space },
-        el("h3", { style: "cursor:pointer", onclick: open }, "📁 " + p.label),
+        el("h3", { style: "cursor:pointer", onclick: open }, displayText("📁 " + visibleLabel(p))),
         el("div", { class: "kind" }, "Folder"),
-        el("div", { class: "inside" }, ...inner.slice(0, 5).map(c => el("span", { class: "chip" }, c.label)), n > 5 ? el("span", { class: "chip" }, "+" + (n - 5)) : null),
+        el("div", { class: "inside" }, ...inner.slice(0, 5).map(c => el("span", { class: "chip" }, displayText(visibleLabel(c)))), n > 5 ? el("span", { class: "chip" }, "+" + (n - 5)) : null),
         el("div", { class: "nums mute" }, n + (n === 1 ? " space inside" : " spaces inside")),
         el("div", { class: "acts" }, el("button", { type: "button", class: "primary", onclick: open }, "Open"),
           el("button", { type: "button", class: "link", onclick: () => addChild({ space: p.space, label: p.label }) }, "A space inside")));
@@ -3790,13 +4036,16 @@ function renderSpaceTiles() {
     }
     const s = byName.get(p.space);
     if (!s) return null;
-    return leaf(s, p.label, tone, !folder && s.stats && s.stats.facts > 0 && s.stats.facts === biggest);
+    return leaf(s, visibleLabel(p), tone, !folder && s.stats && s.stats.facts > 0 && s.stats.facts === biggest);
   }).filter(Boolean);
   // A folder is a space too: what was written in it itself stays one click away.
-  if (folder && byName.has(folder) && byName.get(folder).stats && byName.get(folder).stats.facts > 0) cards.unshift(leaf(byName.get(folder), spaceLabel(folder) + " · its own notes", "", false, true));
+  const current = byName.get(folder);
+  if (current && (current.kind !== "folder" || current.stats?.facts > 0)) {
+    cards.unshift(leaf(current, spaceLabel(folder) + " · " + tr("its own notes"), "", false, true));
+  }
   if (folder) cards.push(el("div", { class: "tile empty", "data-add-inside": "" }, el("h3", {}, "A space inside " + spaceLabel(folder)),
     el("div", { class: "acts" }, el("button", { type: "button", class: "primary", onclick: () => addChild({ space: folder, label: spaceLabel(folder) }) }, "A space inside"))));
-  $("#spaces").replaceChildren(...(cards.length ? cards : [el("p", { class: "mute", style: "grid-column:1/-1" }, "No space yet. Open “Advanced” below and make one under “New space”: for instance “me”, for who you are and what you value, then “health”, “work”, “home”.")]));
+  $("#spaces").replaceChildren(...(cards.length ? cards : [el("p", { class: "mute", style: "grid-column:1/-1" }, "No space yet.")]));
 }
 
 // ---- Machines: this one first, then the peers, live from the node (GET /sync/status) ----
@@ -3865,8 +4114,8 @@ function policyBlock(peer) {
   const v = POLICY.view;
   if (!v || v.peer !== peer) return el("div", { class: "mpol" }, el("p", { class: "mute small" }, "Reading…"));
   const rows = (v.spaces || []).map(r => el("div", { class: "prow", "data-space": r.space },
-    el("span", { class: "pname" }, r.label || r.space, r.sensitive ? el("span", { class: "badge off", style: "margin-left:6px" }, "health or money") : null),
-    waySelect(r.policy, w => setPolicy({ peer, space: r.space, policy: w }), r.label || r.space),
+    el("span", { class: "pname" }, spaceLabel(r.space), r.sensitive ? el("span", { class: "badge off", style: "margin-left:6px" }, "health or money") : null),
+    waySelect(r.policy, w => setPolicy({ peer, space: r.space, policy: w }), spaceLabel(r.space)),
     r.theirs ? el("span", { class: "msub" }, el("span", {}, "the machine says"), " ", el("span", {}, wayLabel(r.theirs))) : null,
     r.policy === "off" && r.exchanged ? el("span", { class: "msub" }, "it keeps what it already holds") : null));
   return el("div", { class: "mpol", "data-policy-of": peer },
@@ -4060,7 +4309,7 @@ function renderOnboarding() {
         try { await api("start", { name: input.value }); OB.name = input.value; await load(); obGo(3); } catch (x) { OB.err = x.message; renderOnboarding(); }
       });
       input.addEventListener("keydown", e => { if (e.key === "Enter") go.click(); });
-      body.replaceChildren(el("h2", {}, "What is your name?"), el("p", { class: "mute" }, "It is how this memory greets you and signs what you write. The spaces are made now: personal, health, home, finances, hobbies and work."),
+      body.replaceChildren(el("h2", {}, "What is your name?"), el("p", { class: "mute" }, "It is how this memory greets you and signs what you write. The spaces are made now: Me, Health, Home, Finances, Hobbies and Work."),
         el("div", { class: "add-row" }, input, go), err, el("div", {}, back));
       input.focus(); input.select();
       return;
@@ -4077,11 +4326,11 @@ function renderOnboarding() {
         el("p", { class: "mute small" }, "In your assistant, add a connector (a remote MCP server) and paste this address. It carries the key, so keep it private: whoever holds it can read your memory. You can revoke it from the list of connected assistants."),
         el("div", { class: "add-row" }, el("button", { type: "button", class: "primary", id: "ob-next", onclick: () => obGo(4) }, "Continue")))
         : el("div", { class: "add-row" }, slug, make);
-      body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", { class: "mute" }, "Claude, ChatGPT, OpenCode… One address is all it needs, and it can reach all your spaces. You can cut that later."),
+      body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", { class: "mute" }, "One address is all it needs, and it can reach all your spaces. You can cut that later."),
         shown, err, el("div", {}, !OB.conn ? el("button", { type: "button", class: "link", id: "ob-skip", onclick: () => obGo(4) }, "Later") : null));
       return;
     }
-    const names = FT.l.filter(x => !kids(x.space).length).map(x => x.label);
+    const names = FT.l.filter(x => !isInboxKind(x.kind) && !kids(x.space).length).map(x => x.label);
     body.replaceChildren(el("h2", {}, "Your memory is ready"), el("p", {}, names.length + " spaces: " + names.join(", ") + "."),
       el("p", { class: "mute" }, "Write a note in any of them, or say it to an assistant. Add another machine from the Machines block."),
       el("div", { class: "add-row" }, el("button", { type: "button", class: "primary", id: "ob-open", onclick: () => { OB.active = false; OB.mode = null; OB.step = 1; applyOnboarding(); render(); } }, "Open my memory")));
@@ -4228,7 +4477,7 @@ function renderGlobal() {
   const graph = location.hash === "#graph";
   const real = S.spaces.filter(v => !isInboxKind(v.kind));
   const notes = real.reduce((n, v) => n + (v.stats ? v.stats.facts : 0), 0);
-  crumbs($("#global-crumb"), [], graph ? "Graph" : "Journal");
+  crumbs($("#global-crumb"), [], tr(graph ? "Graph" : "Journal"));
   $("#global-title").textContent = "Your memory";
   $("#global-sub").textContent = Number(notes).toLocaleString(loc()) + (notes === 1 ? " note" : " notes") + " · " + real.length + (real.length === 1 ? " space" : " spaces");
   $("#global-tabs").replaceChildren(...[["#journal", "Journal", !graph], ["#graph", "Graph", graph]].map(([h, t, on]) =>
@@ -4239,7 +4488,7 @@ function renderGlobal() {
 async function globalJournal(body) {
   const search = el("input", { type: "search", placeholder: "search all notes", value: GL.q, "aria-label": "Search all notes" });
   const spaceSel = el("select", { "aria-label": "Space", id: "gj-space" }, el("option", { value: "" }, "All spaces"),
-    ...orderedSpaces().map(x => el("option", { value: x.space }, "  ".repeat(x.depth) + x.label)));
+    ...orderedSpaces().map(x => el("option", { value: x.space }, displayText("  ".repeat(x.depth) + x.label))));
   spaceSel.value = GL.space;
   const tagSel = el("select", { "aria-label": "Tag", id: "gj-tag" }, el("option", { value: "" }, "All tags"));
   const clear = el("button", { type: "button", class: "link", id: "gj-clear" }, "Clear filters");
@@ -4492,7 +4741,7 @@ function drawGraph(body, scope, g) {
         canShow ? el("button", { type: "button", class: "primary", id: "graph-show", onclick: () => graphOpen(d, scope) }, d.type === "space" ? "Show its notes" : "Show these notes") : null,
         d.type === "space" && !scope.space ? el("button", { type: "button", onclick: () => { location.hash = "#space/" + d.space; } }, "Open the space") : null,
         el("button", { type: "button", class: "link", onclick: () => select(null) }, "Clear")),
-      next.length ? el("div", { class: "small" }, el("span", { class: "mute" }, "Linked to: "), ...next.map(n => el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: () => select(n) }, n.label))) : null);
+      next.length ? el("div", { class: "small" }, el("span", { class: "mute" }, "Linked to: "), ...next.map(n => el("button", { type: "button", class: "chip", style: "cursor:pointer;border:0", onclick: () => select(n) }, displayText(n.label)))) : null);
   }
   const tools = el("div", { class: "gtools" },
     el("button", { type: "button", "aria-label": "Zoom in", title: "Zoom in", onclick: () => zoomAt(W / 2, H / 2, V.k * 1.3) }, "+"),
@@ -4546,7 +4795,7 @@ function setLang(l) {
   document.documentElement.lang = l;
   xTree(document.body);
   renderSwitches();
-  if (S) { render(); route(); applyOnboarding(); }
+  if (S) { renderSpacesView(); renderLayout(); render(); route(); applyOnboarding(); }
 }
 try { const th = localStorage.getItem("memcp-theme"); if (th === "light" || th === "dark") document.documentElement.dataset.theme = th; } catch (_) {}
 document.documentElement.lang = LANG;

@@ -318,7 +318,7 @@ impl Brain {
             if crate::catalogue::is_inbox_kind(k) {
                 return Err(Error::Invalid("the Inbox is made for you already".into()));
             }
-            if !self.catalogue()?.iter().any(|c| &c.key == k) {
+            if k != crate::catalogue::FOLDER && !self.catalogue()?.iter().any(|c| &c.key == k) {
                 return Err(Error::Invalid(format!("unknown kind {k:?}")));
             }
         }
@@ -379,15 +379,15 @@ impl Brain {
         if !(triage::is_triage(self, space) && only_label) {
             self.not_triage(space)?;
         }
-        if let Some(k) = &u.kind {
-            if crate::catalogue::is_inbox_kind(k) {
-                return Err(Error::Invalid("a space cannot become the Inbox".into()));
-            }
-            self.set_space_kind(space, k)?;
+        if u.kind
+            .as_deref()
+            .is_some_and(crate::catalogue::is_inbox_kind)
+        {
+            return Err(Error::Invalid("a space cannot become the Inbox".into()));
         }
         let l = &u.layout;
-        if l.label.is_some() || l.parent.is_some() || l.position.is_some() {
-            self.set_layout(user_id, space, l)?;
+        if l.label.is_some() || l.parent.is_some() || l.position.is_some() || u.kind.is_some() {
+            self.set_layout_and_kind(user_id, space, l, u.kind.as_deref())?;
         }
         let e = &u.rules;
         if !(e.add_tags.is_empty()
@@ -511,6 +511,14 @@ impl Brain {
             )?;
             tx.execute_batch("PRAGMA defer_foreign_keys = ON")?;
             let (o, n) = (old.as_str(), new.as_str());
+            let label: Option<String> =
+                tx.query_row("SELECT label FROM spaces WHERE name = ?1", [o], |r| {
+                    r.get(0)
+                })?;
+            if label.is_none() && crate::layout::builtin_labels(&report.kind).is_none() {
+                let owner = crate::layout::owner_of(&tx, &Space::new(o)?)?;
+                crate::layout::check_unique_label(&tx, new, &report.kind, None, &owner)?;
+            }
             tx.execute("UPDATE spaces SET name = ?2 WHERE name = ?1", [o, n])?;
             for table in [
                 "spaces SET parent",
@@ -536,10 +544,6 @@ impl Brain {
                 tx.execute(
                     "UPDATE spaces SET kind = ?2 WHERE name = ?1",
                     [n, crate::catalogue::TRIAGE],
-                )?;
-                tx.execute(
-                    "UPDATE spaces SET label = 'Inbox' WHERE name = ?1 AND (label IS NULL OR label = ?2)",
-                    [n, o],
                 )?;
                 report.kind = crate::catalogue::TRIAGE.to_string();
             }
@@ -726,7 +730,13 @@ impl Brain {
                 |r| r.get(0),
             )
             .unwrap_or(at);
+        let stored_label: Option<String> = ctl.query_row(
+            "SELECT label FROM spaces WHERE name = ?1",
+            [space.as_str()],
+            |r| r.get(0),
+        )?;
         Ok(json!({
+            "stored_label": stored_label,
             "format": "memcp-archived-space", "version": 1, "state": DELETING,
             "space": space.as_str(), "label": info.label, "kind": info.kind,
             "parent": info.parent.as_ref().map(Space::as_str), "position": info.position,
@@ -927,6 +937,13 @@ impl Brain {
         if !live.join(space.file_name()).is_file() {
             return Err(Error::Invalid("the archive holds no database".into()));
         }
+        crate::layout::check_unique_label(
+            &self.open_control()?,
+            &space,
+            v["kind"].as_str().unwrap_or("custom"),
+            v.get("stored_label").unwrap_or(&v["label"]).as_str(),
+            user_id,
+        )?;
         if dry_run {
             return Ok(space);
         }
@@ -962,13 +979,30 @@ impl Brain {
         if self.has_space(&space)? {
             shift(&pieces(self, &space, &live), false, None)?;
         } else {
-            shift(
-                &pieces(self, &space, &live),
-                false,
-                Some(crate::failpoint::at::RESTORE_DB),
+            let ctl = self.open_control()?;
+            let tx = rusqlite::Transaction::new_unchecked(
+                &ctl,
+                rusqlite::TransactionBehavior::Immediate,
             )?;
+            let kind = j["kind"].as_str().unwrap_or(crate::catalogue::CUSTOM);
+            let label = j.get("stored_label").unwrap_or(&j["label"]).as_str();
+            let paths = pieces(self, &space, &live);
+            match crate::layout::check_unique_label(&tx, &space, kind, label, owner) {
+                Ok(()) => {}
+                Err(e @ Error::Invalid(_)) => {
+                    // A conflicting label may have been entered while this interrupted restore was pending.
+                    shift(&paths, true, None)?;
+                    let mut archived = j.clone();
+                    archived["state"] = json!(ARCHIVED);
+                    write_journal(dir, &archived)?;
+                    return Err(e);
+                }
+                Err(e) => return Err(e),
+            }
+            shift(&paths, false, Some(crate::failpoint::at::RESTORE_DB))?;
             crate::failpoint::hit(crate::failpoint::at::RESTORE_FILES)?;
-            self.reregister(&space, owner, j)?;
+            Self::reregister(&tx, &space, owner, j)?;
+            tx.commit()?;
             crate::failpoint::hit(crate::failpoint::at::RESTORE_REGISTERED)?;
         }
         // The file must declare this space and open cleanly.
@@ -980,10 +1014,12 @@ impl Brain {
 
     /// The control transaction of a restore: the space, its owner, the grants that still have a connection, and the
     /// mark that it is back (newer than the archive, so the other nodes take it again).
-    fn reregister(&self, space: &Space, user_id: &str, v: &Value) -> Result<()> {
-        let ctl = self.open_control()?;
-        let tx =
-            rusqlite::Transaction::new_unchecked(&ctl, rusqlite::TransactionBehavior::Immediate)?;
+    fn reregister(
+        tx: &rusqlite::Connection,
+        space: &Space,
+        user_id: &str,
+        v: &Value,
+    ) -> Result<()> {
         let parent = v["parent"]
             .as_str()
             .filter(|p| {
@@ -995,13 +1031,14 @@ impl Brain {
                 .is_ok()
             })
             .map(String::from);
+        let label = v.get("stored_label").unwrap_or(&v["label"]).as_str();
         tx.execute(
             "INSERT INTO spaces (name, created_at, kind, label, parent, position) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
             params![
                 space.as_str(),
                 v["created_at"].as_i64().unwrap_or_else(util::now),
                 v["kind"].as_str().unwrap_or("custom"),
-                v["label"].as_str(),
+                label,
                 parent,
                 v["position"].as_i64().unwrap_or(0)
             ],
@@ -1038,8 +1075,7 @@ impl Brain {
                 )?;
             }
         }
-        crate::swarm::mark_restored_in(&tx, space, util::now())?;
-        tx.commit()?;
+        crate::swarm::mark_restored_in(tx, space, util::now())?;
         Ok(())
     }
 
