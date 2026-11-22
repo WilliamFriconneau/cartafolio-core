@@ -131,9 +131,20 @@ FEDERATION.md (« Adding a node »); none was removed.
 
 ## First opening
 
-Two choices, on every app: **Start a memory** or **Join a memory**. When another device of the same Apple account is
-already joined, a third comes first: « Continue with the memory of <device> » (an invitation in the iCloud Keychain,
-one tap). Joining otherwise: the address, then « Ask for access » and the three words compared on the node's page.
+The same four steps, the same words and the same order on every app (page, iPhone, iPad, Mac); only the layout is
+adapted to the device:
+
+1. **Start or join.** Two choices: **Start a memory** or **Join a memory**. When another device of the same Apple
+   account is already joined, a third comes first: « Continue with the memory of <device> » (an invitation in the
+   iCloud Keychain, one tap). Joining otherwise: the address, then « Ask for access » and the three words compared on
+   the node's page.
+2. **The name**, which the memory uses to greet the person and sign what they write; the default spaces are made now.
+3. **Connect an assistant**, with the same choices as Settings: **Claude**, **ChatGPT**, **Le Chat (Mistral)**,
+   **Claude Code**, **Kalios** and **Another assistant**. The assistants that sign in (Claude, ChatGPT, Le Chat) use a
+   one-time code: the code is shown, one click copies it, and no long address with a key is needed. The others take
+   their address (and header or command), with a copy button. « Later » is always there.
+4. **Ready**: the spaces made, one line to say what to do, and « Open my memory ».
+
 Then, once, every permission the app will need, each with why. Then the use cases, in three lines.
 
 ## Golden paths (each one a test before a release)

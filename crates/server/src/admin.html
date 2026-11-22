@@ -442,6 +442,23 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
       </div>
     </div>
 
+    <section id="apps-section" data-part="settings">
+      <h2>Get the apps</h2>
+      <p class="mute small">The same memory on your devices. The Apple app signs in and keeps the keys; the programs do the same on a computer.</p>
+      <div class="bento">
+        <div class="tile t2">
+          <h3>iPhone, iPad, Mac</h3>
+          <p class="mute small" style="margin:0">Pensine for Apple devices, in TestFlight for now; it arrives on the App Store.</p>
+          <div class="acts"><a class="link" href="https://williamfriconneau.github.io/pensine-core/wiki/mac-iphone-ipad.html" target="_blank" rel="noopener">Get the app</a></div>
+        </div>
+        <div class="tile t2">
+          <h3>Mac, Windows, Linux</h3>
+          <p class="mute small" style="margin:0">The programs, with their install script and their published binaries.</p>
+          <div class="acts"><a class="link" href="https://github.com/WilliamFriconneau/pensine-core/releases" target="_blank" rel="noopener">Published versions</a></div>
+        </div>
+      </div>
+    </section>
+
     <section id="spaces-section">
       <h2>Your spaces</h2>
       <div class="row" id="spaces-toolbar">
@@ -1205,6 +1222,18 @@ const FR = {
   "Keywords": "Mots-clés",
   "A note that contains one of these words goes to this space.": "Une note qui contient l’un de ces mots va dans cet espace.",
   "entry": "entrée", "entries": "entrées", "Sleep": "Sommeil", "HRV": "VFC", "steps": "pas",
+  "Connected": "Connecté", "Add another": "En ajouter un autre",
+  "Pick your assistant, as in Settings. Claude, ChatGPT and Le Chat sign in with a one-time code; Claude Code and the others take an address.": "Choisissez votre assistant, comme dans Réglages. Claude, ChatGPT et Le Chat se connectent avec un code à usage unique ; Claude Code et les autres prennent une adresse.",
+  "Or connect with a key: an address that carries it.": "Ou connectez avec une clé : une adresse qui la porte.",
+  "You can add another assistant later in Settings.": "Vous pourrez ajouter un autre assistant plus tard dans Réglages.",
+  "Get the apps": "Obtenir les apps",
+  "The same memory on your devices. The Apple app signs in and keeps the keys; the programs do the same on a computer.": "La même mémoire sur vos appareils. L’app Apple se connecte et garde les clés ; les programmes font de même sur un ordinateur.",
+  "iPhone, iPad, Mac": "iPhone, iPad, Mac",
+  "Pensine for Apple devices, in TestFlight for now; it arrives on the App Store.": "Pensine pour les appareils Apple, en TestFlight pour l’instant ; il arrive sur l’App Store.",
+  "Get the app": "Obtenir l’app",
+  "Mac, Windows, Linux": "Mac, Windows, Linux",
+  "The programs, with their install script and their published binaries.": "Les programmes, avec leur script d’installation et leurs binaires publiés.",
+  "Published versions": "Versions publiées",
   "Space this note goes to": "Espace de cette note",
   "Inbox (to sort)": "À trier",
   "tags, such as #home #shopping": "étiquettes, par exemple #maison #courses",
@@ -3574,16 +3603,26 @@ function renderPrompt() {
     el("pre", { style: "max-height:12em;overflow:auto" }, organisePrompt()), copyButton(organisePrompt())));
 }
 
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch (_) { return false; }
+}
 function copyButton(text) {
   return el("button", { type: "button", class: "link", onclick: async e => {
-    try { await navigator.clipboard.writeText(text); e.target.textContent = "copied"; } catch (_) { e.target.textContent = "select and copy by hand"; }
+    const ok = await copyText(text);
+    e.target.textContent = ok ? "copied" : "select and copy by hand";
   } }, "copy");
+}
+// A code or a command: one click copies it, and a click selects the whole of it for a hand copy.
+function copyBlock(text) {
+  return el("pre", { class: "copiable", title: "Click to copy", style: "cursor:pointer;user-select:all;white-space:pre-wrap;word-break:break-all;margin:4px 0",
+    onclick: async () => { const ok = await copyText(text); toast(ok ? "Copied" : "Select and copy by hand"); } }, text);
 }
 
 function openWizard(pre = {}) {
   clearInterval(W.timer);
   W.timer = null;
-  W.platform = null; W.created = null; W.connected = false; W.slug = ""; W.nameFor = null; W.code = null; W.codeRequest = null; W.codeError = "";
+  W.platform = pre.platform || null; W.created = null; W.connected = false; W.slug = ""; W.nameFor = null; W.code = null; W.codeRequest = null; W.codeError = "";
+  if (pre.platform) W.slug = suggestName(PLATFORMS.find(x => x.id === pre.platform) || PLATFORMS[0]);
   W.spaces = new Set(pre.space ? [pre.space] : []);
   W.all = false;
   W.readOnly = !!pre.readOnly;
@@ -3591,6 +3630,13 @@ function openWizard(pre = {}) {
   renderWizard();
   $("#wizard").showModal();
 }
+// A connection made from the onboarding wizard goes on with the onboarding, the same way as in Settings.
+$("#wizard").addEventListener("close", () => {
+  if (typeof OB === "undefined" || !OB.active || OB.mode !== "start" || OB.step !== 3) return;
+  const live = (S.connections || []).filter(c => !c.revoked && !c.internal && !/^janitor(-|$)/.test(c.agent));
+  if (live.length) OB.conn = { agent: live[0].agent };
+  renderOnboarding();
+});
 
 async function requestWizardCode() {
   const request = api("invite", {});
@@ -3689,7 +3735,7 @@ function renderWizard() {
     const list = el("ol", { class: "steps" });
     for (const it of items) {
       if (typeof it === "string") list.append(el("li", {}, it));
-      else { const li = list.lastChild; const box = el("div", {}, el("pre", {}, it.pre), copyButton(it.pre)); li ? li.append(box) : list.append(el("li", {}, box)); }
+      else { const li = list.lastChild; const box = el("div", {}, copyBlock(it.pre), copyButton(it.pre)); li ? li.append(box) : list.append(el("li", {}, box)); }
     }
     const invitation = p.oauth ? el("div", { class: "row" },
       W.code ? el("span", { class: "small mute" }, "Code expires at", " ",
@@ -4378,19 +4424,30 @@ function renderOnboarding() {
       return;
     }
     if (OB.step === 3) {
-      const slug = el("input", { id: "ob-agent", value: OB.conn ? OB.conn.agent : "my-assistant", size: 24, pattern: "[a-z0-9][a-z0-9\\-]{0,39}" });
+      const live = (S.connections || []).filter(c => !c.revoked && !c.internal && !/^janitor(-|$)/.test(c.agent));
+      const connected = OB.conn ? live.find(c => c.agent === OB.conn.agent) || live[0] : null;
+      if (connected) {
+        // The same outcome as in Settings: a connected assistant, and the address only when this one was made with a key.
+        const box = OB.conn && OB.conn.url ? el("div", { class: "addr-box" }, el("code", { id: "ob-url" }, OB.conn.url), copyButton(OB.conn.url)) : null;
+        body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", {}, "Connected: " + connected.agent + "."), box,
+          el("p", { class: "mute small" }, "You can add another assistant later in Settings."),
+          el("div", { class: "add-row" }, el("button", { type: "button", class: "primary", id: "ob-next", onclick: () => obGo(4) }, "Continue"),
+            el("button", { type: "button", class: "link", onclick: () => openWizard() }, "Add another")), err);
+        return;
+      }
+      const slug = el("input", { id: "ob-agent", value: "my-assistant", size: 24, pattern: "[a-z0-9][a-z0-9\\-]{0,39}" });
       const make = el("button", { type: "button", class: "primary", id: "ob-connect" }, "Make the address");
       make.addEventListener("click", async () => {
         make.disabled = true;
         try { const agent = slugOf(slug.value) || "my-assistant"; const r = await api("connections", { agent, rights: "all" }); OB.conn = { agent, url: r.mcp_url_with_key }; await load(); renderOnboarding(); } catch (x) { OB.err = x.message; renderOnboarding(); }
       });
-      const shown = OB.conn ? el("div", {},
-        el("div", { class: "addr-box" }, el("code", { id: "ob-url" }, OB.conn.url), copyButton(OB.conn.url)),
-        el("p", { class: "mute small" }, "In your assistant, add a connector (a remote MCP server) and paste this address. It carries the key, so keep it private: whoever holds it can read your memory. You can revoke it from the list of connected assistants."),
-        el("div", { class: "add-row" }, el("button", { type: "button", class: "primary", id: "ob-next", onclick: () => obGo(4) }, "Continue")))
-        : el("div", { class: "add-row" }, slug, make);
-      body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", { class: "mute" }, "One address is all it needs, and it can reach all your spaces. You can cut that later."),
-        shown, err, el("div", {}, !OB.conn ? el("button", { type: "button", class: "link", id: "ob-skip", onclick: () => obGo(4) }, "Later") : null));
+      const pick = el("div", { class: "pick" }, ...PLATFORMS.map(x => el("button", { type: "button", onclick: () => openWizard({ platform: x.id }) }, x.name)));
+      body.replaceChildren(el("h2", {}, "Connect an assistant"),
+        el("p", { class: "mute" }, "Pick your assistant, as in Settings. Claude, ChatGPT and Le Chat sign in with a one-time code; Claude Code and the others take an address."),
+        pick,
+        el("p", { class: "mute small", style: "margin-top:10px" }, "Or connect with a key: an address that carries it."),
+        el("div", { class: "add-row" }, slug, make),
+        err, el("div", {}, el("button", { type: "button", class: "link", id: "ob-skip", onclick: () => obGo(4) }, "Later")));
       return;
     }
     const names = FT.l.filter(x => !isInboxKind(x.kind) && !kids(x.space).length).map(x => x.label);

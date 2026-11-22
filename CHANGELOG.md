@@ -2,10 +2,21 @@
 
 ## Unreleased
 
+- **The same onboarding everywhere.** The guided start offers the same assistant choices as Settings (Claude, ChatGPT, Le Chat, Claude Code, Kalios, Another assistant), with the one-time code copied by a click and no long keyed address by default; the page and the apps follow one contract (docs/UI-SPEC.md, First opening).
+- **Links to the apps.** Settings shows where to get the Apple app (TestFlight for now) and the published Mac, Windows and Linux programs.
+
+## 20261122.6.0
+
 - **One journal.** The capture (trace or drop) sits at the top of the Journal; below it, the notes of every space with a daily summary, the health figures of the day, and a Health filter.
 - **The page remembers the console key.** Coming back to the node or the Home Assistant app no longer asks for it again; a refused key is forgotten.
+
+## 20261122.5.0
+
 - **Traces with a space and tags of one's own.** The Trace or drop page lets the person choose where a note goes and the tags it carries before sending it; the janitor keeps the tags they set when it files the note.
 - **The same logo everywhere.** The node page shows the app's brain-and-microphone icon in its header and favicon, and the Home Assistant app carries it too.
+
+## 20261122.4.0
+
 - **Source apps.** A space can list the apps whose notes always go to it (`sources` in its rules); by default the notes of Chrome go to the Work space, and listing a source turns that built-in rule off. Editable on the space's keywords page.
 
 ## 20261122.3.0
