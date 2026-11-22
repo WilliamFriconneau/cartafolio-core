@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Traces with a space and tags of one's own.** The Trace or drop page lets the person choose where a note goes and the tags it carries before sending it; the janitor keeps the tags they set when it files the note.
+- **The same logo everywhere.** The node page shows the app's brain-and-microphone icon in its header and favicon, and the Home Assistant app carries it too.
 - **Source apps.** A space can list the apps whose notes always go to it (`sources` in its rules); by default the notes of Chrome go to the Work space, and listing a source turns that built-in rule off. Editable on the space's keywords page.
 
 ## 20261122.3.0

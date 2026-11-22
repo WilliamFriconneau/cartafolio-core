@@ -96,18 +96,6 @@ fn filed_text(title: &str, text: &str) -> String {
     }
 }
 
-/// Whether a tag comes from the `call` of a note (its participants, its app): the janitor keeps those when it files.
-fn is_call_tag(tag: &str) -> bool {
-    tag == "appel"
-        || tag.starts_with("appel/")
-        || tag.starts_with("personnes/")
-        || tag.strip_prefix("field/").is_some_and(|r| {
-            ["caller/", "callee/", "call_"]
-                .iter()
-                .any(|p| r.starts_with(p))
-        })
-}
-
 fn tags_of(fact: &Value) -> Vec<&str> {
     fact["tags"]
         .as_array()
@@ -1197,13 +1185,17 @@ impl Janitor {
         by: &str,
     ) -> Result<String, ClientError> {
         let mut tags_out = choice.tags.clone();
-        tags_out.push("janitor".into());
-        // The participants of a call stay on the note, whatever the model chose.
+        // The tags the person put on the note stay, whatever the model chose; only the Inbox's plumbing goes.
         for t in tags_of(note) {
-            if is_call_tag(t) && !tags_out.iter().any(|x| x == t) {
+            let plumbing = t == "inbox"
+                || t.starts_with("inbox/")
+                || t == "janitor"
+                || t.starts_with("janitor/");
+            if !plumbing && !tags_out.iter().any(|x| x == t) {
                 tags_out.push(t.to_string());
             }
         }
+        tags_out.push("janitor".into());
         let kind = note["kind"].as_str().unwrap_or("fact");
         let body = filed_text(&choice.title, text);
         if choice.vault == vault {

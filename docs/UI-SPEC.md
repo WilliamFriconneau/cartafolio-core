@@ -9,7 +9,9 @@ four sections, in the same order, with the same words. A platform differs only w
 | Mac, Windows, Linux | the whole memory; recording calls and meetings (everyone told, everyone agreeing) |
 | Node page | the whole memory; managing the node (people, connections, peers, updates) |
 
-Words never used: *bridge*, *capture program*, *capture app*, *proxy*, *vault* (say *space*, and *the app* or *the node*). Vulgar or slang words are never used in the interface.
+Words never used: *bridge*, *capture program*, *capture app*, *proxy*, *vault* (say *space*, and *the app* or *the node*).
+The same logo everywhere: the brain-and-microphone icon of the apps, on the node page (header and favicon) and the
+Home Assistant app. Vulgar or slang words are never used in the interface.
 
 ## What matters most to a person (the order of everything below)
 
@@ -46,8 +48,9 @@ image is unloading the mind: a thought drawn out of the head and put somewhere s
 
 The microphone, large, in the middle; under it *Write*, *Attach a file*, and on a computer *Record a meeting*. A voice
 note starts on a tap or on « Dictate » (widget, Action button, Siri, keyboard shortcut), **never on opening the app**.
-Under the buttons, today's captures, newest first, each with the space it went to and its tags (`#home #shopping`),
-or « To sort » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
+Before sending, the person chooses the space the trace goes to and the tags it carries; the janitor keeps those tags
+when it files the note. Under the buttons, today's captures, newest first, each with the space it went to and its tags
+(`#home #shopping`), or « To sort » while it waits. « To confirm » (proposals for Apple Health, Reminders, the calendar) opens from its badge.
 
 ### 2. Journal
 

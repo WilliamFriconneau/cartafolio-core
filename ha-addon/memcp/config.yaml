@@ -1,5 +1,5 @@
 name: Pensine
-version: "20261122.4.0"
+version: "20261122.5.0"
 slug: memcp
 description: Pensine, durable memory for AI assistants over MCP, one memory per person, organised in spaces
 url: https://github.com/WilliamFriconneau/pensine-core
