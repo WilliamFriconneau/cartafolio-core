@@ -586,7 +586,9 @@ pub fn adopt(
         let label = v["label"]
             .as_str()
             .map(str::to_string)
-            .filter(|l| crate::layout::clean_label(l).is_ok());
+            .filter(|l| crate::layout::clean_label(l).is_ok())
+            // A prefix keeps the copies apart by name; their label follows, so two vaults of one kind can coexist.
+            .or_else(|| prefix.map(|_| crate::layout::pretty_name(target.as_str())));
         plan.push(Plan {
             orig,
             target,

@@ -84,11 +84,17 @@ pub(crate) fn visible_labels(name: &str, kind: &str, label: Option<&str>) -> (St
     if let Some((en, fr)) = builtin_labels(kind) {
         return (en.into(), fr.into());
     }
+    let words = pretty_name(name);
+    (words.clone(), words)
+}
+
+/// The name as a person reads it when no label was given: dashes become spaces, first letter up.
+pub(crate) fn pretty_name(name: &str) -> String {
     let mut words = name.replace('-', " ");
     if let Some(first) = words.get_mut(..1) {
         first.make_ascii_uppercase();
     }
-    (words.clone(), words)
+    words
 }
 
 /// Check within the transaction that writes the label, so simultaneous writes cannot both pass.
