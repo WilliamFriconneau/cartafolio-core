@@ -2,7 +2,12 @@
 
 ## Unreleased
 
-- **The same onboarding everywhere.** The guided start offers the same assistant choices as Settings (Claude, ChatGPT, Le Chat, Claude Code, Kalios, Another assistant), with the one-time code copied by a click and no long keyed address by default; the page and the apps follow one contract (docs/UI-SPEC.md, First opening).
+- **No keyed address in the onboarding.** The guided start shows only the same assistant choices as Settings: the platform opens the same wizard, and a keyed address appears there only for an assistant that takes one. The one-time code copies by a click.
+- **Releases under the product name.** The release files are `pensine-...` (and `pensine.exe` on Windows) instead of the old names, with a Mac DMG; the installers fetch the new names and still accept the old ones.
+
+## 20261122.7.0
+
+- **The same onboarding everywhere.** The guided start offers the same assistant choices as Settings (Claude, ChatGPT, Le Chat, Claude Code, Kalios, Another assistant), with the one-time code copied by a click; the page and the apps follow one contract (docs/UI-SPEC.md, First opening).
 - **Links to the apps.** Settings shows where to get the Apple app (TestFlight for now) and the published Mac, Windows and Linux programs.
 
 ## 20261122.6.0

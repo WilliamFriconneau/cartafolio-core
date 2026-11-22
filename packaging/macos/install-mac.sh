@@ -164,7 +164,7 @@ if [ -n "$FROM" ]; then
   say "taken from $FROM"
 else
   case "$(uname -m)" in
-    arm64) TARGET=aarch64-apple-darwin ;;
+    arm64) TARGET=macos-arm64; OLD_TARGET=aarch64-apple-darwin ;;
     *) die "the releases are for Apple silicon; on this Mac build from source (cargo build --release) and use --from" ;;
   esac
   have curl || die "curl is needed"
@@ -175,12 +175,16 @@ else
   say "release $VERSION for $TARGET"
   TMP=$(mktemp -d); trap 'rm -rf "$TMP"' EXIT INT TERM
   curl -fsSL -o "$TMP/SHA256SUMS" "$BASE/$VERSION/SHA256SUMS" || die "no SHA256SUMS for $VERSION"
+  asset() { printf 'pensine%s-%s-%s' "${1#memcp}" "$VERSION" "$TARGET"; }
   for prog in memcp-manager memcp-sync; do
-    if grep -q " $prog-$VERSION-$TARGET\$" "$TMP/SHA256SUMS"; then PROGRAMS="$PROGRAMS $prog"; fi
+    if grep -q " $(asset "$prog")\$" "$TMP/SHA256SUMS"; then PROGRAMS="$PROGRAMS $prog"; fi
   done
   for prog in $PROGRAMS; do
-    f="$prog-$VERSION-$TARGET"
-    curl -fsSL -o "$TMP/$f" "$BASE/$VERSION/$f" || die "cannot download $f"
+    f=$(asset "$prog")
+    if ! curl -fsSL -o "$TMP/$f" "$BASE/$VERSION/$f" 2>/dev/null; then
+      f="$prog-$VERSION-$OLD_TARGET"
+      curl -fsSL -o "$TMP/$f" "$BASE/$VERSION/$f" || die "cannot download $f"
+    fi
     want=$(grep " $f\$" "$TMP/SHA256SUMS" | cut -d' ' -f1)
     [ -n "$want" ] || die "$f is not in SHA256SUMS"
     got=$(shasum -a 256 "$TMP/$f" | cut -d' ' -f1)
@@ -188,7 +192,7 @@ else
   done
   say "checksums match."
   stop_agents
-  for prog in $PROGRAMS; do install -m 755 "$TMP/$prog-$VERSION-$TARGET" "$BIN/$prog"; done
+  for prog in $PROGRAMS; do install -m 755 "$TMP/$(asset "$prog")" "$BIN/$prog" 2>/dev/null || install -m 755 "$TMP/$prog-$VERSION-$OLD_TARGET" "$BIN/$prog"; done
 fi
 for prog in memcp memcp-manager memcp-sync; do
   if [ -x "$BIN/$prog" ]; then ln -sfn "$prog" "$BIN/pensine${prog#memcp}"; fi

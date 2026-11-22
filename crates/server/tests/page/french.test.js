@@ -242,9 +242,12 @@ async function leftovers(page, rootSel) {
   await p2.click("#ob-body button:has-text('Retour')");
   await p2.click("#ob-start"); await sleep(200);
   await scan2("the name step");
-  await p2.click("#ob-make"); await p2.waitForSelector("#ob-connect"); await p2.click("#ob-connect"); await p2.waitForSelector("#ob-url"); await sleep(200);
+  await p2.click("#ob-make"); await p2.waitForSelector("#ob-platforms"); await sleep(200);
   await scan2("the connect step");
-  await p2.click("#ob-next"); await sleep(200);
+  await p2.click("#ob-platforms button:has-text('Claude')"); await p2.waitForSelector("#wizard[open]"); await sleep(600);
+  await scan2("the assistant wizard");
+  await p2.evaluate(() => document.querySelector("#wizard").close()); await sleep(200);
+  await p2.click("#ob-skip"); await sleep(200);
   await scan2("the ready step");
 
   check("nothing logged an error", problems.length === 0, problems.join(" | "));

@@ -13,7 +13,11 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        target: [x86_64-unknown-linux-musl, aarch64-unknown-linux-musl]
+        include:
+          - target: x86_64-unknown-linux-musl
+            short: linux-x64
+          - target: aarch64-unknown-linux-musl
+            short: linux-arm64
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -30,13 +34,13 @@ jobs:
       - name: Package
         run: |
           mkdir dist
-          cp target/${{ matrix.target }}/release/memcp dist/memcp-${{ github.ref_name }}-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/memcp-manager dist/memcp-manager-${{ github.ref_name }}-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/memcp-janitor dist/memcp-janitor-${{ github.ref_name }}-${{ matrix.target }}
-          cp target/${{ matrix.target }}/release/memcp-sync dist/memcp-sync-${{ github.ref_name }}-${{ matrix.target }}
+          cp target/${{ matrix.target }}/release/memcp dist/pensine-${{ matrix.short }}
+          cp target/${{ matrix.target }}/release/memcp-manager dist/pensine-manager-${{ matrix.short }}
+          cp target/${{ matrix.target }}/release/memcp-janitor dist/pensine-janitor-${{ matrix.short }}
+          cp target/${{ matrix.target }}/release/memcp-sync dist/pensine-sync-${{ matrix.short }}
           # The archive install.sh installs from: programs, units, memcp.toml (see packaging/linux).
           V=${GITHUB_REF_NAME#v}
-          n=memcp-$V-${{ matrix.target }}
+          n=pensine-$V-${{ matrix.short }}
           mkdir -p pkg/$n/bin pkg/$n/units
           for b in memcp memcp-janitor memcp-manager memcp-sync; do cp target/${{ matrix.target }}/release/$b pkg/$n/bin/; done
           cp packaging/linux/*.service packaging/linux/*.timer packaging/linux/memcp.sysusers packaging/linux/memcp.tmpfiles pkg/$n/units/
@@ -55,9 +59,11 @@ jobs:
         include:
           - os: macos-latest
             target: aarch64-apple-darwin
+            short: macos-arm64
             ext: ""
           - os: windows-latest
             target: x86_64-pc-windows-msvc
+            short: windows-x64
             ext: ".exe"
     steps:
       - uses: actions/checkout@v4
@@ -73,8 +79,22 @@ jobs:
         run: |
           mkdir dist
           for b in memcp memcp-janitor memcp-manager memcp-sync; do
-            cp "target/${{ matrix.target }}/release/${b}${{ matrix.ext }}" "dist/${b}-${{ github.ref_name }}-${{ matrix.target }}${{ matrix.ext }}"
+            cp "target/${{ matrix.target }}/release/${b}${{ matrix.ext }}" "dist/pensine${b#memcp}-${{ matrix.short }}${{ matrix.ext }}"
           done
+          if [ "${{ matrix.os }}" = "macos-latest" ]; then
+            V=${GITHUB_REF_NAME#v}
+            stage="Pensine-$V"
+            mkdir -p "$stage"
+            for b in memcp memcp-janitor memcp-manager memcp-sync; do
+              cp "target/${{ matrix.target }}/release/$b" "$stage/pensine${b#memcp}"
+            done
+            cat > "$stage/README.txt" <<EOF
+          Pensine $V for Apple silicon.
+          These programs work together: keep them in the same folder.
+          Where the memory lives and how to serve it: https://github.com/${{ github.repository }}/blob/main/docs/LINUX.md
+          EOF
+            hdiutil create -volname "Pensine $V" -srcfolder "$stage" -ov -format UDZO "dist/Pensine-$V-macos-arm64.dmg"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: bin-${{ matrix.target }}
@@ -90,7 +110,7 @@ jobs:
           cargo install cargo-cyclonedx --locked
           cargo cyclonedx --format json --spec-version 1.5 --all
           mkdir dist
-          cp crates/server/memcp-server.cdx.json dist/memcp-${{ github.ref_name }}.cdx.json
+          cp crates/server/memcp-server.cdx.json dist/pensine-${{ github.ref_name }}.cdx.json
       - uses: actions/upload-artifact@v4
         with:
           name: sbom

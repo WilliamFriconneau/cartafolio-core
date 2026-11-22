@@ -48,16 +48,23 @@ fn program(var: &str, base: &str) -> PathBuf {
     if let Some(p) = memcp_core::env::var_os(var) {
         return PathBuf::from(p);
     }
-    let name = if cfg!(windows) {
-        format!("{base}.exe")
-    } else {
-        base.to_string()
-    };
-    std::env::current_exe()
+    let suffix = if cfg!(windows) { ".exe" } else { "" };
+    let name = format!("{base}{suffix}");
+    // The releases since 20261122.7.1 carry the programs under the product name (`pensine-sync`), while
+    // an installation keeps the historical `memcp-` names: look for both next to this program.
+    let alt = format!("{}{suffix}", base.replacen("memcp", "pensine", 1));
+    if let Some(dir) = std::env::current_exe()
         .ok()
-        .and_then(|e| e.parent().map(|d| d.join(&name)))
-        .filter(|p| p.is_file())
-        .unwrap_or_else(|| PathBuf::from(name))
+        .and_then(|e| e.parent().map(PathBuf::from))
+    {
+        for n in [&name, &alt] {
+            let p = dir.join(n);
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
+    PathBuf::from(name)
 }
 
 fn sync_program() -> PathBuf {

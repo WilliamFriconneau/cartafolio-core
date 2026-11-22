@@ -84,8 +84,8 @@ say "A durable memory for your AI assistants, kept on your machine."
 
 [ "$(uname -s)" = Linux ] || die "this installer is for Linux. On macOS, use: cargo install --git https://github.com/$REPO memcp-server (see the README). On Home Assistant, add the repository as an add-on repository."
 case "$(uname -m)" in
-  x86_64|amd64) TARGET=x86_64-unknown-linux-musl ;;
-  aarch64|arm64) TARGET=aarch64-unknown-linux-musl ;;
+  x86_64|amd64) TARGET=x86_64-unknown-linux-musl; SHORT=linux-x64 ;;
+  aarch64|arm64) TARGET=aarch64-unknown-linux-musl; SHORT=linux-arm64 ;;
   *) die "no binary for $(uname -m); build from source: cargo install --git https://github.com/$REPO memcp-server" ;;
 esac
 
@@ -108,15 +108,18 @@ else
   fi
   say "release $VERSION for $TARGET"
   GETO "$BASE/$VERSION/SHA256SUMS" "$TMP/SHA256SUMS" || die "no SHA256SUMS for $VERSION"
-  f="memcp-${VERSION#v}-$TARGET.tar.gz"
-  GETO "$BASE/$VERSION/$f" "$TMP/$f" || die "cannot download $f"
+  f="pensine-${VERSION#v}-$SHORT.tar.gz"
+  if ! GETO "$BASE/$VERSION/$f" "$TMP/$f" 2>/dev/null; then
+    f="memcp-${VERSION#v}-$TARGET.tar.gz"
+    GETO "$BASE/$VERSION/$f" "$TMP/$f" || die "cannot download $f"
+  fi
   want=$(grep " $f\$" "$TMP/SHA256SUMS" | cut -d' ' -f1)
   [ -n "$want" ] || die "$f is not in SHA256SUMS"
   got=$(sha256sum "$TMP/$f" | cut -d' ' -f1)
   [ "$want" = "$got" ] || die "checksum mismatch for $f: refusing to install it"
   say "checksum matches."
   tar -C "$TMP" -xzf "$TMP/$f"
-  SRC="$TMP/memcp-${VERSION#v}-$TARGET"
+  SRC="$TMP/${f%.tar.gz}"
   [ -x "$SRC/bin/memcp" ] || die "the archive does not hold bin/memcp"
 fi
 

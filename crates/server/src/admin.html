@@ -4427,26 +4427,17 @@ function renderOnboarding() {
       const live = (S.connections || []).filter(c => !c.revoked && !c.internal && !/^janitor(-|$)/.test(c.agent));
       const connected = OB.conn ? live.find(c => c.agent === OB.conn.agent) || live[0] : null;
       if (connected) {
-        // The same outcome as in Settings: a connected assistant, and the address only when this one was made with a key.
-        const box = OB.conn && OB.conn.url ? el("div", { class: "addr-box" }, el("code", { id: "ob-url" }, OB.conn.url), copyButton(OB.conn.url)) : null;
-        body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", {}, "Connected: " + connected.agent + "."), box,
+        // The same outcome as in Settings: a connected assistant, and its details stay in the wizard or in Settings.
+        body.replaceChildren(el("h2", {}, "Connect an assistant"), el("p", {}, "Connected: " + connected.agent + "."),
           el("p", { class: "mute small" }, "You can add another assistant later in Settings."),
           el("div", { class: "add-row" }, el("button", { type: "button", class: "primary", id: "ob-next", onclick: () => obGo(4) }, "Continue"),
             el("button", { type: "button", class: "link", onclick: () => openWizard() }, "Add another")), err);
         return;
       }
-      const slug = el("input", { id: "ob-agent", value: "my-assistant", size: 24, pattern: "[a-z0-9][a-z0-9\\-]{0,39}" });
-      const make = el("button", { type: "button", class: "primary", id: "ob-connect" }, "Make the address");
-      make.addEventListener("click", async () => {
-        make.disabled = true;
-        try { const agent = slugOf(slug.value) || "my-assistant"; const r = await api("connections", { agent, rights: "all" }); OB.conn = { agent, url: r.mcp_url_with_key }; await load(); renderOnboarding(); } catch (x) { OB.err = x.message; renderOnboarding(); }
-      });
-      const pick = el("div", { class: "pick" }, ...PLATFORMS.map(x => el("button", { type: "button", onclick: () => openWizard({ platform: x.id }) }, x.name)));
+      const pick = el("div", { class: "pick", id: "ob-platforms" }, ...PLATFORMS.map(x => el("button", { type: "button", onclick: () => openWizard({ platform: x.id }) }, x.name)));
       body.replaceChildren(el("h2", {}, "Connect an assistant"),
         el("p", { class: "mute" }, "Pick your assistant, as in Settings. Claude, ChatGPT and Le Chat sign in with a one-time code; Claude Code and the others take an address."),
         pick,
-        el("p", { class: "mute small", style: "margin-top:10px" }, "Or connect with a key: an address that carries it."),
-        el("div", { class: "add-row" }, slug, make),
         err, el("div", {}, el("button", { type: "button", class: "link", id: "ob-skip", onclick: () => obGo(4) }, "Later")));
       return;
     }
