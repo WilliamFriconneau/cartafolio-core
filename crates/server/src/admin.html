@@ -450,7 +450,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
           <h3>iPhone, iPad, Mac</h3>
           <p class="mute small" style="margin:0">Pensine for Apple devices, in TestFlight for now; it arrives on the App Store.</p>
           <div class="acts"><a class="link" href="https://williamfriconneau.github.io/pensine-core/wiki/mac-iphone-ipad.html" target="_blank" rel="noopener">Get the app</a></div>
-          <div class="acts"><button type="button" class="primary" id="connect-phone">Connect a phone</button></div>
+          <div class="acts"><button type="button" class="primary" id="connect-device">Connect a new device</button></div>
         </div>
         <div class="tile t2">
           <h3>Mac, Windows, Linux</h3>
@@ -752,7 +752,7 @@ header .mute.small{display:flex;flex-wrap:wrap;gap:4px 8px;align-items:center}
 <dialog id="pair-dlg">
   <h2 id="pair-title">Add a node</h2>
   <div id="pair-waiting">
-    <p class="mute small">On the app or the other node: choose “Join a memory” and scan this code, or type the address and the code.</p>
+    <p class="mute small">On the new device (phone, tablet, computer) or the other node: choose “Join a memory” and scan this code, or type the address and the code.</p>
     <p class="mute small"><span>It works once, for</span> <b id="pair-left">10:00</b>.</p>
     <div id="pair-qr" style="text-align:center;margin:8px 0"></div>
     <div class="small mute">Address of this node</div>
@@ -1224,8 +1224,8 @@ const FR = {
   "Keywords": "Mots-clés",
   "A note that contains one of these words goes to this space.": "Une note qui contient l’un de ces mots va dans cet espace.",
   "entry": "entrée", "entries": "entrées", "Sleep": "Sommeil", "HRV": "VFC", "steps": "pas",
-  "Connect a phone": "Connecter un téléphone",
-  "On the app or the other node: choose “Join a memory” and scan this code, or type the address and the code.": "Sur l’app ou l’autre nœud : choisissez « Rejoindre une mémoire » et scannez ce code, ou saisissez l’adresse et le code.",
+  "Connect a new device": "Connecter un nouvel appareil",
+  "On the new device (phone, tablet, computer) or the other node: choose “Join a memory” and scan this code, or type the address and the code.": "Sur le nouvel appareil (téléphone, tablette, ordinateur) ou l’autre nœud : choisissez « Rejoindre une mémoire » et scannez ce code, ou saisissez l’adresse et le code.",
   "It works once, for": "Il fonctionne une fois, pendant",
   "Connected": "Connecté", "Add another": "En ajouter un autre",
   "Pick your assistant, as in Settings. Claude, ChatGPT and Le Chat sign in with a one-time code; Claude Code and the others take an address.": "Choisissez votre assistant, comme dans Réglages. Claude, ChatGPT et Le Chat se connectent avec un code à usage unique ; Claude Code et les autres prennent une adresse.",
@@ -3926,17 +3926,17 @@ $$("#pair-dlg [data-copy]").forEach(b => b.addEventListener("click", async () =>
   try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "copied"; }
   catch (_) { b.textContent = "select and copy by hand"; }
 }));
-let PAIR_FOR_PHONE = false;
-$("#connect-phone").addEventListener("click", () => {
-  PAIR_FOR_PHONE = true;
+let PAIR_FOR_DEVICE = false;
+$("#connect-device").addEventListener("click", () => {
+  PAIR_FOR_DEVICE = true;
   $("#pair-form").dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
 });
 $("#pair-form").addEventListener("submit", async e => {
   e.preventDefault();
   const r = await act("pairing", {});
   if (!r) return;
-  $("#pair-waiting").hidden = false; $("#pair-joined").hidden = true; $("#pair-title").textContent = PAIR_FOR_PHONE ? "Connect a phone" : "Join a Pensine network";
-  PAIR_FOR_PHONE = false;
+  $("#pair-waiting").hidden = false; $("#pair-joined").hidden = true; $("#pair-title").textContent = PAIR_FOR_DEVICE ? "Connect a new device" : "Join a Pensine network";
+  PAIR_FOR_DEVICE = false;
   $("#pair-server").textContent = r.server;
   $("#pair-code").textContent = r.code;
   const qr = $("#pair-qr");

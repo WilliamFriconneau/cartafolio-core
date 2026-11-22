@@ -9,15 +9,18 @@ ARG MEMCP_VERSION
 # curl stays: the base image's own tools (bashio, which reads the options) need it.
 RUN apk add --no-cache tzdata curl poppler-utils \
  && case "${BUILD_ARCH}" in \
-      amd64) T=x86_64-unknown-linux-musl ;; \
-      aarch64) T=aarch64-unknown-linux-musl ;; \
+      amd64) T=x86_64-unknown-linux-musl; SHORT=linux-x64 ;; \
+      aarch64) T=aarch64-unknown-linux-musl; SHORT=linux-arm64 ;; \
       *) echo "unsupported architecture ${BUILD_ARCH}" >&2; exit 1 ;; \
     esac \
  && base="https://github.com/WilliamFriconneau/pensine-core/releases/download/v${MEMCP_VERSION}" \
  && cd /tmp && curl -fsSLO "${base}/SHA256SUMS" \
  && for b in memcp memcp-manager memcp-janitor memcp-sync; do \
-      f="${b}-v${MEMCP_VERSION}-${T}"; \
-      curl -fsSLO "${base}/${f}"; \
+      f="pensine${b#memcp}-${SHORT}"; \
+      if ! curl -fsSLO "${base}/${f}"; then \
+        f="${b}-v${MEMCP_VERSION}-${T}"; \
+        curl -fsSLO "${base}/${f}"; \
+      fi; \
       grep " ${f}\$" SHA256SUMS | sha256sum -c -; \
       install -m 0755 "${f}" "/usr/bin/${b}"; \
     done \

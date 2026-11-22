@@ -121,9 +121,12 @@ above Advanced:
 2. *The nodes*: one line each, with its state (in step, sending, receiving, paused, revoked), its last sync, its
    version, « older version » when it is behind, how it is reached and, when it told several addresses, **reachable via**.
    A node a peer told about (not yet linked) shows **Add this node**.
-3. **Add a node**: one field (a link, an id or an address; the camera scans a code on a phone) and one button. This node
+3. **Connect a new device**: shows a one-time code and its QR code. On the phone, tablet, computer or other
+   node, choose **Join a memory** and scan it, or type the node's address and the code. It works once, for ten
+   minutes; the new device then holds the same memory, kept in step.
+4. **Add a node**: one field (a link, an id or an address; the camera scans a code on a phone) and one button. This node
    asks THAT node; the three words appear here and on the other node; with a link made without words there are none.
-4. *Pending requests*: a device or node asking to join shows on every node of the person, with its three words, the node
+5. *Pending requests*: a device or node asking to join shows on every node of the person, with its three words, the node
    that was asked and its id. Answering on one clears it everywhere.
 
 Codes (show a code, type a code), the older way, are under Advanced, with the other less used controls. The routes are in
@@ -136,8 +139,8 @@ adapted to the device:
 
 1. **Start or join.** Two choices: **Start a memory** or **Join a memory**. When another device of the same Apple
    account is already joined, a third comes first: « Continue with the memory of <device> » (an invitation in the
-   iCloud Keychain, one tap). Joining otherwise: the address, then « Ask for access » and the three words compared on
-   the node's page.
+   iCloud Keychain, one tap). Joining otherwise: scan the one-time code shown by **Connect a new device** on the node
+   (or type its address and the code), then the three words compared on the node's page.
 2. **The name**, which the memory uses to greet the person and sign what they write; the default spaces are made now.
 3. **Connect an assistant**, with the same choices as Settings: **Claude**, **ChatGPT**, **Le Chat (Mistral)**,
    **Claude Code**, **Kalios** and **Another assistant**. The assistants that sign in (Claude, ChatGPT, Le Chat) use a
