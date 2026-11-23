@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A target can be removed** from its editor on the page (two clicks), and the app gets the same action.
+- **Copying a code works on plain HTTP too**: the clipboard falls back to the old command when the secure API is refused.
+
 - **A phone joins with a code.** Settings has a « Connect a phone » button that shows the one-time code and its QR, for the app's « Join a memory ».
 - **The old Kalios entry is gone** from the choices when connecting an assistant.
 

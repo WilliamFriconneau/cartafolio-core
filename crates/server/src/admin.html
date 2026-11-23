@@ -1227,7 +1227,7 @@ const FR = {
   "Connect a new device": "Connecter un nouvel appareil",
   "On the new device (phone, tablet, computer) or the other node: choose “Join a memory” and scan this code, or type the address and the code.": "Sur le nouvel appareil (téléphone, tablette, ordinateur) ou l’autre nœud : choisissez « Rejoindre une mémoire » et scannez ce code, ou saisissez l’adresse et le code.",
   "It works once, for": "Il fonctionne une fois, pendant",
-  "Connected": "Connecté", "Add another": "En ajouter un autre",
+  "Connected": "Connecté", "Add another": "En ajouter un autre", "Remove this target": "Supprimer cette cible", "Click again to remove": "Cliquez encore pour supprimer", "Target removed": "Cible supprimée",
   "Pick your assistant, as in Settings. Claude, ChatGPT and Le Chat sign in with a one-time code; Claude Code and the others take an address.": "Choisissez votre assistant, comme dans Réglages. Claude, ChatGPT et Le Chat se connectent avec un code à usage unique ; Claude Code et les autres prennent une adresse.",
   "Or connect with a key: an address that carries it.": "Ou connectez avec une clé : une adresse qui la porte.",
   "You can add another assistant later in Settings.": "Vous pourrez ajouter un autre assistant plus tard dans Réglages.",
@@ -2261,6 +2261,15 @@ function editTarget(space, card, body, known) {
     finally { save.disabled = false; }
   } }, ...editors.map(editor => editor.element), error,
     el("div", { class: "row" }, save, el("button", { type: "button", onclick: () => dialog.close() }, "Cancel")));
+  const remove = el("button", { type: "button", class: "link danger", onclick: async () => {
+    if (!remove.dataset.armed) { remove.dataset.armed = "1"; remove.textContent = "Click again to remove"; return; }
+    try {
+      await api("living", { space, page: "targets", drop: [card.card_id || card.id] });
+      dialog.close(); toast("Target removed");
+      if (SP?.name === space && SP.tab === "targets") targetsView(body);
+    } catch (x) { error.textContent = x.message; }
+  } }, "Remove this target");
+  form.append(el("p", { style: "margin-top:10px" }, remove));
   dialog.replaceChildren(el("h2", {}, "Edit target"), el("p", {}, displayText(card.text)), form);
   dialog.showModal();
 }
@@ -3601,7 +3610,28 @@ function renderPrompt() {
 }
 
 async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); return true; } catch (_) { return false; }
+  // The clipboard API needs a secure context; a page opened on the local network over plain HTTP
+  // falls back to the old command, so a code still copies with one click.
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch (_) { /* fall through */ }
+  try {
+    const area = document.createElement("textarea");
+    area.value = text;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.top = "-1000px";
+    area.style.opacity = "0";
+    document.body.append(area);
+    area.select();
+    area.setSelectionRange(0, text.length);
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  } catch (_) { return false; }
 }
 function copyButton(text) {
   return el("button", { type: "button", class: "link", onclick: async e => {
@@ -3923,7 +3953,7 @@ $("#code-form").addEventListener("submit", async e => {
 
 let pairTimer = null;
 $$("#pair-dlg [data-copy]").forEach(b => b.addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "copied"; }
+  try { const ok = await copyText($("#" + b.dataset.copy).textContent); b.textContent = ok ? "copied" : "select and copy by hand"; }
   catch (_) { b.textContent = "select and copy by hand"; }
 }));
 let PAIR_FOR_DEVICE = false;
@@ -3934,7 +3964,7 @@ $("#connect-device").addEventListener("click", () => {
 $("#pair-form").addEventListener("submit", async e => {
   e.preventDefault();
   const r = await act("pairing", {});
-  if (!r) return;
+  if (!r) { PAIR_FOR_DEVICE = false; return; }
   $("#pair-waiting").hidden = false; $("#pair-joined").hidden = true; $("#pair-title").textContent = PAIR_FOR_DEVICE ? "Connect a new device" : "Join a Pensine network";
   PAIR_FOR_DEVICE = false;
   $("#pair-server").textContent = r.server;
@@ -4355,7 +4385,7 @@ $("#link-ticket").addEventListener("click", async () => {
   try { fillLink(await api("nodes/invite", {}), true); } catch (x) { fail(x); }
 });
 $$("#link-dlg [data-copy]").forEach(b => b.addEventListener("click", async () => {
-  try { await navigator.clipboard.writeText($("#" + b.dataset.copy).textContent); b.textContent = "copied"; }
+  try { const ok = await copyText($("#" + b.dataset.copy).textContent); b.textContent = ok ? "copied" : "select and copy by hand"; }
   catch (_) { b.textContent = "select and copy by hand"; }
 }));
 
