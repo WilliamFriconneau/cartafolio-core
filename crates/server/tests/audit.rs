@@ -5,11 +5,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -61,7 +61,7 @@ fn machine(e: &Env, agent: &str, rights: &str) -> Result<String, Box<dyn Error>>
     let ctl = e.app.brain.open_control()?;
     Ok(access::connect_peer(
         &ctl,
-        memcp_core::users::OWNER,
+        pensine_core::users::OWNER,
         agent,
         &Rights::parse(rights)?,
         false,
@@ -90,10 +90,10 @@ fn rq(method: &str, path: &str, token: &str, query: &[(&str, &str)], body: &str)
 
 fn event(id: &str, tags: &[&str]) -> Value {
     json!({
-        "eid": format!("c:{id}"), "hlc": format!("{:013}-0000-peer", memcp_core::util::now_ms()),
-        "origin": "peer", "kind": "fact_created", "at": memcp_core::util::now(),
+        "eid": format!("c:{id}"), "hlc": format!("{:013}-0000-peer", pensine_core::util::now_ms()),
+        "origin": "peer", "kind": "fact_created", "at": pensine_core::util::now(),
         "payload": { "id": id, "kind": "context", "text": format!("text {id}"), "source_kind": "agent",
-                     "author": "peer", "created_at": memcp_core::util::now(), "tags": tags },
+                     "author": "peer", "created_at": pensine_core::util::now(), "tags": tags },
     })
 }
 
@@ -151,7 +151,7 @@ fn a_connection_limited_to_paths_cannot_use_the_sync_routes() -> Res {
 #[test]
 fn a_request_may_not_make_the_server_buffer_a_gigabyte() {
     // The biggest body of any request is what an MCP call may carry (a 24 MB recording in base64), not more.
-    const { assert!(memcp_server::net::LARGE_MAX <= 40 * 1024 * 1024) };
+    const { assert!(pensine_server::net::LARGE_MAX <= 40 * 1024 * 1024) };
 }
 
 fn raw(port: u16, req: &str) -> String {
@@ -205,7 +205,7 @@ fn guessing_a_key_by_the_size_of_a_body_is_counted_like_any_wrong_key() -> Res {
 
 #[test]
 fn a_header_value_cannot_carry_a_line_break() {
-    use memcp_server::net::header_is_safe;
+    use pensine_server::net::header_is_safe;
     assert!(header_is_safe("Content-Type", "image/png"));
     assert!(header_is_safe(
         "Content-Disposition",
@@ -224,7 +224,7 @@ fn the_check_phrase_uses_every_word_of_its_list() {
     // It used to draw from about 26 of the 64 words (a base32 letter modulo 64): 14 bits instead of 18.
     let mut words = std::collections::HashSet::new();
     for _ in 0..3000 {
-        for w in memcp_server::join::phrase().split('-') {
+        for w in pensine_server::join::phrase().split('-') {
             words.insert(w.to_string());
         }
     }
@@ -234,7 +234,7 @@ fn the_check_phrase_uses_every_word_of_its_list() {
 #[test]
 fn the_failure_guard_holds_an_ipv6_network_and_cannot_grow_without_bound() -> Res {
     let e = env()?;
-    let now = memcp_core::util::now();
+    let now = pensine_core::util::now();
     for i in 0..10 {
         e.app.fail(now, &format!("2001:db8:1:2:{i:x}::1"));
     }
@@ -324,9 +324,9 @@ fn a_connection_named_like_a_machine_gets_none_of_the_powers_of_one() -> Res {
         assert_eq!(r.status, 403, "{method} sync/{op}");
     }
     // A machine the person let in (a pairing code) has them.
-    let now = memcp_core::util::now();
-    let (code, _) = memcp_core::pairing::create_for_peer(&e.app.brain, "owner", "owner", now)?;
-    let paired = memcp_core::pairing::redeem(&ctl, &code, "laptop", now)?;
+    let now = pensine_core::util::now();
+    let (code, _) = pensine_core::pairing::create_for_peer(&e.app.brain, "owner", "owner", now)?;
+    let paired = pensine_core::pairing::redeem(&ctl, &code, "laptop", now)?;
     let invite = e.app.handle(&rq(
         "POST",
         &format!("/mcp/{}/join/invite", paired.agent),

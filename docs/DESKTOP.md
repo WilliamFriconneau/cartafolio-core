@@ -9,11 +9,11 @@ the voice notes.
 | | Mac | Windows |
 |---|---|---|
 | installer | `packaging/macos/install-mac.sh` | `packaging/windows/install.ps1` |
-| programs | `~/Library/Application Support/MemCP/bin` | `%LOCALAPPDATA%\MemCP\bin` |
-| memory | `~/Library/Application Support/MemCP/data` | `%LOCALAPPDATA%\MemCP\data` |
-| settings | `~/Library/Application Support/MemCP/memcp.toml` | `%LOCALAPPDATA%\MemCP\memcp.toml` |
-| logs | `~/Library/Logs/MemCP` | `%LOCALAPPDATA%\MemCP\logs` |
-| task | launchd agent `~/Library/LaunchAgents/org.memcp.node.plist` | Task Scheduler, folder `\MemCP\`, task `MemCP node` |
+| programs | `~/Library/Application Support/Pensine/bin` | `%LOCALAPPDATA%\Pensine\bin` |
+| memory | `~/Library/Application Support/Pensine/data` | `%LOCALAPPDATA%\Pensine\data` |
+| settings | `~/Library/Application Support/Pensine/memcp.toml` | `%LOCALAPPDATA%\Pensine\memcp.toml` |
+| logs | `~/Library/Logs/Pensine` | `%LOCALAPPDATA%\Pensine\logs` |
+| task | launchd agent `~/Library/LaunchAgents/org.memcp.node.plist` | Task Scheduler, folder `\Pensine\`, task `Pensine node` |
 | keys | Keychain, service `memcp`, account the connection's address | `keys\desktop.key`, `keys\device.key`, readable by the person only |
 | assistants | `http://127.0.0.1:8791/mcp/desktop` with the key of the Keychain | the same address, the key of `keys\desktop.key` |
 
@@ -46,7 +46,7 @@ At the end they show the page's address (`http://127.0.0.1:8791/admin`) and a co
 Running an installer again updates the programs and leaves the memory and the keys as they are.
 
 **From an earlier version** (the one that ran a second program, `memcp-capture`, with its own port, settings and tasks): the next run of
-the installer removes the old tasks (`org.memcp.bridge`, `org.memcp.transcribe`, `MemCP bridge`, `MemCP transcribe`), carries the voice
+the installer removes the old tasks (`org.memcp.bridge`, `org.memcp.transcribe`, `Pensine bridge`, `Pensine transcribe`), carries the voice
 settings of the old `bridge/bridge.conf` into `memcp.toml`, moves the keys (Keychain service `memcp-capture` to `memcp`; `bridge.key` and
 `device.key` to `keys\`), keeps the old folder as `bridge.migrated`, and keeps an existing connection named `desktop-bridge` (its address
 is its name). `--bridge-port` and `MEMCP_BRIDGE_PORT` are read, said to be unused, and ignored; the assistants reach the node on its own port.
@@ -85,9 +85,9 @@ An assistant that only runs commands can use `memcp --data DIR mcp` (standard in
 ## Look, stop, remove
 
 - Mac: `launchctl list | grep org.memcp`; `launchctl kickstart -k gui/$(id -u)/org.memcp.node` to restart the node;
-  logs in `~/Library/Logs/MemCP`.
-- Windows: `Get-ScheduledTask -TaskPath \MemCP\`; `Restart` with `Stop-ScheduledTask` then `Start-ScheduledTask`;
-  logs in `%LOCALAPPDATA%\MemCP\logs`.
+  logs in `~/Library/Logs/Pensine`.
+- Windows: `Get-ScheduledTask -TaskPath \Pensine\`; `Restart` with `Stop-ScheduledTask` then `Start-ScheduledTask`;
+  logs in `%LOCALAPPDATA%\Pensine\logs`.
 - Remove: `sh install-mac.sh --uninstall` or `install.ps1 -Uninstall` stops the task and removes it, the programs and
   the keys; **the memory is kept**. Add `--purge` / `-Purge` to delete the memory and the logs too (asked first).
 

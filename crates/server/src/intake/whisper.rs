@@ -341,7 +341,7 @@ impl Whisper {
     }
 
     /// What `audio` says, the speech model told to expect `hints` (comma separated words: see
-    /// `memcp_core::transcription`) besides the lexicon, when guided transcription is on.
+    /// `pensine_core::transcription`) besides the lexicon, when guided transcription is on.
     pub fn transcribe_with(&self, audio: &Path, work: &Path, hints: &str) -> Result<Heard, String> {
         let prompt = self.prompt(hints);
         if let Some(url) = &self.api_url {

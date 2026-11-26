@@ -9,12 +9,12 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use base64::Engine as _;
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::users;
-use memcp_manager::{Manager, Options};
-use memcp_server::http::{Request, Response, parse_query};
-use memcp_server::net::Handler;
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::users;
+use pensine_manager::{Manager, Options};
+use pensine_server::http::{Request, Response, parse_query};
+use pensine_server::net::Handler;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -29,7 +29,7 @@ impl Dir {
     fn new(tag: &str) -> Dir {
         let n = N.fetch_add(1, Ordering::SeqCst);
         let p =
-            std::env::temp_dir().join(format!("memcp-manager-{tag}-{}-{n}", std::process::id()));
+            std::env::temp_dir().join(format!("pensine-manager-{tag}-{}-{n}", std::process::id()));
         let _ = fs::remove_dir_all(&p);
         Dir(p)
     }
@@ -386,7 +386,7 @@ fn claude_on_the_web_signs_in_as_the_person_the_tailnet_says_it_is() -> Res {
     for person in ["alice", "lou"] {
         let app = m.person_app(person).ok_or("app")?;
         let ctl = app.brain.open_control()?;
-        if let Some(who) = access::authenticate(&ctl, &access, memcp_core::util::now())? {
+        if let Some(who) = access::authenticate(&ctl, &access, pensine_core::util::now())? {
             note(&who.agent, &access);
         }
     }
@@ -735,7 +735,7 @@ fn each_memory_of_the_installation_goes_by_its_name_and_says_how_it_is_reached()
     let m = Manager::open(d.path(), opts).map_err(|e| e.1)?;
     m.add_person("lou", "Lou", None, false).map_err(|e| e.1)?;
     let app = m.person_app("lou").ok_or("no app for lou")?;
-    let node = memcp_core::directory::node_json(&app.brain, 0)?;
+    let node = pensine_core::directory::node_json(&app.brain, 0)?;
     assert_eq!(node["name"], "Home Assistant");
     let kinds: Vec<&str> = node["exposures"]
         .as_array()
@@ -879,9 +879,9 @@ fn a_peer_sees_a_device_asking_to_join_and_allows_it() -> Res {
 /// finished, and a file whose event the peers' log lacks gets it.
 #[test]
 fn the_manager_repairs_what_a_crash_cut_off_in_a_persons_memory() -> Res {
-    use memcp_core::facts::{self, NewFact};
-    use memcp_core::moves::{self, Step};
-    use memcp_core::{Brain, Space, files};
+    use pensine_core::facts::{self, NewFact};
+    use pensine_core::moves::{self, Step};
+    use pensine_core::{Brain, Space, files};
     let d = Dir::new("recover");
     drop(two_people(&d)?);
     let b = Brain::open(&d.path().join("people/alice"))?;
@@ -903,7 +903,7 @@ fn the_manager_repairs_what_a_crash_cut_off_in_a_persons_memory() -> Res {
     let bytes = b"a short text";
     let blobs = b.dir().join("files").join("notes");
     fs::create_dir_all(&blobs)?;
-    let sha = memcp_core::chunks::digest(bytes);
+    let sha = pensine_core::chunks::digest(bytes);
     fs::write(blobs.join(&sha), bytes)?;
     conn.execute(
         "INSERT INTO files (id, name, mime, size, sha256, note, fact_id, author, created_at)
@@ -1063,7 +1063,7 @@ fn a_person_off_the_tailnet_connects_claude_with_a_code_the_administrator_makes(
     for person in ["alice", "lou"] {
         let app = m.person_app(person).ok_or("app")?;
         let ctl = app.brain.open_control()?;
-        if let Some(who) = access::authenticate(&ctl, &access, memcp_core::util::now())? {
+        if let Some(who) = access::authenticate(&ctl, &access, pensine_core::util::now())? {
             note(&who.agent, &access);
         }
     }
@@ -1133,7 +1133,7 @@ fn the_invitation_endpoint_takes_an_administrators_console_token_and_never_funne
     );
     assert!(
         !m.registry()
-            .blocked(memcp_core::util::now(), mcp.ip.as_deref().unwrap_or("?"))
+            .blocked(pensine_core::util::now(), mcp.ip.as_deref().unwrap_or("?"))
     );
     assert_eq!(m.handle(&mcp).status, 200);
     Ok(())
@@ -1146,7 +1146,7 @@ fn a_restored_manager_keeps_the_name_already_stored_in_its_memory() -> Res {
     let first = Manager::open(old.path(), options()).map_err(|e| e.1)?;
     assert_eq!(first.node_name(), "Pensine");
     assert_eq!(
-        memcp_core::directory::stored_own_name(&first.registry().brain)?.as_deref(),
+        pensine_core::directory::stored_own_name(&first.registry().brain)?.as_deref(),
         Some("Pensine"),
     );
     let mut explicit = options();

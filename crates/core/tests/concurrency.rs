@@ -7,8 +7,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Barrier};
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-use memcp_core::{Brain, Error};
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::{Brain, Error};
 
 const NOW: i64 = 1_900_000_000;
 

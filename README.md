@@ -1,6 +1,6 @@
 # Pensine
 
-Release installers provide `pensine`, `pensine-manager`, and `pensine-sync`. The corresponding `silice` and `memcp` commands still work. On Linux this is `~/.local/bin` for a user install, `/usr/local/bin` for `--system`, or `/usr/bin` for a package. On macOS it is `~/Library/Application Support/MemCP/bin`. On Windows the aliases are `.exe` files in `%LOCALAPPDATA%\MemCP\bin`. A custom install location takes precedence.
+Release installers provide `pensine`, `pensine-manager`, and `pensine-sync`. The corresponding `silice` and `memcp` commands still work. On Linux this is `~/.local/bin` for a user install, `/usr/local/bin` for `--system`, or `/usr/bin` for a package. On macOS it is `~/Library/Application Support/Pensine/bin`. On Windows the aliases are `.exe` files in `%LOCALAPPDATA%\Pensine\bin`. A custom install location takes precedence.
 
 **The external hard drive for your AIs.**
 
@@ -92,7 +92,7 @@ As a system service, with a Debian or Arch package and hardened systemd units, a
 
 **On a Mac, the Pensine app is the recommended way** (Mac App Store, once published): it runs the node for you, keeps the keys in the iCloud Keychain so that another device of the same Apple account joins your memory in one tap, and adds what only a device can do (dictation transcribed on the Mac, recording a call with everyone told). The node it runs is the one below; nothing is different in the memory.
 
-The releases carry `memcp`, `memcp-janitor` and `memcp-sync` for macOS and Windows. Everything builds and its tests pass on both in CI. On Windows, read [docs/SPACES.md](docs/SPACES.md) for what differs.
+The releases carry `memcp`, `pensine-janitor` and `memcp-sync` for macOS and Windows. Everything builds and its tests pass on both in CI. On Windows, read [docs/SPACES.md](docs/SPACES.md) for what differs.
 
 ## Connect an assistant
 

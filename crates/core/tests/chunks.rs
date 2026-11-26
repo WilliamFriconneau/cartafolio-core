@@ -5,12 +5,12 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::chunks::{self, CHUNK_BYTES};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::files::{self, MAX_INLINE};
-use memcp_core::sync::{self, Event};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
+use pensine_core::chunks::{self, CHUNK_BYTES};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::files::{self, MAX_INLINE};
+use pensine_core::sync::{self, Event};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
 
 type Boxed = Box<dyn std::error::Error>;
 

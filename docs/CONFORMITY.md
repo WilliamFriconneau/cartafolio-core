@@ -1,6 +1,6 @@
 # Conformity of a node on Linux and Home Assistant
 
-What the documents require of a node on Linux and Home Assistant (the `memcp` binary, `memcp-manager`, and the Home Assistant app in `ha-addon/`), one line per requirement, and where it is checked. Scope: UI-SPEC.md, FEDERATION.md, CONCEPTS.md, DISCOVERY.md, TOOLS.md, SECURITY.md. The desktop and phone apps are out of scope, so the rows of UI-SPEC about them are not listed. `crates/server/tests/page/*.test.js` are optional browser tests (not run by `cargo test`).
+What the documents require of a node on Linux and Home Assistant (the `memcp` binary, `pensine-manager`, and the Home Assistant app in `ha-addon/`), one line per requirement, and where it is checked. Scope: UI-SPEC.md, FEDERATION.md, CONCEPTS.md, DISCOVERY.md, TOOLS.md, SECURITY.md. The desktop and phone apps are out of scope, so the rows of UI-SPEC about them are not listed. `crates/server/tests/page/*.test.js` are optional browser tests (not run by `cargo test`).
 
 Status: **done** (code and a test), **partial** (code, or part of the rule), **missing**, **n/a** (a plan the document itself marks as not built).
 

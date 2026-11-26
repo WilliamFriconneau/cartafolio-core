@@ -6,13 +6,13 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::policy::{self, Policy};
-use memcp_core::sync::{self, Cursor};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Space};
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::policy::{self, Policy};
+use pensine_core::sync::{self, Cursor};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Space};
 
 type Boxed = Box<dyn std::error::Error>;
 

@@ -8,14 +8,14 @@
 
 use std::sync::Arc;
 
-use memcp_client::peer_sync::Peer;
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Space, triage, util};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::peer_sync::Peer;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Space, triage, util};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 
 fn temp(name: &str) -> std::path::PathBuf {
     static N: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
@@ -155,7 +155,7 @@ fn active(brain: &Brain, space: &Space) -> Vec<String> {
         .collect()
 }
 
-fn pass(peer: &Peer, brain: &Brain) -> memcp_client::peer_sync::Pass {
+fn pass(peer: &Peer, brain: &Brain) -> pensine_client::peer_sync::Pass {
     let p = peer.sync_once(brain, util::now()).unwrap();
     assert!(p.problems.is_empty(), "{:?}", p.problems);
     p
@@ -327,7 +327,8 @@ fn only_a_peer_of_the_person_offers_a_space_and_another_persons_key_stays_in_the
             .unwrap()
     );
     // The refusal is kept for the page: a sync in the background has nobody reading its output.
-    let kept = memcp_core::sync::last_pass(&l.brain.open_control().unwrap(), "peer-home").unwrap();
+    let kept =
+        pensine_core::sync::last_pass(&l.brain.open_control().unwrap(), "peer-home").unwrap();
     assert!(
         kept["problems"]
             .to_string()

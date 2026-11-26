@@ -33,7 +33,7 @@ pub struct Found {
 /// `MEMCP_DISCOVER_FOUND` is a seam for tests of the page: lines `name<TAB>address<TAB>version<TAB>via` that stand for
 /// what the network would have shown, so that no network is needed.
 pub fn discover(wait: Duration) -> Vec<Found> {
-    if let Ok(fixed) = memcp_core::env::var("MEMCP_DISCOVER_FOUND") {
+    if let Ok(fixed) = pensine_core::env::var("MEMCP_DISCOVER_FOUND") {
         return fixed
             .lines()
             .filter_map(|l| {

@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Error, ErrorKind, Space};
+use pensine_core::access::{self, Rights};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Error, ErrorKind, Space};
 use serde_json::{Value, json};
 
 /// The rows of the table "Error vocabulary": (code, http status).
@@ -207,12 +207,12 @@ fn core_errors_carry_their_kind() -> Res {
     let t = Temp::new("error-core");
     let b = brain(&t)?;
     let conn = b.open_space(&common::sp("home"))?;
-    let e = memcp_core::facts::retire(&conn, "me", "nope", "why").err();
+    let e = pensine_core::facts::retire(&conn, "me", "nope", "why").err();
     assert_eq!(e.map(|e| e.kind()), Some(ErrorKind::NotFound));
     let again = Brain::init(
         &t.path().join("data"),
         &[],
-        memcp_core::text::Language::English,
+        pensine_core::text::Language::English,
     );
     assert_eq!(again.err().map(|e| e.kind()), Some(ErrorKind::Conflict));
     let missing = Brain::open(&t.path().join("none"));

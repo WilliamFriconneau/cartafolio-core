@@ -4,9 +4,9 @@ mod common;
 
 use base64::Engine as _;
 use common::{Res, Temp, sp};
-use memcp_core::sync::{self, Event};
-use memcp_core::text::Language;
-use memcp_core::{Brain, util};
+use pensine_core::sync::{self, Event};
+use pensine_core::text::Language;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -110,7 +110,7 @@ fn a_peer_cannot_store_a_file_under_a_hostile_name_or_type() -> Res {
         &png,
     );
     assert_eq!(applied(&b, ev)?.applied, 1);
-    let f = memcp_core::files::info(&b, &s, "file_1")?.ok_or("no file")?;
+    let f = pensine_core::files::info(&b, &s, "file_1")?.ok_or("no file")?;
     assert_eq!(f.name, "ab.png");
     assert_eq!(f.mime, "image/png");
     // Bytes of a kind that is not kept are refused, as they are when an assistant puts them.
@@ -127,31 +127,31 @@ fn a_peer_cannot_store_a_file_under_a_hostile_name_or_type() -> Res {
 #[test]
 fn tags_are_bounded_in_number_and_a_search_in_terms() -> Res {
     let many: Vec<String> = (0..100).map(|i| format!("t{i}")).collect();
-    assert!(memcp_core::facts::normalize_tags(&many).is_err());
+    assert!(pensine_core::facts::normalize_tags(&many).is_err());
     let ok: Vec<String> = (0..20).map(|i| format!("t{i}")).collect();
-    assert_eq!(memcp_core::facts::normalize_tags(&ok)?.len(), 20);
+    assert_eq!(pensine_core::facts::normalize_tags(&ok)?.len(), 20);
     let words: String = (0..5000).map(|i| format!("word{i} ")).collect();
-    assert!(memcp_core::facts::fts_terms(&words) <= 64);
+    assert!(pensine_core::facts::fts_terms(&words) <= 64);
     Ok(())
 }
 
 #[cfg(unix)]
 #[test]
 fn an_export_that_holds_a_link_is_not_verified() -> Res {
-    use memcp_core::users::{self, OWNER};
+    use pensine_core::users::{self, OWNER};
     let t = Temp::new("audit-export-link");
     let brain = Brain::init(&t.path().join("data"), &[sp("legacy")], Language::English)?;
     let ctl = brain.open_control()?;
     let sam = users::create_user(&ctl, OWNER, "sam", "Sam", false)?;
     brain.add_vault(&sam.id, "sam", "work")?;
     let out = t.path().join("out");
-    let root = memcp_core::export::export_person(&brain, &sam, &out, 1_900_000_000)?;
-    memcp_core::export::verify_export(&root)?;
+    let root = pensine_core::export::export_person(&brain, &sam, &out, 1_900_000_000)?;
+    pensine_core::export::verify_export(&root)?;
     // The same bytes, reached through a link: the fingerprint matches, the file is still not in the export.
     let readme = root.join("README.txt");
     let elsewhere = t.path().join("elsewhere.txt");
     std::fs::rename(&readme, &elsewhere)?;
     std::os::unix::fs::symlink(&elsewhere, &readme)?;
-    assert!(memcp_core::export::verify_export(&root).is_err());
+    assert!(pensine_core::export::verify_export(&root).is_err());
     Ok(())
 }

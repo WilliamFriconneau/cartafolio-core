@@ -7,7 +7,7 @@ DATA=/data/manager
 MANAGER=/usr/bin/memcp-manager
 LANGUAGE=$(bashio::config 'language')
 
-# Coming from another installation (a former HemCP or MemCP app): the folders it left in this app's own configuration
+# Coming from another installation (a former HemCP or Pensine app): the folders it left in this app's own configuration
 # folder (`/config/import/manager`, and `/config/import/janitor` if it had a janitor) are taken in once, when this app
 # has no data of its own yet. The import folder is then renamed, never deleted. See DOCS.md, "Moving from another app".
 IMPORT=/config/import

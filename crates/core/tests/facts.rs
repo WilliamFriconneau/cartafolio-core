@@ -7,8 +7,8 @@ use std::error::Error;
 use std::fs;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::Space;
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::Space;
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
 use rusqlite::Connection;
 
 struct Base {
@@ -24,7 +24,7 @@ fn base() -> Result<Base, Box<dyn Error>> {
     Ok(Base { _t: t, space, conn })
 }
 
-fn remember(b: &Base, text: &str, distinct: &[String]) -> memcp_core::Result<Remembered> {
+fn remember(b: &Base, text: &str, distinct: &[String]) -> pensine_core::Result<Remembered> {
     facts::remember(
         &b.conn,
         &b.space,
@@ -46,7 +46,7 @@ fn supersede(
     id: &str,
     text: &str,
     reason: Option<&str>,
-) -> memcp_core::Result<facts::Fact> {
+) -> pensine_core::Result<facts::Fact> {
     facts::supersede(
         &b.conn,
         &b.space,
@@ -430,7 +430,7 @@ fn a_text_longer_than_a_peer_takes_is_refused_when_written() -> Res {
     let longer = format!("b{most}");
     assert!(matches!(
         remember(&b, &longer, &[]),
-        Err(memcp_core::Error::Invalid(_))
+        Err(pensine_core::Error::Invalid(_))
     ));
     let short = create(&b, "Fed the cat")?;
     assert!(matches!(
@@ -442,7 +442,7 @@ fn a_text_longer_than_a_peer_takes_is_refused_when_written() -> Res {
             NewFact::agent(&longer, "agent:test"),
             None
         ),
-        Err(memcp_core::Error::Invalid(_))
+        Err(pensine_core::Error::Invalid(_))
     ));
     Ok(())
 }

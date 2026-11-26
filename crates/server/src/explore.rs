@@ -6,9 +6,9 @@
 //! read nothing of anyone else's). An edit is never an overwrite: a correction is a `supersede` that
 //! keeps the old text in the history, a removal is a `retire` with its reason.
 
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-use memcp_core::users::{self, User};
-use memcp_core::{Space, util::iso};
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::users::{self, User};
+use pensine_core::{Space, util::iso};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -66,7 +66,7 @@ fn fact_row(f: &facts::Fact) -> Value {
         "text": f.text,
         "extract": extract(&f.text, 160),
         "tags": f.tags,
-        "fields": memcp_core::autotag::fields_json(&f.tags),
+        "fields": pensine_core::autotag::fields_json(&f.tags),
         "author": f.author,
         "created_at": f.created_at,
         "created": iso(f.created_at),
@@ -113,7 +113,7 @@ fn voice_state(conn: &Connection, f: &facts::Fact) -> Option<Value> {
             |r| r.get::<_, String>(0),
         )
         .ok()?;
-    let waiting = memcp_core::files::recordings_waiting(conn)
+    let waiting = pensine_core::files::recordings_waiting(conn)
         .unwrap_or_default()
         .iter()
         .any(|r| r.0 == file);
@@ -124,7 +124,7 @@ fn voice_state(conn: &Connection, f: &facts::Fact) -> Option<Value> {
         .query_row(
             "SELECT d.id FROM facts d JOIN fact_tags x ON x.fact_id = d.id
              WHERE d.status = 'active' AND x.tag = ?1 AND instr(d.text, ?2) > 0 LIMIT 1",
-            rusqlite::params![memcp_core::files::VOICE_FAILED_TAG, file],
+            rusqlite::params![pensine_core::files::VOICE_FAILED_TAG, file],
             |r| r.get(0),
         )
         .ok();
@@ -155,7 +155,7 @@ pub fn view(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
     };
     match app.space_view(&caller, &args, now) {
         Ok(v) => Response::json(200, &v),
-        Err(memcp_core::tools::ToolError::Denied(m)) => err(403, &m),
+        Err(pensine_core::tools::ToolError::Denied(m)) => err(403, &m),
         Err(e) => err(400, &e.to_string()),
     }
 }
@@ -192,7 +192,7 @@ pub fn overview(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64)
         .into_iter()
         .map(|(t, n)| json!({ "tag": t, "count": n }))
         .collect();
-    let dashboard = memcp_core::view::dashboard(&conn, &kind, now);
+    let dashboard = pensine_core::view::dashboard(&conn, &kind, now);
     Response::json(
         200,
         &json!({
@@ -664,7 +664,7 @@ pub fn write(
             };
             // The node tags what the page writes, as it tags every write.
             let text = new.text.clone();
-            memcp_core::autotag::add_to(&app.brain, &me.id, &space, &conn, &text, &mut new.tags);
+            pensine_core::autotag::add_to(&app.brain, &me.id, &space, &conn, &text, &mut new.tags);
             let distinct: Vec<String> = body
                 .get("distinct_from")
                 .and_then(Value::as_array)
@@ -706,7 +706,7 @@ pub fn write(
             let f = facts::supersede(&conn, &space, &who, id, new, reason).map_err(fail)?;
             // The person changed the tags of a note: the node learns it.
             if let (true, Some(old)) = (retagged, old) {
-                memcp_core::autotag::learn_change(
+                pensine_core::autotag::learn_change(
                     &app.brain, &who, &space, &f.text, &old.tags, &f.tags,
                 );
             }
@@ -759,7 +759,7 @@ pub fn layout_get(app: &App, me: &User) -> Response {
 /// `POST /layout/set` (rename, move, reorder) and `POST /layout/add` (a space of the person's own).
 /// Only the layout changes: no file moves and no right is rewritten.
 pub fn layout_write(app: &App, me: &User, path: &str, body: &Value) -> Result<Value, Response> {
-    use memcp_core::layout::Change;
+    use pensine_core::layout::Change;
     let parent_of = |v: &Value| -> Result<Option<Space>, Response> {
         match v.as_str().filter(|s| !s.is_empty()) {
             None => Ok(None),
@@ -809,7 +809,7 @@ pub fn layout_write(app: &App, me: &User, path: &str, body: &Value) -> Result<Va
 
 /// `GET /pairing/status?code=…`: whether the code shown on the page was used, and by which connection.
 pub fn pairing_status(ctl: &Connection, me: &User, req: &Request, now: i64) -> Response {
-    use memcp_core::pairing::{self, Standing};
+    use pensine_core::pairing::{self, Standing};
     let code = req.query.get("code").map(String::as_str).unwrap_or("");
     let body = match pairing::standing(ctl, &me.id, code, now) {
         Standing::Waiting => json!({ "state": "waiting" }),
@@ -872,7 +872,7 @@ fn clean_sources(v: Option<&Value>) -> Option<Vec<String>> {
         .into_iter()
         .flatten()
         .filter_map(Value::as_str)
-        .filter_map(memcp_core::rules::clean_source)
+        .filter_map(pensine_core::rules::clean_source)
         .collect();
     out.sort();
     out.dedup();
@@ -961,7 +961,7 @@ pub fn space_write(
                     })
                     .unwrap_or_default()
             };
-            let edit = memcp_core::rules::Edit {
+            let edit = pensine_core::rules::Edit {
                 add_tags: list("add_tags"),
                 remove_tags: list("remove_tags"),
                 add_keywords: list("add_keywords"),
@@ -969,7 +969,7 @@ pub fn space_write(
                 add_sources: list("add_sources"),
                 remove_sources: list("remove_sources"),
             };
-            memcp_core::rules::edit(&conn, &space, &who, &edit).map_err(fail)?;
+            pensine_core::rules::edit(&conn, &space, &who, &edit).map_err(fail)?;
             Ok(json!({ "result": "ok" }))
         }
         "/space/move-tag" => {

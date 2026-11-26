@@ -1,7 +1,7 @@
 //! The deliveries of a kept note.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 fn connector(id: &str, kind: ConnectorKind, icloud: bool) -> ConnectorConfig {
     ConnectorConfig {

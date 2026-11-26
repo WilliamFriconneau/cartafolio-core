@@ -46,8 +46,8 @@
 
 ## 20261122.1.0
 
-- **The product is now called Pensine** (Silice for a day, MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.
-- **New names, old names kept.** `PENSINE_*` environment variables, `pensine.toml`, `/.well-known/pensine` and a `pensine` command are accepted first; the Silice and MemCP ones keep working.
+- **The product is now called Pensine** (Silice for a day, Pensine before). The name changes in the documentation, the page, the Home Assistant app and the messages.
+- **New names, old names kept.** `PENSINE_*` environment variables, `pensine.toml`, `/.well-known/pensine` and a `pensine` command are accepted first; the Silice and Pensine ones keep working.
 
 ## 20261121.3.0
 
@@ -68,9 +68,9 @@
 
 ## 20261121.2.0
 
-- **The product is now called Silice** (it was called Cartafolio for one day, and MemCP before). The name changes in the documentation, the page, the Home Assistant app and the messages.
+- **The product is now called Silice** (it was called Cartafolio for one day, and Pensine before). The name changes in the documentation, the page, the Home Assistant app and the messages.
 
-- **New names, old names kept.** `SILICE_*` environment variables, `silice.toml`, `/.well-known/silice` and a `silice` command are accepted next to the MemCP ones, which keep working. The short-lived `cartafolio` names are gone.
+- **New names, old names kept.** `SILICE_*` environment variables, `silice.toml`, `/.well-known/silice` and a `silice` command are accepted next to the Pensine ones, which keep working. The short-lived `cartafolio` names are gone.
 
 - **A new installation names itself Silice.** The default node name changes; an installation that already has a name keeps it.
 
@@ -80,7 +80,7 @@
 
 - **New names, old names kept.** `CARTAFOLIO_*` environment variables, `cartafolio.toml`, `/.well-known/cartafolio` and a `cartafolio` command are accepted next to the old ones; the old ones keep working.
 
-- **MemCP is now called Cartafolio.** The name changes in the documentation, the page, the Home Assistant app and the messages; the command, the environment variables, the configuration file, the data folders and the addresses keep their names.
+- **Pensine is now called Cartafolio.** The name changes in the documentation, the page, the Home Assistant app and the messages; the command, the environment variables, the configuration file, the data folders and the addresses keep their names.
 
 ## 20261120.12.0
 
@@ -130,7 +130,7 @@
 
 - **A sign the person takes off a note stays off.** Correcting a note with `sign_set` (or `tags_set`, by default) leaves the mark `signe-refuse/<sign>` beside the note's tags: the node's tagger and the janitor's night sweep no longer put that sign back on that note, whatever the person writes there afterwards. Adding the sign again with `sign_set` takes the mark off. A pass that says `learn: false` (the sweep, an engine) leaves no mark and clears none.
 - `signs_review` shows those notes too, with `refused`: the signs the person took off, so that one can come back with `sign_set`.
-- **The language of a note is read before its signs** (`memcp_health::lang_of`, used by the node's tagger and by the janitor): French alone when the text looks French, every language at once otherwise. A note once taken for French because of `de`, `la` or `un` (words three languages share) is now read with its English signs; `Müdigkeit` is no longer French.
+- **The language of a note is read before its signs** (`pensine_health::lang_of`, used by the node's tagger and by the janitor): French alone when the text looks French, every language at once otherwise. A note once taken for French because of `de`, `la` or `un` (words three languages share) is now read with its English signs; `Müdigkeit` is no longer French.
 
 ## 20261120.5.0
 
@@ -230,11 +230,11 @@
 
 ## 20261117.0.28
 
-- **Space reads remind assistants to write a journal handoff.** MemCP repeats the reminder in the tool response, even when the client did not show the initial guide. One entry per topic brings together the important reasoning, any advice given and the agreed next step.
+- **Space reads remind assistants to write a journal handoff.** Pensine repeats the reminder in the tool response, even when the client did not show the initial guide. One entry per topic brings together the important reasoning, any advice given and the agreed next step.
 
 ## 20261117.0.27
 
-- **ChatGPT and Le Chat connect.** Adding MemCP in ChatGPT (and in Le Chat) was refused: the node accepted only Claude's return address. It now accepts theirs, and names itself in every sign-in answer, as ChatGPT requires.
+- **ChatGPT and Le Chat connect.** Adding Pensine in ChatGPT (and in Le Chat) was refused: the node accepted only Claude's return address. It now accepts theirs, and names itself in every sign-in answer, as ChatGPT requires.
 - **Big files reach every machine.** A recording or a document of up to 2 GB (24 MB before) goes between your machines in pieces of 4 MB, each checked; a transfer cut halfway goes on where it stopped. A machine not yet updated keeps getting files up to 24 MB, and the bigger ones once it is. Big files come in from a watched folder.
 - **Choose which spaces go to each machine, and which way.** On a machine, « spaces and ways » sets each space both ways, send only, receive only or no sync, and the choice for spaces made later; health and money are marked. Nothing changes until you choose: every space still goes both ways (`memcp node policy`).
 
@@ -352,7 +352,7 @@
 
 ## 20261117.0.6
 
-- The bridge is now the capture program: crates `memcp-capture` and `memcp-capture-ffi`, binary `memcp-capture` (the commands are the same).
+- The bridge is now the capture program: crates `memcp-capture` and `pensine-capture-ffi`, binary `memcp-capture` (the commands are the same).
 - A replica can hold only the last N days (`memcp-sync --window-days N`; pruning is local and never touches what no peer has acknowledged).
 - A device the person allowed in advance joins at once, once (`/join/allow-device`).
 - The page: machines first with live peers, folders, French and English, light and dark, a first screen with two choices, keywords and targets of a space.
@@ -482,7 +482,7 @@ First release under the AGPL-3.0-or-later (with a commercial licence available);
 
 ## 0.23.0
 
-First public release, under the name MemCP (the project was developed privately as HemCP up to 0.22.7).
+First public release, under the name Pensine (the project was developed privately as HemCP up to 0.22.7).
 
 - Spaces can be laid out: a label, a parent and a position, nesting up to eight deep, free creation and renaming, without touching a file or a right.
 - Dependency fix: SQLite updated through `rusqlite` 0.41 (RUSTSEC-2026-0459). The minimum Rust version is now 1.89.

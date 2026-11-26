@@ -11,7 +11,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::hash::{Hash, Hasher};
 
-use memcp_client::Error as ClientError;
+use pensine_client::Error as ClientError;
 use serde_json::{Value, json};
 
 use crate::models::{self, Models};

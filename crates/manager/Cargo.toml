@@ -1,7 +1,7 @@
 [package]
 publish = false
-name = "memcp-manager"
-description = "memcp manager: one memory per person, created and administered from one place"
+name = "pensine-manager"
+description = "pensine manager: one memory per person, created and administered from one place"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,8 +9,8 @@ rust-version.workspace = true
 repository.workspace = true
 
 [dependencies]
-memcp-core = { path = "../core" }
-memcp-server = { path = "../server" }
+pensine-core = { path = "../core" }
+pensine-server = { path = "../server" }
 serde_json = "1.0.154"
 
 [dev-dependencies]

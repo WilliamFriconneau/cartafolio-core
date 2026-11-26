@@ -1,6 +1,6 @@
 # The health referential
 
-What the node knows about health, as data and as code: the signs and symptoms a person says, the measures and vital constants with their units and plausible ranges, and the red flags. It is the crate `memcp-health` (`crates/health`), a library with no binary, no model, no I/O and no clock. The node's tagger ([AUTOTAG.md](AUTOTAG.md)), the janitor's health rule and the read tool `health_referential` ([TOOLS.md](TOOLS.md)) all read the same data, so an app, an assistant and the node agree.
+What the node knows about health, as data and as code: the signs and symptoms a person says, the measures and vital constants with their units and plausible ranges, and the red flags. It is the crate `pensine-health` (`crates/health`), a library with no binary, no model, no I/O and no clock. The node's tagger ([AUTOTAG.md](AUTOTAG.md)), the janitor's health rule and the read tool `health_referential` ([TOOLS.md](TOOLS.md)) all read the same data, so an app, an assistant and the node agree.
 
 A result is a **suggestion for the person to confirm**, never a diagnosis. Nothing is ticked by itself.
 
@@ -37,7 +37,7 @@ The source referential has French everywhere; the only text it has in English an
 ## Detection
 
 ```rust
-let d = memcp_health::detect("Mal de tête 6/10, tension 12/8", Lang::Fr);
+let d = pensine_health::detect("Mal de tête 6/10, tension 12/8", Lang::Fr);
 ```
 
 ```json
@@ -56,7 +56,7 @@ let d = memcp_health::detect("Mal de tête 6/10, tension 12/8", Lang::Fr);
 }
 ```
 
-- **Language.** A text is read in French alone when it looks French (an accent, or words only French uses), so that a word of both languages in one sense only (`pain`, bread) is not taken for the other's sign; otherwise in every language at once (`memcp_health::lang_of`).
+- **Language.** A text is read in French alone when it looks French (an accent, or words only French uses), so that a word of both languages in one sense only (`pain`, bread) is not taken for the other's sign; otherwise in every language at once (`pensine_health::lang_of`).
 - **Signs.** A sign is found by its label or one of its keywords, as a run of whole words (case, accents and apostrophes ignored; the last word may be a plural). A match right after a negation (`pas de`, `aucune`, `sans`, `jamais de`; English `no`, `not`, `without`) does not count, but a bare `pas` does not deny (`pas mal de fatigue` says there is some). A shorter keyword inside a longer one of another sign is dropped (`mal au ventre` is the belly's, not also `pain`). Each sign is given once, in order of appearance; a more general sign it also is (`also`: mental fatigue is fatigue too) follows it.
 - **Level.** On a named scale only (`pain`, `intensity`, `wellbeing`; the mood, `-5` to `+5`, is left to its bar, and a sign noted by presence has none): `n/10`, `n sur 10`, `n out of 10`, `n / 10`, from 0 to 10. A number without its scale is no level (`depuis 2 jours`). Phrase by phrase (cut at `. ; ! ? , ` and line breaks): as many levels as signs pair in order; a level alone goes to the one sign of the phrase before (`anxieux, 2 sur 10`); a level that a later sign closes goes to the sign before it (`douleur 4 sur 10 et fatigue`); a level that ends a phrase of two signs is ambiguous and left out (`triste et anxieux à 4/10`). Without a number, the word as said, up to two words after the sign or the word before it (`forte douleur`, `mild headache`).
 - **Measures.** A number counts only next to its word (`tension 12/8`, `je pèse 72,5 kg`, `38,5 de fièvre`; up to five filler words such as `est`, `de`, `à`, `of`, `:`), or with a unit that says what it is (`64 bpm`, `72 kg`, `38,5 °C`), and only inside its plausible range. A comma is a decimal point. **A date (`2026-11-17`, `17/11/2026`) and a clock time (`12h30`, `12:30`) are never a value.** The one exception is a duration after its own keyword: `dormi 6h30` is 6.5 hours, `dormi à 12h30` is nothing. The first value said of each measure is kept. `value` is in `unit`; a pressure said in centimetres of mercury (`12/8`) is given in mmHg (`120/80`). Glucose with no unit: up to 40 is g/L or mmol/L, from 40 to 600 is mg/dL.

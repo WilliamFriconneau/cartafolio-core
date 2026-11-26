@@ -1,12 +1,12 @@
 //! The money extension of the space view contract (`memcp.view/1`).
 //!
-//! The core reads facts; bank statements live in `memcp_finances` and are reached through this node.
+//! The core reads facts; bank statements live in `pensine_finances` and are reached through this node.
 //! When a caller reads the dashboard, targets or register of a money space, the core's answer is
 //! extended here with the finance capabilities and, for `type=movement`, with the ledger's register.
 //! Nothing is renamed and no core tool changes.
 
-use memcp_core::tools::ToolError;
-use memcp_finances::Ledger;
+use pensine_core::tools::ToolError;
+use pensine_finances::Ledger;
 use serde_json::{Value, json};
 
 /// Adds the finance indicators to a money space's `stats` answer: the balances read in the last

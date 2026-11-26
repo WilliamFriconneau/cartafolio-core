@@ -5,14 +5,14 @@
 
 use std::sync::Arc;
 
-use memcp_client::peer_sync::Peer;
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::sync;
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space, users};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::peer_sync::Peer;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::sync;
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space, users};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 use serde_json::json;
 
 const NOW: i64 = 1_794_800_000;
@@ -353,7 +353,7 @@ fn a_peer_with_a_newer_protocol_is_refused_with_a_clear_message_and_nothing_is_t
     say_in_local(&b);
     let before = all_texts(&b);
     let peer = Peer::new(
-        &fake_peer(Some(memcp_core::sync::PROTOCOL + 1)),
+        &fake_peer(Some(pensine_core::sync::PROTOCOL + 1)),
         "k",
         "peer-new",
     );
@@ -379,7 +379,7 @@ fn say_in_local(b: &Brain) {
 fn a_peer_with_an_older_protocol_or_none_is_still_served_as_the_first_one() {
     let (b, db) = local("older");
     say_in_local(&b);
-    for protocol in [None, Some(0), Some(memcp_core::sync::PROTOCOL)] {
+    for protocol in [None, Some(0), Some(pensine_core::sync::PROTOCOL)] {
         let peer = Peer::new(&fake_peer(protocol), "k", "peer-old");
         let pass = peer.sync_once(&b, NOW).unwrap();
         // The person of this node is sam (the one who owns its spaces): the only thing said is that the old peer

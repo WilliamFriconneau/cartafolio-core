@@ -4,13 +4,13 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::access::{self, Caller, Kind, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::sync::{self, Cursor};
-use memcp_core::text::Language;
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space};
+use pensine_core::access::{self, Caller, Kind, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::sync::{self, Cursor};
+use pensine_core::text::Language;
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space};
 use serde_json::{Value, json};
 
 type Boxed = Box<dyn std::error::Error>;

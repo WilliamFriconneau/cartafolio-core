@@ -1,5 +1,5 @@
 //! The health patterns of the tagger: signs and symptoms (with the level as said), measures (with the value as said) and
-//! red flags, read from the health referential (`memcp-health`, see docs/HEALTH.md). Small, deterministic, no model.
+//! red flags, read from the health referential (`pensine-health`, see docs/HEALTH.md). Small, deterministic, no model.
 //!
 //! The referential does the reading: a number counts only next to its word, a date and a clock time are never a value, a
 //! denied sign (`pas de fièvre`) is not tagged. Here the result becomes tags and fields:
@@ -11,7 +11,7 @@
 
 use std::collections::BTreeMap;
 
-use memcp_health::{detect, lang_of};
+use pensine_health::{detect, lang_of};
 
 pub(super) struct Found {
     pub tags: Vec<String>,
@@ -62,7 +62,7 @@ pub(super) fn health(text: &str) -> Found {
 /// The tags of the signs the referential knows (`signe/<tag>` is the tag each one gives), each once, in its order.
 pub(super) fn sign_slugs() -> Vec<&'static str> {
     let mut out: Vec<&str> = Vec::new();
-    for m in memcp_health::builtin().manifestations() {
+    for m in pensine_health::builtin().manifestations() {
         if !out.contains(&m.tag.as_str()) {
             out.push(m.tag.as_str());
         }
@@ -73,7 +73,7 @@ pub(super) fn sign_slugs() -> Vec<&'static str> {
 /// The tags of the measures the referential knows, each once, in its order.
 pub(super) fn measure_slugs() -> Vec<&'static str> {
     let mut out: Vec<&str> = Vec::new();
-    for m in memcp_health::builtin().measure_defs() {
+    for m in pensine_health::builtin().measure_defs() {
         if !out.contains(&m.tag.as_str()) {
             out.push(m.tag.as_str());
         }
@@ -83,7 +83,7 @@ pub(super) fn measure_slugs() -> Vec<&'static str> {
 
 /// The French and English labels of a sign or a measure of the referential, by its tag.
 pub(super) fn labels(tag: &str) -> Option<(String, String)> {
-    let r = memcp_health::builtin();
+    let r = pensine_health::builtin();
     let pick = |l: &BTreeMap<String, String>| {
         let fr = l
             .get("fr")

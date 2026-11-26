@@ -10,16 +10,16 @@ use std::path::Path;
 use std::time::Duration;
 
 use common::{Res, Temp, sp};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::failpoint::{self, at};
-use memcp_core::files;
-use memcp_core::layout::Change;
-use memcp_core::lifecycle::{Children, Disposition, SpaceNew};
-use memcp_core::moves::{self, Step};
-use memcp_core::swarm::{self, Answer};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Space, catalogue, export, merge, sync, triage};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::failpoint::{self, at};
+use pensine_core::files;
+use pensine_core::layout::Change;
+use pensine_core::lifecycle::{Children, Disposition, SpaceNew};
+use pensine_core::moves::{self, Step};
+use pensine_core::swarm::{self, Answer};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Space, catalogue, export, merge, sync, triage};
 
 type Out<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -35,8 +35,8 @@ fn node(t: &Temp, name: &str) -> Out<Brain> {
 fn crash<T>(
     b: &Brain,
     point: &'static str,
-    op: impl FnOnce() -> memcp_core::Result<T>,
-) -> Out<(Brain, memcp_core::recover::Recovered)> {
+    op: impl FnOnce() -> pensine_core::Result<T>,
+) -> Out<(Brain, pensine_core::recover::Recovered)> {
     failpoint::arm(Some(point));
     let r = op();
     failpoint::arm(None);
@@ -368,7 +368,7 @@ fn an_archived_space_is_not_brought_back_by_a_peer_after_a_crash() -> Res {
                 &Disposition::Archive,
                 &Children::Grandparent,
                 false,
-                memcp_core::util::now(),
+                pensine_core::util::now(),
             )
         })?;
         let offer = swarm::offers(&b, OWNER)?
@@ -570,7 +570,7 @@ fn a_torn_file_under_its_name_is_written_again() -> Res {
     let t = Temp::new("crash-torn");
     let b = node(&t, "a")?;
     let bytes = b"the whole content of the file, longer than its torn part".to_vec();
-    let sha = memcp_core::chunks::digest(&bytes);
+    let sha = pensine_core::chunks::digest(&bytes);
     let dir = b.dir().join("files").join("notes");
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join(&sha), &bytes[..10])?;

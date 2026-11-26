@@ -411,7 +411,7 @@ impl Client {
         let id = self.take_id();
         let init = json!({"jsonrpc":"2.0","id":id,"method":"initialize","params":{
             "protocolVersion": PROTOCOL, "capabilities": {},
-            "clientInfo": {"name": "memcp-client", "version": env!("CARGO_PKG_VERSION")}}});
+            "clientInfo": {"name": "pensine-client", "version": env!("CARGO_PKG_VERSION")}}});
         let answer = self.post(&init, Some(id))?;
         if let Some(e) = answer.get("error") {
             return Err(Error::Rpc {

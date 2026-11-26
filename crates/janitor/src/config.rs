@@ -159,7 +159,7 @@ impl Config {
             ollama_url: get("ollama_url").unwrap_or_else(|| "http://127.0.0.1:11436".into()),
             ollama_model: get("ollama_model").unwrap_or_else(|| "qwen3:8b".into()),
             state_dir: get("state_dir")
-                .map_or_else(|| home().join(".local/share/memcp-janitor"), |v| path(&v)),
+                .map_or_else(|| home().join(".local/share/pensine-janitor"), |v| path(&v)),
             max_notes: usize::try_from(number("max_notes", 30)?)
                 .map_err(|_| "max_notes".to_string())?,
             keyword_min_notes: usize::try_from(number("keyword_min_notes", 10)?)
@@ -187,14 +187,14 @@ impl Config {
         {
             return Err(format!("models: {bad} is not `local` or `api`"));
         }
-        if !memcp_client::allowed_url(&c.ollama_url) {
+        if !pensine_client::allowed_url(&c.ollama_url) {
             return Err(format!(
                 "ollama_url {} is refused: HTTPS, or in clear only on this machine or the own network",
                 c.ollama_url
             ));
         }
         if let Some(url) = &c.api_url
-            && !memcp_client::allowed_url(url)
+            && !pensine_client::allowed_url(url)
         {
             return Err(format!(
                 "api_url {url} is refused: HTTPS, or in clear only on this machine or the own network"
@@ -211,7 +211,8 @@ mod tests {
     use super::Config;
 
     fn settings(extra: &str) -> Result<Config, String> {
-        let dir = std::env::temp_dir().join(format!("memcp-janitor-config-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("pensine-janitor-config-{}", std::process::id()));
         std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
         std::fs::write(dir.join("key"), "hcp_x\n").map_err(|e| e.to_string())?;
         Config::parse(&format!(

@@ -250,7 +250,7 @@ impl Plan {
         let v: Value = serde_json::from_str(text)
             .map_err(|e| Error::Invalid(format!("the plan is not valid JSON: {e}")))?;
         if v["format"] != PLAN_FORMAT {
-            return Err(Error::Invalid("this is not a MemCP merge plan".into()));
+            return Err(Error::Invalid("this is not a Pensine merge plan".into()));
         }
         if v["version"].as_u64() != Some(u64::from(PLAN_VERSION)) {
             return Err(Error::Invalid(format!(

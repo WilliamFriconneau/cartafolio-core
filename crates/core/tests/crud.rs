@@ -3,14 +3,14 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::peers;
-use memcp_core::people;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{sync, util, vocabulary};
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::peers;
+use pensine_core::people;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{sync, util, vocabulary};
 
-fn audit_count(b: &memcp_core::Brain, event: &str) -> Result<i64, Box<dyn std::error::Error>> {
+fn audit_count(b: &pensine_core::Brain, event: &str) -> Result<i64, Box<dyn std::error::Error>> {
     Ok(b.open_control()?.query_row(
         "SELECT count(*) FROM auth_audit WHERE event = ?1",
         [event],
@@ -72,7 +72,7 @@ fn a_node_is_renamed_paused_revoked_and_forgotten_without_losing_its_history() -
     let alex = users::create_user(&ctl, OWNER, "alex", "Alex", false)?;
     access::connect_peer(
         &ctl,
-        memcp_core::users::OWNER,
+        pensine_core::users::OWNER,
         "peer-laptop-ab12",
         &Rights::parse("work:rw")?,
         false,
@@ -159,7 +159,7 @@ fn removing_a_person_disables_and_exports_and_never_loses_the_memory() -> Res {
     b.set_layout(
         OWNER,
         &sp("personal"),
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Owner’s personal space".into()),
             ..Default::default()
         },
@@ -195,7 +195,7 @@ fn removing_a_person_disables_and_exports_and_never_loses_the_memory() -> Res {
     );
     let done = people::retire_person(&b, &admin, &alex.id, false, 100)?;
     let out = done.export.ok_or("export")?;
-    memcp_core::export::verify_export(&out)?;
+    pensine_core::export::verify_export(&out)?;
     assert!(users::user(&ctl, &alex.id)?.ok_or("alex")?.disabled);
     assert!(b.dir().join("archive/people").is_dir());
     // The memory is still there, and enabling brings the person back.
@@ -274,13 +274,13 @@ fn vocabulary_terms_and_library_folders_can_be_edited_and_removed() -> Res {
     let dir = t.path().join("notes");
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join("a.md"), "# Title\nbody [[b]]")?;
-    let id = memcp_core::library::add_root(&conn, &dir, 1)?;
-    memcp_core::library::rescan_all(&conn, 2)?;
-    assert_eq!(memcp_core::library::roots(&conn)?[0].entries, 1);
-    assert!(memcp_core::library::remove_root(&conn, id)?);
-    assert!(memcp_core::library::roots(&conn)?.is_empty());
+    let id = pensine_core::library::add_root(&conn, &dir, 1)?;
+    pensine_core::library::rescan_all(&conn, 2)?;
+    assert_eq!(pensine_core::library::roots(&conn)?[0].entries, 1);
+    assert!(pensine_core::library::remove_root(&conn, id)?);
+    assert!(pensine_core::library::roots(&conn)?.is_empty());
     assert!(dir.join("a.md").is_file(), "the original is never touched");
-    assert!(!memcp_core::library::remove_root(&conn, id)?);
+    assert!(!pensine_core::library::remove_root(&conn, id)?);
     Ok(())
 }
 
@@ -291,11 +291,11 @@ fn keywords_and_tags_are_added_and_removed_one_by_one_with_history() -> Res {
     let s = sp("work");
     let conn = b.open_space(&s)?;
     let add = |kw: &[&str], rm: &[&str]| {
-        memcp_core::rules::edit(
+        pensine_core::rules::edit(
             &conn,
             &s,
             "me",
-            &memcp_core::rules::Edit {
+            &pensine_core::rules::Edit {
                 add_keywords: kw.iter().map(|k| k.to_string()).collect(),
                 remove_keywords: rm.iter().map(|k| k.to_string()).collect(),
                 add_tags: vec!["Clients".into()],
@@ -305,7 +305,7 @@ fn keywords_and_tags_are_added_and_removed_one_by_one_with_history() -> Res {
     };
     assert_eq!(add(&["Atlas", "quote"], &[])?.keywords, ["atlas", "quote"]);
     assert_eq!(add(&[], &["quote"])?.keywords, ["atlas"]);
-    let (_, r) = memcp_core::rules::read(&conn);
+    let (_, r) = pensine_core::rules::read(&conn);
     assert_eq!(
         (r.keywords, r.tags),
         (vec!["atlas".to_string()], vec!["clients".to_string()])

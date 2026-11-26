@@ -1,16 +1,16 @@
 //! The `memcp` binary: the owner's command line and the node (MCP, the page, OAuth, sync with its peers).
 
-use memcp_server::{app, cli, config, net, setup};
+use pensine_server::{app, cli, config, net, setup};
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
 use cli::Failure;
-use memcp_core::Brain;
-use memcp_core::text;
+use pensine_core::Brain;
+use pensine_core::text;
 
-use memcp_server::commands::{Args, dispatch, list, parse, usage};
+use pensine_server::commands::{Args, dispatch, list, parse, usage};
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match run(&args) {
@@ -39,7 +39,7 @@ fn run(args: &[String]) -> Result<(), Failure> {
             .get(1)
             .ok_or_else(|| (2, format!("missing the folder to write\n\n{}", usage())))?;
         let data = a.flags.get("--data").map(PathBuf::from);
-        let n = memcp_core::profession::export(
+        let n = pensine_core::profession::export(
             Path::new(dir),
             env!("CARGO_PKG_VERSION"),
             data.as_deref(),
@@ -59,8 +59,8 @@ fn run(args: &[String]) -> Result<(), Failure> {
         return cli::verify_export(Path::new(dir));
     }
     // Against a running node (`--node`, or MEMCP_NODE): the same commands, over HTTP with a key (docs/CLI.md).
-    if let Some(target) = memcp_server::remote::target(&a)? {
-        return memcp_server::remote::run(&target, args, &a);
+    if let Some(target) = pensine_server::remote::target(&a)? {
+        return pensine_server::remote::run(&target, args, &a);
     }
     // The settings file fills in what the command line does not say.
     // `setup` may name a file that does not exist yet: it makes it.
@@ -69,11 +69,11 @@ fn run(args: &[String]) -> Result<(), Failure> {
         .flags
         .get("--data")
         .map(PathBuf::from)
-        .or_else(|| memcp_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
+        .or_else(|| pensine_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
     let setup_target = if a.pos[0] == "setup" {
         named
             .map(PathBuf::from)
-            .or_else(|| memcp_core::env::var_os("MEMCP_CONFIG").map(PathBuf::from))
+            .or_else(|| pensine_core::env::var_os("MEMCP_CONFIG").map(PathBuf::from))
     } else {
         None
     };
@@ -138,9 +138,9 @@ fn start_intake(
     brain: &Brain,
     settings: &config::Settings,
     data: &Path,
-) -> Option<memcp_server::intake::Running> {
-    let intake = memcp_server::intake::Settings::from_file(settings, &data.join("intake"))
-        .and_then(|s| memcp_server::intake::start(brain, s).map_err(|e| e.to_string()));
+) -> Option<pensine_server::intake::Running> {
+    let intake = pensine_server::intake::Settings::from_file(settings, &data.join("intake"))
+        .and_then(|s| pensine_server::intake::start(brain, s).map_err(|e| e.to_string()));
     match intake {
         Ok(running) => running,
         Err(e) => {
@@ -191,7 +191,7 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
     }
     if let Some(u) = flag("--public-url")
         .map(String::from)
-        .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok())
+        .or_else(|| pensine_core::env::var("MEMCP_PUBLIC_URL").ok())
     {
         app.public_url = u.trim_end_matches('/').to_string();
     } else if let Some(u) = app::listened_url(listen) {
@@ -203,9 +203,9 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
         .map(String::from)
         .filter(|_| !app.tailnet_users.is_empty() || app.login_url.is_some())
         .map(|l| app.login_url.clone().unwrap_or(l));
-    let _ = memcp_core::directory::set_exposures(
+    let _ = pensine_core::directory::set_exposures(
         &app.brain,
-        &memcp_core::directory::exposures_from(listen, &app.public_url, tailnet.as_deref()),
+        &pensine_core::directory::exposures_from(listen, &app.public_url, tailnet.as_deref()),
     );
     // Found without typing an address: advertised on the local network (see docs/DISCOVERY.md).
     let _advertised = if a.switches.iter().any(|s| s == "--advertise") {
@@ -214,13 +214,13 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
             .next()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8791);
-        memcp_server::discovery::advertise(port, &app.node_name)
+        pensine_server::discovery::advertise(port, &app.node_name)
     } else {
         None
     };
     let app = Arc::new(app);
     // The peers this node keeps in step with, started again with it.
-    memcp_server::replica::resume(&app);
+    pensine_server::replica::resume(&app);
     // Voice notes, watched folders and absorbed folders: tasks of the node itself, as set in memcp.toml.
     let _intake = start_intake(&app.brain, settings, data);
     let identity = match flag("--identity-listen") {
@@ -264,13 +264,13 @@ fn serve(data: &Path, a: &Args, settings: &config::Settings, listen: &str) -> Re
 #[cfg(test)]
 mod tests {
     use super::*;
-    use memcp_core::directory;
+    use pensine_core::directory;
 
     #[test]
     fn a_running_node_holds_its_data_directory() -> Result<(), Failure> {
         let dir = std::env::temp_dir().join(format!(
             "pensine-instance-{}",
-            memcp_core::util::random_base32(16)
+            pensine_core::util::random_base32(16)
         ));
         std::fs::create_dir(&dir).map_err(cli::fail)?;
         let first = net::lock_node(&dir)?;
@@ -287,7 +287,7 @@ mod tests {
     fn node_name_defaults_only_when_no_name_is_given_or_stored() -> Result<(), String> {
         let dir = std::env::temp_dir().join(format!(
             "pensine-node-name-{}",
-            memcp_core::util::random_base32(16)
+            pensine_core::util::random_base32(16)
         ));
         let brain = Brain::init(&dir, &[], text::Language::English).map_err(|e| e.to_string())?;
         let start = |args: &[&str], settings: &str| -> Result<app::App, String> {
@@ -313,14 +313,14 @@ mod tests {
             Some("Pensine")
         );
 
-        let settings = r#"node_name = "MemCP""#;
-        assert_eq!(start(&["serve"], settings)?.node_name, "MemCP");
-        assert_eq!(start(&["serve"], "")?.node_name, "MemCP");
+        let settings = r#"node_name = "Pensine""#;
+        assert_eq!(start(&["serve"], settings)?.node_name, "Pensine");
+        assert_eq!(start(&["serve"], "")?.node_name, "Pensine");
         assert_eq!(
             directory::stored_own_name(&brain)
                 .map_err(|e| e.to_string())?
                 .as_deref(),
-            Some("MemCP")
+            Some("Pensine")
         );
 
         assert_eq!(

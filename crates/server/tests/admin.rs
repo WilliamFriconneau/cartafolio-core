@@ -7,12 +7,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::users;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::users;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -883,7 +883,7 @@ fn only_what_deserves_a_look_is_listed_and_refused_keys_are_for_administrators()
         json!({ "agent": "sam-silent", "rights": "all" }),
     )?;
     let ctl = e.app.brain.open_control()?;
-    let now = memcp_core::util::now();
+    let now = pensine_core::util::now();
     ctl.execute(
         "UPDATE connections SET created_at = ?1 WHERE agent IN ('sam-never', 'alex-forgotten')",
         [now - 10 * 86_400],
@@ -1272,7 +1272,7 @@ fn the_owner_approves_what_an_app_proposed_as_it_reads_and_nobody_else_does() ->
         access::authenticate(&ctl, &t, 1_900_000_000)?.ok_or("refused")?
     };
     let propose = |text: &str| -> Res {
-        memcp_core::tools::call(&e.app.brain, &c, "guide_propose", &json!({ "text": text }))
+        pensine_core::tools::call(&e.app.brain, &c, "guide_propose", &json!({ "text": text }))
             .map_err(|x| format!("{x:?}"))?;
         Ok(())
     };
@@ -1314,11 +1314,11 @@ fn the_timeline_counts_what_each_vault_received_per_slice() -> Res {
     own(&e, SAM, "work")?;
     let conn = e.app.brain.open_space(&sp("work"))?;
     for text in ["first note", "second note"] {
-        memcp_core::facts::remember(
+        pensine_core::facts::remember(
             &conn,
             &sp("work"),
             "test",
-            memcp_core::facts::NewFact::agent(text, "test"),
+            pensine_core::facts::NewFact::agent(text, "test"),
             &[],
         )?;
     }
@@ -1502,11 +1502,11 @@ fn the_page_route_gives_the_words_to_expect_for_the_spaces_of_the_person_only() 
         ),
     ] {
         let conn = e.app.brain.open_space(&sp(space))?;
-        memcp_core::facts::remember(
+        pensine_core::facts::remember(
             &conn,
             &sp(space),
             "test",
-            memcp_core::facts::NewFact::agent(text, "test"),
+            pensine_core::facts::NewFact::agent(text, "test"),
             &[],
         )?;
     }
@@ -1562,7 +1562,7 @@ fn the_page_route_gives_the_words_to_expect_for_the_spaces_of_the_person_only() 
 
 /// Everything `from` holds of a space that `to` lacks.
 fn catch_up(from: &Brain, to: &Brain, from_name: &str, space: &Space) -> Res {
-    use memcp_core::sync;
+    use pensine_core::sync;
     loop {
         let (pulled, _) = sync::cursors(to, from_name, space)?;
         let page = sync::events_after(from, space, pulled, 50, 1 << 20, None)?;
@@ -1577,7 +1577,7 @@ fn catch_up(from: &Brain, to: &Brain, from_name: &str, space: &Space) -> Res {
 
 #[test]
 fn the_page_counts_the_disputes_lists_them_and_the_person_picks_a_version() -> Res {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let e = env()?;
     own(&e, SAM, "sam-notes")?;
     let s = sp("sam-notes");

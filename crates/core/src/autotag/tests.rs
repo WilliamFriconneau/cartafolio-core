@@ -349,21 +349,21 @@ fn a_denied_sign_is_not_tagged_and_the_richer_referential_finds_more() {
 
 #[test]
 fn every_tag_of_the_referential_is_a_valid_tag() {
-    for m in memcp_health::builtin().manifestations() {
+    for m in pensine_health::builtin().manifestations() {
         assert!(
             crate::facts::normalize_tag(&format!("signe/{}", m.tag)).is_ok(),
             "{}",
             m.tag
         );
     }
-    for d in memcp_health::builtin().measure_defs() {
+    for d in pensine_health::builtin().measure_defs() {
         assert!(
             crate::facts::normalize_tag(&format!("mesure/{}", d.tag)).is_ok(),
             "{}",
             d.tag
         );
     }
-    for r in memcp_health::builtin().red_flag_rules().rules() {
+    for r in pensine_health::builtin().red_flag_rules().rules() {
         assert!(
             crate::facts::normalize_tag(&format!("alerte/{}", r.id)).is_ok(),
             "{}",

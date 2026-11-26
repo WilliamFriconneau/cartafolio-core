@@ -23,7 +23,7 @@ Rules that hold for every row:
   person's rights and answers the same text, so each row below is reachable by key without its own route. The
   routes of the **HTTP** column stay the way for a page or an app.
 
-Legend: **core** = `memcp_core` function, **CLI** = `memcp` command, **HTTP** = route under `/admin/api`,
+Legend: **core** = `pensine_core` function, **CLI** = `memcp` command, **HTTP** = route under `/admin/api`,
 **page** = button on the node page, **MCP** = tool for the person's assistants. `-` = deliberately not offered.
 
 ## Spaces

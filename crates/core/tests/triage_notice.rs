@@ -4,13 +4,13 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::guide;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::guide;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
 
-fn put(b: &memcp_core::Brain, space: &memcp_core::Space, text: &str, tags: &[&str]) -> Res {
+fn put(b: &pensine_core::Brain, space: &pensine_core::Space, text: &str, tags: &[&str]) -> Res {
     let conn = b.open_space(space)?;
     let mut n = NewFact::agent(text, "agent:phone");
     n.tags = tags.iter().map(|t| t.to_string()).collect();
@@ -22,8 +22,8 @@ fn put(b: &memcp_core::Brain, space: &memcp_core::Space, text: &str, tags: &[&st
 }
 
 fn told(
-    b: &memcp_core::Brain,
-    space: &memcp_core::Space,
+    b: &pensine_core::Brain,
+    space: &pensine_core::Space,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let ctl = b.open_control()?;
     let rights = Rights::parse(&format!("{}:rw", space.as_str()))?;

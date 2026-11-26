@@ -9,11 +9,11 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use memcp_core::text::Language;
-use memcp_core::{Brain, users};
-use memcp_server::config::Settings as File;
-use memcp_server::intake::whisper::VoiceSettings;
-use memcp_server::intake::{self, Intake, Memory, Settings, voice};
+use pensine_core::text::Language;
+use pensine_core::{Brain, users};
+use pensine_server::config::Settings as File;
+use pensine_server::intake::whisper::VoiceSettings;
+use pensine_server::intake::{self, Intake, Memory, Settings, voice};
 use serde_json::json;
 
 const FFMPEG: &str = r#"#!/bin/sh
@@ -411,7 +411,7 @@ fn a_folder_is_absorbed_new_text_only_names_become_posts_and_proposals_come_back
     // Its guide waits for the person's approval on the page, as an app's guide.
     let waiting: i64 = w
         .brain
-        .open_space(&memcp_core::Space::new("sam-me").expect("space"))
+        .open_space(&pensine_core::Space::new("sam-me").expect("space"))
         .expect("space")
         .query_row(
             "SELECT count(*) FROM app_guides WHERE app = 'intake' AND text LIKE '%proposals/pro%'",

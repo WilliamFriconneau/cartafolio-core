@@ -19,11 +19,11 @@
 
 use base64::Engine as _;
 use base64::engine::general_purpose::URL_SAFE_NO_PAD;
-use memcp_core::Space;
-use memcp_core::access::{self, Rights};
-use memcp_core::text::hex;
-use memcp_core::users::{self, User};
-use memcp_core::util;
+use pensine_core::Space;
+use pensine_core::access::{self, Rights};
+use pensine_core::text::hex;
+use pensine_core::users::{self, User};
+use pensine_core::util;
 use rusqlite::{Connection, OptionalExtension, params};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -201,7 +201,7 @@ fn resource_named(
     ctl: &Connection,
     public_url: &str,
     resource: &str,
-) -> memcp_core::Result<Option<Named>> {
+) -> pensine_core::Result<Option<Named>> {
     let Some(seg) = resource
         .strip_prefix(public_url)
         .and_then(|rest| rest.strip_prefix("/mcp/"))
@@ -697,7 +697,7 @@ pub fn authorize(app: &App, req: &Request) -> Response {
         else {
             return storage_failed();
         };
-        let kept = n.starts_with("console-") || n.starts_with(memcp_core::sync::PEER_PREFIX);
+        let kept = n.starts_with("console-") || n.starts_with(pensine_core::sync::PEER_PREFIX);
         if kept || (owner.is_some() && made_by_signing_in.is_none()) {
             return page(
                 app,

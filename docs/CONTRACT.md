@@ -15,7 +15,7 @@ A space offers four main views, and its **Targets are its home page**:
 `dashboard` and `register` stay callable for older clients but are **not advertised**: the web has no Dashboard
 or Register page in duplicate.
 
-- **Name and version**: `memcp.view/1` (`memcp_core::view::CONTRACT`, `CONTRACT_VERSION`). Additive fields keep the
+- **Name and version**: `memcp.view/1` (`pensine_core::view::CONTRACT`, `CONTRACT_VERSION`). Additive fields keep the
   version; a removed or renamed field is a new contract.
 - **Discovery**: MCP `space_view {space, view: "capabilities"}`. The node also advertises `viewContract` in its MCP
   `serverInfo` and `view_contract` in `GET /.well-known/memcp`.

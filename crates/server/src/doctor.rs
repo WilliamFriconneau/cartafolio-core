@@ -7,10 +7,10 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::time::Duration;
 
-use memcp_core::access;
-use memcp_core::users;
-use memcp_core::util::{iso, now};
-use memcp_core::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
+use pensine_core::access;
+use pensine_core::users;
+use pensine_core::util::{iso, now};
+use pensine_core::{CONTROL_SCHEMA_VERSION, SPACE_SCHEMA_VERSION};
 use rusqlite::{Connection, OpenFlags};
 
 use crate::cli::Failure;
@@ -270,14 +270,14 @@ fn storage(r: &mut Report, data: &Path) {
         );
         return;
     };
-    if !memcp_core::fsx::loose(&meta) {
+    if !pensine_core::fsx::loose(&meta) {
         r.add(Level::Ok, "the data directory is private to its owner");
     } else {
         r.add(
             Level::Warn,
             format!(
                 "the data directory is readable by others (mode {:o}). Fix: chmod 700 {}",
-                memcp_core::fsx::mode_bits(&meta).unwrap_or(0) & 0o777,
+                pensine_core::fsx::mode_bits(&meta).unwrap_or(0) & 0o777,
                 data.display()
             ),
         );
@@ -287,7 +287,7 @@ fn storage(r: &mut Report, data: &Path) {
         for e in rd.flatten() {
             let p = e.path();
             if p.extension().is_some_and(|x| x == "sqlite")
-                && e.metadata().is_ok_and(|m| memcp_core::fsx::loose(&m))
+                && e.metadata().is_ok_and(|m| pensine_core::fsx::loose(&m))
             {
                 loose.push(e.file_name().to_string_lossy().to_string());
             }

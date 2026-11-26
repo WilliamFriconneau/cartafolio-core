@@ -1,7 +1,7 @@
 //! The person organises her spaces; nothing is lost, the sensitive one stays apart.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 fn space(id: &str, path: &str, sensitive: bool) -> Space {
     let mut s = Space::default_notes(id);

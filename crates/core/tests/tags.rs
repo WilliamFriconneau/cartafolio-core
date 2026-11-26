@@ -6,9 +6,9 @@ mod common;
 use std::error::Error;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-use memcp_core::text::Language;
+use pensine_core::Brain;
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::text::Language;
 
 struct Bench {
     _t: Temp,

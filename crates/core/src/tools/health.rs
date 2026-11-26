@@ -1,7 +1,7 @@
 //! The health referential for apps: a compact read of the signs, measures, vital constants and red flags the node knows
-//! (see `memcp-health`, docs/HEALTH.md). It reads no space and writes nothing.
+//! (see `pensine-health`, docs/HEALTH.md). It reads no space and writes nothing.
 
-use memcp_health::Lang;
+use pensine_health::Lang;
 
 use super::*;
 
@@ -26,7 +26,7 @@ pub(super) fn health_referential(
         }
     };
     let query = args.get("query").and_then(Value::as_str);
-    let mut out = memcp_health::builtin().compact(kind, query, lang);
+    let mut out = pensine_health::builtin().compact(kind, query, lang);
     out["notice"] = json!(
         "A suggestion for the person to confirm, never a diagnosis. The French vocabulary is complete; English is partial; there is no Spanish vocabulary."
     );

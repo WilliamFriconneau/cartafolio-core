@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::tools;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::tools;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 fn caller(b: &Brain, name: &str, rights: &str) -> Result<Caller, Box<dyn std::error::Error>> {
@@ -307,7 +307,7 @@ fn every_space_announces_its_profession_and_the_person_can_add_profiles() -> Res
 
     // The person's own profile, from the file beside the memory: a new profile of health, and a replaced one.
     std::fs::write(
-        b.dir().join(memcp_core::profession::FILE),
+        b.dir().join(pensine_core::profession::FILE),
         json!([
             { "id": "physio", "kind": "health", "title": "Physio", "brief": "You follow rehabilitation.",
               "principles": ["Pain stops the exercise."], "skills": [{ "id": "n", "title": "Note", "when": "After an exercise.", "tool": "remember" }] },
@@ -340,7 +340,7 @@ fn every_tool_a_profession_names_exists() -> Res {
         .iter()
         .map(|d| d.name.to_string())
         .collect();
-    for name in memcp_core::profession::tool_names() {
+    for name in pensine_core::profession::tool_names() {
         // The bank statement tools live in the finances crate.
         if name.starts_with("finances_") {
             continue;
@@ -357,7 +357,7 @@ fn every_tool_a_profession_names_exists() -> Res {
 fn the_professions_are_exported_as_a_claude_plugin_marketplace() -> Res {
     let t = Temp::new("toolkit-export");
     let out = t.path().join("skills");
-    let n = memcp_core::profession::export(&out, "20261119.2.0", None)?;
+    let n = pensine_core::profession::export(&out, "20261119.2.0", None)?;
     assert!(n >= 9, "{n} skills");
     let skill = std::fs::read_to_string(
         out.join("plugins/memcp-metiers/skills/memcp-health-nurse/SKILL.md"),
@@ -389,7 +389,7 @@ fn a_profession_for_a_game_master_is_proposed_accepted_and_applies_to_its_space_
     b.set_layout(
         OWNER,
         &sp("work"),
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Other hobbies".into()),
             ..Default::default()
         },
@@ -436,7 +436,7 @@ fn a_profession_for_a_game_master_is_proposed_accepted_and_applies_to_its_space_
         .is_err()
     );
     // The person accepts.
-    assert!(memcp_core::profession::decide(
+    assert!(pensine_core::profession::decide(
         b.dir(),
         "hobbies",
         "gamemaster",
@@ -485,7 +485,7 @@ fn a_profession_for_a_game_master_is_proposed_accepted_and_applies_to_its_space_
     );
     // And it becomes a Claude skill like the others.
     let out = t.path().join("skills");
-    memcp_core::profession::export(&out, "x", Some(b.dir()))?;
+    pensine_core::profession::export(&out, "x", Some(b.dir()))?;
     let md = std::fs::read_to_string(
         out.join("plugins/memcp-metiers/skills/memcp-hobbies-gamemaster/SKILL.md"),
     )?;

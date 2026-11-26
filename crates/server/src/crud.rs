@@ -5,9 +5,9 @@
 //! shows in its confirmation), without doing it. Every real change is audited by the core function that does it.
 //! A person touches their own objects only; an answer for someone else's object is 403 or 404, never a result.
 
-use memcp_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
-use memcp_core::users::{self, User};
-use memcp_core::{Space, access, layout::Change, peers, people, rules, util};
+use pensine_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
+use pensine_core::users::{self, User};
+use pensine_core::{Space, access, layout::Change, peers, people, rules, util};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -109,7 +109,7 @@ pub fn get(
             }
             "/spaces/archived" => Ok(
                 json!({ "archived": app.brain.archived_spaces(&me.id).map_err(fail)?
-                .iter().map(memcp_core::lifecycle::Archived::to_json).collect::<Vec<_>>() }),
+                .iter().map(pensine_core::lifecycle::Archived::to_json).collect::<Vec<_>>() }),
             ),
             "/nodes" => {
                 let list = peers::list(&app.brain, me, now, q("all") == "1").map_err(fail)?;
@@ -151,7 +151,7 @@ pub fn get(
                 let s = owned(ctl, me, q("space"))?;
                 let conn = app.brain.open_space(&s).map_err(fail)?;
                 Ok(
-                    json!({ "vocabularies": memcp_core::vocabulary::list(&conn).map_err(fail)?.iter().map(|v| json!({
+                    json!({ "vocabularies": pensine_core::vocabulary::list(&conn).map_err(fail)?.iter().map(|v| json!({
                     "name": v.name, "source": v.source, "terms": v.terms, "imported_at": util::iso(v.imported_at),
                 })).collect::<Vec<_>>() }),
                 )
@@ -160,14 +160,14 @@ pub fn get(
                 let s = owned(ctl, me, q("space"))?;
                 let conn = app.brain.open_space(&s).map_err(fail)?;
                 Ok(
-                    json!({ "libraries": memcp_core::library::roots(&conn).map_err(fail)?.iter().map(|r| json!({
+                    json!({ "libraries": pensine_core::library::roots(&conn).map_err(fail)?.iter().map(|r| json!({
                     "id": r.id, "root": r.root, "files": r.entries, "scanned_at": r.scanned_at.map(util::iso),
                 })).collect::<Vec<_>>() }),
                 )
             }
             "/space/folder" => {
                 let s = owned(ctl, me, q("space"))?;
-                memcp_core::folders::info(&app.brain, &s).map_err(fail)
+                pensine_core::folders::info(&app.brain, &s).map_err(fail)
             }
             _ => Err(err(404, "not found")),
         }
@@ -441,9 +441,9 @@ fn vocabulary(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Va
         return Ok(json!({ "dry_run": true, "would": would }));
     }
     let n = match op {
-        "delete" => usize::from(memcp_core::vocabulary::remove(&mut conn, name).map_err(fail)?),
-        "add" => memcp_core::vocabulary::add_terms(&mut conn, name, &terms).map_err(fail)?,
-        _ => memcp_core::vocabulary::remove_terms(&mut conn, name, &terms).map_err(fail)?,
+        "delete" => usize::from(pensine_core::vocabulary::remove(&mut conn, name).map_err(fail)?),
+        "add" => pensine_core::vocabulary::add_terms(&mut conn, name, &terms).map_err(fail)?,
+        _ => pensine_core::vocabulary::remove_terms(&mut conn, name, &terms).map_err(fail)?,
     };
     access::auth_event(
         ctl,
@@ -476,22 +476,22 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
                 );
             }
             // One setting: `library add` is `folder set` in read-only mode (see docs/FOLDERS.md).
-            memcp_core::folders::set(
+            pensine_core::folders::set(
                 &app.brain,
                 &s,
                 Some(std::path::Path::new(path)),
-                memcp_core::folders::Mode::Read,
+                pensine_core::folders::Mode::Read,
                 now,
             )
             .map_err(fail)?;
             let canon = std::fs::canonicalize(path).map_err(fail)?;
-            let id = memcp_core::library::roots(&conn)
+            let id = pensine_core::library::roots(&conn)
                 .map_err(fail)?
                 .into_iter()
                 .find(|r| std::path::Path::new(&r.root) == canon)
                 .map(|r| r.id)
                 .ok_or_else(|| err(500, "the folder was not mounted"))?;
-            let r = memcp_core::library::rescan(&conn, id, now).map_err(fail)?;
+            let r = pensine_core::library::rescan(&conn, id, now).map_err(fail)?;
             json!({ "ok": true, "id": id, "scan": r.to_json() })
         }
         "remove" => {
@@ -499,7 +499,7 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
                 .get("id")
                 .and_then(Value::as_i64)
                 .ok_or_else(|| err(400, "id is required"))?;
-            let root = memcp_core::library::roots(&conn)
+            let root = pensine_core::library::roots(&conn)
                 .map_err(fail)?
                 .into_iter()
                 .find(|r| r.id == id)
@@ -509,17 +509,17 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
                     json!({ "dry_run": true, "would": format!("{} is unmounted from {s}: its index is forgotten, the folder itself is never touched", root.root) }),
                 );
             }
-            memcp_core::library::remove_root(&conn, id).map_err(fail)?;
+            pensine_core::library::remove_root(&conn, id).map_err(fail)?;
             // The folder of the space on this node was this one: the setting goes with it.
-            if memcp_core::folders::get(&app.brain, &s)
+            if pensine_core::folders::get(&app.brain, &s)
                 .map_err(fail)?
                 .is_some_and(|f| f.path == std::path::Path::new(&root.root))
             {
-                memcp_core::folders::set(
+                pensine_core::folders::set(
                     &app.brain,
                     &s,
                     None,
-                    memcp_core::folders::Mode::Read,
+                    pensine_core::folders::Mode::Read,
                     now,
                 )
                 .map_err(fail)?;
@@ -527,7 +527,7 @@ fn library(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value
             json!({ "ok": true })
         }
         "scan" => {
-            json!({ "ok": true, "scan": memcp_core::library::rescan_all(&conn, now).map_err(fail)?.to_json() })
+            json!({ "ok": true, "scan": pensine_core::library::rescan_all(&conn, now).map_err(fail)?.to_json() })
         }
         _ => return Err(err(400, "op: add, remove or scan")),
     };
@@ -550,7 +550,7 @@ fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value,
     let now = util::now();
     let result = match op {
         "sync" => {
-            if memcp_core::folders::get(&app.brain, &s)
+            if pensine_core::folders::get(&app.brain, &s)
                 .map_err(fail)?
                 .is_none()
             {
@@ -561,14 +561,14 @@ fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value,
                     json!({ "dry_run": true, "would": format!("the folder of {s} is read and written once now") }),
                 );
             }
-            let r = memcp_core::folders::sync_space(
+            let r = pensine_core::folders::sync_space(
                 &app.brain,
                 &s,
                 now,
-                memcp_core::folders::Options::default(),
+                pensine_core::folders::Options::default(),
             )
             .map_err(fail)?;
-            json!({ "ok": true, "scan": r.to_json(), "folder": memcp_core::folders::info(&app.brain, &s).map_err(fail)? })
+            json!({ "ok": true, "scan": r.to_json(), "folder": pensine_core::folders::info(&app.brain, &s).map_err(fail)? })
         }
         "set" => {
             let path = body
@@ -582,7 +582,7 @@ fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value,
                     "administrators only: choosing a folder names a path on this machine",
                 ));
             }
-            let mode = memcp_core::folders::Mode::parse(
+            let mode = pensine_core::folders::Mode::parse(
                 body.get("mode")
                     .and_then(Value::as_str)
                     .unwrap_or("readwrite"),
@@ -590,7 +590,7 @@ fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value,
             .map_err(fail)?;
             if dry(body) {
                 let would = match path {
-                    Some(p) if mode == memcp_core::folders::Mode::Read => format!(
+                    Some(p) if mode == pensine_core::folders::Mode::Read => format!(
                         "{p} becomes the folder of {s} on this node, only read and indexed for search; nothing is written in it"
                     ),
                     Some(p) => format!(
@@ -602,9 +602,14 @@ fn folder(app: &App, ctl: &Connection, me: &User, body: &Value) -> Result<Value,
                 };
                 return Ok(json!({ "dry_run": true, "would": would }));
             }
-            let info =
-                memcp_core::folders::set(&app.brain, &s, path.map(std::path::Path::new), mode, now)
-                    .map_err(fail)?;
+            let info = pensine_core::folders::set(
+                &app.brain,
+                &s,
+                path.map(std::path::Path::new),
+                mode,
+                now,
+            )
+            .map_err(fail)?;
             json!({ "ok": true, "folder": info })
         }
         _ => return Err(err(400, "op: set or sync")),

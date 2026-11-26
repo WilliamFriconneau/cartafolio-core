@@ -18,7 +18,7 @@ fn alive(pid: &str) -> bool {
 fn a_loop_started_by_a_node_ends_when_the_node_is_gone() {
     let dir = std::env::temp_dir().join(format!("memcp-sync-loop-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    memcp_core::Brain::init(&dir, &[], memcp_core::text::Language::English).unwrap();
+    pensine_core::Brain::init(&dir, &[], pensine_core::text::Language::English).unwrap();
     // A stand-in for the node: a shell that starts the loop as the node does, says its PID, and dies at once.
     let out = Command::new("sh")
         .arg("-c")

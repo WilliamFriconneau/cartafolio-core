@@ -4,9 +4,9 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::users::OWNER;
-use memcp_core::{Space, tools, triage, util};
+use pensine_core::access::{self, Rights};
+use pensine_core::users::OWNER;
+use pensine_core::{Space, tools, triage, util};
 use serde_json::json;
 
 #[test]

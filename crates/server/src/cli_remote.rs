@@ -9,7 +9,7 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use memcp_core::users::User;
+use pensine_core::users::User;
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -205,7 +205,7 @@ pub fn exec(app: &App, me: &User, body: &Value, ip: Option<&str>) -> Result<Valu
         }
     };
     if let Ok(ctl) = app.brain.open_control() {
-        memcp_core::access::auth_event(
+        pensine_core::access::auth_event(
             &ctl,
             None,
             ip,

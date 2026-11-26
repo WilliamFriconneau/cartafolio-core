@@ -8,8 +8,8 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
 
 pub type Res = Result<(), Box<dyn Error>>;
 

@@ -8,14 +8,14 @@ use std::fs;
 use std::path::PathBuf;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::export;
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::files;
-use memcp_core::guide;
-use memcp_core::merge::{self, Action, Options, Plan, Policy};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER, User};
+use pensine_core::Brain;
+use pensine_core::export;
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::files;
+use pensine_core::guide;
+use pensine_core::merge::{self, Action, Options, Plan, Policy};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER, User};
 
 struct World {
     t: Temp,
@@ -644,16 +644,16 @@ fn another_persons_space_cannot_be_merged_into() -> Res {
 fn catch_up(from: &Brain, to: &Brain, space: &str) -> Res {
     let s = sp(space);
     loop {
-        let (pulled, _) = memcp_core::sync::cursors(to, "peer-from", &s)?;
-        let page = memcp_core::sync::events_after(from, &s, pulled, 50, 1 << 20, None)?;
-        let r = memcp_core::sync::apply(to, &s, &page.events, "peer-from")?;
+        let (pulled, _) = pensine_core::sync::cursors(to, "peer-from", &s)?;
+        let page = pensine_core::sync::events_after(from, &s, pulled, 50, 1 << 20, None)?;
+        let r = pensine_core::sync::apply(to, &s, &page.events, "peer-from")?;
         assert!(r.stopped.is_none(), "{r:?}");
         assert!(r.rejected.is_empty(), "{r:?}");
-        memcp_core::sync::set_cursor(
+        pensine_core::sync::set_cursor(
             to,
             "peer-from",
             &s,
-            memcp_core::sync::Cursor::Pulled,
+            pensine_core::sync::Cursor::Pulled,
             page.next,
         )?;
         if !page.more {

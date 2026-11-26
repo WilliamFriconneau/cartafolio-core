@@ -1,21 +1,21 @@
 //! One pass of synchronisation with a peer, from this node: for each space the peer's key reaches, pull the peer's
 //! events after this node's cursor and apply them here, then push this node's events after the peer's cursor. The
 //! cursors move only past what was dealt with, so a pass cut short resumes where it stopped; the same event twice is
-//! one row (see `memcp_core::sync`). Over HTTP to the peer's `/sync/` routes, at the address of the connection.
+//! one row (see `pensine_core::sync`). Over HTTP to the peer's `/sync/` routes, at the address of the connection.
 //!
-//! Both ways for the spaces themselves (see `memcp_core::swarm`): a space of the person that the peer lacks is offered to
+//! Both ways for the spaces themselves (see `pensine_core::swarm`): a space of the person that the peer lacks is offered to
 //! it (`POST /sync/spaces`) and then exchanged like the others; the person's Inbox here is paired with theirs
 //! there, whatever its name; an archive on either side archives the other's copy. A peer of an older version, which
 //! takes no offers, is kept in step as before, and the pass says what it could not give it.
 //!
-//! The sync policy of this node for the peer (`memcp_core::policy`, under the name this node keeps the peer by) is
+//! The sync policy of this node for the peer (`pensine_core::policy`, under the name this node keeps the peer by) is
 //! enforced here, space by space: a space this node does not give is neither pushed, offered nor told archived; one it
 //! does not take is neither pulled, made here from the peer's list, nor archived on the peer's word. The peer's own side
 //! (`policy` in its list of spaces) is kept for the page, and a pull or a push the peer said it would refuse is not
 //! tried. This node's side goes to the peer with the directory.
 //!
-//! A file bigger than travels inside its event (`memcp_core::files::MAX_INLINE`) goes in chunks with a peer that says it
-//! takes them (`chunks` in its list of spaces; see `memcp_core::chunks`): pulled, the chunks this node lacks are fetched
+//! A file bigger than travels inside its event (`pensine_core::files::MAX_INLINE`) goes in chunks with a peer that says it
+//! takes them (`chunks` in its list of spaces; see `pensine_core::chunks`): pulled, the chunks this node lacks are fetched
 //! from the peer (`GET /sync/chunk`) and checked one by one; pushed, the peer says which it lacks (`wants`) and this node
 //! sends them (`POST /sync/chunk`). Either way the file's event is dealt with only once the whole file is here and
 //! matches its digest; a chunk that does not match is refused, and what came stays for the next pass. A peer that takes
@@ -24,11 +24,11 @@
 
 use std::time::Duration;
 
-use memcp_core::catalogue::TRIAGE;
-use memcp_core::policy::{self, Policy};
-use memcp_core::swarm::{self, Answer};
-use memcp_core::sync::{self, Cursor, Event};
-use memcp_core::{Brain, Space, directory, triage, users};
+use pensine_core::catalogue::TRIAGE;
+use pensine_core::policy::{self, Policy};
+use pensine_core::swarm::{self, Answer};
+use pensine_core::sync::{self, Cursor, Event};
+use pensine_core::{Brain, Space, directory, triage, users};
 use serde_json::{Value, json};
 
 const PAGE: usize = 500;
@@ -45,7 +45,7 @@ pub struct Pass {
     pub pushed: usize,
     /// Events that touched a fact changed on both sides (kept, flagged for the person).
     pub disputed: usize,
-    /// Notes this replica removed to keep to its window (see `memcp_core::sync::prune_window`).
+    /// Notes this replica removed to keep to its window (see `pensine_core::sync::prune_window`).
     pub pruned: usize,
     /// Spaces of this node the peer did not have and made in this pass.
     pub offered: usize,
@@ -160,7 +160,7 @@ impl Peer {
         // The person paused this machine: nothing is exchanged until they resume it.
         if brain
             .open_control()
-            .is_ok_and(|c| memcp_core::peers::is_paused(&c, &self.name))
+            .is_ok_and(|c| pensine_core::peers::is_paused(&c, &self.name))
         {
             return Ok(Pass {
                 problems: vec!["paused".into()],
@@ -216,7 +216,7 @@ impl Peer {
         now: i64,
         pass: &mut Pass,
     ) -> Result<(Vec<Pair>, serde_json::Map<String, Value>), String> {
-        let fail = |e: memcp_core::Error| e.to_string();
+        let fail = |e: pensine_core::Error| e.to_string();
         let ctl = brain.open_control().map_err(fail)?;
         // This node's side for a space (its name here) with this peer: a policy that cannot be read is `off`.
         let side =
@@ -241,7 +241,7 @@ impl Peer {
         }
         let offers_ok = listed["offers"].as_bool() == Some(true);
         // A peer that takes chunks says their size; one of another size is taken as one that takes none.
-        let chunks = listed["chunks"].as_u64() == Some(memcp_core::chunks::CHUNK_BYTES as u64);
+        let chunks = listed["chunks"].as_u64() == Some(pensine_core::chunks::CHUNK_BYTES as u64);
         let entries = listed["spaces"].as_array().cloned().unwrap_or_default();
         // 1. What the peer archived is archived here (an archive, never a deletion), unless the copy here is newer, or
         // this node takes nothing of that space from the peer.
@@ -268,7 +268,7 @@ impl Peer {
                 entries.iter().find(|s| {
                     s["kind"]
                         .as_str()
-                        .is_some_and(memcp_core::catalogue::is_inbox_kind)
+                        .is_some_and(pensine_core::catalogue::is_inbox_kind)
                 })
             })
             .and_then(|s| s["space"].as_str())
@@ -290,7 +290,7 @@ impl Peer {
             let they_give = their_side.is_none_or(Policy::gives);
             // An older peer does not say when its copy began: it counts as made now.
             let since = s["since"].as_i64();
-            if memcp_core::catalogue::is_inbox_kind(kind) {
+            if pensine_core::catalogue::is_inbox_kind(kind) {
                 if theirs.as_deref() != Some(name) {
                     continue;
                 }
@@ -378,7 +378,7 @@ impl Peer {
             .into_iter()
             .filter(|o| !listed_names.contains(o.space.as_str()))
             .filter(|o| {
-                if memcp_core::catalogue::is_inbox_kind(&o.kind) {
+                if pensine_core::catalogue::is_inbox_kind(&o.kind) {
                     theirs.is_none() && mine.as_ref() == Some(&o.space)
                 } else {
                     true
@@ -595,7 +595,7 @@ impl Peer {
                 "chunk?space={remote}&file={}&n={n}&hash={hash}",
                 w.file
             ))?;
-            memcp_core::chunks::store(brain, space, &w.file, hash, &bytes)
+            pensine_core::chunks::store(brain, space, &w.file, hash, &bytes)
                 .map_err(|e| format!("chunk {n} of file {} refused: {e}", w.file))?;
             pass.chunks_in += 1;
         }
@@ -606,7 +606,7 @@ impl Peer {
     /// that takes them (the peer says which it lacks), and not at all to one that does not: said, and not held by it.
     fn push(&self, brain: &Brain, p: &Pair, now: i64, pass: &mut Pass) -> Result<(), String> {
         let (space, remote) = (&p.here, p.there.as_str());
-        let fail = |e: memcp_core::Error| e.to_string();
+        let fail = |e: pensine_core::Error| e.to_string();
         // The peer takes chunks now: what was left out for it when it did not goes again. The cursor goes back
         // before the mark first, durably; only then is the mark cleared (a crash between repeats the first step).
         if p.chunks
@@ -641,7 +641,7 @@ impl Peer {
                     pass.problems.push(format!(
                         "{}: push: {files} file(s) over {} MB not sent: the peer runs an earlier version, which takes no chunks",
                         space.as_str(),
-                        memcp_core::files::MAX_INLINE / 1024 / 1024
+                        pensine_core::files::MAX_INLINE / 1024 / 1024
                     ));
                 }
             }
@@ -766,10 +766,10 @@ impl Peer {
                 continue;
             };
             let n = usize::try_from(n).map_err(|e| e.to_string())?;
-            let bytes = memcp_core::chunks::read(brain, space, file, n, Some(hash))
+            let bytes = pensine_core::chunks::read(brain, space, file, n, Some(hash))
                 .map_err(|e| e.to_string())?
                 .ok_or_else(|| format!("chunk {n} of file {file} is not on this node"))?;
-            if memcp_core::chunks::digest(&bytes) != hash {
+            if pensine_core::chunks::digest(&bytes) != hash {
                 return Err(format!(
                     "chunk {n} of file {file} does not match its digest on this node: not sent"
                 ));
@@ -803,7 +803,7 @@ impl Peer {
         }
         res.body_mut()
             .with_config()
-            .limit(memcp_core::chunks::CHUNK_BYTES as u64 + 1)
+            .limit(pensine_core::chunks::CHUNK_BYTES as u64 + 1)
             .read_to_vec()
             .map_err(|e| format!("unreadable: {e}"))
     }
@@ -927,7 +927,7 @@ pub fn who_is_there(server: &str) -> Result<Value, String> {
         .map_err(|e| format!("unreachable: {e}"))?;
     let v = read(&mut res)?;
     if v["service"] != "memcp" {
-        return Err("this is not a MemCP node".into());
+        return Err("this is not a Pensine node".into());
     }
     Ok(v)
 }

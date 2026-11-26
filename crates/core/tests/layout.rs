@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::layout::{Change, MAX_DEPTH};
-use memcp_core::users::OWNER;
+use pensine_core::layout::{Change, MAX_DEPTH};
+use pensine_core::users::OWNER;
 
-fn names(b: &memcp_core::Brain) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+fn names(b: &pensine_core::Brain) -> Result<Vec<String>, Box<dyn std::error::Error>> {
     Ok(b.layout(OWNER)?
         .iter()
         .map(|p| {

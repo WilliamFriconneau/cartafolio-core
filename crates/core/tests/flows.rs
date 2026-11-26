@@ -4,15 +4,15 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::pairing;
-use memcp_core::sync::{self, Cursor};
-use memcp_core::text::Language;
-use memcp_core::tools;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space};
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::pairing;
+use pensine_core::sync::{self, Cursor};
+use pensine_core::text::Language;
+use pensine_core::tools;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space};
 use serde_json::json;
 
 const NOW: i64 = 1_900_000_000;

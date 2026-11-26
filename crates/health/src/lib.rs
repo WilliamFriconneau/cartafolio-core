@@ -2,7 +2,7 @@
 //! in the program, and the deterministic detection of them in a text (`detect`). No model, no I/O, no clock.
 //!
 //! ```ignore
-//! use memcp_health::{Lang, detect};
+//! use pensine_health::{Lang, detect};
 //! let d = detect("Mal de tête 6/10, tension 12/8", Lang::Fr);
 //! assert_eq!(d.signs[0].id, "headache");
 //! assert_eq!(d.signs[0].level.as_deref(), Some("6/10"));

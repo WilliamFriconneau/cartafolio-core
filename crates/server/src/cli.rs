@@ -2,12 +2,12 @@
 
 use std::path::Path;
 
-use memcp_core::access::{self, Rights};
-use memcp_core::export;
-use memcp_core::import::{self, ImportOptions, ImportRules};
-use memcp_core::text::{self, Language};
-use memcp_core::util::{iso, now};
-use memcp_core::{Brain, Space, users};
+use pensine_core::access::{self, Rights};
+use pensine_core::export;
+use pensine_core::import::{self, ImportOptions, ImportRules};
+use pensine_core::text::{self, Language};
+use pensine_core::util::{iso, now};
+use pensine_core::{Brain, Space, users};
 
 pub type Failure = (u8, String);
 
@@ -157,7 +157,7 @@ pub fn connect(data: &Path, o: ConnectOpts) -> Result<(), Failure> {
     let ctl = brain.open_control().map_err(fail)?;
     // The owner of the node, on its own command line, may make the connection of a machine by hand: a name `peer-…`
     // makes one (no expiry, never read-only). Nowhere else does a name make a machine.
-    let token = if o.agent.starts_with(memcp_core::sync::PEER_PREFIX) {
+    let token = if o.agent.starts_with(pensine_core::sync::PEER_PREFIX) {
         if o.days.is_some() || o.read_only {
             return Err(bad(
                 "the connection of a machine has no --days and is not --read-only",
@@ -262,7 +262,7 @@ pub fn export_person(data: &Path, user: Option<&str>, to: &Path) -> Result<(), F
 /// What an export says about itself, the same for the one written here and the one that came down from a node.
 pub fn export_report(person: &str, dir: &Path, manifest: &serde_json::Value) {
     sayln!("exported the memory of {person} to {}", dir.display());
-    for v in memcp_core::export::manifest_spaces(manifest)
+    for v in pensine_core::export::manifest_spaces(manifest)
         .into_iter()
         .flatten()
     {
@@ -284,7 +284,7 @@ pub fn verify_export(dir: &Path) -> Result<(), Failure> {
         "ok: export of {} made on {}, {} space(s), every file matches its fingerprint.",
         manifest["person"]["name"].as_str().unwrap_or("?"),
         manifest["created_at"].as_str().unwrap_or("?"),
-        memcp_core::export::manifest_spaces(&manifest).map_or(0, Vec::len)
+        pensine_core::export::manifest_spaces(&manifest).map_or(0, Vec::len)
     );
     Ok(())
 }
@@ -326,7 +326,7 @@ pub fn merge(
     backup_to: Option<&Path>,
     policy: Option<&str>,
 ) -> Result<(), Failure> {
-    use memcp_core::merge::{self, Plan, Policy};
+    use pensine_core::merge::{self, Plan, Policy};
     let brain = open(data)?;
     match (plan_of, apply_of) {
         (Some(export_dir), None) => {
@@ -418,7 +418,7 @@ pub(crate) fn mcp_stdio_with_strict_write_agents(
     token_env: &str,
     strict_write_agents: Vec<String>,
 ) -> Result<(), Failure> {
-    let token = memcp_core::env::var(token_env).map_err(|_| {
+    let token = pensine_core::env::var(token_env).map_err(|_| {
         (
             2,
             format!(
@@ -449,7 +449,7 @@ pub fn status(data: &Path, user: Option<&str>) -> Result<(), Failure> {
     sayln!(
         "{} {}, search language {}",
         crate::commands::command_name(),
-        memcp_core::directory::own_version(),
+        pensine_core::directory::own_version(),
         brain.language().map_err(fail)?.code()
     );
     let people = users::list_users(&ctl).map_err(fail)?;
@@ -575,7 +575,7 @@ pub fn limit(data: &Path, agent: &str, key: &str, value: &str) -> Result<(), Fai
 
 /// What says the same thing twice, for a person to decide on. Changes nothing.
 pub fn duplicates(data: &Path) -> Result<(), Failure> {
-    use memcp_core::facts;
+    use pensine_core::facts;
     use std::collections::BTreeMap;
     let brain = open(data)?;
     let short = |t: &str| t.chars().take(100).collect::<String>();
@@ -653,7 +653,7 @@ pub fn backup(data: &Path, to: &Path, keep: usize) -> Result<(), Failure> {
 /// only read, indexed for search. Nothing in the folder is copied, changed or moved. It replaces the folder the space
 /// had (a space has one folder on a node).
 pub fn library_add(data: &Path, folder: &Path, space: &str) -> Result<(), Failure> {
-    folder_set(data, space, Some(folder), memcp_core::folders::Mode::Read)
+    folder_set(data, space, Some(folder), pensine_core::folders::Mode::Read)
 }
 
 pub fn folder_line(info: &serde_json::Value) -> String {
@@ -683,7 +683,7 @@ pub fn folder_set(
     data: &Path,
     space: &str,
     folder: Option<&Path>,
-    mode: memcp_core::folders::Mode,
+    mode: pensine_core::folders::Mode,
 ) -> Result<(), Failure> {
     let brain = open(data)?;
     let space = Space::new(space).map_err(fail)?;
@@ -692,17 +692,17 @@ pub fn folder_set(
         None => None,
     };
     let info =
-        memcp_core::folders::set(&brain, &space, path.as_deref(), mode, now()).map_err(fail)?;
+        pensine_core::folders::set(&brain, &space, path.as_deref(), mode, now()).map_err(fail)?;
     sayln!("{}", folder_line(&info));
     if let Some(w) = info["warning"].as_str() {
         sayln!("warning: {w}");
     }
     if path.is_some() {
-        let r = memcp_core::folders::sync_space(
+        let r = pensine_core::folders::sync_space(
             &brain,
             &space,
             now(),
-            memcp_core::folders::Options::default(),
+            pensine_core::folders::Options::default(),
         )
         .map_err(fail)?;
         sayln!("{}", r.to_json());
@@ -716,7 +716,7 @@ pub fn folder_get(data: &Path, space: Option<&str>) -> Result<(), Failure> {
     match space {
         Some(s) => {
             let s = Space::new(s).map_err(fail)?;
-            let info = memcp_core::folders::info(&brain, &s).map_err(fail)?;
+            let info = pensine_core::folders::info(&brain, &s).map_err(fail)?;
             sayln!("{}", folder_line(&info));
             if let Some(w) = info["warning"].as_str() {
                 sayln!("warning: {w}");
@@ -731,10 +731,10 @@ pub fn folder_get(data: &Path, space: Option<&str>) -> Result<(), Failure> {
             }
         }
         None => {
-            for f in memcp_core::folders::all(&brain).map_err(fail)? {
+            for f in pensine_core::folders::all(&brain).map_err(fail)? {
                 sayln!(
                     "{}",
-                    folder_line(&memcp_core::folders::info(&brain, &f.space).map_err(fail)?)
+                    folder_line(&pensine_core::folders::info(&brain, &f.space).map_err(fail)?)
                 );
             }
         }
@@ -745,17 +745,17 @@ pub fn folder_get(data: &Path, space: Option<&str>) -> Result<(), Failure> {
 /// `folder sync [SPACE]`: one pass now (the node does it by itself every few seconds while it serves).
 pub fn folder_sync(data: &Path, space: Option<&str>) -> Result<(), Failure> {
     let brain = open(data)?;
-    let opts = memcp_core::folders::Options::default();
+    let opts = pensine_core::folders::Options::default();
     let spaces = match space {
         Some(s) => vec![Space::new(s).map_err(fail)?],
-        None => memcp_core::folders::all(&brain)
+        None => pensine_core::folders::all(&brain)
             .map_err(fail)?
             .into_iter()
             .map(|f| f.space)
             .collect(),
     };
     for s in spaces {
-        let r = memcp_core::folders::sync_space(&brain, &s, now(), opts).map_err(fail)?;
+        let r = pensine_core::folders::sync_space(&brain, &s, now(), opts).map_err(fail)?;
         sayln!("{s}: {}", r.to_json());
     }
     Ok(())
@@ -770,10 +770,13 @@ pub fn library_scan(data: &Path, space: Option<&str>) -> Result<(), Failure> {
     };
     for s in spaces {
         let conn = brain.open_space(&s).map_err(fail)?;
-        if memcp_core::library::roots(&conn).map_err(fail)?.is_empty() {
+        if pensine_core::library::roots(&conn)
+            .map_err(fail)?
+            .is_empty()
+        {
             continue;
         }
-        let r = memcp_core::library::rescan_all(&conn, now()).map_err(fail)?;
+        let r = pensine_core::library::rescan_all(&conn, now()).map_err(fail)?;
         sayln!(
             "{s}: {} added, {} updated, {} unchanged, {} removed",
             r.added,
@@ -790,7 +793,7 @@ pub fn library_list(data: &Path) -> Result<(), Failure> {
     let brain = open(data)?;
     for s in brain.spaces().map_err(fail)? {
         let conn = brain.open_space(&s).map_err(fail)?;
-        for r in memcp_core::library::roots(&conn).map_err(fail)? {
+        for r in pensine_core::library::roots(&conn).map_err(fail)? {
             sayln!("{s}\t{}\t{} files", r.root, r.entries);
         }
     }
@@ -813,10 +816,10 @@ pub fn vocabulary_import(
     }
     let text =
         std::fs::read_to_string(file).map_err(|e| bad(&format!("{}: {e}", file.display())))?;
-    let terms = memcp_core::vocabulary::parse(&text);
+    let terms = pensine_core::vocabulary::parse(&text);
     let mut conn = brain.open_space(&space).map_err(fail)?;
     let kept =
-        memcp_core::vocabulary::import(&mut conn, name, source, &terms, now()).map_err(fail)?;
+        pensine_core::vocabulary::import(&mut conn, name, source, &terms, now()).map_err(fail)?;
     sayln!("vocabulary {name} on {space}: {kept} terms");
     Ok(())
 }
@@ -830,7 +833,7 @@ pub fn vocabulary_list(data: &Path, space: Option<&str>) -> Result<(), Failure> 
     };
     for s in spaces {
         let conn = brain.open_space(&s).map_err(fail)?;
-        for v in memcp_core::vocabulary::list(&conn).map_err(fail)? {
+        for v in pensine_core::vocabulary::list(&conn).map_err(fail)? {
             sayln!("{s}\t{}\t{} terms\t{}", v.name, v.terms, v.source);
         }
     }
@@ -842,7 +845,7 @@ pub fn vocabulary_remove(data: &Path, space: &str, name: &str) -> Result<(), Fai
     let brain = open(data)?;
     let space = Space::new(space).map_err(fail)?;
     let mut conn = brain.open_space(&space).map_err(fail)?;
-    if memcp_core::vocabulary::remove(&mut conn, name).map_err(fail)? {
+    if pensine_core::vocabulary::remove(&mut conn, name).map_err(fail)? {
         sayln!("removed {name} from {space}");
         Ok(())
     } else {
@@ -889,8 +892,8 @@ pub fn purge(
         .filter(|l| !l.is_empty())
         .map(String::from)
         .collect();
-    let r =
-        memcp_core::sync::purge_facts(&brain, &space, &ids, protect, allow, apply).map_err(fail)?;
+    let r = pensine_core::sync::purge_facts(&brain, &space, &ids, protect, allow, apply)
+        .map_err(fail)?;
     sayln!(
         "{} {}: asked {}, not here {}, protected {} (kept), with a stored file {} (kept); {} {} notes with their versions, {} tag rows, {} log rows",
         if apply { "purged" } else { "dry run" },
@@ -917,7 +920,7 @@ pub fn purge(
     Ok(())
 }
 
-/// `repair provenance`: puts back the provenance a retag lost (see `memcp_core::sync::repair_provenance`).
+/// `repair provenance`: puts back the provenance a retag lost (see `pensine_core::sync::repair_provenance`).
 pub fn repair_provenance(
     data: &Path,
     space: &str,
@@ -926,8 +929,8 @@ pub fn repair_provenance(
 ) -> Result<(), Failure> {
     let brain = open(data)?;
     let space = Space::new(space).map_err(fail)?;
-    let r =
-        memcp_core::sync::repair_provenance(&brain, &space, reason_prefix, apply).map_err(fail)?;
+    let r = pensine_core::sync::repair_provenance(&brain, &space, reason_prefix, apply)
+        .map_err(fail)?;
     sayln!(
         "{} {}: {} notes {} their creation date, author and source back, {} of them their origin",
         if apply { "repaired" } else { "dry run" },
@@ -939,7 +942,7 @@ pub fn repair_provenance(
     Ok(())
 }
 
-/// `tags remove`: takes tags off the notes that carry them, on this machine (see `memcp_core::retag`).
+/// `tags remove`: takes tags off the notes that carry them, on this machine (see `pensine_core::retag`).
 pub fn tags_remove(
     data: &Path,
     space: &str,
@@ -949,7 +952,7 @@ pub fn tags_remove(
 ) -> Result<(), Failure> {
     let brain = open(data)?;
     let space = Space::new(space).map_err(fail)?;
-    let r = memcp_core::retag::remove_tags(&brain, &space, tags, only, apply).map_err(fail)?;
+    let r = pensine_core::retag::remove_tags(&brain, &space, tags, only, apply).map_err(fail)?;
     sayln!(
         "{} {}: {} notes carry them; {} {}, {} left alone (no other tag)",
         if apply { "done" } else { "dry run" },

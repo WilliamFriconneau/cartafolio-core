@@ -6,12 +6,12 @@ mod common;
 use std::error::Error;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::access::{self, Rights};
-use memcp_core::guide::{self, Standing};
-use memcp_core::text::Language;
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::{self, OWNER};
+use pensine_core::Brain;
+use pensine_core::access::{self, Rights};
+use pensine_core::guide::{self, Standing};
+use pensine_core::text::Language;
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::{self, OWNER};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 

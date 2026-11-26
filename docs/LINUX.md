@@ -6,7 +6,7 @@ The same complete node as on Home Assistant, as a system service of your own mac
 
 Pick one.
 
-**A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp` and `memcp-janitor` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
+**A package.** Debian and Ubuntu: `packaging/linux/build-deb.sh` builds `target/debian/memcp_*.deb` (`sudo apt install ./memcp_*.deb`). Arch and CachyOS: `makepkg -si` in `packaging/linux/` with the `PKGBUILD`. Both install `memcp` and `pensine-janitor` in `/usr/bin`, the units, the `memcp` user, and `/etc/memcp/memcp.toml`.
 
 **One command.** `curl -fsSL https://raw.githubusercontent.com/WilliamFriconneau/pensine-core/main/install.sh | sh` installs for your own user (programs in `~/.local/bin`, memory in `~/memory`, a user service). `sudo sh install.sh --system` does the package's job from the release archive: it checks the download against `SHA256SUMS`, makes the user `memcp`, `/var/lib/memcp`, `/etc/memcp/memcp.toml` and the units. `--help` lists the options. The archive (`memcp-<version>-<target>.tar.gz`, built by `packaging/linux/build-tarball.sh`) also carries `install.sh` and installs from itself, offline.
 
@@ -23,7 +23,7 @@ curl -fsS http://127.0.0.1:18791/health
 "$check_dir/bin & tools/pensine" --data "$check_dir/my memory" doctor
 ```
 
-Use a test account without an existing MemCP service. If the user manager does not load the temporary configuration directory, run `systemd-analyze --user verify "$check_dir/config files/systemd/user/memcp.service"` and test the generated unit from the user manager's regular unit directory.
+Use a test account without an existing Pensine service. If the user manager does not load the temporary configuration directory, run `systemd-analyze --user verify "$check_dir/config files/systemd/user/memcp.service"` and test the generated unit from the user manager's regular unit directory.
 
 ## First run
 
@@ -75,7 +75,7 @@ Memory itself is never in the file: no key, no password. A service key (the jani
 ### Companions
 
 - **Read before write.** Set `strict_write_agents = ["my-assistant"]` to require a recent read before selected MCP writes. A single `"*"` selects every connection except apps (names starting with `app-` or ending with `-app`), peers, consoles and the janitor. The default is `[]`. The first nonempty comma-separated value from `PENSINE_STRICT_WRITE_AGENTS`, `SILICE_STRICT_WRITE_AGENTS`, or `MEMCP_STRICT_WRITE_AGENTS` overrides the file. The `--strict-write-agents` flag takes precedence.
-- **Janitor.** `janitor = true`, a person, and a model (`janitor_ollama_url` or `janitor_api_url`), then `sudo systemctl enable --now memcp-janitor`. The unit runs `memcp prepare janitor` first, which makes the janitor's own key and its settings from `memcp.toml`. See [JANITOR.md](JANITOR.md).
+- **Janitor.** `janitor = true`, a person, and a model (`janitor_ollama_url` or `janitor_api_url`), then `sudo systemctl enable --now pensine-janitor`. The unit runs `memcp prepare janitor` first, which makes the janitor's own key and its settings from `memcp.toml`. See [JANITOR.md](JANITOR.md).
 - **Voice notes.** `transcribe = true` with `transcribe_api_url` (a speech service: the recording leaves this machine for it) or `transcribe_model` (whisper.cpp and `ffmpeg` on this machine). The node reads the recordings itself while it runs, with no other unit; `memcp transcribe` is one pass by hand. Folders to watch: `watch = ["/srv/dictation -> personal"]`. See [INTAKE.md](INTAKE.md). A system that had `memcp-transcribe.timer` can disable it (`sudo systemctl disable --now memcp-transcribe.timer`): the package no longer ships it.
 - **Backups.** `memcp-backup.timer` runs `memcp backup` every night: a consistent copy of every database and of the files in `backup_dir` (`/var/backups/memcp`), the last `backup_keep` (14) kept. The same by hand: `memcp backup --to DIR --keep 14`.
 
@@ -112,11 +112,11 @@ Connections and their keys are in the backup (only their digests), so every assi
 ## Uninstall
 
 ```sh
-sudo systemctl disable --now memcp memcp-backup.timer memcp-janitor
+sudo systemctl disable --now memcp memcp-backup.timer pensine-janitor
 sudo apt remove memcp        # or: sudo pacman -R memcp
 ```
 
-The package never removes your memory, your backups or `memcp.toml`, even when purged. To erase them for good: `sudo rm -r /var/lib/memcp /var/backups/memcp /etc/memcp /var/lib/memcp-janitor /var/lib/memcp-transcribe`, and `sudo userdel memcp`. Export what you want to keep first: `memcp export --to DIR`.
+The package never removes your memory, your backups or `memcp.toml`, even when purged. To erase them for good: `sudo rm -r /var/lib/memcp /var/backups/memcp /etc/memcp /var/lib/pensine-janitor /var/lib/memcp-transcribe`, and `sudo userdel memcp`. Export what you want to keep first: `memcp export --to DIR`.
 
 ## Firewall and network
 
@@ -204,7 +204,7 @@ Do not publish `/admin` through a public proxy: it is served on the loopback for
 | An assistant gets 403 or nothing from outside | The proxy, the firewall, or `public_url` (check with `memcp doctor --public-url https://...`). Claude on the web needs HTTPS reachable from the internet. |
 | The page says the key is not valid | Console keys are shown once: `memcp console-token owner` gives a new one. A lot of wrong keys blocks the address for a while. |
 | `memcp: unknown option` in `memcp.toml` | A typo: `memcp config check` names the line. |
-| The janitor does nothing | `systemctl status memcp-janitor`: exit 78 means `janitor = false`, or no model named. |
+| The janitor does nothing | `systemctl status pensine-janitor`: exit 78 means `janitor = false`, or no model named. |
 | `database ... newer than this program` | You started an older version after a newer one. Install the newer one again, or restore a backup. |
 | Nothing works after the machine restarted | `systemctl is-enabled memcp`; `journalctl -u memcp -b`. |
 

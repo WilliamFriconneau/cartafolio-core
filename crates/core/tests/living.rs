@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::tools;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
+use pensine_core::access::{self, Rights};
+use pensine_core::tools;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
 use serde_json::json;
 
 #[test]
@@ -137,7 +137,7 @@ fn a_named_list_holds_what_to_buy_from_notes_of_any_space() -> Res {
 fn health_targets_return_referential_ids_and_free_signs() -> Res {
     let t = Temp::new("living-health");
     let b = brain(&t)?;
-    let space = memcp_core::Space::new("health")?;
+    let space = pensine_core::Space::new("health")?;
     b.open_space(&space)?;
     b.set_space_kind(&space, "health")?;
     let ctl = b.open_control()?;

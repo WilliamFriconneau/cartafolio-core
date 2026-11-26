@@ -6,9 +6,9 @@ mod common;
 use std::fs;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::files::{self, sniff};
-use memcp_core::tools::{self, ToolError};
+use pensine_core::access::{self, Rights};
+use pensine_core::files::{self, sniff};
+use pensine_core::tools::{self, ToolError};
 use serde_json::json;
 
 const PNG: &[u8] = &[
@@ -213,7 +213,7 @@ fn the_tools_stay_within_the_caller_spaces() -> Res {
 
 const DAY: i64 = 86_400;
 
-fn exists(b: &memcp_core::Brain, space: &memcp_core::Space, sha: &str) -> bool {
+fn exists(b: &pensine_core::Brain, space: &pensine_core::Space, sha: &str) -> bool {
     b.dir()
         .join("files")
         .join(space.as_str())
@@ -223,10 +223,10 @@ fn exists(b: &memcp_core::Brain, space: &memcp_core::Space, sha: &str) -> bool {
 
 /// A recording filed as waiting for its transcription, and the fact that holds its text.
 fn memo_and_transcript(
-    b: &memcp_core::Brain,
-    space: &memcp_core::Space,
+    b: &pensine_core::Brain,
+    space: &pensine_core::Space,
 ) -> Result<(files::FileInfo, String), Box<dyn std::error::Error>> {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let memo = files::put_tagged(
         b,
         space,
@@ -249,8 +249,8 @@ fn memo_and_transcript(
 }
 
 fn transcribed_at(
-    b: &memcp_core::Brain,
-    space: &memcp_core::Space,
+    b: &pensine_core::Brain,
+    space: &pensine_core::Space,
     fact: &str,
     at: i64,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -273,7 +273,7 @@ fn a_transcribed_recording_is_erased_once_its_text_exists_with_a_trace() -> Res 
     let b = brain(&t)?;
     let personal = sp("personal");
     let (memo, transcript) = memo_and_transcript(&b, &personal)?;
-    let then = memcp_core::util::now() - 30 * DAY;
+    let then = pensine_core::util::now() - 30 * DAY;
     transcribed_at(&b, &personal, &transcript, then)?;
     assert!(exists(&b, &personal, &memo.sha256));
 
@@ -361,7 +361,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
     let (memo, transcript) = memo_and_transcript(&b, &personal)?;
     let long_ago = 1_700_000_000;
     transcribed_at(&b, &personal, &transcript, long_ago)?;
-    let now = memcp_core::util::now();
+    let now = pensine_core::util::now();
 
     // A photo, however old: never.
     let photo = files::put_tagged(
@@ -405,7 +405,7 @@ fn only_a_recording_waiting_for_its_transcription_is_ever_erased() -> Res {
         );
     }
     let conn = b.open_space(&personal)?;
-    memcp_core::facts::retire(&conn, "x", &transcript, "wrong")?;
+    pensine_core::facts::retire(&conn, "x", &transcript, "wrong")?;
     assert!(files::erase_at(&b, &personal, "x", &memo.id, &personal, &transcript, now).is_err());
     assert!(exists(&b, &personal, &memo.sha256));
     // An unknown file.
@@ -421,7 +421,7 @@ fn bytes_that_another_record_or_space_still_holds_stay() -> Res {
     let work = sp("work");
     let (memo, transcript) = memo_and_transcript(&b, &personal)?;
     transcribed_at(&b, &personal, &transcript, 1_700_000_000)?;
-    let now = memcp_core::util::now();
+    let now = pensine_core::util::now();
     let tag = ["inbox/audio".to_string()];
     // The same recording under another name in the same vault, and in another vault.
     let twin = files::put_tagged(&b, &personal, "device", "Copie.m4a", "", &m4a(200), &tag)?;
@@ -505,7 +505,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
         &b,
         &personal,
         &transcript,
-        memcp_core::util::now() - 8 * DAY,
+        pensine_core::util::now() - 8 * DAY,
     )?;
     let done = tools::call(&b, &worker, "file_erase", &args)?;
     assert_eq!(done["result"], "erased");
@@ -520,7 +520,7 @@ fn the_tool_is_for_a_whole_vault_with_write_rights_and_stays_in_its_spaces() -> 
 
 #[test]
 fn the_transcription_may_have_been_sorted_into_another_vault() -> Res {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("files");
     let b = brain(&t)?;
     let personal = sp("personal");
@@ -542,10 +542,10 @@ fn the_transcription_may_have_been_sorted_into_another_vault() -> Res {
     else {
         return Err("transcript".into());
     };
-    transcribed_at(&b, &work, &text.id, memcp_core::util::now() - 9 * DAY)?;
+    transcribed_at(&b, &work, &text.id, pensine_core::util::now() - 9 * DAY)?;
     b.open_space(&personal)?.execute(
         "UPDATE files SET created_at = ?1",
-        [memcp_core::util::now() - 10 * DAY],
+        [pensine_core::util::now() - 10 * DAY],
     )?;
     let ctl = b.open_control()?;
     let mk = |name: &str, spec: &str| -> Result<access::Caller, Box<dyn std::error::Error>> {
@@ -574,7 +574,7 @@ fn the_transcription_may_have_been_sorted_into_another_vault() -> Res {
 
 #[test]
 fn an_unrelated_old_fact_is_not_a_transcript() -> Res {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("files");
     let b = brain(&t)?;
     let personal = sp("personal");
@@ -594,7 +594,7 @@ fn an_unrelated_old_fact_is_not_a_transcript() -> Res {
         "UPDATE facts SET created_at = 1700000000 WHERE id = ?1",
         [&old.id],
     )?;
-    let now = memcp_core::util::now() + 30 * DAY;
+    let now = pensine_core::util::now() + 30 * DAY;
     let r = files::erase_at(&b, &personal, "x", &memo.id, &personal, &old.id, now);
     assert!(
         matches!(&r, Err(e) if e.to_string().contains("name this recording")),
@@ -654,10 +654,10 @@ fn a_file_never_takes_over_a_note_written_before() -> Res {
     let t = Temp::new("files");
     let b = brain(&t)?;
     let conn = b.open_space(&sp("home"))?;
-    let mut n = memcp_core::facts::NewFact::agent("File: plan.txt", "tester");
+    let mut n = pensine_core::facts::NewFact::agent("File: plan.txt", "tester");
     n.tags = vec!["notes".into()];
-    let memcp_core::facts::Remembered::Created(note) =
-        memcp_core::facts::remember(&conn, &sp("home"), "tester", n, &[])?
+    let pensine_core::facts::Remembered::Created(note) =
+        pensine_core::facts::remember(&conn, &sp("home"), "tester", n, &[])?
     else {
         return Err("not created".into());
     };

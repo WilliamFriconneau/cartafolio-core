@@ -5,11 +5,11 @@ mod common;
 
 use base64::Engine as _;
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::call::{self, Call};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::call::{self, Call};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 fn caller(b: &Brain, name: &str, rights: &str) -> Result<Caller, Box<dyn std::error::Error>> {

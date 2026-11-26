@@ -1,4 +1,4 @@
-//! memcp-server: MCP over HTTP, the OAuth endpoints and the admin page.
+//! pensine-server: MCP over HTTP, the OAuth endpoints and the admin page.
 
 #[macro_use]
 pub mod out;

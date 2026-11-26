@@ -5,11 +5,11 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Mutex;
 
 use crate::http::bearer_of;
-use memcp_core::access::{self, Caller};
-use memcp_core::catalogue::Feature;
-use memcp_core::guide;
-use memcp_core::tools::{self, ToolDef, ToolError};
-use memcp_core::{Brain, Space, util};
+use pensine_core::access::{self, Caller};
+use pensine_core::catalogue::Feature;
+use pensine_core::guide;
+use pensine_core::tools::{self, ToolDef, ToolError};
+use pensine_core::{Brain, Space, util};
 use serde_json::{Value, json};
 
 use crate::http::{Request, Response};
@@ -131,18 +131,18 @@ pub fn listened_url(listen: &str) -> Option<String> {
 
 impl App {
     pub fn new(brain: Brain) -> App {
-        let node_name = memcp_core::directory::own_name(&brain).unwrap_or_else(|e| {
+        let node_name = pensine_core::directory::own_name(&brain).unwrap_or_else(|e| {
             eprintln!("node name: {e}");
-            memcp_core::directory::DEFAULT_NODE_NAME.into()
+            pensine_core::directory::DEFAULT_NODE_NAME.into()
         });
         Self::with_node_name(brain, node_name)
     }
 
-    pub fn new_with_name(brain: Brain, name: Option<&str>) -> memcp_core::Result<App> {
+    pub fn new_with_name(brain: Brain, name: Option<&str>) -> pensine_core::Result<App> {
         if let Some(name) = name {
-            memcp_core::directory::set_own_name(&brain, name)?;
+            pensine_core::directory::set_own_name(&brain, name)?;
         }
-        let node_name = memcp_core::directory::own_name(&brain)?;
+        let node_name = pensine_core::directory::own_name(&brain)?;
         Ok(Self::with_node_name(brain, node_name))
     }
 
@@ -376,10 +376,10 @@ impl App {
 
     /// The bank statements of the money space this caller reaches, if any.
     /// A key limited to paths of that vault gets none: the statements are not under a path, they are the vault.
-    fn ledger_for(&self, caller: &Caller) -> Option<memcp_finances::Ledger<'_>> {
+    fn ledger_for(&self, caller: &Caller) -> Option<pensine_finances::Ledger<'_>> {
         self.feature_space(caller, Feature::Money)
             .filter(|space| caller.read_paths(space).is_none())
-            .map(|space| memcp_finances::Ledger {
+            .map(|space| pensine_finances::Ledger {
                 brain: &self.brain,
                 space,
             })
@@ -581,8 +581,7 @@ impl App {
         params: &Value,
         now: i64,
     ) -> (u16, Value) {
-        let server_info =
-            json!({ "name": NAME, "version": VERSION, "viewContract": memcp_core::view::CONTRACT });
+        let server_info = json!({ "name": NAME, "version": VERSION, "viewContract": pensine_core::view::CONTRACT });
         // What this connection is told: the general rules, the guides of what it reaches, and
         // the indexes of those vaults (see the `guide` module).
         let instructions = || {
@@ -656,7 +655,7 @@ impl App {
         let agent = &caller.agent;
         let flagged = if self.strict_write_agents == ["*"] {
             !matches!(caller.kind, access::Kind::Peer | access::Kind::Console)
-                && !agent.starts_with(memcp_core::sync::PEER_PREFIX)
+                && !agent.starts_with(pensine_core::sync::PEER_PREFIX)
                 && !agent.starts_with("console-")
                 && !agent.starts_with("app-")
                 && !agent.ends_with("-app")
@@ -692,7 +691,7 @@ impl App {
         let inbox_note = name == "remember"
             && params["arguments"]["tags"].as_array().is_some_and(|tags| {
                 tags.iter().filter_map(Value::as_str).any(|tag| {
-                    memcp_core::facts::normalize_tag(tag).is_ok_and(|tag| tag == "inbox")
+                    pensine_core::facts::normalize_tag(tag).is_ok_and(|tag| tag == "inbox")
                 })
             });
         if !read && (!write || inbox_note) {
@@ -833,7 +832,7 @@ impl App {
     /// This node's id (`ABCD-EFGH-IJKL`), read from the control database the first time only.
     pub fn own_node_id(&self) -> Option<&str> {
         if self.node_id.get().is_none()
-            && let Ok(id) = memcp_core::directory::node_id(&self.brain)
+            && let Ok(id) = pensine_core::directory::node_id(&self.brain)
         {
             let _ = self.node_id.set(id);
         }

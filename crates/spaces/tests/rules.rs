@@ -1,7 +1,7 @@
 //! Shared rules, and what an assistant may change by itself.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 fn hlc(ms: u64) -> String {
     Hlc {

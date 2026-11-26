@@ -4,7 +4,7 @@
 //! the detection keeps for any text. Ported with the same cases and results as the reference tests of the previous health
 //! app (the reminder part of its note reader is not health and is not ported). Fictional notes only.
 
-use memcp_health::{Lang, Measure, builtin, detect};
+use pensine_health::{Lang, Measure, builtin, detect};
 
 /// The numbers on ten the detection gives, by sign.
 fn levels(text: &str) -> Vec<(String, String)> {

@@ -4,12 +4,12 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::triage;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::triage;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 const READ: [&str; 17] = [
@@ -691,11 +691,11 @@ fn the_sorting_tools_only_touch_the_triage_space_of_a_connection_that_writes_it(
 fn peers_lists_only_the_peers_of_the_person_and_is_open_to_any_reader() -> Res {
     let w = world()?;
     let ctl = w.brain.open_control()?;
-    let other = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
+    let other = pensine_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
     w.brain.set_layout(
         OWNER,
         &sp("personal"),
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Owner’s personal space".into()),
             ..Default::default()
         },
@@ -813,11 +813,11 @@ fn a_revoked_an_expired_or_a_rotated_key_is_refused_without_saying_why() -> Res 
 fn rights_never_go_beyond_the_person_and_a_regrant_takes_effect_at_once() -> Res {
     let w = world()?;
     let ctl = w.brain.open_control()?;
-    let ann = memcp_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
+    let ann = pensine_core::users::create_user(&ctl, OWNER, "ann", "Ann", false)?.id;
     w.brain.set_layout(
         OWNER,
         &sp("personal"),
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Owner’s personal space".into()),
             ..Default::default()
         },

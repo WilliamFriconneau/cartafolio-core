@@ -1,6 +1,6 @@
 //! `memcp.toml`: the settings of a Linux installation, one file for the server, the janitor, the voice notes and the
 //! backups. Every option of the Home Assistant app has its counterpart here (see docs/PARITY.md); the file is the
-//! same for `memcp` and `memcp-manager`, and a flag on the command line always wins over the file.
+//! same for `memcp` and `pensine-manager`, and a flag on the command line always wins over the file.
 //!
 //! The format is the flat subset of TOML that the file needs: `key = value` lines, `#` comments, strings in double
 //! quotes, whole numbers, `true`/`false`, and lists of strings in square brackets (on one line or several). Nothing
@@ -140,7 +140,7 @@ static WHERE: [Opt; 9] = [
     ),
 ];
 
-pub use memcp_core::directory::DEFAULT_NODE_NAME;
+pub use pensine_core::directory::DEFAULT_NODE_NAME;
 
 static NODE: [Opt; 3] = [
     o(
@@ -184,7 +184,7 @@ static SIGN_IN: [Opt; 5] = [
         "auto",
         Some("new_people"),
         Some("--new-people"),
-        "Only for `memcp-manager` (several people on one node): `auto` gives every new login a memory of their own, `ask` makes them wait for an administrator. `memcp serve` holds one memory and ignores it.",
+        "Only for `pensine-manager` (several people on one node): `auto` gives every new login a memory of their own, `ask` makes them wait for an administrator. `memcp serve` holds one memory and ignores it.",
     ),
     o(
         "identity_listen",
@@ -228,7 +228,7 @@ static JANITOR: [Opt; 11] = [
         "false",
         Some("janitor"),
         None,
-        "Run the janitor (`memcp-janitor.service`): it files the notes of the inboxes with the model named below.",
+        "Run the janitor (`pensine-janitor.service`): it files the notes of the inboxes with the model named below.",
     ),
     o(
         "janitor_person",
@@ -903,7 +903,7 @@ pub fn locate_with_data(
             Err(format!("{}: no such settings file", p.display()))
         };
     }
-    if let Some(p) = memcp_core::env::var_os("MEMCP_CONFIG") {
+    if let Some(p) = pensine_core::env::var_os("MEMCP_CONFIG") {
         let p = PathBuf::from(p);
         return if p.is_file() {
             Ok(Some(p))
@@ -962,7 +962,7 @@ pub fn fill_flags(
     flags: &mut std::collections::HashMap<String, String>,
     switches: &mut Vec<String>,
 ) {
-    if let Ok(agents) = memcp_core::env::var("MEMCP_STRICT_WRITE_AGENTS") {
+    if let Ok(agents) = pensine_core::env::var("MEMCP_STRICT_WRITE_AGENTS") {
         flags
             .entry("--strict-write-agents".into())
             .or_insert(agents);
@@ -1046,7 +1046,7 @@ mod alias_tests {
     fn config_alias_precedence_in_the_same_directory() -> Result<(), Box<dyn std::error::Error>> {
         let dir = std::env::temp_dir().join(format!(
             "pensine-config-{}",
-            memcp_core::util::random_base32(16)
+            pensine_core::util::random_base32(16)
         ));
         std::fs::create_dir_all(&dir)?;
         let [new, alias, old] = settings_in(&dir);

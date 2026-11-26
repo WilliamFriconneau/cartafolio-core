@@ -5,9 +5,9 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-use memcp_core::text::Language;
+use pensine_core::Brain;
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::text::Language;
 
 const NOW: i64 = 1_900_000_000;
 
@@ -189,8 +189,8 @@ fn an_old_note_still_waiting_is_listed_behind_many_sorted_ones() -> Res {
 
 #[test]
 fn a_write_into_an_inbox_marks_it_and_tidy_asks_for_order_now() -> Res {
-    use memcp_core::access::{self, Rights};
-    use memcp_core::tools;
+    use pensine_core::access::{self, Rights};
+    use pensine_core::tools;
     let t = Temp::new("inbox-mark");
     let b = Brain::init(&t.path().join("data"), &[sp("health")], Language::English)?;
     let ctl = b.open_control()?;

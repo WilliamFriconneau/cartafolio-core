@@ -6,7 +6,7 @@ The page has four sections (`#note`, `#journal`, the empty hash for Spaces, `#se
 Settings goes to `#settings` first.
 
 ```sh
-cargo build -p memcp-server
+cargo build -p pensine-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 for t in *.test.js; do CHROMIUM=/usr/bin/chromium node "$t" || echo "FAILED $t"; done
 ```
@@ -47,7 +47,7 @@ editor, the download of the export, the activity list, and that nothing breaks t
 security policy or logs an error.
 
 ```sh
-cargo build -p memcp-server
+cargo build -p pensine-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node browser.test.js     # SCREENSHOTS=some/dir keeps pictures of the page
 ```
@@ -65,7 +65,7 @@ scrolls sideways at 400 px. It stands in for the network (`MEMCP_DISCOVER_FOUND`
 needs no network. `SCREENSHOTS=dir` keeps pictures at 1280 and 400 px.
 
 ```sh
-cargo build -p memcp-server
+cargo build -p pensine-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node onboarding.test.js
 ```
@@ -82,7 +82,7 @@ number or a name in it); if it is a sentence worth guarding, add its first words
 written once in each language (`ORGANISE_PROMPT` and `ORGANISE_PROMPT_FR`), not translated line by line.
 
 ```sh
-cargo build -p memcp-server
+cargo build -p pensine-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node french.test.js
 ```
@@ -95,7 +95,7 @@ space, a new key, revoke and remove a connection, the janitor kept in *Internal 
 bring a removed note back, remove a vocabulary, and that no browser dialog is ever used.
 
 ```sh
-cargo build -p memcp-server
+cargo build -p pensine-server
 cd crates/server/tests/page && npm install jsdom playwright-core --no-save
 CHROMIUM=/usr/bin/chromium node crud.test.js
 ```

@@ -3,11 +3,11 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::sync::purge_facts;
-use memcp_core::tools;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::sync::purge_facts;
+use pensine_core::tools;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 fn caller(b: &Brain) -> Result<Caller, Box<dyn std::error::Error>> {
@@ -161,7 +161,7 @@ fn a_purge_removes_the_notes_their_versions_and_their_traces_and_spares_the_rest
 
 #[test]
 fn a_retag_that_lost_the_provenance_gets_it_back() -> Res {
-    use memcp_core::sync::repair_provenance;
+    use pensine_core::sync::repair_provenance;
     let t = Temp::new("repair");
     let b = brain(&t)?;
     let c = caller(&b)?;

@@ -1,15 +1,15 @@
-//! `memcp-manager`: one memory per person, created and administered from one place.
+//! `pensine-manager`: one memory per person, created and administered from one place.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use memcp_core::text::Language;
-use memcp_manager::{Failure, Manager, Options};
-use memcp_server::net;
+use pensine_core::text::Language;
+use pensine_manager::{Failure, Manager, Options};
+use pensine_server::net;
 
-const USAGE: &str = "usage: memcp-manager --data DIR <command>
+const USAGE: &str = "usage: pensine-manager --data DIR <command>
 
   Settings: pensine.toml, silice.toml or memcp.toml. Use --config FILE to choose a path (see docs/LINUX.md).
   serve [--listen 127.0.0.1:8791] [--allow-remote] [--advertise] [--node-name NAME] [--allow-origin URL] [--threads N]
@@ -29,11 +29,11 @@ A person's own commands are the engine's, on their directory:
   memcp --data DIR/people/NAME connections";
 
 fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp-manager", "silice-manager", "pensine-manager")
+    pensine_core::invoked_as("pensine-manager", "silice-manager", "pensine-manager")
 }
 
 fn usage() -> String {
-    USAGE.replace("memcp-manager ", &format!("{} ", command_name()))
+    USAGE.replace("pensine-manager ", &format!("{} ", command_name()))
 }
 
 struct Args {
@@ -119,7 +119,7 @@ fn options(a: &Args) -> Result<Options, Failure> {
     Ok(Options {
         public_url: flag("--public-url")
             .map(String::from)
-            .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok()),
+            .or_else(|| pensine_core::env::var("MEMCP_PUBLIC_URL").ok()),
         node_name: flag("--node-name").map(String::from),
         listen: flag("--listen").map(String::from),
         allowed_origins: flag("--allow-origin")
@@ -142,20 +142,20 @@ fn options(a: &Args) -> Result<Options, Failure> {
 fn run(args: &[String]) -> Result<(), Failure> {
     let mut a = parse(args)?;
     // memcp.toml (the same file as `memcp`) fills in what the command line does not say.
-    let mut settings = memcp_server::config::Settings::default();
+    let mut settings = pensine_server::config::Settings::default();
     let data_hint = a
         .flags
         .get("--data")
         .map(PathBuf::from)
-        .or_else(|| memcp_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
-    if let Some(p) = memcp_server::config::locate_with_data(
+        .or_else(|| pensine_core::env::var_os("MEMCP_DATA").map(PathBuf::from));
+    if let Some(p) = pensine_server::config::locate_with_data(
         a.flags.get("--config").map(String::as_str),
         data_hint.as_deref(),
     )
     .map_err(|e| (2, e))?
     {
-        settings = memcp_server::config::Settings::load(&p).map_err(|e| (2, e))?;
-        memcp_server::config::fill_flags(&settings, &mut a.flags, &mut a.switches);
+        settings = pensine_server::config::Settings::load(&p).map_err(|e| (2, e))?;
+        pensine_server::config::fill_flags(&settings, &mut a.flags, &mut a.switches);
     }
     if a.switches.iter().any(|s| s == "-h" || s == "--help") || a.pos.is_empty() {
         println!("{}", usage());
@@ -223,11 +223,11 @@ fn m_doctor(data: &Path, a: &Args) -> Result<(), Failure> {
     for (i, (label, dir)) in dirs.iter().enumerate() {
         println!("== {label}");
         let role = if i == 0 {
-            memcp_server::doctor::Role::Registry
+            pensine_server::doctor::Role::Registry
         } else {
-            memcp_server::doctor::Role::Person
+            pensine_server::doctor::Role::Person
         };
-        let r = memcp_server::doctor::inspect_as(
+        let r = pensine_server::doctor::inspect_as(
             dir,
             role,
             if i == 0 { flag("--public-url") } else { None },
@@ -247,9 +247,9 @@ fn m_doctor(data: &Path, a: &Args) -> Result<(), Failure> {
 /// that cannot work is said, and the node starts without it.
 fn start_intake(
     manager: &Manager,
-    settings: &memcp_server::config::Settings,
-) -> Option<memcp_server::intake::Running> {
-    let probe = memcp_server::intake::Settings::from_file(settings, Path::new("."));
+    settings: &pensine_server::config::Settings,
+) -> Option<pensine_server::intake::Running> {
+    let probe = pensine_server::intake::Settings::from_file(settings, Path::new("."));
     match probe {
         Ok(p) if p.is_idle() => return None,
         Err(e) => {
@@ -270,11 +270,11 @@ fn start_intake(
         return None;
     };
     let started =
-        memcp_server::intake::Settings::from_file(settings, &app.brain.dir().join("intake"))
+        pensine_server::intake::Settings::from_file(settings, &app.brain.dir().join("intake"))
             .and_then(|mut s| {
                 // Inside the person's own memory, the first administrator of it is the person.
                 s.person = None;
-                memcp_server::intake::start(&app.brain, s).map_err(|e| e.to_string())
+                pensine_server::intake::start(&app.brain, s).map_err(|e| e.to_string())
             });
     match started {
         Ok(running) => running,
@@ -285,7 +285,11 @@ fn start_intake(
     }
 }
 
-fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Result<(), Failure> {
+fn serve(
+    data: &Path,
+    a: &Args,
+    settings: &pensine_server::config::Settings,
+) -> Result<(), Failure> {
     let flag = |n: &str| a.flags.get(n).map(String::as_str);
     let listen = flag("--listen").unwrap_or("127.0.0.1:8791");
     let loopback = listen.starts_with("127.")
@@ -299,7 +303,7 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             ),
         ));
     }
-    std::fs::create_dir_all(data).map_err(memcp_server::cli::fail)?;
+    std::fs::create_dir_all(data).map_err(pensine_server::cli::fail)?;
     let _instance = net::lock_node(data)?;
     let manager = Arc::new(Manager::open(data, options(a)?)?);
     // Voice notes, watched folders and absorbed folders work for one person of this node: tasks of the node itself.
@@ -311,7 +315,7 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             .next()
             .and_then(|p| p.parse::<u16>().ok())
             .unwrap_or(8791);
-        memcp_server::discovery::advertise(port, &manager.node_name())
+        pensine_server::discovery::advertise(port, &manager.node_name())
     } else {
         None
     };
@@ -349,7 +353,7 @@ fn serve(data: &Path, a: &Args, settings: &memcp_server::config::Settings) -> Re
             ingress,
             threads,
         },
-        &format!("{} {}", command_name(), memcp_server::app::VERSION),
+        &format!("{} {}", command_name(), pensine_server::app::VERSION),
     )
 }
 

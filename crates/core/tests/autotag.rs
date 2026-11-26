@@ -3,11 +3,11 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::tools;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::tools;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 fn caller(b: &Brain, name: &str, rights: &str) -> Result<Caller, Box<dyn std::error::Error>> {
@@ -127,7 +127,7 @@ fn a_write_gets_the_tag_of_the_space_and_what_the_text_says() -> Res {
 fn nothing_is_added_to_a_trier_nor_to_a_path_connection() -> Res {
     let t = Temp::new("autotag-triage");
     let b = brain(&t)?;
-    let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
+    let (_, box_name) = pensine_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
     let device = caller(&b, "peer-phone-x", &format!("{box_name}:rw"))?;
     let r = tools::call(
         &b,
@@ -412,7 +412,7 @@ fn the_janitor_and_an_engine_that_asks_not_to_learn_teach_nothing() -> Res {
 fn where_the_person_sends_notes_is_learned_and_the_janitors_choice_is_not() -> Res {
     let t = Temp::new("autotag-route");
     let b = brain(&t)?;
-    let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
+    let (_, box_name) = pensine_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
     let box_ = sp(&box_name);
     let device = caller(&b, "peer-phone-x", &format!("{box_name}:rw"))?;
     let c = caller(&b, "person-page", "all")?;
@@ -432,7 +432,7 @@ fn where_the_person_sends_notes_is_learned_and_the_janitors_choice_is_not() -> R
             &box_,
             &drop(text)?,
             &sp("home"),
-            "memcp-janitor",
+            "pensine-janitor",
             "owner",
         )?;
     }
@@ -499,9 +499,9 @@ fn the_tags_come_back_in_a_living_page_and_in_recall() -> Res {
 fn a_note_sent_out_of_a_triage_space_is_tagged_like_one_written_there() -> Res {
     let t = Temp::new("autotag-triage");
     let b = brain(&t)?;
-    let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
+    let (_, box_name) = pensine_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
     let device = caller(&b, "peer-phone-y", &format!("{box_name}:rw"))?;
-    let janitor = caller(&b, "memcp-janitor", "all")?;
+    let janitor = caller(&b, "pensine-janitor", "all")?;
     // A device writes with no space: the note waits in Inbox, untagged by the space it will go to.
     let r = tools::call(
         &b,
@@ -852,7 +852,7 @@ fn hashtags_are_said_on_purpose_in_any_space_and_a_note_may_carry_many() -> Res 
     assert!(has(&f, "chantier-cuisine"), "{f}");
     // `C#` is not a hashtag.
     assert_eq!(
-        memcp_core::autotag::hashtags("du C# et #un #deux #un"),
+        pensine_core::autotag::hashtags("du C# et #un #deux #un"),
         ["un", "deux"]
     );
     // The explicit # is not squeezed out by the cap: ten of them, ten tags.
@@ -905,7 +905,7 @@ fn the_keys_and_numbers_of_a_json_dump_are_not_tagged_but_its_sentences_are() ->
         "the words inside the dump are read: {day}"
     );
     assert_eq!(
-        memcp_core::autotag::prose_of("pas de json ici"),
+        pensine_core::autotag::prose_of("pas de json ici"),
         "pas de json ici"
     );
     Ok(())

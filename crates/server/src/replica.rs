@@ -11,8 +11,8 @@
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 
-use memcp_core::users::{self, User};
-use memcp_core::{Error, Space, util};
+use pensine_core::users::{self, User};
+use pensine_core::{Error, Space, util};
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -45,7 +45,7 @@ pub fn start(app: &App, ctl: &rusqlite::Connection, me: &User, name: &str) -> Re
 
 /// A program shipped next to this one (or the one named by the variable).
 fn program(var: &str, base: &str) -> PathBuf {
-    if let Some(p) = memcp_core::env::var_os(var) {
+    if let Some(p) = pensine_core::env::var_os(var) {
         return PathBuf::from(p);
     }
     let suffix = if cfg!(windows) { ".exe" } else { "" };
@@ -147,7 +147,7 @@ fn ask(
         .stderr(Stdio::null());
     // The ticket goes by the environment, never on a command line another user of the machine could read.
     if let Some(t) = ticket {
-        memcp_core::env::set_child(&mut cmd, "JOIN_TICKET", t);
+        pensine_core::env::set_child(&mut cmd, "JOIN_TICKET", t);
     }
     let child = cmd.spawn().map_err(|_| {
         "the program that joins (memcp-sync) is not installed on this node".to_string()
@@ -161,7 +161,7 @@ fn ask(
 /// the three words and answers, from any of their nodes. A bare id is looked up in the peer directory: a node that a
 /// peer told about is added without typing an address.
 pub fn add_node(app: &App, text: &str) -> Result<Value, String> {
-    use memcp_core::directory as dir;
+    use pensine_core::directory as dir;
     let link = dir::NodeLink::parse(text).map_err(|e| e.to_string())?;
     let own = dir::node_id(&app.brain).map_err(|e| e.to_string())?;
     let mut addresses = link.addresses.clone();
@@ -236,9 +236,9 @@ pub fn resume(app: &App) {
             }
         }
         let mut cmd = Command::new(sync_program());
-        memcp_core::env::set_child(&mut cmd, "PEER_TOKEN", key);
+        pensine_core::env::set_child(&mut cmd, "PEER_TOKEN", key);
         // The loop ends with this node, so a restart never runs two loops with one peer.
-        memcp_core::env::set_child(&mut cmd, "SYNC_PARENT", std::process::id().to_string());
+        pensine_core::env::set_child(&mut cmd, "SYNC_PARENT", std::process::id().to_string());
         if let Ok(child) = cmd
             .arg("--data")
             .arg(app.brain.dir())

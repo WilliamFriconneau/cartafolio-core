@@ -1,6 +1,6 @@
 //! The language a note is read in: French alone when it looks French, every language together otherwise.
 
-use memcp_health::{Lang, lang_of};
+use pensine_health::{Lang, lang_of};
 
 #[test]
 fn a_french_note_is_read_in_french() {
@@ -41,7 +41,7 @@ fn a_note_with_nothing_to_read_says_nothing() {
 #[test]
 fn a_french_word_of_another_sense_is_not_a_sign() {
     // « pain » is bread: a French note that says it is not a note about pain.
-    let d = memcp_health::detect(
+    let d = pensine_health::detect(
         "Courses : pain, lait, café.",
         lang_of("Courses : pain, lait, café."),
     );
@@ -52,6 +52,6 @@ fn a_french_word_of_another_sense_is_not_a_sign() {
     );
     // An English note that says pain is a note about pain.
     let text = "Pain in my knee since Monday.";
-    let d = memcp_health::detect(text, lang_of(text));
+    let d = pensine_health::detect(text, lang_of(text));
     assert!(d.signs.iter().any(|s| s.id == "pain"), "{d:?}");
 }

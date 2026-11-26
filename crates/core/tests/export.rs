@@ -11,13 +11,13 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use common::{Res, Temp, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::export::{self, FORMAT};
-use memcp_core::guide;
-use memcp_core::text::Language;
-use memcp_core::tools;
-use memcp_core::users::{self, OWNER, User};
-use memcp_core::{Brain, Space, files};
+use pensine_core::access::{self, Rights};
+use pensine_core::export::{self, FORMAT};
+use pensine_core::guide;
+use pensine_core::text::Language;
+use pensine_core::tools;
+use pensine_core::users::{self, OWNER, User};
+use pensine_core::{Brain, Space, files};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -38,7 +38,7 @@ fn world() -> Result<World, Box<dyn Error>> {
     brain.set_layout(
         &sam.id,
         &work,
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Sam’s work".into()),
             ..Default::default()
         },
@@ -422,7 +422,7 @@ fn an_export_is_taken_in_whole_by_another_installation() -> Res {
 
 #[test]
 fn an_erased_recording_leaves_no_bytes_in_the_export_and_the_record_travels() -> Res {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let w = world()?;
     let work = sp("sam-work");
     let mut memo = vec![0, 0, 0, 0x20];

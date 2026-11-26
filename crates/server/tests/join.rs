@@ -5,10 +5,10 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;

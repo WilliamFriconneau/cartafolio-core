@@ -3,7 +3,7 @@
 //! assistant does what the app does.
 
 use super::*;
-use memcp_health::{Lang, Manifestation, builtin};
+use pensine_health::{Lang, Manifestation, builtin};
 
 /// The kind of a space, as the memory knows it.
 fn kind_of(brain: &Brain, space: &Space) -> String {
@@ -349,7 +349,7 @@ pub(super) fn signs_review(
         let refused: Vec<&str> = f
             .tags
             .iter()
-            .filter_map(|t| t.strip_prefix(memcp_health::REFUSED_SIGN_PREFIX))
+            .filter_map(|t| t.strip_prefix(pensine_health::REFUSED_SIGN_PREFIX))
             .collect();
         if let Some(m) = only
             && !tags
@@ -360,7 +360,7 @@ pub(super) fn signs_review(
             continue;
         }
         // What the referential finds in the words of the note now: the words that bring each sign up.
-        let found = memcp_health::detect(&f.text, Lang::Auto);
+        let found = pensine_health::detect(&f.text, Lang::Auto);
         let evidence: Vec<Value> = found
             .signs
             .iter()

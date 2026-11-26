@@ -3,7 +3,7 @@
 //! Red-flag detection: only a real negation denies, doubt fires, a harmless idiom stays quiet but never hides a real case.
 //! Fictional sentences only. Ported with the same cases and results as the reference tests of the previous health app.
 
-use memcp_health::{Lang, builtin, detect};
+use pensine_health::{Lang, builtin, detect};
 
 fn ids(text: &str) -> Vec<String> {
     builtin()
@@ -462,7 +462,7 @@ fn detect_carries_the_red_flag_with_its_number_and_only_in_french() {
 
 #[test]
 fn an_invalid_referential_is_rejected() {
-    use memcp_health::{Referential, Sources};
+    use pensine_health::{Referential, Sources};
     let src = |red: &'static str| Sources {
         manifestations: include_str!("../data/manifestations.json"),
         manifestations_fr: include_str!("../data/manifestations.fr.json"),

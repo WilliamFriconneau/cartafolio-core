@@ -7,13 +7,13 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use base64::Engine as _;
-use memcp_core::access;
-use memcp_core::text::Language;
-use memcp_core::users;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response, parse_query};
-use memcp_server::oauth;
+use pensine_core::access;
+use pensine_core::text::Language;
+use pensine_core::users;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response, parse_query};
+use pensine_server::oauth;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
@@ -198,7 +198,7 @@ fn address_of(e: &Env, access: &str) -> String {
 }
 
 fn util_now() -> i64 {
-    memcp_core::util::now()
+    pensine_core::util::now()
 }
 
 fn ping(e: &Env, access: &str) -> u16 {
@@ -652,7 +652,7 @@ fn a_code_that_chose_no_vault_is_refused() -> Res {
             client,
             CALLBACK,
             challenge(),
-            memcp_core::util::now() + 300
+            pensine_core::util::now() + 300
         ],
     )?;
     let cb = "https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback";

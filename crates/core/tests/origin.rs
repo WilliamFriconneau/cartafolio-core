@@ -4,10 +4,10 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::facts::{self, NewFact, RecallOptions};
-use memcp_core::origin::{self, Deposit, Origin};
-use memcp_core::text::Language;
+use pensine_core::Brain;
+use pensine_core::facts::{self, NewFact, RecallOptions};
+use pensine_core::origin::{self, Deposit, Origin};
+use pensine_core::text::Language;
 
 const NOW: i64 = 1_900_000_000;
 

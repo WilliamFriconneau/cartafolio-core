@@ -6,11 +6,11 @@ mod common;
 use std::collections::BTreeSet;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util, view};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util, view};
 use serde_json::{Value, json};
 
 const NOW: i64 = 1_795_000_000;
@@ -398,7 +398,7 @@ fn chronology_stats_and_file_inventory_are_one_contract() -> Res {
         &["sources/scanner"],
     )?;
     at(&b, "work", &app, NOW - 2 * DAY)?;
-    let file = memcp_core::files::put(
+    let file = pensine_core::files::put(
         &b,
         &sp("work"),
         "fixture",

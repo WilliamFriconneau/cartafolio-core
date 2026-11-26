@@ -1,7 +1,7 @@
 # The janitor
 
 The optional part of the memory that keeps the person's Inbox and the `inbox` tag of each space in order. It runs in the Home Assistant app next to the memory when
-the person turns it on (see the app's documentation, « The janitor »), or anywhere as `memcp-janitor`. It reads the memory
+the person turns it on (see the app's documentation, « The janitor »), or anywhere as `pensine-janitor`. It reads the memory
 like any assistant, with a connection of its own, and does three jobs:
 
 0. **What comes in goes to a space, by keywords.** Every capturing device writes to one box, the person's **Inbox** (the
@@ -113,7 +113,7 @@ it is tagged the same; the text is never changed (`tags_set` keeps the old versi
 - It reads newest first, 600 notes tagged per pass at most, and goes on where it stopped; after a full turn it only looks at
   what is newer. Changing `VERSION` in `signs.rs` makes it look at everything again.
 - No model: the referential alone. A note that looks French is read in French, so that `pain` (bread) is not a sign;
-the mark of French is an accent or words only French uses (`memcp_health::lang_of`), and a note that shows another
+the mark of French is an accent or words only French uses (`pensine_health::lang_of`), and a note that shows another
 language is read in every language at once.
 - **It never puts back a sign the person took off.** Correcting a note with `sign_set` leaves the mark
   `signe-refuse/<sign>` on it; the sweep skips that sign there, and the note is tagged with the others. Adding the sign
@@ -165,16 +165,16 @@ passes it only looks at the date of that file.
 In the Home Assistant app: the `janitor` options (it makes its connection and its settings itself). Elsewhere:
 
 ```
-memcp-janitor [--config FILE] [run]          # one pass; exit 0 done, 1 key refused, 2 wrong settings, 3 problems
-memcp-janitor --config FILE --watch MARK [--quiet SECONDS] [--night HH:MM]
+pensine-janitor [--config FILE] [run]          # one pass; exit 0 done, 1 key refused, 2 wrong settings, 3 problems
+pensine-janitor --config FILE --watch MARK [--quiet SECONDS] [--night HH:MM]
                                              # stays: a pass once the writing has calmed down, on request, at night
 ```
 
-Settings, in a file of `key = value` lines (`#` comments), default `~/.config/memcp-janitor/janitor.conf`:
+Settings, in a file of `key = value` lines (`#` comments), default `~/.config/pensine-janitor/janitor.conf`:
 
 ```
 url            = https://memory.example/mcp/janitor     # the connection's address
-key_file       = ~/.local/share/memcp-janitor/key      # a file only the janitor reads
+key_file       = ~/.local/share/pensine-janitor/key      # a file only the janitor reads
 inbox_vaults   = personal, work                        # spaces whose `inbox` tag is filed (default: every space; Inbox is always read)
 models         = api,local                             # `local`, `api`, or both in order (see Models)
 ```

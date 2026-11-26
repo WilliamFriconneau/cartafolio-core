@@ -9,9 +9,9 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use memcp_core::Brain;
-use memcp_core::folders::{self, Options};
-use memcp_core::util;
+use pensine_core::Brain;
+use pensine_core::folders::{self, Options};
+use pensine_core::util;
 
 /// Seconds between two passes.
 pub const EVERY: u64 = 10;
@@ -34,7 +34,7 @@ impl FolderTask {
 
 /// The seconds between two passes: `MEMCP_FOLDER_EVERY` if it is a number of at least one, else [`EVERY`].
 pub fn every() -> u64 {
-    memcp_core::env::var("MEMCP_FOLDER_EVERY")
+    pensine_core::env::var("MEMCP_FOLDER_EVERY")
         .ok()
         .and_then(|v| v.trim().parse::<u64>().ok())
         .filter(|n| *n >= 1)

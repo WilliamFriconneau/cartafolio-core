@@ -227,7 +227,7 @@ less, none twice whatever the case; `text` is the first of them that fit in abou
   passes `text` to `whisper-cli` (`--prompt`, after the terms of `transcribe_lexicon`), to the speech model inside the program (its
   initial prompt) and to a speech service of the OpenAI kind (the `prompt` field of the request). With a service, those words leave
   the machine with the recording; `false` sends the recording alone (the lexicon still goes as before).
-- **Rust**: `memcp_core::transcription::{hints, Hints, Groups, builds}`; `intake::whisper::VoiceSettings.hints: bool`,
+- **Rust**: `pensine_core::transcription::{hints, Hints, Groups, builds}`; `intake::whisper::VoiceSettings.hints: bool`,
   `Whisper::transcribe_with(audio, work, hints)`, `join_prompt`; `intake::local::transcribe_samples_with(..., hints)`.
 
 ## The health referential, in the node (next version)
@@ -373,7 +373,7 @@ When the node transcribes a recording that has a call, the transcription note (t
 
 **`tags_set`**: `fields` takes a list for `caller` and `callee` (the whole side is replaced; `[]` empties it); `add`/`remove` of `field/caller/<name>` and `field/callee/<name>` keep the `personnes/<name>` tags in step. **`tags_suggest`**: new optional `tags` (the note's tags); the `personnes/` ones make `route` answer `{ "space", "score", "by": "people" }` where earlier notes with that person went (learned when the person sends a note of Inbox to a space).
 
-**Core**: `memcp_core::call::people_names(brain, space?)` returns the distinct names of the `personnes/` tags with their counts, most first; `memcp_core::autotag::fields_json(tags)` is the JSON form of the fields.
+**Core**: `pensine_core::call::people_names(brain, space?)` returns the distinct names of the `personnes/` tags with their counts, most first; `pensine_core::autotag::fields_json(tags)` is the JSON form of the fields.
 
 ## A folder for each space, on each node (next version)
 
@@ -403,7 +403,7 @@ Everything below is added; nothing is renamed. The rules are in [FOLDERS.md](FOL
 
 **Storage.** Control database migration 24: `space_folders` (`space`, `path`, `mode`, `cloud`, `set_at`, `last_scan`, `last_files`, `last_errors`) and `folder_state` (what the node remembers of each file: hash, size, time, the note or file it stands for). Neither is in a space file or in the sync log.
 
-**Rust.** `memcp_core::folders`, `memcp_server::folder_sync`; the embedded node of an app (`NodeIntake::start`) runs the task too.
+**Rust.** `pensine_core::folders`, `pensine_server::folder_sync`; the embedded node of an app (`NodeIntake::start`) runs the task too.
 
 ## Adding a node by its id or link, from any node (next version)
 
@@ -424,7 +424,7 @@ Only words change; no route, field, kind or stored name does.
 
 - The person's box is shown as **Inbox** (the same word in French and Spanish). It is still a space of kind `a-trier` named `<person>-a-trier`; `triage: true`, the `triage` answer of `POST /sync/spaces`, `S.triage` of the page's state and the `triage_*` tools keep their names. An app shows the label « Inbox » for the space whose kind is `a-trier`, never its stored name.
 - Texts an app may have matched change: errors say « the Inbox is not a space to change or delete », « the Inbox is made for you already », « a space cannot become the Inbox », « `<space>` is not the person's Inbox »; the reason written in a note's history by `triage_send` is « sent from the Inbox to `<space>` (`<id>`) by `<author>` »; the janitor's note in the box says « attendent dans l'Inbox ». Match the kind and the tags, not these texts.
-- `memcp_spaces::parse_spaces` reads a default space labelled « À trier » as « Inbox » (`memcp_spaces::FORMER_DEFAULT_LABEL`); its id and path do not change.
+- `pensine_spaces::parse_spaces` reads a default space labelled « À trier » as « Inbox » (`pensine_spaces::FORMER_DEFAULT_LABEL`); its id and path do not change.
 - `doctor` says « space NAME: … » where it said « vault NAME: … », and « this node answers on ADDR » where it said « the server answers on ADDR »; its check names (`vault-file`, `server-answers`…) are unchanged.
 - Command line: `memcp space make KIND` (the former `vault add KIND`, still accepted), `memcp import --folder DIR` (the former `--vault DIR`, still accepted).
 
@@ -451,13 +451,13 @@ The protocol stays 1: everything below is added, and a node of the previous vers
 
 **Connections of peers.** A node that joins now gets a connection with `all` (it reaches every space of the person, present and future); the join answer's `spaces` lists the spaces the person has at that moment. A `peer-…` connection made by an earlier join (a read-write grant on « À trier » and on at least one other space, no path limits) is read as `all` too. A device paired to capture keeps its grant on the box alone.
 
-**Filing from « À trier».** The note a `triage_send` (or the janitor) writes in the target space has an id derived from the note and the space (`f_t` and 20 hex characters, `memcp_core::triage::filed_id`), the same on every node.
+**Filing from « À trier».** The note a `triage_send` (or the janitor) writes in the target space has an id derived from the note and the space (`f_t` and 20 hex characters, `pensine_core::triage::filed_id`), the same on every node.
 
-**Rust.** `memcp_core::swarm` (`Offer`, `Answer`, `offers`, `accept`, `adopt`, `archive_here`, `archived_at`, `tombstones`, `since`); `memcp_client::peer_sync::Pass` gains `offered` and `archived`; `Peer::with_person`. **Command.** `memcp-sync --person ID`; its line ends with `N offered, N archived`.
+**Rust.** `pensine_core::swarm` (`Offer`, `Answer`, `offers`, `accept`, `adopt`, `archive_here`, `archived_at`, `tombstones`, `since`); `pensine_client::peer_sync::Pass` gains `offered` and `archived`; `Peer::with_person`. **Command.** `memcp-sync --person ID`; its line ends with `N offered, N archived`.
 
 ## The capture program is gone: the node does its work (next version)
 
-There is one program on every machine, the node (`memcp`, `memcp-manager`). It reads the voice notes, watches the folders and absorbs
+There is one program on every machine, the node (`memcp`, `pensine-manager`). It reads the voice notes, watches the folders and absorbs
 the notes folders itself ([INTAKE.md](INTAKE.md)). The words *bridge* and *capture program* are gone from the code, the page and the
 documents.
 
@@ -466,34 +466,34 @@ documents.
 | Before | Now | How the old one is treated |
 |---|---|---|
 | control database table `bridge_pairings` | `pairings` | migration 22 renames it, every row kept (an old database upgrades by itself) |
-| `vaults` in the answer of `POST /pair` | `spaces` | `memcp_client::pair`, the Swift `pair(...)` read both; `Pairing.vaults` stays in Swift, deprecated, equal to `spaces` |
+| `vaults` in the answer of `POST /pair` | `spaces` | `pensine_client::pair`, the Swift `pair(...)` read both; `Pairing.vaults` stays in Swift, deprecated, equal to `spaces` |
 | `vaults` in the answer of the join state (`GET /join/<id>`, `join.vaults`) | `spaces` | not read back by any program of this repository (`memcp-sync` takes `mcp_url`, `key`, `agent`): change it if you read it |
 | `vaults` in the answer of the `tidy` tool | `spaces` | not read back anywhere: change it |
 | `vaults` in `GET /admin/api/timeline` | `spaces` | the page reads the new one |
-| `vaults`, `vault_names` in the people list of `memcp-manager` | `spaces`, `space_names` | the page reads `spaces`, and `space_names` or the old `vault_names` |
-| export manifest key `vaults`, folder `vaults/` | `spaces`, `spaces/` | `verify-export`, `adopt` and `merge` read both: an export made before still verifies and is taken in whole (`memcp_core::export::manifest_spaces`, `space_file`) |
+| `vaults`, `vault_names` in the people list of `pensine-manager` | `spaces`, `space_names` | the page reads `spaces`, and `space_names` or the old `vault_names` |
+| export manifest key `vaults`, folder `vaults/` | `spaces`, `spaces/` | `verify-export`, `adopt` and `merge` read both: an export made before still verifies and is taken in whole (`pensine_core::export::manifest_spaces`, `space_file`) |
 | connection `desktop-bridge` (installers) | `desktop` | an installation that has `desktop-bridge` keeps it (its address is its name); the page shows a connection named `bridge-...` without the prefix, its name and address unchanged |
 | `bridge.conf`, `bridge.key`, `device.key`, the `bridge/` folder (installers) | `memcp.toml`, `keys\desktop.key`, `keys\device.key` (Windows), the settings in `memcp.toml` | the installers carry the voice settings and the keys over once and keep the old folder as `bridge.migrated` |
 | Keychain service `memcp-capture` (installers) | `memcp` | the installer moves the entries it finds |
 | `MEMCP_BRIDGE_PORT`, `--bridge-port`, `-BridgePort` | gone (the node serves assistants itself, on its own port) | read, said (`no longer used`), ignored, for one release |
 | `MEMCP_BRIDGE_BIN` (the program `/discover` asked) | gone (the node browses itself) | ignored |
-| `Paired.vaults`, `Pairing.vaults` in Rust (`memcp_client`, `memcp_core::pairing`) | `spaces` | rename the field |
+| `Paired.vaults`, `Pairing.vaults` in Rust (`pensine_client`, `pensine_core::pairing`) | `spaces` | rename the field |
 
 ### What was removed
 
 - The `memcp-capture` program, its release assets (`memcp-capture-<tag>-<target>`), its package entries, its LaunchAgent and
-  Task Scheduler tasks (`org.memcp.bridge`, `org.memcp.transcribe`, `MemCP bridge`, `MemCP transcribe`: the installers remove them
+  Task Scheduler tasks (`org.memcp.bridge`, `org.memcp.transcribe`, `Pensine bridge`, `Pensine transcribe`: the installers remove them
   at the next run) and the systemd units `memcp-transcribe.service` and `memcp-transcribe.timer`.
   `memcp prepare transcribe` is kept for one release and does nothing (it removes the old settings file).
 - The offline gateway and relay: the outbox, the local MCP on `127.0.0.1:8792`, the Unix socket, `memcp-capture connect`. A node is
   local: an app embeds it and writes into it. An assistant of the machine reaches the node at its own address with the key of its
   connection (`desktop`), or through `memcp mcp` (standard input and output).
 - `memcp-capture discover` and `join`: `memcp intake discover`, and the page or `memcp-sync --join` to join a memory.
-- From `memcp-capture-ffi` (the apps no longer use them): `Intake`, `IntakeConfig`, `IntakeItem`, `IntakeFlush`, `ItemKind`,
+- From `pensine-capture-ffi` (the apps no longer use them): `Intake`, `IntakeConfig`, `IntakeItem`, `IntakeFlush`, `ItemKind`,
   `ItemState`, `LocalMcp`, `connectionOutbox`, `adoptOldCaptures`, `HeardInput`, `LiveLineInput`, `MarkdownPart`, `markdownNote`,
   `markdownFile`, `markdownMeeting`, `ReplicaWindow`, `replicaWindow`, `setReplicaWindow`, `pruneReplicaWindow`, `ReplicaError`.
 
-### What stays in `memcp-capture-ffi`, unchanged
+### What stays in `pensine-capture-ffi`, unchanged
 
 `pair`, `Pairing` (with `spaces` added next to `vaults`), `PairError`, `addressAllowed`, `BrowserLink`, `BrowserCall`,
 `browserExtensionId`, `IntakeError` (what `BrowserLink` and `transcribe` throw), `transcribe(model:pcm:lexicon:)` (macOS),
@@ -527,7 +527,7 @@ to-sort box on Linux).
 { "format": "memcp-export", "spaces": [ { "name": "sam-work", "kind": "work", "facts": 12, "files": 1 } ], "hashes": { "spaces/sam-work.sqlite": "..." } }
 ```
 
-**Rust** (`memcp-server`, module `intake`; the app's node crate calls these):
+**Rust** (`pensine-server`, module `intake`; the app's node crate calls these):
 
 | Name | Type |
 |---|---|
@@ -541,7 +541,7 @@ to-sort box on Linux).
 | `intake::plan::{should_transcribe, SUMMARY_INSTRUCTIONS, summary_pieces, summary_prompt, summary_join_prompt}` | the battery rule and the summary prompts |
 | `intake::discover::discover(Duration) -> Vec<Found>` | nodes on this network and on the tailnet |
 
-**Swift** (`memcp-capture-ffi`, `NodeIntake`): `NodeIntake(dataDir:settings:decoder:)`, `start()`, `stop()`, `transcribeNow()`,
+**Swift** (`pensine-capture-ffi`, `NodeIntake`): `NodeIntake(dataDir:settings:decoder:)`, `start()`, `stop()`, `transcribeNow()`,
 `watchNow()`, `recordingsWaiting()`; the records `NodeIntakeSettings`, `NodeWatchedFolder`, `NodeVoiceReport`, `NodeWatchReport`,
 `NodeRecordingsWaiting`; the protocol `NodeAudioDecoder { func decode(path:) throws -> [Float] }`; the error `NodeIntakeError`
 (`invalid`, `failed`). Types and meanings: [INTAKE.md](INTAKE.md#the-apps).

@@ -79,7 +79,7 @@ Locally only 0, 1 and 2 happen (a few commands keep their own code, such as 78 f
 
 The table is generated from the command list in `crates/server/src/cli_table.rs`; a test fails when a command of the usage
 text (`memcp --help`) is missing from it, when a command has no remote form and no reason, or when this table is out of
-date (`MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity` rewrites it).
+date (`MEMCP_BLESS=1 cargo test -p pensine-server --test cli_parity` rewrites it).
 
 <!-- table:start -->
 | Command | What it does | Local (`--data`) | Remote (`--node`) | Key |

@@ -80,11 +80,11 @@ flowchart LR
 - **Instructions and index**: each person can write standing instructions, for themselves and for each space they own, on the node page (never through a tool: an assistant cannot plant one). A connection is told the instructions and the index of the spaces it reaches, and only those, when it connects. The index is a fact tagged `index` that an assistant keeps up to date; it is told as data, never as an instruction.
 - **Export and adopt**: `memcp export --to DIR` writes a person's memory (each space they own as a database, its files, a readable Markdown version, their instructions, a manifest of fingerprints; no key or right). `verify-export DIR` checks it, `adopt DIR --user PERSON` takes it into another installation. The page has "export my data" for each person's own.
 - **Tags**: a fact can be filed under up to eight hierarchical tags (`work/dev/ci`) and tagged `@space` to be found from another space you can read. `stats` lists the tags in use so an assistant reuses them.
-- **One memory per person**: a manager (`memcp-manager`) creates and administers the people, each with a directory, spaces and keys of their own; nothing is shared between people, and a key never goes beyond its person. The engine (`memcp`) is the same memory for one person on its own, with no manager.
+- **One memory per person**: a manager (`pensine-manager`) creates and administers the people, each with a directory, spaces and keys of their own; nothing is shared between people, and a key never goes beyond its person. The engine (`memcp`) is the same memory for one person on its own, with no manager.
 - **Bank statements** (finances space): import the `.xlsx` export of your bank, then read balances, movements and a monthly statement. Your own rules (a cap on a merchant, a merchant to watch) live in the space, not in the code. Account numbers are never returned in clear.
 - **Memory only.** A node stores and finds what it is given. It never fetches, proxies or sends anything for an assistant: mail, calendar and the house belong in a connector of their own, next to this one.
-- **The intake** (`memcp-server`, module `intake`, and `crates/capture-ffi`, its Swift interface) is the node's own work on what comes into it: it reads the voice notes, watches folders and absorbs notes folders, as set in `memcp.toml`; see [docs/INTAKE.md](INTAKE.md).
-- **A laptop, a PC or a phone is a node.** It keeps what a person captures (a note, a file, a recording) and synchronises with the other nodes; an assistant reaches it at its address. The memory keeps `memcp-client`, the library the programs that reach a node are built on (`crates/client`).
+- **The intake** (`pensine-server`, module `intake`, and `crates/capture-ffi`, its Swift interface) is the node's own work on what comes into it: it reads the voice notes, watches folders and absorbs notes folders, as set in `memcp.toml`; see [docs/INTAKE.md](INTAKE.md).
+- **A laptop, a PC or a phone is a node.** It keeps what a person captures (a note, a file, a recording) and synchronises with the other nodes; an assistant reaches it at its address. The memory keeps `pensine-client`, the library the programs that reach a node are built on (`crates/client`).
 - **Sources, a dossier and the `inbox` tag.** A health app deposits its raw records under `sources/<app>` with its own record ids (no copy of its own, a cursor to resume from, an optional standard code such as `loinc:8867-4`); an expert reader writes the sorted entry in the `dossier`; quick notes wait under the `inbox` tag. A plain `recall` leaves the raw layers out and every assistant is told how much there is. See [docs/HEALTH-SOURCES.md](HEALTH-SOURCES.md).
 - **A guide written by an app.** A key given the path `guide` (`health/guide:rw`) can propose how what is written for its app should look (its paths, its format): a proposal kept apart from the facts, that the person reads and approves on their page, as it reads, before any assistant is told it. Form only; a change waits for the person again.
 - **Files**: photos, documents and recordings (m4a, mp3, wav, ogg, flac; any size) kept in a space, type checked by content, stored once, found through their note.
@@ -213,9 +213,9 @@ memcp --data ~/memory import --space ~/Notes --rules rules.txt
 ## People from the command line
 
 ```sh
-memcp-manager --data ~/memory person add alex --display Alex   # a directory of their own
-memcp-manager --data ~/memory people
-memcp-manager --data ~/memory console-token alice             # opens the registry's page, never MCP
+pensine-manager --data ~/memory person add alex --display Alex   # a directory of their own
+pensine-manager --data ~/memory people
+pensine-manager --data ~/memory console-token alice             # opens the registry's page, never MCP
 memcp --data ~/memory/people/alex connections                 # one person's own commands
 ```
 

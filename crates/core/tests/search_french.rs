@@ -3,9 +3,9 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-use memcp_core::text::{self, Language};
+use pensine_core::Brain;
+use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+use pensine_core::text::{self, Language};
 
 #[test]
 fn french_accents_plurals_and_stopwords() -> Res {

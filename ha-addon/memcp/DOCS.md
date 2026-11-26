@@ -27,7 +27,7 @@ Each person can protect their own memory, on their page, under **Safety**:
 - **An heir**: another person of the installation. After 30 days without the person opening their page, the heir can attach a new, waiting Home Assistant account to their memory. Until then the heir sees nothing of it.
 - **A recovery key**, shown once: a new Home Assistant account that enters it on the waiting page takes the person's memory over, once. A new key cancels the old one.
 
-**If the administrator loses their own account:** put the new account's login name in the `admins` option and restart: the person of that name is linked to the new account. Or, from a terminal on the Home Assistant host, `docker exec -it addon_local_memcp memcp-manager --data /data/manager console-token <name>` prints a key that opens the registry's page on port 8791 of the local network (never through the internet).
+**If the administrator loses their own account:** put the new account's login name in the `admins` option and restart: the person of that name is linked to the new account. Or, from a terminal on the Home Assistant host, `docker exec -it addon_local_memcp pensine-manager --data /data/manager console-token <name>` prints a key that opens the registry's page on port 8791 of the local network (never through the internet).
 
 The memory is not encrypted at rest: whoever can read the disk can read it. Protect the host and the backups.
 

@@ -3,11 +3,11 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::layout::Change;
-use memcp_core::users::OWNER;
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::layout::Change;
+use pensine_core::users::OWNER;
 
-fn put(b: &memcp_core::Brain, space: &str, text: &str, tag: &str) -> Res {
+fn put(b: &pensine_core::Brain, space: &str, text: &str, tag: &str) -> Res {
     let conn = b.open_space(&sp(space))?;
     let mut n = NewFact::agent(text, "agent:test");
     n.tags = vec![tag.into()];
@@ -109,8 +109,8 @@ fn a_space_s_own_settings_never_move_with_its_notes() -> Res {
 
 use std::time::{Duration, Instant};
 
-use memcp_core::Brain;
-use memcp_core::moves::{Limits, Step, fail_at};
+use pensine_core::Brain;
+use pensine_core::moves::{Limits, Step, fail_at};
 
 type Out<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -208,7 +208,7 @@ fn limits(limit: usize) -> Limits {
     }
 }
 
-fn move_all(b: &Brain, from: &str, to: &str, tag: &str) -> Out<memcp_core::Moved> {
+fn move_all(b: &Brain, from: &str, to: &str, tag: &str) -> Out<pensine_core::Moved> {
     Ok(b.move_by_tag_within(&sp(from), &sp(to), tag, "tester", false, &limits(5000))?)
 }
 

@@ -6,9 +6,9 @@ use std::error::Error;
 use std::fs;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::Brain;
-use memcp_core::access::{self, Rights};
-use memcp_core::tools::{self, ToolError};
+use pensine_core::Brain;
+use pensine_core::access::{self, Rights};
+use pensine_core::tools::{self, ToolError};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -326,7 +326,7 @@ fn expired_unknown_or_malformed_tokens_get_the_same_refusal() -> Res {
         false,
         false,
     )?;
-    let later = memcp_core::util::now() + 10 * 86_400;
+    let later = pensine_core::util::now() + 10 * 86_400;
     assert!(access::authenticate(&h.ctl, &t, later)?.is_none());
     assert!(access::authenticate(&h.ctl, "hcp_00000000_unknown", 0)?.is_none());
     assert!(access::authenticate(&h.ctl, "", 0)?.is_none());

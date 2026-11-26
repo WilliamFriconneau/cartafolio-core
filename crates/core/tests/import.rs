@@ -9,9 +9,9 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::facts::{self, RecallOptions};
-use memcp_core::import::{self, ImportOptions, ImportRules, chunk, date_from_name};
-use memcp_core::{Brain, Space};
+use pensine_core::facts::{self, RecallOptions};
+use pensine_core::import::{self, ImportOptions, ImportRules, chunk, date_from_name};
+use pensine_core::{Brain, Space};
 
 const RULES: &str = "
 # fictitious vault
@@ -78,7 +78,7 @@ fn put(e: &Env, rel: &str, content: &str) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
-fn import_with(e: &Env, opts: &ImportOptions) -> memcp_core::Result<import::Report> {
+fn import_with(e: &Env, opts: &ImportOptions) -> pensine_core::Result<import::Report> {
     import::import(&e.brain, &e.vault, &e.rules, opts)
 }
 

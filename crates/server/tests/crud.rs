@@ -7,12 +7,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::users;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::users;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -464,7 +464,7 @@ fn connections_rotate_and_are_deleted_once_revoked_and_people_are_removed_with_a
     let ctl = e.app.brain.open_control()?;
     assert!(
         access::authenticate(&ctl, &old, 0)?.is_none()
-            && access::authenticate(&ctl, &new, memcp_core::util::now())?.is_some()
+            && access::authenticate(&ctl, &new, pensine_core::util::now())?.is_some()
     );
     drop(ctl);
     // Delete: refused while active, previewed, then done.
@@ -598,7 +598,7 @@ fn a_retired_note_comes_back_and_keywords_vocabularies_and_libraries_are_edited(
     let space = Space::new(&s)?;
     {
         let mut conn = e.app.brain.open_space(&space)?;
-        memcp_core::vocabulary::import(
+        pensine_core::vocabulary::import(
             &mut conn,
             "signs",
             "test",

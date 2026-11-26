@@ -4,8 +4,8 @@
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use memcp_core::Brain;
-use memcp_core::text;
+use pensine_core::Brain;
+use pensine_core::text;
 use serde_json::json;
 
 use super::{Intake, Settings, watch};

@@ -5,13 +5,13 @@
 mod common;
 
 use common::{Res, Temp};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::lifecycle::{Children, Disposition};
-use memcp_core::swarm::{self, Answer, Offer};
-use memcp_core::sync;
-use memcp_core::text::Language;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space, triage, util};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::lifecycle::{Children, Disposition};
+use pensine_core::swarm::{self, Answer, Offer};
+use pensine_core::sync;
+use pensine_core::text::Language;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space, triage, util};
 
 type Boxed = Box<dyn std::error::Error>;
 
@@ -51,7 +51,7 @@ fn an_offered_space_is_made_with_its_label_and_parent_for_the_same_person() -> R
         let back = Offer::from_json(&o.to_json())?;
         assert_eq!(&back, o);
         let answer = swarm::accept(&a, OWNER, o)?;
-        if o.kind == memcp_core::catalogue::TRIAGE {
+        if o.kind == pensine_core::catalogue::TRIAGE {
             // A's own box answers for it: the two are paired, no second box is made.
             assert_eq!(
                 answer,
@@ -135,7 +135,7 @@ fn a_note_filed_on_two_nodes_before_they_meet_is_one_note() -> Res {
     swarm::accept(&b, OWNER, &offer)?;
     // B's box takes A's name here, to copy events plainly (the pass pairs boxes of different names).
     let shared = box_a.clone();
-    swarm::adopt(&b, OWNER, &shared, memcp_core::catalogue::TRIAGE, 0)?;
+    swarm::adopt(&b, OWNER, &shared, pensine_core::catalogue::TRIAGE, 0)?;
     let conn = a.open_space(&shared)?;
     let mut new = NewFact::agent("Water the tomatoes before the heat", "agent:dictation");
     new.tags = vec!["inbox".into()];
@@ -164,11 +164,11 @@ fn a_box_offered_by_a_peer_of_another_person_never_takes_a_space_of_this_one() -
     let t = Temp::new("swarm-other-box");
     let (a, own_box) = node(&t, "alma")?;
     let garage = a.add_custom_space(OWNER, "alma", "Garage", None)?;
-    let bob = memcp_core::users::create_user(&a.open_control()?, OWNER, "bob", "Bob", false)?;
+    let bob = pensine_core::users::create_user(&a.open_control()?, OWNER, "bob", "Bob", false)?;
     // A peer of Bob, who has no box here, offers « À trier » under the names of the owner's spaces.
     for name in [&garage, &own_box] {
         let offer = Offer::from_json(&serde_json::json!({
-            "space": name.as_str(), "kind": memcp_core::catalogue::TRIAGE,
+            "space": name.as_str(), "kind": pensine_core::catalogue::TRIAGE,
             "label": null, "parent": null, "position": 0, "since": 1,
         }))?;
         assert!(swarm::accept(&a, &bob.id, &offer).is_err(), "{name} taken");

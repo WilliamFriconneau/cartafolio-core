@@ -6,11 +6,11 @@ use std::fs;
 use std::path::Path;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::library;
-use memcp_core::tools;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space};
+use pensine_core::access::{self, Rights};
+use pensine_core::library;
+use pensine_core::tools;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space};
 use serde_json::{Value, json};
 
 fn write(root: &Path, rel: &str, body: &str) -> Res {

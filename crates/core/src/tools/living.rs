@@ -117,8 +117,8 @@ pub(crate) fn living(
         if !health_targets {
             return Some(slug);
         }
-        let folded = memcp_health::text::fold(&slug);
-        memcp_health::builtin()
+        let folded = pensine_health::text::fold(&slug);
+        pensine_health::builtin()
             .manifestations()
             .iter()
             .find(|m| {
@@ -126,7 +126,7 @@ pub(crate) fn living(
                     || folded == sign_slug(&m.tag)
                     || m.labels
                         .values()
-                        .any(|label| folded == sign_slug(&memcp_health::text::fold(label)))
+                        .any(|label| folded == sign_slug(&pensine_health::text::fold(label)))
             })
             .map(|m| m.id.clone())
             .or_else(|| {

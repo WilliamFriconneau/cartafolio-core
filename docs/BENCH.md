@@ -15,10 +15,10 @@ scripts/bench.sh --keep                  # keep the directory (stores and logs o
 
 Options: `--only swarm,load,security,crash`, `--notes N` (3000), `--writers N` (8), `--clients N` (32), `--secs N` (60),
 `--settle N` (300: how long the swarm may take to converge), `--keep`. The script builds the programs in release
-(`memcp`, `memcp-sync`, `memcp-bench`), honours `CARGO_TARGET_DIR`, and writes the table to `target/bench-summary.txt`
+(`memcp`, `memcp-sync`, `pensine-bench`), honours `CARGO_TARGET_DIR`, and writes the table to `target/bench-summary.txt`
 as well.
 
-The driver is `crates/bench` (`memcp-bench --bin DIR --work DIR ...`). It kills only the processes it started, by
+The driver is `crates/bench` (`pensine-bench --bin DIR --work DIR ...`). It kills only the processes it started, by
 their PID, and the sync loops the nodes started themselves (it puts a small wrapper in front of `memcp-sync` through
 `MEMCP_SYNC_BIN` that notes their PID); before it signals a PID it checks that the process names the bench's
 directory. The script removes only the directory it made with `mktemp`.

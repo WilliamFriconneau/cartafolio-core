@@ -6,7 +6,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use memcp_client::{BATCH, Client, Error, allowed_url};
+use pensine_client::{BATCH, Client, Error, allowed_url};
 use serde_json::{Value, json};
 
 struct Seen {
@@ -259,14 +259,14 @@ fn a_long_list_of_records_goes_in_batches_with_the_positions_of_the_whole_list()
 
 /// The real engine, with a key limited to `inbox` and one limited to an app's paths.
 fn engine(rights: &[(&str, &str)]) -> (String, Vec<String>, std::path::PathBuf) {
-    use memcp_core::access::{self, Rights};
-    use memcp_core::text::Language;
-    use memcp_core::{Brain, users};
-    use memcp_server::app::App;
-    use memcp_server::net::{Listeners, serve_on};
+    use pensine_core::access::{self, Rights};
+    use pensine_core::text::Language;
+    use pensine_core::{Brain, users};
+    use pensine_server::app::App;
+    use pensine_server::net::{Listeners, serve_on};
 
     let dir = std::env::temp_dir().join(format!(
-        "memcp-client-{}-{}",
+        "pensine-client-{}-{}",
         std::process::id(),
         rights.len()
     ));
@@ -432,12 +432,12 @@ fn a_recording_is_read_back_byte_for_byte() {
 
 #[test]
 fn a_device_pairs_with_a_code_and_its_key_works_once() {
-    use memcp_core::text::Language;
-    use memcp_core::{Brain, pairing, users};
-    use memcp_server::app::App;
-    use memcp_server::net::{Listeners, serve_on};
+    use pensine_core::text::Language;
+    use pensine_core::{Brain, pairing, users};
+    use pensine_server::app::App;
+    use pensine_server::net::{Listeners, serve_on};
 
-    let dir = std::env::temp_dir().join(format!("memcp-client-pair-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pensine-client-pair-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let brain = Brain::init(&dir, &[], Language::English).expect("init");
     let code = {
@@ -446,7 +446,7 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
             .expect("user")
             .id;
         brain.add_vault(&sam, "sam", "me").expect("vault");
-        pairing::create_for_peer(&brain, &sam, "sam", memcp_core::util::now())
+        pairing::create_for_peer(&brain, &sam, "sam", pensine_core::util::now())
             .expect("code")
             .0
     };
@@ -471,7 +471,7 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
         std::thread::sleep(Duration::from_millis(100));
     }
     let server = format!("http://127.0.0.1:{port}");
-    let p = memcp_client::pair(&server, &code.to_lowercase(), "Sam's laptop").expect("paired");
+    let p = pensine_client::pair(&server, &code.to_lowercase(), "Sam's laptop").expect("paired");
     // A peer: every space of the person, read and write.
     assert!(
         p.spaces.iter().any(|v| v.starts_with("sam-me")),
@@ -489,12 +489,12 @@ fn a_device_pairs_with_a_code_and_its_key_works_once() {
         .expect("write");
     // A peer writes like the person: nothing is forced into an inbox.
     assert!(r["fact"]["id"].is_string(), "{r}");
-    match memcp_client::pair(&server, &code, "again") {
+    match pensine_client::pair(&server, &code, "again") {
         Err(Error::Tool(m)) => assert!(m.contains("unknown, used or expired"), "{m}"),
         other => panic!("{other:?}"),
     }
     assert!(matches!(
-        memcp_client::pair("http://example.com", &code, "x"),
+        pensine_client::pair("http://example.com", &code, "x"),
         Err(Error::Tool(_))
     ));
     let _ = std::fs::remove_dir_all(dir);
@@ -534,7 +534,7 @@ fn an_error_never_names_the_memorys_address() {
         .expect_err("refused")
         .to_string();
     assert!(!refused.contains("example.com"), "{refused}");
-    let p = memcp_client::pair("http://example.com", "AAAA-AAAA", "x")
+    let p = pensine_client::pair("http://example.com", "AAAA-AAAA", "x")
         .expect_err("refused")
         .to_string();
     assert!(!p.contains("example.com"), "{p}");
@@ -556,7 +556,7 @@ fn a_program_may_take_an_address_in_clear_when_it_says_so() {
         "refused by default"
     );
     far.allow_clear = true;
-    far.retry = memcp_client::Retry {
+    far.retry = pensine_client::Retry {
         tries: 1,
         first: Duration::ZERO,
         longest: Duration::ZERO,
@@ -571,7 +571,7 @@ fn a_program_may_take_an_address_in_clear_when_it_says_so() {
 fn many_tries_never_overflow_the_wait() {
     // Nothing listens on port 1: every try fails at once, and the doubled wait passes what a duration holds.
     let mut c = Client::new("http://127.0.0.1:1/mcp/x", "hcp_fictional");
-    c.retry = memcp_client::Retry {
+    c.retry = pensine_client::Retry {
         tries: 90,
         first: Duration::from_millis(1),
         longest: Duration::from_millis(1),

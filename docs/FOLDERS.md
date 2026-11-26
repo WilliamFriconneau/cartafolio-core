@@ -128,6 +128,6 @@ While the node serves (and in the apps' embedded node), a background task makes 
 
 ## In the code
 
-`memcp_core::folders`: `set`, `get`, `all`, `info`, `sync_space`, `sync_all`, `cloud_of`, `cloud_warning`, `slug`, `short_id`, `hash_bytes`, `parse_note`, `render_note`, `Mode`, `Options`, `Report`. The background task is `memcp_server::folder_sync`. The tests are `crates/core/tests/folders.rs` (unit, round trip, conflict, deletion, read-only, loop, cloud, permissions, nothing in the sync log), `crates/server/tests/folder.rs` and `crud.rs` (command line, task, routes) and `crates/server/tests/page/folder.test.js` (the page).
+`pensine_core::folders`: `set`, `get`, `all`, `info`, `sync_space`, `sync_all`, `cloud_of`, `cloud_warning`, `slug`, `short_id`, `hash_bytes`, `parse_note`, `render_note`, `Mode`, `Options`, `Report`. The background task is `pensine_server::folder_sync`. The tests are `crates/core/tests/folders.rs` (unit, round trip, conflict, deletion, read-only, loop, cloud, permissions, nothing in the sync log), `crates/server/tests/folder.rs` and `crud.rs` (command line, task, routes) and `crates/server/tests/page/folder.test.js` (the page).
 
 See also [SPACES.md](SPACES.md) (living next to a synchronised drive) and [INTAKE.md](INTAKE.md) (a watched folder is a drop box; a folder of a space is kept in step).

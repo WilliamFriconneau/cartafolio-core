@@ -1,7 +1,7 @@
 //! The settings screens as data: the same everywhere, in three languages.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::ui::*;
+use pensine_spaces::ui::*;
 
 #[test]
 fn every_text_exists_in_french_english_and_spanish() {

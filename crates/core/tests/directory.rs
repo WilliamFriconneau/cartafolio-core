@@ -4,11 +4,11 @@
 mod common;
 
 use common::{Res, Temp};
-use memcp_core::access::{self, Rights};
-use memcp_core::directory::{self, Local};
-use memcp_core::text::Language;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, tools, util};
+use pensine_core::access::{self, Rights};
+use pensine_core::directory::{self, Local};
+use pensine_core::text::Language;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, tools, util};
 use serde_json::{Value, json};
 
 const NOW: i64 = 1_794_800_000;
@@ -55,7 +55,7 @@ fn a_node_writes_its_own_entry_with_its_name_and_the_program_version() -> Res {
     assert_eq!(directory::own_name(&b)?, "Pensine");
     assert!(directory::set_own_name(&b, "  ").is_err());
 
-    for name in ["Silice", "MemCP"] {
+    for name in ["Silice", "Pensine"] {
         directory::set_own_name(&b, name)?;
         directory::touch_self(&b, NOW)?;
         assert_eq!(directory::own_name(&b)?, name);

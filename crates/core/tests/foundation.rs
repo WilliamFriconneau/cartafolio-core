@@ -9,8 +9,8 @@ use std::fs;
 use std::os::unix::fs::PermissionsExt;
 
 use common::{Res, SPACES, Temp, brain, mode, sp, spaces};
-use memcp_core::text::Language;
-use memcp_core::{Brain, SPACE_SCHEMA_VERSION};
+use pensine_core::text::Language;
+use pensine_core::{Brain, SPACE_SCHEMA_VERSION};
 use rusqlite::Connection;
 
 #[cfg(unix)]

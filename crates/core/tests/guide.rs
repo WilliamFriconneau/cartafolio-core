@@ -6,12 +6,12 @@ mod common;
 use std::error::Error;
 
 use common::{Res, Temp, sp};
-use memcp_core::access::{self, INSTRUCTIONS, Rights};
-use memcp_core::guide;
-use memcp_core::text::Language;
-use memcp_core::tools;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Error as CoreError};
+use pensine_core::access::{self, INSTRUCTIONS, Rights};
+use pensine_core::guide;
+use pensine_core::text::Language;
+use pensine_core::tools;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Error as CoreError};
 use rusqlite::Connection;
 use serde_json::json;
 
@@ -34,7 +34,7 @@ fn world() -> Result<World, Box<dyn Error>> {
     brain.set_layout(
         &sam,
         &work,
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Sam’s work".into()),
             ..Default::default()
         },
@@ -443,7 +443,7 @@ fn a_recording_waiting_more_than_half_an_hour_is_warned_about_and_counted() -> R
     wav.extend_from_slice(&[0; 32]);
     let tags = vec!["inbox/audio".to_string()];
     let space = sp("sam-work");
-    memcp_core::files::put_tagged(&w.brain, &space, "device", "memo.wav", "kept", &wav, &tags)?;
+    pensine_core::files::put_tagged(&w.brain, &space, "device", "memo.wav", "kept", &wav, &tags)?;
     let seen = |w: &World| -> Result<serde_json::Value, Box<dyn Error>> {
         let s = tools::call(&w.brain, &c, "spaces", &json!({}))?;
         Ok(s["spaces"]

@@ -724,124 +724,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
-name = "memcp-bench"
-version = "20261122.7.4"
-dependencies = [
- "rusqlite",
- "serde_json",
- "ureq",
-]
-
-[[package]]
-name = "memcp-capture-ffi"
-version = "20261122.7.4"
-dependencies = [
- "base64 0.22.1",
- "memcp-client",
- "memcp-core",
- "memcp-server",
- "serde_json",
- "tiny_http",
- "uniffi",
-]
-
-[[package]]
-name = "memcp-client"
-version = "20261122.7.4"
-dependencies = [
- "base64 0.22.1",
- "memcp-core",
- "memcp-server",
- "serde_json",
- "tiny_http",
- "ureq",
-]
-
-[[package]]
-name = "memcp-core"
-version = "20261122.7.4"
-dependencies = [
- "base64 0.22.1",
- "getrandom 0.4.3",
- "memcp-health",
- "rusqlite",
- "rust-stemmers",
- "serde_json",
- "sha2",
- "subtle",
- "unicode-normalization",
-]
-
-[[package]]
-name = "memcp-finances"
-version = "20261122.7.4"
-dependencies = [
- "calamine",
- "memcp-core",
- "rusqlite",
- "serde_json",
-]
-
-[[package]]
-name = "memcp-health"
-version = "20261122.7.4"
-dependencies = [
- "serde",
- "serde_json",
- "unicode-normalization",
-]
-
-[[package]]
-name = "memcp-janitor"
-version = "20261122.7.4"
-dependencies = [
- "memcp-client",
- "memcp-core",
- "memcp-health",
- "memcp-server",
- "serde_json",
- "tiny_http",
- "ureq",
-]
-
-[[package]]
-name = "memcp-manager"
-version = "20261122.7.4"
-dependencies = [
- "base64 0.22.1",
- "memcp-core",
- "memcp-server",
- "rusqlite",
- "serde_json",
- "sha2",
-]
-
-[[package]]
-name = "memcp-server"
-version = "20261122.7.4"
-dependencies = [
- "base64 0.22.1",
- "mdns-sd",
- "memcp-core",
- "memcp-finances",
- "qrcode",
- "rusqlite",
- "serde_json",
- "sha2",
- "tiny_http",
- "ureq",
- "whisper-rs",
-]
-
-[[package]]
-name = "memcp-spaces"
-version = "20261122.7.4"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "minimal-lexical"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -892,6 +774,124 @@ name = "once_cell"
 version = "1.21.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f7c3e4beb33f85d45ae3e3a1792185706c8e16d043238c593331cc7cd313b50"
+
+[[package]]
+name = "pensine-bench"
+version = "20261122.7.4"
+dependencies = [
+ "rusqlite",
+ "serde_json",
+ "ureq",
+]
+
+[[package]]
+name = "pensine-capture-ffi"
+version = "20261122.7.4"
+dependencies = [
+ "base64 0.22.1",
+ "pensine-client",
+ "pensine-core",
+ "pensine-server",
+ "serde_json",
+ "tiny_http",
+ "uniffi",
+]
+
+[[package]]
+name = "pensine-client"
+version = "20261122.7.4"
+dependencies = [
+ "base64 0.22.1",
+ "pensine-core",
+ "pensine-server",
+ "serde_json",
+ "tiny_http",
+ "ureq",
+]
+
+[[package]]
+name = "pensine-core"
+version = "20261122.7.4"
+dependencies = [
+ "base64 0.22.1",
+ "getrandom 0.4.3",
+ "pensine-health",
+ "rusqlite",
+ "rust-stemmers",
+ "serde_json",
+ "sha2",
+ "subtle",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "pensine-finances"
+version = "20261122.7.4"
+dependencies = [
+ "calamine",
+ "pensine-core",
+ "rusqlite",
+ "serde_json",
+]
+
+[[package]]
+name = "pensine-health"
+version = "20261122.7.4"
+dependencies = [
+ "serde",
+ "serde_json",
+ "unicode-normalization",
+]
+
+[[package]]
+name = "pensine-janitor"
+version = "20261122.7.4"
+dependencies = [
+ "pensine-client",
+ "pensine-core",
+ "pensine-health",
+ "pensine-server",
+ "serde_json",
+ "tiny_http",
+ "ureq",
+]
+
+[[package]]
+name = "pensine-manager"
+version = "20261122.7.4"
+dependencies = [
+ "base64 0.22.1",
+ "pensine-core",
+ "pensine-server",
+ "rusqlite",
+ "serde_json",
+ "sha2",
+]
+
+[[package]]
+name = "pensine-server"
+version = "20261122.7.4"
+dependencies = [
+ "base64 0.22.1",
+ "mdns-sd",
+ "pensine-core",
+ "pensine-finances",
+ "qrcode",
+ "rusqlite",
+ "serde_json",
+ "sha2",
+ "tiny_http",
+ "ureq",
+ "whisper-rs",
+]
+
+[[package]]
+name = "pensine-spaces"
+version = "20261122.7.4"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "percent-encoding"

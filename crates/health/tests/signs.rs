@@ -6,7 +6,7 @@
 
 use std::collections::BTreeSet;
 
-use memcp_health::{Lang, builtin, detect};
+use pensine_health::{Lang, builtin, detect};
 
 fn found(text: &str) -> Vec<String> {
     builtin().suggest(text, Lang::Fr)
@@ -359,19 +359,19 @@ fn an_ordinary_shopping_need_is_not_an_urge_to_buy() {
 #[test]
 fn a_refused_sign_is_named_and_read_back() {
     assert_eq!(
-        memcp_health::refused_sign("signe/fatigue").as_deref(),
+        pensine_health::refused_sign("signe/fatigue").as_deref(),
         Some("signe-refuse/fatigue")
     );
     assert_eq!(
-        memcp_health::sign_of_refusal("signe-refuse/fatigue").as_deref(),
+        pensine_health::sign_of_refusal("signe-refuse/fatigue").as_deref(),
         Some("signe/fatigue")
     );
     // Only a sign is refused, and only a mark comes back: a measure or a plain tag does not.
-    assert!(memcp_health::refused_sign("mesure/poids").is_none());
-    assert!(memcp_health::sign_of_refusal("signe/fatigue").is_none());
+    assert!(pensine_health::refused_sign("mesure/poids").is_none());
+    assert!(pensine_health::sign_of_refusal("signe/fatigue").is_none());
     // A sign and its mark never collide.
     assert_ne!(
-        memcp_health::refused_sign("signe/fatigue"),
+        pensine_health::refused_sign("signe/fatigue"),
         Some("signe/fatigue".to_string())
     );
 }

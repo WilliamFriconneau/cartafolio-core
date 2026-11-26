@@ -1,7 +1,7 @@
 //! A note as a Markdown file.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 #[test]
 fn the_file_name_is_dated_and_made_of_the_first_words() {

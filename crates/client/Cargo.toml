@@ -1,7 +1,7 @@
 [package]
 publish = false
-name = "memcp-client"
-description = "memcp client: a connection's address, as a program sees it (MCP over HTTP, deposits by batch, files, retries)"
+name = "pensine-client"
+description = "pensine client: a connection's address, as a program sees it (MCP over HTTP, deposits by batch, files, retries)"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -15,18 +15,18 @@ ureq = { version = "3.5", default-features = false, features = ["rustls"] }
 base64 = "0.22"
 # The synchronisation between peers (memcp-sync) writes this node's memory: only with the `sync` feature, so that the
 # libraries embedding this client (capture-ffi in the apps) do not take the memory's SQLite with it.
-memcp-core = { path = "../core", optional = true }
+pensine-core = { path = "../core", optional = true }
 
 [features]
-sync = ["dep:memcp-core"]
+sync = ["dep:pensine-core"]
 
 [[bin]]
 name = "memcp-sync"
 required-features = ["sync"]
 
 [dev-dependencies]
-memcp-core = { path = "../core" }
-memcp-server = { path = "../server" }
+pensine-core = { path = "../core" }
+pensine-server = { path = "../server" }
 tiny_http = "0.12"
 
 [lints]

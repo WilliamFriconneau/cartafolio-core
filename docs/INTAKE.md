@@ -1,7 +1,7 @@
 # The intake
 
 What comes into a memory besides what an assistant writes: a voice note to read, a file dropped in a folder, a folder of notes
-kept up to date. It is **the node's own work**: `memcp serve` and `memcp-manager serve` do it themselves, in the same process,
+kept up to date. It is **the node's own work**: `memcp serve` and `pensine-manager serve` do it themselves, in the same process,
 as background tasks configured in `memcp.toml` (or the app's options). There is no other program to start, no timer to
 install, and no key to hand over: the node works on its own memory with the rights of the person it works for.
 
@@ -47,7 +47,7 @@ How it goes:
   `appel`, `appel/<app>`...). When the node transcribes it, **the note of the text inherits the same tags** (so `fields` returns
   `caller`, `callee`, `call_app`...), next to `inbox` and `dictee`. The janitor keeps them when it files the note, and the person
   tags lead where it goes: where earlier notes with the same person went (what the person taught through the learn store).
-  `memcp_core::call::people_names(brain, space?)` lists the names with the number of notes, for the hints of a speech model.
+  `pensine_core::call::people_names(brain, space?)` lists the names with the number of notes, for the hints of a speech model.
 - **A capture already in text is complete**: a recording received with a note that names it is not read again ("a note received
   means it is already done").
 - Silence, and a text that is only what the model makes up on silence, give nothing: that recording no longer waits. A recording
@@ -171,7 +171,7 @@ work on the data folder directly, so they run next to a node that serves.
 
 ## What a paired device can do
 
-A phone or a computer that joins a memory by a **code** (`POST <node>/pair {"code", "device"}`, or `memcp_client::pair`) gets a
+A phone or a computer that joins a memory by a **code** (`POST <node>/pair {"code", "device"}`, or `pensine_client::pair`) gets a
 connection of its own, limited to the person's **Inbox** (the one box for everything that comes in):
 `{agent, key, mcp_url, spaces}`, with the rights `<person>-a-trier/inbox:rw`. (An older node said `vaults` instead of `spaces`; both are
 read.) The key goes into the Keychain at once. A key made by hand for `<space>/inbox:rw` does the same for one space. A key limited to
@@ -196,7 +196,7 @@ An app (iPhone, iPad, Mac, Windows, Linux) embeds the node. It writes into it wi
 with the tags `inbox`, `inbox/dictee`, `inbox/resume`, and `file_put` with the tag `inbox/audio` for a sound that is not transcribed
 yet. The node reads it itself.
 
-The Swift interface (UniFFI 0.32, `crates/capture-ffi`, the crate `memcp-capture-ffi`; its names are frozen for the apps that already
+The Swift interface (UniFFI 0.32, `crates/capture-ffi`, the crate `pensine-capture-ffi`; its names are frozen for the apps that already
 link it) gives the app what only an app has:
 
 ```swift
@@ -227,9 +227,9 @@ open class NodeIntake {
 
 With `model` set and a `decoder`, the recordings are read inside the process: build with `local-whisper` (`metal` on a Mac, which the
 crate turns on for macOS). Without the feature the pass says that this build has no built-in speech model, and leaves the recording.
-`NodeIntake` is the Swift face of `memcp_server::intake`, which an app's own node library can call directly as well (the Rust names are
+`NodeIntake` is the Swift face of `pensine_server::intake`, which an app's own node library can call directly as well (the Rust names are
 in [CHANGELOG-API.md](CHANGELOG-API.md)). Nothing generated is committed; the Swift is made from the library:
-`cargo run -p memcp-capture-ffi --bin uniffi-bindgen -- generate --library target/<profile>/libmemcp_capture_ffi.dylib --language swift --out-dir <dir>`.
+`cargo run -p pensine-capture-ffi --bin uniffi-bindgen -- generate --library target/<profile>/libmemcp_capture_ffi.dylib --language swift --out-dir <dir>`.
 
 ## Trying it without touching a real memory
 

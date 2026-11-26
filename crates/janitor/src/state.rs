@@ -144,7 +144,8 @@ mod tests {
 
     #[test]
     fn failures_are_counted_and_survive_a_restart() {
-        let dir = std::env::temp_dir().join(format!("memcp-janitor-state-{}", std::process::id()));
+        let dir =
+            std::env::temp_dir().join(format!("pensine-janitor-state-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let mut s = State::open(&dir).expect("open");
         s.note_failed("n1");

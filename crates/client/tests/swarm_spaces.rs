@@ -6,16 +6,16 @@
 
 use std::sync::Arc;
 
-use memcp_client::peer_sync::Peer;
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::layout::Change;
-use memcp_core::lifecycle::{Children, Disposition};
-use memcp_core::text::Language;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space, triage, util};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::peer_sync::Peer;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::layout::Change;
+use pensine_core::lifecycle::{Children, Disposition};
+use pensine_core::text::Language;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space, triage, util};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 use serde_json::json;
 
 fn temp(name: &str) -> std::path::PathBuf {
@@ -95,7 +95,7 @@ fn connection(n: &Node, address_of_first: &str, machine: &str) -> (String, Strin
     (format!("{base}/mcp/{agent}"), key)
 }
 
-fn pass(peer: &Peer, n: &Node) -> memcp_client::peer_sync::Pass {
+fn pass(peer: &Peer, n: &Node) -> pensine_client::peer_sync::Pass {
     let p = peer.sync_once(&n.brain, util::now()).unwrap();
     assert!(p.problems.is_empty(), "{:?}", p.problems);
     p
@@ -375,7 +375,7 @@ fn a_window_replica_never_prunes_a_note_its_peer_refused() {
     let (addr, key) = serve(&a, "b");
     let b_to_a = Peer::new(&addr, &key, "peer-a");
     // B keeps 30 days. It holds two old notes: one A takes, one A refuses (an author longer than a peer accepts).
-    memcp_core::sync::set_window_days(&b.brain, Some(30)).unwrap();
+    pensine_core::sync::set_window_days(&b.brain, Some(30)).unwrap();
     let conn = b.brain.open_space(&b.triage).unwrap();
     let taken = note(&b, &b.triage, "The boiler was serviced in March");
     let long = "x".repeat(300);

@@ -7,9 +7,9 @@ mod common;
 use std::collections::{BTreeMap, BTreeSet};
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::tools;
-use memcp_core::users::OWNER;
+use pensine_core::access::{self, Rights};
+use pensine_core::tools;
+use pensine_core::users::OWNER;
 use serde_json::{Value, json};
 
 /// Every tool of the core, as seen by the union of an owner, a read-only key and a key that may

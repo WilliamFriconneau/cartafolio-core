@@ -1,7 +1,7 @@
 //! Ids, the logical clock and the spaces file: ready for peers.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 #[test]
 fn ids_are_uuid_v7_unique_and_sorted_by_time() {
@@ -33,7 +33,7 @@ fn the_clock_never_goes_back_and_sorts_as_text() {
 
 #[test]
 fn the_spaces_file_is_written_whole_and_read_back() {
-    let dir = std::env::temp_dir().join(format!("memcp-spaces-{}", new_id()));
+    let dir = std::env::temp_dir().join(format!("pensine-spaces-{}", new_id()));
     std::fs::create_dir_all(&dir).unwrap();
     let path = dir.join("spaces.json");
     let mut tree = load_spaces(&path, "Notes").unwrap();

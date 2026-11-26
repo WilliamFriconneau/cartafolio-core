@@ -3,14 +3,14 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact};
-use memcp_core::layout::Change;
-use memcp_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
-use memcp_core::rules;
-use memcp_core::users::{self, OWNER};
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact};
+use pensine_core::layout::Change;
+use pensine_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
+use pensine_core::rules;
+use pensine_core::users::{self, OWNER};
 
-fn note(b: &memcp_core::Brain, space: &str, text: &str, tags: &[&str]) -> Res {
+fn note(b: &pensine_core::Brain, space: &str, text: &str, tags: &[&str]) -> Res {
     let conn = b.open_space(&sp(space))?;
     let mut n = NewFact::agent(text, "tester");
     n.tags = tags.iter().map(|t| t.to_string()).collect();
@@ -18,7 +18,7 @@ fn note(b: &memcp_core::Brain, space: &str, text: &str, tags: &[&str]) -> Res {
     Ok(())
 }
 
-fn active(b: &memcp_core::Brain, space: &str) -> Result<i64, Box<dyn std::error::Error>> {
+fn active(b: &pensine_core::Brain, space: &str) -> Result<i64, Box<dyn std::error::Error>> {
     Ok(b.open_space(&sp(space))?.query_row(
         "SELECT count(*) FROM facts WHERE status = 'active'",
         [],
@@ -101,7 +101,7 @@ fn deleting_into_another_space_moves_everything_and_keeps_the_original_aside() -
     note(&b, "work", "Call the client about the quote", &["clients"])?;
     note(&b, "work", "Invoice sent on Monday", &[])?;
     note(&b, "home", "Buy light bulbs", &[])?;
-    memcp_core::files::put_tagged(
+    pensine_core::files::put_tagged(
         &b,
         &sp("work"),
         "owner",
@@ -183,7 +183,7 @@ fn deleting_into_another_space_moves_everything_and_keeps_the_original_aside() -
     )?;
     assert_eq!(tagged, 1, "tags travel with the notes");
     assert_eq!(
-        memcp_core::files::list(&b, &sp("home"), None, 10)?.len(),
+        pensine_core::files::list(&b, &sp("home"), None, 10)?.len(),
         1,
         "the file moved"
     );
@@ -223,7 +223,7 @@ fn an_archive_is_a_full_export_and_the_space_comes_back_with_restore() -> Res {
     let t = Temp::new("life");
     let b = brain(&t)?;
     note(&b, "health", "Slept well", &["sleep"])?;
-    memcp_core::files::put_tagged(&b, &sp("health"), "owner", "scan.txt", "", b"data", &[])?;
+    pensine_core::files::put_tagged(&b, &sp("health"), "owner", "scan.txt", "", b"data", &[])?;
     b.set_layout(
         OWNER,
         &sp("health"),
@@ -263,7 +263,7 @@ fn an_archive_is_a_full_export_and_the_space_comes_back_with_restore() -> Res {
         .next()
         .ok_or("export")??
         .path();
-    memcp_core::export::verify_export(&export)?;
+    pensine_core::export::verify_export(&export)?;
     // Another space cannot take the name while restoring is pending, and a stranger cannot restore.
     assert!(
         b.restore_space("someone-else", &list[0].name, false)
@@ -274,7 +274,7 @@ fn an_archive_is_a_full_export_and_the_space_comes_back_with_restore() -> Res {
     assert_eq!(active(&b, "health")?, 2, "the note and the file note");
     let info = b.space_info(OWNER, &back)?;
     assert_eq!(info.label, "My health");
-    assert_eq!(memcp_core::files::list(&b, &back, None, 10)?.len(), 1);
+    assert_eq!(pensine_core::files::list(&b, &back, None, 10)?.len(), 1);
     assert!(b.archived_spaces(OWNER)?.is_empty());
     let ctl = b.open_control()?;
     let g: i64 = ctl.query_row(
@@ -301,7 +301,7 @@ fn a_connection_limited_to_paths_comes_back_limited_after_a_restore() -> Res {
         false,
         false,
     )?;
-    let before = access::authenticate(&ctl, &token, memcp_core::util::now())?.ok_or("caller")?;
+    let before = access::authenticate(&ctl, &token, pensine_core::util::now())?.ok_or("caller")?;
     assert!(
         before.read_paths(&sp("health")).is_some(),
         "limited to paths"
@@ -318,7 +318,7 @@ fn a_connection_limited_to_paths_comes_back_limited_after_a_restore() -> Res {
     let list = b.archived_spaces(OWNER)?;
     b.restore_space(OWNER, &list[0].name, false)?;
     let ctl = b.open_control()?;
-    let after = access::authenticate(&ctl, &token, memcp_core::util::now())?.ok_or("caller")?;
+    let after = access::authenticate(&ctl, &token, pensine_core::util::now())?.ok_or("caller")?;
     assert_eq!(
         after.read_paths(&sp("health")),
         before.read_paths(&sp("health")),
@@ -413,7 +413,7 @@ fn children_go_to_the_grandparent_by_default_and_one_cannot_delete_what_is_not_t
     let moved = l.iter().find(|p| p.space == leaf).ok_or("leaf")?;
     assert_eq!(moved.parent, Some(sp("work")), "up to the grandparent");
     // Inbox is never deleted.
-    let tri = memcp_core::triage::ensure(&b, OWNER, "owner")?;
+    let tri = pensine_core::triage::ensure(&b, OWNER, "owner")?;
     assert!(
         b.delete_space(OWNER, &tri, &Disposition::Archive, &Children::Top, true, 5)
             .is_err()

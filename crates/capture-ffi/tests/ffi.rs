@@ -1,5 +1,5 @@
-//! The Swift interface as Swift will call it (the same functions, from Rust). The logic is tested in `memcp-server` (the
-//! node's `intake`) and `memcp-client` (joining by code); here, what the shell itself does: the names, the conversions,
+//! The Swift interface as Swift will call it (the same functions, from Rust). The logic is tested in `pensine-server` (the
+//! node's `intake`) and `pensine-client` (joining by code); here, what the shell itself does: the names, the conversions,
 //! the errors, and the node's intake end to end through the interface.
 
 // A setup that fails is a test that fails: `expect` says where.
@@ -9,13 +9,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use memcp_capture_ffi::node::{NodeIntake, NodeIntakeSettings, NodeWatchedFolder};
-use memcp_capture_ffi::{
+use pensine_capture_ffi::node::{NodeIntake, NodeIntakeSettings, NodeWatchedFolder};
+use pensine_capture_ffi::{
     PairError, address_allowed, browser_extension_id, pair, should_transcribe,
     summary_instructions, summary_join_prompt, summary_prompts,
 };
-use memcp_core::text::Language;
-use memcp_core::{Brain, users};
+use pensine_core::text::Language;
+use pensine_core::{Brain, users};
 use serde_json::json;
 
 fn dir(tag: &str) -> PathBuf {
@@ -141,7 +141,7 @@ fn node(tag: &str) -> (PathBuf, PathBuf) {
 fn note_texts(data: &std::path::Path, space: &str) -> Vec<String> {
     let brain = Brain::open(data).expect("open");
     let conn = brain
-        .open_space(&memcp_core::Space::new(space).expect("space"))
+        .open_space(&pensine_core::Space::new(space).expect("space"))
         .expect("space");
     let mut st = conn
         .prepare("SELECT text FROM facts WHERE status = 'active'")
@@ -192,13 +192,13 @@ fn the_node_intake_watches_a_folder_and_reads_a_recording_by_a_speech_service() 
     {
         let brain = Brain::open(&data).expect("open");
         let ctl = brain.open_control().expect("control");
-        let caller = memcp_core::access::authenticate(
+        let caller = pensine_core::access::authenticate(
             &ctl,
-            &memcp_core::access::connect_for(
+            &pensine_core::access::connect_for(
                 &ctl,
                 &users::resolve(&ctl, "sam").expect("sam").id,
                 "mac-app",
-                &memcp_core::access::Rights::parse("sam-me:rw").expect("rights"),
+                &pensine_core::access::Rights::parse("sam-me:rw").expect("rights"),
                 None,
                 false,
                 false,
@@ -211,7 +211,7 @@ fn the_node_intake_watches_a_folder_and_reads_a_recording_by_a_speech_service() 
         let mut wav = b"RIFF\0\0\0\0WAVE".to_vec();
         wav.extend_from_slice(b"a voice");
         use base64::Engine as _;
-        memcp_core::tools::call(
+        pensine_core::tools::call(
             &brain,
             &caller,
             "file_put",
@@ -261,18 +261,18 @@ fn a_decoder_with_no_built_in_speech_model_is_said_not_silently_ignored() {
     // Without `local-whisper` (the Linux build) a model on the machine needs `whisper-cli`; the app's decoder only serves
     // the model inside the program, which this build does not have: the recording is left, the problem is told.
     struct Never;
-    impl memcp_capture_ffi::node::NodeAudioDecoder for Never {
+    impl pensine_capture_ffi::node::NodeAudioDecoder for Never {
         fn decode(
             &self,
             _path: String,
-        ) -> Result<Vec<f32>, memcp_capture_ffi::node::NodeIntakeError> {
+        ) -> Result<Vec<f32>, pensine_capture_ffi::node::NodeIntakeError> {
             Ok(vec![0.0; 16_000])
         }
     }
     let (root, data) = node("decoder");
     let mut s = settings();
     s.model = Some("/models/ggml-small.bin".into());
-    let decoder: Arc<dyn memcp_capture_ffi::node::NodeAudioDecoder> = Arc::new(Never);
+    let decoder: Arc<dyn pensine_capture_ffi::node::NodeAudioDecoder> = Arc::new(Never);
     let intake =
         NodeIntake::new(data.to_string_lossy().into_owned(), s, Some(decoder)).expect("intake");
     let report = intake.transcribe_now().expect("a pass");

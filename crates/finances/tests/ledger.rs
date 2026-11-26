@@ -5,11 +5,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::text::Language;
-use memcp_core::tools::ToolError;
-use memcp_core::{Brain, Space, files};
-use memcp_finances::Ledger;
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::text::Language;
+use pensine_core::tools::ToolError;
+use pensine_core::{Brain, Space, files};
+use pensine_finances::Ledger;
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -39,7 +39,7 @@ impl Drop for Env {
 
 fn env() -> Result<Env, Box<dyn Error>> {
     let n = N.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("memcp-finances-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pensine-finances-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     let brain = Brain::init(&dir, &[sp("finances"), sp("home")], Language::English)?;
     Ok(Env { dir, brain })

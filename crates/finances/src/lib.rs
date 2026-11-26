@@ -1,4 +1,4 @@
-//! memcp-finances: a person's bank statements in a memory space.
+//! pensine-finances: a person's bank statements in a memory space.
 //!
 //! The person exports their accounts from the bank (an `.xlsx` workbook: a summary
 //! sheet named "Vos comptes" and one sheet per account, "Cpt `<number>`" or
@@ -16,10 +16,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::io::Cursor;
 
 use calamine::{Data, Reader, Xlsx, open_workbook_from_rs};
-use memcp_core::access::Caller;
-use memcp_core::tools::{ToolDef, ToolError};
-use memcp_core::util::{self, civil};
-use memcp_core::{Brain, Space, files};
+use pensine_core::access::Caller;
+use pensine_core::tools::{ToolDef, ToolError};
+use pensine_core::util::{self, civil};
+use pensine_core::{Brain, Space, files};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 
@@ -1114,8 +1114,8 @@ fn page(
         })
         .flatten();
     json!({
-        "contract": memcp_core::view::CONTRACT,
-        "contract_version": memcp_core::view::CONTRACT_VERSION,
+        "contract": pensine_core::view::CONTRACT,
+        "contract_version": pensine_core::view::CONTRACT_VERSION,
         "space": ledger.space.as_str(),
         "kind": "money",
         "view": "register",
@@ -1123,7 +1123,7 @@ fn page(
         "items": items,
         "page": { "limit": limit, "has_more": more, "next_cursor": next },
         "provenance": { "kind": "statement", "source": "bank export" },
-        "notice": memcp_core::tools::NOTICE,
+        "notice": pensine_core::tools::NOTICE,
     })
 }
 

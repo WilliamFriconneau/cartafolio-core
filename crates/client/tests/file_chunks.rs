@@ -8,17 +8,17 @@
 use std::io::{Seek, SeekFrom, Write};
 use std::sync::Arc;
 
-use memcp_client::peer_sync::{Pass, Peer};
-use memcp_core::access::{self, Rights};
-use memcp_core::chunks::{self, CHUNK_BYTES};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::files::{self, FileInfo};
-use memcp_core::policy::{self, Policy};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Space, util};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::peer_sync::{Pass, Peer};
+use pensine_core::access::{self, Rights};
+use pensine_core::chunks::{self, CHUNK_BYTES};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::files::{self, FileInfo};
+use pensine_core::policy::{self, Policy};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Space, util};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 use serde_json::Value;
 
 fn temp(name: &str) -> std::path::PathBuf {

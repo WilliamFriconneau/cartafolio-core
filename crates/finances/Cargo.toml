@@ -1,6 +1,6 @@
 [package]
 publish = false
-name = "memcp-finances"
+name = "pensine-finances"
 description = "A person's bank statements in a memory space: import, balances, movements, monthly statement"
 version.workspace = true
 edition.workspace = true
@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 calamine = { version = "0.38.0", default-features = false }
-memcp-core = { path = "../core" }
+pensine-core = { path = "../core" }
 rusqlite = { version = "0.41", features = ["bundled"] }
 serde_json = "1.0.154"
 

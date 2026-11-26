@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Caller, Rights};
-use memcp_core::tools;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, util};
+use pensine_core::access::{self, Caller, Rights};
+use pensine_core::tools;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, util};
 use serde_json::{Value, json};
 
 fn caller(b: &Brain, name: &str, rights: &str) -> Result<Caller, Box<dyn std::error::Error>> {
@@ -41,7 +41,7 @@ fn teams() -> Value {
 fn the_people_of_a_note_are_a_strong_hint_for_where_it_goes() -> Res {
     let t = Temp::new("call-route");
     let b = brain(&t)?;
-    let (_, box_name) = memcp_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
+    let (_, box_name) = pensine_core::pairing::create_for_peer(&b, OWNER, "owner", util::now())?;
     let box_ = sp(&box_name);
     let device = caller(&b, "peer-phone-x", &format!("{box_name}:rw"))?;
     let c = caller(&b, "person-page", "all")?;
@@ -64,12 +64,12 @@ fn the_people_of_a_note_are_a_strong_hint_for_where_it_goes() -> Res {
     )?;
     assert_eq!(p["route"], json!([]), "{p}");
     // The janitor sends: not learned.
-    memcp_core::triage::send(
+    pensine_core::triage::send(
         &b,
         &box_,
         &drop("First words", with_bob.clone())?,
         &sp("home"),
-        "memcp-janitor",
+        "pensine-janitor",
         "owner",
     )?;
     let p = tools::call(
@@ -80,7 +80,7 @@ fn the_people_of_a_note_are_a_strong_hint_for_where_it_goes() -> Res {
     )?;
     assert_eq!(p["route"], json!([]), "{p}");
     // The person sends one note about Bob to work: one is enough, whatever the words.
-    memcp_core::triage::send(
+    pensine_core::triage::send(
         &b,
         &box_,
         &drop("Budget call", with_bob.clone())?,

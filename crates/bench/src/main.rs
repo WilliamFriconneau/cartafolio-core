@@ -1,4 +1,4 @@
-//! `memcp-bench --bin DIR --work DIR [--only swarm,load,security,crash] [--notes N] [--writers N] [--clients N]
+//! `pensine-bench --bin DIR --work DIR [--only swarm,load,security,crash] [--notes N] [--writers N] [--clients N]
 //! [--secs N] [--settle N] [--summary FILE]`: real nodes, started from the programs in `--bin`, in `--work` (a
 //! directory of the bench's own, on loopback ports), driven from outside like a person and their devices drive them.
 //! Prints a summary table; exit 1 when a check does not hold. `scripts/bench.sh` builds the programs and runs it.
@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use node::{Env, Row, row};
 
-const USAGE: &str = "usage: memcp-bench --bin DIR --work DIR [--only swarm,load,security,crash] [--notes 3000] [--writers 8] [--clients 32] [--secs 60] [--settle 300] [--summary FILE]";
+const USAGE: &str = "usage: pensine-bench --bin DIR --work DIR [--only swarm,load,security,crash] [--notes 3000] [--writers 8] [--clients 32] [--secs 60] [--settle 300] [--summary FILE]";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -38,7 +38,7 @@ fn main() -> ExitCode {
         work: PathBuf::from(work),
     };
     if std::fs::create_dir_all(&env.work).is_err() {
-        eprintln!("memcp-bench: cannot use {}", env.work.display());
+        eprintln!("pensine-bench: cannot use {}", env.work.display());
         return ExitCode::from(2);
     }
     let only = value("--only").unwrap_or_else(|| "swarm,load,security,crash".into());

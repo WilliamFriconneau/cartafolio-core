@@ -7,13 +7,13 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use common::{Res, Temp, brain, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::folders::{self, Mode, Options, Report};
-use memcp_core::library;
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space, files, util};
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::folders::{self, Mode, Options, Report};
+use pensine_core::library;
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space, files, util};
 use serde_json::json;
 
 const NOW: Options = Options { settle_secs: 0 };

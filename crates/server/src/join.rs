@@ -7,8 +7,8 @@
 
 use std::collections::HashMap;
 
-use memcp_core::users::User;
-use memcp_core::{pairing, util};
+use pensine_core::users::User;
+use pensine_core::{pairing, util};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -24,7 +24,7 @@ const TTL_VAR: &str = "MEMCP_JOIN_TTL";
 pub fn ttl() -> i64 {
     static T: std::sync::OnceLock<i64> = std::sync::OnceLock::new();
     *T.get_or_init(|| {
-        memcp_core::env::var(TTL_VAR)
+        pensine_core::env::var(TTL_VAR)
             .ok()
             .and_then(|v| v.parse::<i64>().ok())
             .map_or(TTL, |v| v.clamp(2, 3600))
@@ -103,7 +103,7 @@ pub fn request(app: &App, req: &Request) -> Response {
     let node_id = body
         .get("node_id")
         .and_then(Value::as_str)
-        .and_then(memcp_core::directory::valid_id);
+        .and_then(pensine_core::directory::valid_id);
     // A ticket made by a peer of the same person: the device joins at once, once, with a key of its own.
     let ticket_owner = match body.get("ticket").and_then(Value::as_str) {
         Some(t) => {
@@ -146,7 +146,7 @@ pub fn request(app: &App, req: &Request) -> Response {
         && let Ok((code, _)) = pairing::create_for_peer(&app.brain, &user_id, &user_name, now)
         && let Ok(paired) = pairing::redeem(&ctl, &code, &device, now)
     {
-        memcp_core::access::auth_event(&ctl, Some(&paired.agent), None, "joined", &device);
+        pensine_core::access::auth_event(&ctl, Some(&paired.agent), None, "joined", &device);
         state = State::Approved(json!({
             "agent": paired.agent,
             "key": paired.token,
@@ -230,7 +230,7 @@ pub fn pending_here(app: &App) -> Vec<Value> {
 /// check phrase (`node` names the node that was asked, for the second kind).
 pub fn pending(app: &App, _me: &User) -> Response {
     let mut list = pending_here(app);
-    list.extend(memcp_core::directory::remote_joins(&app.brain, util::now()).unwrap_or_default());
+    list.extend(pensine_core::directory::remote_joins(&app.brain, util::now()).unwrap_or_default());
     Response::json(200, &json!({ "requests": list }))
 }
 
@@ -255,7 +255,7 @@ pub fn decide(
             .unwrap_or(TICKET_TTL / 60)
             .clamp(1, TICKET_TTL / 60);
         let ticket = make_ticket_for(app, &me.id, &me.name, now, minutes * 60)?;
-        let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+        let link = pensine_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
             .map(|l| l.to_link())
             .ok();
         return Ok(json!({
@@ -280,7 +280,7 @@ pub fn decide(
         } else {
             "approved"
         };
-        return match memcp_core::directory::answer_remote_join(&app.brain, id, result, now) {
+        return match pensine_core::directory::answer_remote_join(&app.brain, id, result, now) {
             Ok(Some(node)) => Ok(json!({ "result": result, "via": node, "queued": true })),
             _ => Err(refused(404, "this request is gone")),
         };
@@ -296,7 +296,7 @@ pub fn decide(
         .map_err(|e| refused(400, &e.to_string()))?;
     let paired =
         pairing::redeem(ctl, &code, &j.device, now).map_err(|e| refused(400, &e.to_string()))?;
-    memcp_core::access::auth_event(ctl, Some(&paired.agent), None, "joined", &j.device);
+    pensine_core::access::auth_event(ctl, Some(&paired.agent), None, "joined", &j.device);
     j.state = State::Approved(json!({
         "agent": paired.agent,
         "key": paired.token,
@@ -349,7 +349,7 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
         return refused(500, "storage failed");
     };
     let Some(caller) = crate::http::bearer_of(req.header("authorization")).and_then(|t| {
-        memcp_core::access::authenticate(&ctl, &t, now)
+        pensine_core::access::authenticate(&ctl, &t, now)
             .ok()
             .flatten()
     }) else {
@@ -365,7 +365,7 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
     if !app.rate_ok(now, &format!("invite:{}", caller.id), 6) {
         return refused(429, "too many invitations, wait a minute").with("Retry-After", "60");
     }
-    let name = memcp_core::users::user(&ctl, &caller.user_id)
+    let name = pensine_core::users::user(&ctl, &caller.user_id)
         .ok()
         .flatten()
         .map(|u| u.name)
@@ -374,8 +374,8 @@ pub fn invite(app: &App, req: &Request, now: i64, agent: &str) -> Response {
         Ok(t) => t,
         Err(r) => return r,
     };
-    memcp_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
-    let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+    pensine_core::access::auth_event(&ctl, Some(&caller.agent), None, "join_invite", "");
+    let link = pensine_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
         .map(|l| l.to_link())
         .ok();
     Response::json(
@@ -439,7 +439,7 @@ pub fn by_peer(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Res
         return refused(500, "storage failed");
     };
     let Some(caller) = crate::http::bearer_of(req.header("authorization")).and_then(|t| {
-        memcp_core::access::authenticate(&ctl, &t, now)
+        pensine_core::access::authenticate(&ctl, &t, now)
             .ok()
             .flatten()
     }) else {
@@ -452,7 +452,7 @@ pub fn by_peer(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Res
     if !caller.is_peer() {
         return refused(403, "only a peer of the person may answer a device");
     }
-    let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id) else {
+    let Ok(Some(me)) = pensine_core::users::user(&ctl, &caller.user_id) else {
         return refused(403, "no person behind this key");
     };
     match (req.method.as_str(), op) {

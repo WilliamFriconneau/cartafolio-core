@@ -7,7 +7,7 @@
 //!   proposals of a space are put down as files in a folder.
 //!
 //! All of it is configured in `memcp.toml` (or the app's options) and runs as background tasks of `memcp serve` and
-//! `memcp-manager serve`: there is no other program and no timer. The same passes are the commands `memcp transcribe`,
+//! `pensine-manager serve`: there is no other program and no timer. The same passes are the commands `memcp transcribe`,
 //! `memcp watch` and `memcp intake ...`, for a machine that wants one pass now. The node works on its own memory in
 //! the same process, with the rights of the person it works for: no key, no address.
 
@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
-use memcp_core::Brain;
+use pensine_core::Brain;
 
 pub use memory::{AUTHOR, Failure, Memory};
 pub use settings::{Settings, Watched, home_path};

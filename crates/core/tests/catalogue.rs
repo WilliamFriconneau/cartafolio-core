@@ -7,11 +7,11 @@ use std::error::Error;
 use std::fs;
 
 use common::{Res, Temp, sp};
-use memcp_core::access::{self, Rights};
-use memcp_core::catalogue::{self, CUSTOM, Feature};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER};
-use memcp_core::{Brain, Error as CoreError};
+use pensine_core::access::{self, Rights};
+use pensine_core::catalogue::{self, CUSTOM, Feature};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER};
+use pensine_core::{Brain, Error as CoreError};
 
 fn brain(name: &str) -> Result<(Temp, Brain), Box<dyn Error>> {
     let t = Temp::new(name);
@@ -128,7 +128,7 @@ fn the_vault_of_a_kind_is_the_one_the_caller_owns() -> Res {
     b.set_layout(
         &sam.id,
         &sam_health,
-        &memcp_core::layout::Change {
+        &pensine_core::layout::Change {
             label: Some("Sam’s health".into()),
             ..Default::default()
         },

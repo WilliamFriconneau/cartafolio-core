@@ -3,15 +3,15 @@
 //! become notes and files. The app writes into its node (MCP, in the same process) and does not transcribe anything
 //! itself: it only gives the node what only the app has, a way to decode a recording ([`NodeAudioDecoder`]: AVFoundation).
 //!
-//! All the logic is `memcp_server::intake`; this is the shell Swift calls.
+//! All the logic is `pensine_server::intake`; this is the shell Swift calls.
 
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use memcp_core::Brain;
-use memcp_core::text;
-use memcp_server::intake::whisper::{Decoder, VoiceSettings};
-use memcp_server::intake::{self, Intake, Running, Settings, Watched};
+use pensine_core::Brain;
+use pensine_core::text;
+use pensine_server::intake::whisper::{Decoder, VoiceSettings};
+use pensine_server::intake::{self, Intake, Running, Settings, Watched};
 
 /// An error the app can show as it is; `message` is in plain words.
 #[derive(Debug, uniffi::Error)]
@@ -212,7 +212,7 @@ pub struct NodeIntake {
     settings: Settings,
     by_hand: Mutex<Intake>,
     running: Mutex<Option<Running>>,
-    folders: Mutex<Option<memcp_server::folder_sync::FolderTask>>,
+    folders: Mutex<Option<pensine_server::folder_sync::FolderTask>>,
 }
 
 #[uniffi::export]
@@ -253,7 +253,7 @@ impl NodeIntake {
         // The folders of the spaces on this node (see docs/FOLDERS.md): kept in step with the memory.
         let mut folders = self.folders.lock().map_err(failed)?;
         if folders.is_none() {
-            *folders = memcp_server::folder_sync::start(&self.brain);
+            *folders = pensine_server::folder_sync::start(&self.brain);
         }
         Ok(())
     }

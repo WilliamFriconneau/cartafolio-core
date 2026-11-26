@@ -9,8 +9,8 @@
 
 use std::io::{BufRead, Write};
 
-use memcp_core::access;
-use memcp_core::util;
+use pensine_core::access;
+use pensine_core::util;
 use serde_json::{Value, json};
 
 use crate::app::{App, rpc_err};

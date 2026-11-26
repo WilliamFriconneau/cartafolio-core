@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 
 use crate::cli::{self, Failure};
 use crate::config;
-use memcp_core::text::Language;
+use pensine_core::text::Language;
 
 pub const USAGE: &str = "usage: memcp --data DIR <command>
 
@@ -139,7 +139,7 @@ The directory may come from MEMCP_DATA. The default public address comes from ME
 
 /// The command name printed by the CLI.
 pub fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp", "silice", "pensine")
+    pensine_core::invoked_as("memcp", "silice", "pensine")
 }
 
 /// Help for the current command name.
@@ -303,7 +303,7 @@ pub fn dispatch(
     let need = |name: &str| flag(name).ok_or_else(|| (2, format!("missing {name}\n\n{}", usage())));
     let public = flag("--public-url")
         .map(String::from)
-        .or_else(|| memcp_core::env::var("MEMCP_PUBLIC_URL").ok())
+        .or_else(|| pensine_core::env::var("MEMCP_PUBLIC_URL").ok())
         .unwrap_or_else(|| "http://127.0.0.1:8791".into());
     let rights = || cli::rights(sw("--all"), flag("--grant"));
 
@@ -353,9 +353,9 @@ pub fn dispatch(
                 Some(Path::new(arg(3, "the folder (or --default)")?))
             },
             if sw("--read") {
-                memcp_core::folders::Mode::Read
+                pensine_core::folders::Mode::Read
             } else {
-                memcp_core::folders::Mode::ReadWrite
+                pensine_core::folders::Mode::ReadWrite
             },
         ),
         ("folder", Some("get")) => cli::folder_get(&data, a.pos.get(2).map(String::as_str)),
@@ -400,10 +400,10 @@ pub fn dispatch(
             sw("--yes"),
         ),
         ("professions", None) => {
-            for p in memcp_core::profession::pending(&data) {
+            for p in pensine_core::profession::pending(&data) {
                 println!("proposed  {}/{}  {}", p["kind"].as_str().unwrap_or(""), p["id"].as_str().unwrap_or(""), p["title"].as_str().unwrap_or(""));
             }
-            let file = data.join(memcp_core::profession::FILE);
+            let file = data.join(pensine_core::profession::FILE);
             println!(
                 "the person's own profiles are in {} ({})",
                 file.display(),
@@ -416,7 +416,7 @@ pub fn dispatch(
             let (kind, id) = what
                 .split_once('/')
                 .ok_or_else(|| cli::bad("KIND/ID, for example hobbies/gamemaster"))?;
-            let done = memcp_core::profession::decide(&data, kind, id, verb == "accept").map_err(|e| (1, e))?;
+            let done = pensine_core::profession::decide(&data, kind, id, verb == "accept").map_err(|e| (1, e))?;
             if done {
                 println!("{} {what}", if verb == "accept" { "accepted" } else { "dropped" });
                 Ok(())

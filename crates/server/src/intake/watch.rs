@@ -26,10 +26,10 @@ use super::{Error, Memory};
 pub const SETTLE_SECS: i64 = 3;
 /// The most a note of this kind holds (the memory takes 4000 characters).
 const NOTE_MAX: usize = 3500;
-/// The biggest file taken: the biggest a space keeps (see `memcp_core::files::MAX_BYTES`). A file over
-/// `memcp_core::files::MAX_INLINE` is kept from its path, a block at a time; a text that big is not made into notes.
-const FILE_MAX: u64 = memcp_core::files::MAX_BYTES as u64;
-const INLINE_MAX: u64 = memcp_core::files::MAX_INLINE as u64;
+/// The biggest file taken: the biggest a space keeps (see `pensine_core::files::MAX_BYTES`). A file over
+/// `pensine_core::files::MAX_INLINE` is kept from its path, a block at a time; a text that big is not made into notes.
+const FILE_MAX: u64 = pensine_core::files::MAX_BYTES as u64;
+const INLINE_MAX: u64 = pensine_core::files::MAX_INLINE as u64;
 /// Tries before a file the memory refuses is left alone.
 const MAX_FAILS: u64 = 3;
 /// How deep the folder is read.

@@ -1,6 +1,6 @@
 #![cfg(all(feature = "sync", target_os = "linux"))]
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
-//! End to end with REAL PROCESSES: the programs `memcp`, `memcp-manager` and `memcp-sync` are started
+//! End to end with REAL PROCESSES: the programs `memcp`, `pensine-manager` and `memcp-sync` are started
 //! on ephemeral loopback ports, in temporary directories, and driven the way a person and their devices drive them
 //! (the command line, the admin API with a console token, the MCP address, the join of a new node). Nothing of the node
 //! is replaced by a mock; the tests read the stores of the nodes directly only to check what the processes did.
@@ -16,8 +16,8 @@ use std::process::{Child, Command, Output, Stdio};
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
-use memcp_client::Client;
-use memcp_core::{Brain, Space};
+use pensine_client::Client;
+use pensine_core::{Brain, Space};
 use serde_json::{Value, json};
 
 // --- programs ----------------------------------------------------------------------------------------------------
@@ -31,7 +31,7 @@ fn bin_dir() -> PathBuf {
 }
 
 /// The path of a program of the workspace. The ones of other packages are built once if they are not there yet (a
-/// plain `cargo test -p memcp-client` does not build them; `cargo test --workspace` and `scripts/e2e.sh` do).
+/// plain `cargo test -p pensine-client` does not build them; `cargo test --workspace` and `scripts/e2e.sh` do).
 fn exe(name: &str) -> PathBuf {
     static BUILD: Once = Once::new();
     let path = bin_dir().join(format!("{name}{}", std::env::consts::EXE_SUFFIX));
@@ -39,7 +39,7 @@ fn exe(name: &str) -> PathBuf {
         return path;
     }
     BUILD.call_once(|| {
-        let all = ["memcp", "memcp-manager"];
+        let all = ["memcp", "pensine-manager"];
         if all.iter().all(|n| {
             bin_dir()
                 .join(format!("{n}{}", std::env::consts::EXE_SUFFIX))
@@ -49,7 +49,7 @@ fn exe(name: &str) -> PathBuf {
         }
         let cargo = std::env::var("CARGO").unwrap_or_else(|_| "cargo".into());
         let status = Command::new(cargo)
-            .args(["build", "-p", "memcp-server", "-p", "memcp-manager"])
+            .args(["build", "-p", "pensine-server", "-p", "pensine-manager"])
             .status()
             .unwrap();
         assert!(status.success(), "the programs could not be built");
@@ -490,7 +490,7 @@ fn fill(c: &mut Client, spaces: &[&str], n: u64, seed: u64) {
 
 /// Many notes at once, written straight into the store of a node that is NOT running (a fast way to make a big memory).
 fn bulk(data: &Path, space: &str, n: u64, seed: u64) {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let b = Brain::open(data).unwrap();
     let s = Space::new(space).unwrap();
     let conn = b.open_space(&s).unwrap();
@@ -585,7 +585,7 @@ fn the_manager_makes_a_person_and_serves_them() {
     let root = Root::new("manager");
     let data = root.path("managed");
     let manager = |args: &[&str]| {
-        Command::new(exe("memcp-manager"))
+        Command::new(exe("pensine-manager"))
             .arg("--data")
             .arg(&data)
             .args(args)
@@ -626,7 +626,7 @@ fn the_manager_makes_a_person_and_serves_them() {
         .local_addr()
         .unwrap()
         .port();
-    let mut cmd = Command::new(exe("memcp-manager"));
+    let mut cmd = Command::new(exe("pensine-manager"));
     cmd.arg("--data")
         .arg(&data)
         .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
@@ -787,7 +787,7 @@ fn a_window_replica_prunes_by_itself_and_leaves_the_origin_alone() {
     {
         let b = w.brain();
         let conn = b.open_space(&Space::new("personal").unwrap()).unwrap();
-        let month_ago = memcp_core::util::now() - 30 * 86_400;
+        let month_ago = pensine_core::util::now() - 30 * 86_400;
         conn.execute(
             "UPDATE facts SET created_at = ?1 WHERE id IN (SELECT id FROM facts ORDER BY id LIMIT 12)",
             [month_ago],
@@ -1008,7 +1008,7 @@ fn a_busy_node_says_when_to_come_back_and_a_client_retries() {
     c.retry.tries = 1;
     assert!(matches!(
         c.call("spaces", json!({})),
-        Err(memcp_client::Error::Unreachable(m)) if m.contains("503")
+        Err(pensine_client::Error::Unreachable(m)) if m.contains("503")
     ));
     // A client that calls now waits and goes through once the places are free again.
     c.retry.first = Duration::from_millis(100);
@@ -1929,7 +1929,7 @@ fn the_manager_runs_the_intake_for_the_person_the_settings_name() {
     let drop = root.path("Drop");
     std::fs::create_dir_all(&drop).unwrap();
     let manager = |args: &[&str]| {
-        Command::new(exe("memcp-manager"))
+        Command::new(exe("pensine-manager"))
             .arg("--data")
             .arg(&data)
             .args(args)
@@ -1955,7 +1955,7 @@ fn the_manager_runs_the_intake_for_the_person_the_settings_name() {
         .local_addr()
         .unwrap()
         .port();
-    let mut cmd = Command::new(exe("memcp-manager"));
+    let mut cmd = Command::new(exe("pensine-manager"));
     cmd.arg("--data")
         .arg(&data)
         .args(["serve", "--listen", &format!("127.0.0.1:{port}")])
@@ -2612,9 +2612,9 @@ fn a_laptop_joined_to_a_person_of_another_id_shares_their_inbox_and_spaces_and_n
     // The space made on the laptop is robin's at home; nothing of carol's is on the laptop.
     let hb = home.brain();
     let ctl = hb.open_control().unwrap();
-    let robin = memcp_core::users::resolve(&ctl, "robin").unwrap().id;
+    let robin = pensine_core::users::resolve(&ctl, "robin").unwrap().id;
     let music = Space::new("rob-music").unwrap();
-    assert!(memcp_core::users::is_space_owner(&ctl, &music, &robin).unwrap());
+    assert!(pensine_core::users::is_space_owner(&ctl, &music, &robin).unwrap());
     let on_laptop: Vec<String> = laptop
         .brain()
         .spaces()

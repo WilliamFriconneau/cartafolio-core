@@ -1,5 +1,5 @@
 #![warn(missing_docs)]
-//! memcp-core: the memory itself. Dated, sourced facts stored in
+//! pensine-core: the memory itself. Dated, sourced facts stored in
 //! isolated spaces (one SQLite file each) plus a control database for
 //! connections and rights. No model inside, no network.
 //!
@@ -8,9 +8,9 @@
 //! # Example: remember, recall, supersede, retire
 //!
 //! ```
-//! use memcp_core::facts::{self, NewFact, RecallOptions, Remembered};
-//! use memcp_core::text::Language;
-//! use memcp_core::{Brain, Space};
+//! use pensine_core::facts::{self, NewFact, RecallOptions, Remembered};
+//! use pensine_core::text::Language;
+//! use pensine_core::{Brain, Space};
 //!
 //! # let dir = std::env::temp_dir().join(format!("memcp-doc-{}", std::process::id()));
 //! # let _ = std::fs::remove_dir_all(&dir);
@@ -38,7 +38,7 @@
 //! # drop(conn);
 //! # drop(brain);
 //! # let _ = std::fs::remove_dir_all(&dir);
-//! # Ok::<(), memcp_core::Error>(())
+//! # Ok::<(), pensine_core::Error>(())
 //! ```
 
 pub mod access;
@@ -207,7 +207,7 @@ mod program_name_tests {
     fn invocation_uses_the_filename_prefix() {
         for (legacy, silice, pensine) in [
             ("memcp", "silice", "pensine"),
-            ("memcp-manager", "silice-manager", "pensine-manager"),
+            ("pensine-manager", "silice-manager", "pensine-manager"),
             ("memcp-sync", "silice-sync", "pensine-sync"),
         ] {
             for (argv0, expected) in [

@@ -1,6 +1,6 @@
 # Core API: the map
 
-What `memcp-core` offers, by module. Every public item has a doc comment (`cargo doc -p memcp-core --open`); this page is the map. The crate has no network and no model: it opens files in a data directory (0700; files 0600), one SQLite file per space plus `control.sqlite`.
+What `pensine-core` offers, by module. Every public item has a doc comment (`cargo doc -p pensine-core --open`); this page is the map. The crate has no network and no model: it opens files in a data directory (0700; files 0600), one SQLite file per space plus `control.sqlite`.
 
 **Invariants.** Facts are append-only: a fact is never deleted or edited; `supersede` marks the old one `replaced`, `retire` marks it `retired`, both keep the text and a history event. The only erasures are `files::erase` (a voice recording once its transcript exists) and, on a replica that chose a window, `sync::prune_window` (local, never synchronised). The author of a write is the connection's name, never an argument. A function that takes a `Caller` or goes through `tools::call` checks rights; the lower-level functions take an open connection and trust the caller: only the node's HTTP server and the tools may reach them.
 
@@ -388,4 +388,4 @@ Every failure has exactly one kind (`ErrorKind`). `Error::kind()` and `ToolError
 
 ## Main flows
 
-The crate-level example of `memcp_core` (doc-test, run by `cargo test --doc`) shows remember, recall, supersede and retire. `crates/core/tests/flows.rs` runs the other flows end to end: a triage claim, the filing rules, and joining then syncing with a peer.
+The crate-level example of `pensine_core` (doc-test, run by `cargo test --doc`) shows remember, recall, supersede and retire. `crates/core/tests/flows.rs` runs the other flows end to end: a triage claim, the filing rules, and joining then syncing with a peer.

@@ -8,12 +8,12 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 | `language` | `language` | `setup --language`, `init --language` | Written once into the new memory. |
 | `strict_write_agents` | `strict_write_agents` | `--strict-write-agents NAME,...` | Require a read within 30 minutes before selected MCP writes. Empty by default. |
 | `admins` | `admins` | `serve --admins` | Logins for the ingress listener (Home Assistant). On Linux the page is opened by console key or tailnet identity, so it is rarely needed. |
-| `new_people` | `new_people` | `memcp-manager serve --new-people` | Only for `memcp-manager` (several people on one node). `memcp serve` holds one memory and ignores it. |
+| `new_people` | `new_people` | `pensine-manager serve --new-people` | Only for `pensine-manager` (several people on one node). `memcp serve` holds one memory and ignores it. |
 | `public_url` | `public_url` | `serve --public-url`, `connect --public-url`, `doctor --public-url` | |
 | `identity_trust` | `identity_trust` | `serve --identity-trust` | Needs `identity_listen`. |
 | `login_url` | `login_url` | `serve --login-url` | |
 | `tailnet_users` | `tailnet_users` | `serve --tailnet-user` | A list in the file, `a=b,c=d` on the line. |
-| `janitor` | `janitor` | `prepare janitor` | Run by `memcp-janitor.service`. |
+| `janitor` | `janitor` | `prepare janitor` | Run by `pensine-janitor.service`. |
 | `janitor_person` | `janitor_person` | `prepare janitor` | |
 | `janitor_inboxes` | `janitor_inboxes` | `prepare janitor` | |
 | `janitor_work_words` | `janitor_work_words` | `prepare janitor` | |
@@ -24,7 +24,7 @@ Every option of the Home Assistant app (`ha-addon/memcp/config.yaml`) has a coun
 | `janitor_api_key` | `janitor_api_key_file` | `prepare janitor` | The key is a file (mode 0600), never a line of `memcp.toml`. |
 | `janitor_ollama_url` | `janitor_ollama_url` | `prepare janitor` | |
 | `janitor_ollama_model` | `janitor_ollama_model` | `prepare janitor` | |
-| `transcribe` | `transcribe` | | A task of the node itself (`memcp serve`, `memcp-manager serve`); `memcp transcribe` is one pass by hand. |
+| `transcribe` | `transcribe` | | A task of the node itself (`memcp serve`, `pensine-manager serve`); `memcp transcribe` is one pass by hand. |
 | `transcribe_person` | `transcribe_person` | | |
 | `transcribe_spaces` | `transcribe_spaces` | | |
 | `transcribe_api_url` | `transcribe_api_url` | | |

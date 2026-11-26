@@ -11,7 +11,7 @@
 //!   (`.../Sources/...`), a mounted library, the janitor's own notes, the living boards, the rules.
 //! - It never teaches the node (`learn: false`): what an engine writes is not a correction by the person.
 
-use memcp_client::Error as ClientError;
+use pensine_client::Error as ClientError;
 use serde_json::{Value, json};
 
 use crate::{Janitor, Report, health_rule, is_library, now, tags_of};
@@ -59,7 +59,7 @@ pub(crate) fn leave_alone(item: &Value) -> bool {
 fn refused(item: &Value) -> Vec<String> {
     tags_of(item)
         .iter()
-        .filter_map(|t| memcp_health::sign_of_refusal(t))
+        .filter_map(|t| pensine_health::sign_of_refusal(t))
         .collect()
 }
 

@@ -2,9 +2,9 @@
 //! person the intake works for (every space they own, a space made later included). No key, no address, no network.
 
 use base64::Engine as _;
-use memcp_core::access::{self, Caller};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::{Brain, users};
+use pensine_core::access::{self, Caller};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::{Brain, users};
 use serde_json::{Value, json};
 
 /// A tool the memory refused, or a failure inside it, in the memory's own words.
@@ -68,7 +68,7 @@ impl Memory {
     /// The person's Inbox, made if it is not there yet.
     pub fn triage_space(&self) -> Result<String, Failure> {
         let person = self.person()?;
-        memcp_core::triage::ensure(&self.brain, &self.user_id, &person)
+        pensine_core::triage::ensure(&self.brain, &self.user_id, &person)
             .map(|s| s.to_string())
             .map_err(|e| Failure(e.to_string()))
     }
@@ -108,7 +108,7 @@ impl Memory {
     /// with exactly that right.
     pub fn propose_guide(&mut self, space: &str, text: &str) -> Result<Value, Failure> {
         let mut caller = self.caller()?;
-        let s = memcp_core::Space::new(space).map_err(|e| Failure(e.to_string()))?;
+        let s = pensine_core::Space::new(space).map_err(|e| Failure(e.to_string()))?;
         caller.paths.insert(s, vec![("guide".to_string(), true)]);
         tools::call(
             &self.brain,
@@ -139,7 +139,7 @@ impl Memory {
         Ok((answer["file"].clone(), bytes))
     }
 
-    /// [`Memory::file_put`] for a file on disk, read a block at a time (a big one, up to `memcp_core::files::MAX_BYTES`).
+    /// [`Memory::file_put`] for a file on disk, read a block at a time (a big one, up to `pensine_core::files::MAX_BYTES`).
     pub fn file_put_path(
         &mut self,
         space: &str,

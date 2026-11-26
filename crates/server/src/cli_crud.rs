@@ -4,11 +4,11 @@
 
 use std::path::Path;
 
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::layout::Change;
-use memcp_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
-use memcp_core::util::{iso, now};
-use memcp_core::{Brain, Space, access, peers, people, rules, users};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::layout::Change;
+use pensine_core::lifecycle::{Children, Disposition, SpaceNew, SpaceUpdate};
+use pensine_core::util::{iso, now};
+use pensine_core::{Brain, Space, access, peers, people, rules, users};
 
 use crate::cli::{Failure, bad, fail};
 
@@ -46,7 +46,7 @@ impl Cmd<'_> {
 
 fn open(data: &Path) -> Result<Brain, Failure> {
     let brain = Brain::open(data).map_err(fail)?;
-    memcp_core::text::set_language(brain.language().map_err(fail)?);
+    pensine_core::text::set_language(brain.language().map_err(fail)?);
     Ok(brain)
 }
 
@@ -74,7 +74,7 @@ fn tool(
         kind: access::Kind::Console,
         local: true,
     };
-    memcp_core::tools::call(brain, &caller, name, args).map_err(fail)
+    pensine_core::tools::call(brain, &caller, name, args).map_err(fail)
 }
 
 fn me(brain: &Brain, c: &Cmd) -> Result<users::User, Failure> {
@@ -431,7 +431,7 @@ fn node(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
 /// `node policy PEER`: what this node does with each space of the person and that machine; `node policy PEER SPACE
 /// POLICY` or `node policy PEER --later POLICY` sets it (`both`, `send`, `receive`, `off`).
 fn node_policy(brain: &Brain, who: &users::User, c: &Cmd, peer: &str) -> Result<(), Failure> {
-    use memcp_core::policy::{self, Policy};
+    use pensine_core::policy::{self, Policy};
     if let Some(word) = (c.flag)("--later") {
         let p = Policy::parse(word).map_err(fail)?;
         policy::set_later(brain, who, peer, p).map_err(fail)?;
@@ -654,7 +654,7 @@ fn note(data: &Path, c: &Cmd, op: &str) -> Result<(), Failure> {
                 ..NewFact::agent(c.arg(3, "the text")?, &author)
             };
             let text = new.text.clone();
-            memcp_core::autotag::add_to(&brain, &who.id, &s, &conn, &text, &mut new.tags);
+            pensine_core::autotag::add_to(&brain, &who.id, &s, &conn, &text, &mut new.tags);
             match facts::remember(&conn, &s, &author, new, &[]).map_err(fail)? {
                 Remembered::Created(f) => sayln!("note {} created.", f.id),
                 Remembered::Duplicate(f) => sayln!("already there: {}.", f.id),
@@ -768,7 +768,7 @@ fn library_remove(data: &Path, c: &Cmd) -> Result<(), Failure> {
     let canon = std::fs::canonicalize(want)
         .map(|p| p.to_string_lossy().to_string())
         .unwrap_or_else(|_| want.to_string());
-    let root = memcp_core::library::roots(&conn)
+    let root = pensine_core::library::roots(&conn)
         .map_err(fail)?
         .into_iter()
         .find(|r| r.root == canon || r.root == want)
@@ -780,7 +780,7 @@ fn library_remove(data: &Path, c: &Cmd) -> Result<(), Failure> {
         );
         return Ok(());
     }
-    memcp_core::library::remove_root(&conn, root.id).map_err(fail)?;
+    pensine_core::library::remove_root(&conn, root.id).map_err(fail)?;
     sayln!(
         "{} unmounted from {s}. The folder itself was not touched.",
         root.root
@@ -798,9 +798,9 @@ fn vocabulary_terms(data: &Path, c: &Cmd, add: bool) -> Result<(), Failure> {
         return Err(bad("give the terms after the vocabulary name"));
     }
     let n = if add {
-        memcp_core::vocabulary::add_terms(&mut conn, name, &terms)
+        pensine_core::vocabulary::add_terms(&mut conn, name, &terms)
     } else {
-        memcp_core::vocabulary::remove_terms(&mut conn, name, &terms)
+        pensine_core::vocabulary::remove_terms(&mut conn, name, &terms)
     }
     .map_err(fail)?;
     sayln!(

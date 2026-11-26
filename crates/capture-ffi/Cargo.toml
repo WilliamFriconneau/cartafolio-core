@@ -1,6 +1,6 @@
 [package]
 publish = false
-name = "memcp-capture-ffi"
+name = "pensine-capture-ffi"
 description = "The Swift interface (UniFFI) of the node's helpers for the apps: joining by code, the browser extension's link, the speech model of a Mac, and the node's own intake (voice notes, watched folders). The crate and its names are frozen for the apps that already link them; the node is the one place the logic lives"
 version.workspace = true
 edition.workspace = true
@@ -10,21 +10,21 @@ repository.workspace = true
 
 [lib]
 crate-type = ["lib", "staticlib", "cdylib"]
-name = "memcp_capture_ffi"
+name = "pensine_capture_ffi"
 
 [[bin]]
 name = "uniffi-bindgen"
 path = "src/bin/uniffi-bindgen.rs"
 
 [dependencies]
-memcp-client = { path = "../client" }
-memcp-core = { path = "../core" }
-memcp-server = { path = "../server" }
+pensine-client = { path = "../client" }
+pensine-core = { path = "../core" }
+pensine-server = { path = "../server" }
 uniffi = { version = "0.32", features = ["cli"] }
 
 # Whisper inside the app, on the GPU: the Mac only.
 [target.'cfg(target_os = "macos")'.dependencies]
-memcp-server = { path = "../server", features = ["metal"] }
+pensine-server = { path = "../server", features = ["metal"] }
 
 [dev-dependencies]
 base64 = "0.22"

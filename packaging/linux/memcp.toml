@@ -63,7 +63,7 @@
 # the tailnet.
 # admins = []
 
-# Only for `memcp-manager` (several people on one node): `auto` gives every
+# Only for `pensine-manager` (several people on one node): `auto` gives every
 # new login a memory of their own, `ask` makes them wait for an administrator.
 # `memcp serve` holds one memory and ignores it.
 # new_people = "auto"
@@ -87,8 +87,8 @@
 
 # --- The janitor -------------------------------------------------
 
-# Run the janitor (`memcp-janitor.service`): it files the notes of the inboxes
-# with the model named below.
+# Run the janitor (`pensine-janitor.service`): it files the notes of the
+# inboxes with the model named below.
 # janitor = false
 
 # The person whose inboxes it files.

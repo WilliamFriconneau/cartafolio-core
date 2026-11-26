@@ -1,7 +1,7 @@
 //! Next to a synchronised folder.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 #[test]
 fn never_write_over_a_hand_made_change() {

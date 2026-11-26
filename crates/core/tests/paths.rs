@@ -7,11 +7,11 @@ mod common;
 use std::error::Error;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users::{self, OWNER};
+use pensine_core::Brain;
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users::{self, OWNER};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -468,20 +468,20 @@ fn the_handshake_tells_a_path_limited_key_nothing_outside_its_path() -> Res {
         "remember",
         json!({"space": "sam-health", "text": "A note to sort", "tags": ["inbox"]}),
     )?;
-    memcp_core::guide::set(
+    pensine_core::guide::set(
         &w.ctl,
         &w.sam,
         "space:sam-health",
         "Private rules of the health vault",
     )?;
-    let whole = memcp_core::guide::instructions(&w.brain, &owner)?;
+    let whole = pensine_core::guide::instructions(&w.brain, &owner)?;
     assert!(
         whole.contains("cardiologist")
             && whole.contains("Private rules")
             && whole.contains("INBOX")
     );
     let app = caller(&w, "healthapp", "sam-health/sources/healthapp:rw")?;
-    let told = memcp_core::guide::instructions(&w.brain, &app)?;
+    let told = pensine_core::guide::instructions(&w.brain, &app)?;
     for secret in ["cardiologist", "Private rules", "INBOX", "INDEX"] {
         assert!(!told.contains(secret), "{secret} leaked: {told}");
     }
@@ -492,13 +492,13 @@ fn the_handshake_tells_a_path_limited_key_nothing_outside_its_path() -> Res {
 fn a_connection_can_be_kept_from_the_persons_own_guide() -> Res {
     let w = world()?;
     w.brain.add_vault(&w.sam, "sam", "work")?;
-    memcp_core::guide::set(
+    pensine_core::guide::set(
         &w.ctl,
         &w.sam,
         &format!("person:{}", w.sam),
         "My family, my knee: private",
     )?;
-    memcp_core::guide::set(&w.ctl, &w.sam, "space:sam-work", "Work rules")?;
+    pensine_core::guide::set(&w.ctl, &w.sam, "space:sam-work", "Work rules")?;
     let token = access::connect_for(
         &w.ctl,
         &w.sam,
@@ -512,11 +512,11 @@ fn a_connection_can_be_kept_from_the_persons_own_guide() -> Res {
         Ok(access::authenticate(&w.ctl, &token, 1_900_000_000)?.ok_or("refused")?)
     };
     assert!(
-        memcp_core::guide::instructions(&w.brain, &auth()?)?.contains("private"),
+        pensine_core::guide::instructions(&w.brain, &auth()?)?.contains("private"),
         "told by default"
     );
     assert!(access::set_no_person_guide(&w.ctl, "pro", true)?);
-    let told = memcp_core::guide::instructions(&w.brain, &auth()?)?;
+    let told = pensine_core::guide::instructions(&w.brain, &auth()?)?;
     assert!(
         told.contains("Work rules") && !told.contains("private"),
         "{told}"
@@ -527,7 +527,7 @@ fn a_connection_can_be_kept_from_the_persons_own_guide() -> Res {
             .any(|c| c.agent == "pro" && c.no_person_guide)
     );
     access::set_no_person_guide(&w.ctl, "pro", false)?;
-    assert!(memcp_core::guide::instructions(&w.brain, &auth()?)?.contains("private"));
+    assert!(pensine_core::guide::instructions(&w.brain, &auth()?)?.contains("private"));
     Ok(())
 }
 
@@ -540,7 +540,7 @@ fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
         "sam-health/sources/healthapp:rw,sam-health/proposals/healthapp:r",
     )?;
     let owner = caller(&w, "claude", "sam-health:rw")?;
-    let told = memcp_core::guide::instructions(&w.brain, &owner)?;
+    let told = pensine_core::guide::instructions(&w.brain, &owner)?;
     assert!(
         told.contains("PROPOSALS of the space \"sam-health\"")
             && told.contains("`healthapp` (tag `proposals/healthapp`)"),
@@ -548,6 +548,6 @@ fn an_assistant_is_told_which_tools_read_the_proposals_of_a_vault() -> Res {
     );
     // Not to a key that only reads, nor to the tool itself.
     let reader = caller(&w, "reader", "sam-health:r")?;
-    assert!(!memcp_core::guide::instructions(&w.brain, &reader)?.contains("PROPOSALS"));
+    assert!(!pensine_core::guide::instructions(&w.brain, &reader)?.contains("PROPOSALS"));
     Ok(())
 }

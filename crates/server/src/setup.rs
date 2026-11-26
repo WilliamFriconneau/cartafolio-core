@@ -9,9 +9,9 @@
 use std::io::{BufRead, IsTerminal, Write};
 use std::path::{Path, PathBuf};
 
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::{Brain, directory, users};
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::{Brain, directory, users};
 
 use crate::cli::{Failure, bad, fail};
 use crate::config::{self, Settings, Value};
@@ -202,7 +202,7 @@ pub fn setup(a: SetupArgs, existing: Option<PathBuf>) -> Result<(), Failure> {
         println!("{} already holds a memory: left as it is.", data.display());
     }
     let brain = Brain::open(&data).map_err(fail)?;
-    memcp_core::text::set_language(brain.language().map_err(fail)?);
+    pensine_core::text::set_language(brain.language().map_err(fail)?);
     let ctl = brain.open_control().map_err(fail)?;
     let me = users::resolve(&ctl, users::OWNER).map_err(fail)?;
     if fresh || !person.is_empty() && me.display.is_empty() {
@@ -345,7 +345,7 @@ fn service_key(brain: &Brain, user: &str, agent: &str, dir: &Path) -> Result<Str
     if let Ok(old) = std::fs::read_to_string(&file) {
         let old = old.trim();
         if !old.is_empty()
-            && access::authenticate(&ctl, old, memcp_core::util::now())
+            && access::authenticate(&ctl, old, pensine_core::util::now())
                 .map_err(fail)?
                 .is_some()
         {
@@ -367,14 +367,14 @@ fn service_key(brain: &Brain, user: &str, agent: &str, dir: &Path) -> Result<Str
 
 fn write_private(path: &Path, text: &str) -> Result<(), Failure> {
     std::fs::write(path, text).map_err(fail)?;
-    memcp_core::fsx::set_private_file(path).map_err(fail)?;
+    pensine_core::fsx::set_private_file(path).map_err(fail)?;
     Ok(())
 }
 
 /// `prepare janitor|transcribe --out DIR`: the key and the settings file of a companion service.
 pub fn prepare(kind: &str, data: &Path, s: &Settings, out: &Path) -> Result<(), Failure> {
     std::fs::create_dir_all(out).map_err(fail)?;
-    memcp_core::fsx::set_private_dir(out).map_err(fail)?;
+    pensine_core::fsx::set_private_dir(out).map_err(fail)?;
     let brain = Brain::open(data).map_err(fail)?;
     let listen = local_address(&s.text_or_default("listen"));
     match kind {
@@ -430,7 +430,7 @@ pub fn prepare(kind: &str, data: &Path, s: &Settings, out: &Path) -> Result<(), 
             write_private(&out.join("janitor.conf"), &conf)?;
             let env = format!(
                 "JANITOR_ARGS=--watch {} --quiet {} --night {}\n",
-                data.join(memcp_core::tools::INBOX_WRITTEN).display(),
+                data.join(pensine_core::tools::INBOX_WRITTEN).display(),
                 s.int("janitor_quiet").unwrap_or(120),
                 s.text_or_default("janitor_night")
             );

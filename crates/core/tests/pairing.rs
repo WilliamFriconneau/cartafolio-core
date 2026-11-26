@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::pairing::{self, CODE_TTL};
-use memcp_core::tools::{self, ToolError};
-use memcp_core::users;
+use pensine_core::access::{self, Rights};
+use pensine_core::pairing::{self, CODE_TTL};
+use pensine_core::tools::{self, ToolError};
+use pensine_core::users;
 use serde_json::json;
 
 const NOW: i64 = 1_900_000_000;
@@ -62,25 +62,25 @@ fn a_peer_reads_and_writes_every_space_of_the_person() -> Res {
     let p = pairing::redeem(&ctl, &code, "phone", NOW + 1)?;
     assert!(p.agent.starts_with("peer-phone-"), "{}", p.agent);
     let c = access::authenticate(&ctl, &p.token, NOW + 2)?.ok_or("key")?;
-    let box_ = memcp_core::Space::new(&triage)?;
+    let box_ = pensine_core::Space::new(&triage)?;
     assert!(c.can_write(&box_));
     assert!(c.readable().contains(&box_));
     // A second device gets the same box, never a second one.
     let (_, again) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW + 3)?;
     assert_eq!(again, triage);
-    assert!(memcp_core::triage::is_triage(&brain, &box_));
+    assert!(pensine_core::triage::is_triage(&brain, &box_));
     Ok(())
 }
 
 #[test]
 fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
-    use memcp_core::facts::{self, NewFact, Remembered};
+    use pensine_core::facts::{self, NewFact, Remembered};
     let t = Temp::new("triage-send");
     let brain = brain(&t)?;
     let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
-    let box_ = memcp_core::Space::new(&triage)?;
+    let box_ = pensine_core::Space::new(&triage)?;
     // The usual `work` space of a fresh memory already is a work space: the owner keeps one, so this test uses it.
-    let work = memcp_core::Space::new("work")?;
+    let work = pensine_core::Space::new("work")?;
     let mut n = NewFact::agent("2026-11-03, rappeler le fournisseur", "device-phone");
     n.tags = vec!["inbox".into()];
     let Remembered::Created(note) =
@@ -88,13 +88,13 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     else {
         return Err("not created".into());
     };
-    let waiting = memcp_core::triage::waiting(&brain, &box_, 20)?;
+    let waiting = pensine_core::triage::waiting(&brain, &box_, 20)?;
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(1));
     assert!(
-        memcp_core::triage::send(&brain, &work, &note.id, &box_, "owner", "owner").is_err(),
+        pensine_core::triage::send(&brain, &work, &note.id, &box_, "owner", "owner").is_err(),
         "only out of Inbox"
     );
-    let new = memcp_core::triage::send(&brain, &box_, &note.id, &work, "owner", "owner")?;
+    let new = pensine_core::triage::send(&brain, &box_, &note.id, &work, "owner", "owner")?;
     let moved = facts::read_fact(&brain.open_space(&work)?, &new)?.ok_or("moved")?;
     assert_eq!(moved.text, note.text, "as it is");
     assert!(
@@ -103,14 +103,14 @@ fn what_waits_in_a_trier_is_sent_to_the_inbox_of_a_vault_and_leaves() -> Res {
     );
     let left = facts::read_fact(&brain.open_space(&box_)?, &note.id)?.ok_or("kept")?;
     assert_eq!(left.status, "retired");
-    let waiting = memcp_core::triage::waiting(&brain, &box_, 20)?;
+    let waiting = pensine_core::triage::waiting(&brain, &box_, 20)?;
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(0));
     Ok(())
 }
 
 #[test]
 fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Res {
-    use memcp_core::facts;
+    use pensine_core::facts;
     let t = Temp::new("triage-default-space");
     let brain = brain(&t)?;
     let ctl = brain.open_control()?;
@@ -133,7 +133,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
     }
     // The person's Inbox now exists: a key on all spaces writes there, and nowhere else.
     let (_, triage) = pairing::create_for_peer(&brain, users::OWNER, "owner", NOW)?;
-    let box_ = memcp_core::Space::new(&triage)?;
+    let box_ = pensine_core::Space::new(&triage)?;
     let all = key("assistant-2", "all")?;
     let r = tools::call(&brain, &all, "remember", &note)?;
     assert_eq!(r["result"], "created", "{r}");
@@ -141,7 +141,7 @@ fn a_write_that_names_no_space_goes_to_a_trier_when_the_key_writes_there() -> Re
     assert!(facts::read_fact(&brain.open_space(&box_)?, &id)?.is_some());
     let r = tools::call(&brain, &all, "file_put", &file)?;
     assert_eq!(r["result"], "kept", "{r}");
-    let waiting = memcp_core::triage::waiting(&brain, &box_, 20)?;
+    let waiting = pensine_core::triage::waiting(&brain, &box_, 20)?;
     assert_eq!(waiting["notes"].as_array().map(Vec::len), Some(1));
     assert_eq!(waiting["files"].as_array().map(Vec::len), Some(1));
     for vault in common::SPACES {

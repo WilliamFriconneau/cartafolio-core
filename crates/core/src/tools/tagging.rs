@@ -131,14 +131,14 @@ pub(super) fn tags_set(
         // Every sign the note had and no longer has, whether it went through `remove` or through a whole `tags` list.
         for t in &old.tags {
             if !tags.contains(t)
-                && let Some(mark) = memcp_health::refused_sign(t)
+                && let Some(mark) = pensine_health::refused_sign(t)
                 && !tags.contains(&mark)
             {
                 tags.push(mark);
             }
         }
         for t in &add {
-            if let Some(mark) = memcp_health::refused_sign(t) {
+            if let Some(mark) = pensine_health::refused_sign(t) {
                 tags.retain(|x| *x != mark);
             }
         }

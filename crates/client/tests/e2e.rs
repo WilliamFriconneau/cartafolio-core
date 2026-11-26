@@ -6,14 +6,14 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use memcp_client::Client;
-use memcp_client::peer_sync::Peer;
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space, users};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::Client;
+use pensine_client::peer_sync::Peer;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space, users};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 use serde_json::json;
 
 const NOW: i64 = 1_794_800_000;

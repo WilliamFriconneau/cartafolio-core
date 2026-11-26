@@ -1,19 +1,19 @@
-//! `memcp-janitor [--config FILE] [run]`: one pass over the inboxes (notes filed, absorbed pieces turned into facts), then it
+//! `pensine-janitor [--config FILE] [run]`: one pass over the inboxes (notes filed, absorbed pieces turned into facts), then it
 //! stops. `--watch FILE`: it stays, and passes once the writing has calmed down (`--quiet SECONDS` after the last write the
 //! memory marks in FILE) and once a night (`--night HH:MM`): never for nothing. Run it on a timer. Exit: 0 done, 1 the key is refused, 2 wrong use or settings, 3 done with problems (said on standard error).
 
 use std::path::PathBuf;
 use std::process::ExitCode;
 
-use memcp_janitor::{Config, Janitor};
+use pensine_janitor::{Config, Janitor};
 
-const USAGE: &str = "usage: memcp-janitor [--config FILE] [run]
+const USAGE: &str = "usage: pensine-janitor [--config FILE] [run]
 
 One pass: every note and file of the Inbox is sent to a space, tagged `inbox` (or left there when it is unsure), every note
 tagged `inbox` in a space is filed in that space, its
 text unchanged; a piece of a note the node absorbed is turned into short, dated facts. If no model answers, the notes stay.
 With --watch FILE (the memory's mark of the last write into an inbox), it stays: a pass once the writing has calmed down
-(--quiet SECONDS, 120 by default) and one a night (--night HH:MM, 03:00 by default). How the Home Assistant app runs it. The settings are in FILE (default ~/.config/memcp-janitor/janitor.conf); see docs/JANITOR.md.";
+(--quiet SECONDS, 120 by default) and one a night (--night HH:MM, 03:00 by default). How the Home Assistant app runs it. The settings are in FILE (default ~/.config/pensine-janitor/janitor.conf); see docs/JANITOR.md.";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -31,7 +31,7 @@ fn main() -> ExitCode {
             "--config" => match it.next() {
                 Some(f) => file = Some(PathBuf::from(f)),
                 None => {
-                    eprintln!("memcp-janitor: --config needs a file");
+                    eprintln!("pensine-janitor: --config needs a file");
                     return ExitCode::from(2);
                 }
             },
@@ -39,14 +39,14 @@ fn main() -> ExitCode {
             "--watch" => match it.next() {
                 Some(f) => watch = Some(PathBuf::from(f)),
                 None => {
-                    eprintln!("memcp-janitor: --watch needs a file");
+                    eprintln!("pensine-janitor: --watch needs a file");
                     return ExitCode::from(2);
                 }
             },
             "--quiet" => match it.next().and_then(|v| v.parse().ok()) {
                 Some(n) if (10..=86_400).contains(&n) => quiet = n,
                 _ => {
-                    eprintln!("memcp-janitor: --quiet needs seconds, 10 to 86400");
+                    eprintln!("pensine-janitor: --quiet needs seconds, 10 to 86400");
                     return ExitCode::from(2);
                 }
             },
@@ -56,24 +56,24 @@ fn main() -> ExitCode {
             }) {
                 Some((h, m)) if h < 24 && m < 60 => night = (h, m),
                 _ => {
-                    eprintln!("memcp-janitor: --night needs HH:MM");
+                    eprintln!("pensine-janitor: --night needs HH:MM");
                     return ExitCode::from(2);
                 }
             },
             other => {
-                eprintln!("memcp-janitor: unknown argument {other:?}\n\n{USAGE}");
+                eprintln!("pensine-janitor: unknown argument {other:?}\n\n{USAGE}");
                 return ExitCode::from(2);
             }
         }
     }
     let file = file.unwrap_or_else(|| {
         PathBuf::from(std::env::var("HOME").unwrap_or_default())
-            .join(".config/memcp-janitor/janitor.conf")
+            .join(".config/pensine-janitor/janitor.conf")
     });
     let mut janitor = match Config::load(&file).and_then(Janitor::new) {
         Ok(j) => j,
         Err(e) => {
-            eprintln!("memcp-janitor: {e}");
+            eprintln!("pensine-janitor: {e}");
             return ExitCode::from(2);
         }
     };
@@ -87,10 +87,10 @@ fn main() -> ExitCode {
             r.left
         );
         for p in &r.problems {
-            eprintln!("memcp-janitor: {p}");
+            eprintln!("pensine-janitor: {p}");
         }
         if r.key_refused {
-            eprintln!("memcp-janitor: the key is refused or revoked");
+            eprintln!("pensine-janitor: the key is refused or revoked");
             return ExitCode::from(1);
         }
         // Something went wrong (the memory unreachable, a note that could not be written): the unit shows it.
@@ -139,10 +139,10 @@ fn main() -> ExitCode {
             );
         }
         for p in &r.problems {
-            eprintln!("memcp-janitor: {p}");
+            eprintln!("pensine-janitor: {p}");
         }
         if r.key_refused {
-            eprintln!("memcp-janitor: the key is refused or revoked");
+            eprintln!("pensine-janitor: the key is refused or revoked");
         }
         r.key_refused
     };
@@ -175,7 +175,7 @@ fn main() -> ExitCode {
                 return ExitCode::from(1);
             }
             for p in janitor.write_learning_notes() {
-                eprintln!("memcp-janitor: {p}");
+                eprintln!("pensine-janitor: {p}");
             }
         }
     }

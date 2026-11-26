@@ -3,12 +3,12 @@
 mod common;
 
 use common::{Res, Temp, sp};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::layout::Change;
-use memcp_core::sync::{self, Cursor, Event};
-use memcp_core::text::Language;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::layout::Change;
+use pensine_core::sync::{self, Cursor, Event};
+use pensine_core::text::Language;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space};
 
 type Boxed = Box<dyn std::error::Error>;
 
@@ -227,12 +227,12 @@ fn files_travel_with_their_bytes_and_a_name_clash_keeps_both() -> Res {
     let t = Temp::new("sync-files");
     let (a, b) = (node(&t, "a")?, node(&t, "b")?);
     let s = sp("notes");
-    let f1 = memcp_core::files::put(&a, &s, "me", "plan.txt", "first", b"first plan")?;
-    let f2 = memcp_core::files::put(&b, &s, "me", "plan.txt", "second", b"second plan")?;
+    let f1 = pensine_core::files::put(&a, &s, "me", "plan.txt", "first", b"first plan")?;
+    let f2 = pensine_core::files::put(&b, &s, "me", "plan.txt", "second", b"second plan")?;
     catch_up(&a, &b, "a", "b", &s)?;
     catch_up(&b, &a, "b", "a", &s)?;
     let names = |n: &Brain| -> Result<Vec<String>, Boxed> {
-        let mut v: Vec<String> = memcp_core::files::list(n, &s, None, 10)?
+        let mut v: Vec<String> = pensine_core::files::list(n, &s, None, 10)?
             .into_iter()
             .map(|f| f.name)
             .collect();
@@ -241,16 +241,16 @@ fn files_travel_with_their_bytes_and_a_name_clash_keeps_both() -> Res {
     };
     for n in [&a, &b] {
         assert_eq!(names(n)?.len(), 2);
-        let (_, bytes) = memcp_core::files::get(n, &s, &f1.id)?.ok_or("missing 1")?;
+        let (_, bytes) = pensine_core::files::get(n, &s, &f1.id)?.ok_or("missing 1")?;
         assert_eq!(bytes, b"first plan");
-        let (_, bytes) = memcp_core::files::get(n, &s, &f2.id)?.ok_or("missing 2")?;
+        let (_, bytes) = pensine_core::files::get(n, &s, &f2.id)?.ok_or("missing 2")?;
         assert_eq!(bytes, b"second plan");
     }
     assert_eq!(names(&a)?, names(&b)?, "the same names on both nodes");
     assert!(names(&a)?.iter().any(|n| n == "plan.txt"));
-    memcp_core::files::retire(&a, &s, "me", &f1.id, "old")?;
+    pensine_core::files::retire(&a, &s, "me", &f1.id, "old")?;
     catch_up(&a, &b, "a", "b", &s)?;
-    assert_eq!(memcp_core::files::list(&b, &s, None, 10)?.len(), 1);
+    assert_eq!(pensine_core::files::list(&b, &s, None, 10)?.len(), 1);
     Ok(())
 }
 
@@ -300,7 +300,7 @@ fn bad_events_are_refused_and_change_nothing() -> Res {
     let mut future = good.clone();
     future.hlc = format!(
         "{:015}.00000.zzzz",
-        memcp_core::util::now_ms() + 10 * 3_600_000
+        pensine_core::util::now_ms() + 10 * 3_600_000
     );
     let mut odd = good.clone();
     odd.kind = "wipe".into();
@@ -327,11 +327,11 @@ fn status_reports_direction_progress_and_goes_idle() -> Res {
     let a = node(&t, "a")?;
     let s = sp("notes");
     let conn = a.open_control()?;
-    memcp_core::access::connect_peer(
+    pensine_core::access::connect_peer(
         &conn,
         OWNER,
         "peer-laptop-ab12",
-        &memcp_core::access::Rights::parse("notes:rw")?,
+        &pensine_core::access::Rights::parse("notes:rw")?,
         false,
     )?;
     let idle = sync::status(&a, 1000)?;
@@ -424,7 +424,7 @@ fn a_recording_erased_on_one_node_is_erased_on_the_others_and_its_bytes_never_tr
     let t = Temp::new("sync-erase");
     let (a, b, c) = (node(&t, "a")?, node(&t, "b")?, node(&t, "c")?);
     let s = sp("notes");
-    let rec = memcp_core::files::put_tagged(
+    let rec = pensine_core::files::put_tagged(
         &a,
         &s,
         "device",
@@ -435,15 +435,15 @@ fn a_recording_erased_on_one_node_is_erased_on_the_others_and_its_bytes_never_tr
     )?;
     catch_up(&a, &b, "a", "b", &s)?;
     assert!(
-        memcp_core::files::get(&b, &s, &rec.id)?.is_some(),
+        pensine_core::files::get(&b, &s, &rec.id)?.is_some(),
         "B holds the bytes"
     );
     let text = write(&a, &format!("Memo, audio {}: buy bread.", rec.name))?;
-    memcp_core::files::erase(&a, &s, "dictation", &rec.id, &s, &text)?;
+    pensine_core::files::erase(&a, &s, "dictation", &rec.id, &s, &text)?;
     catch_up(&a, &b, "a", "b", &s)?;
-    assert!(memcp_core::files::erased(&b, &s, &rec.id)?);
+    assert!(pensine_core::files::erased(&b, &s, &rec.id)?);
     assert!(
-        memcp_core::files::get(&b, &s, &rec.id)?.is_none(),
+        pensine_core::files::get(&b, &s, &rec.id)?.is_none(),
         "B erased its bytes"
     );
     // A node that joins later gets the record from either, never the bytes.
@@ -457,7 +457,7 @@ fn a_recording_erased_on_one_node_is_erased_on_the_others_and_its_bytes_never_tr
         assert!(put.payload.get("data").is_none(), "{:?}", put.payload);
     }
     catch_up(&b, &c, "b", "c", &s)?;
-    assert!(memcp_core::files::get(&c, &s, &rec.id)?.is_none());
+    assert!(pensine_core::files::get(&c, &s, &rec.id)?.is_none());
     Ok(())
 }
 
@@ -503,15 +503,15 @@ fn a_file_is_never_bigger_than_a_node_reads_and_a_page_stays_under_its_size() ->
     let a = node(&t, "a")?;
     let s = sp("notes");
     let mut big = b"%PDF-1.4\n".to_vec();
-    big.resize(memcp_core::files::MAX_INLINE + 1, b'a');
-    assert!(memcp_core::files::put(&a, &s, "me", "big.pdf", "", &big).is_err());
+    big.resize(pensine_core::files::MAX_INLINE + 1, b'a');
+    assert!(pensine_core::files::put(&a, &s, "me", "big.pdf", "", &big).is_err());
     // Two files that fit: a page of 1.5 of them holds one, and the next page the other.
     let mut one = b"%PDF-1.4\n".to_vec();
     one.resize(1 << 20, b'b');
     let mut two = b"%PDF-1.4\n".to_vec();
     two.resize(1 << 20, b'c');
-    memcp_core::files::put(&a, &s, "me", "one.pdf", "", &one)?;
-    memcp_core::files::put(&a, &s, "me", "two.pdf", "", &two)?;
+    pensine_core::files::put(&a, &s, "me", "one.pdf", "", &one)?;
+    pensine_core::files::put(&a, &s, "me", "two.pdf", "", &two)?;
     let limit = (1 << 20) * 2;
     let mut after = 0;
     loop {

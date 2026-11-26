@@ -1,7 +1,7 @@
 //! Processed notes are not sorted again in a loop.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 fn lease(node: &str, ms: u64) -> Lease {
     Lease {

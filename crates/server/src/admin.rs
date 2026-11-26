@@ -10,12 +10,12 @@
 //! Every write needs the `X-Requested-With: memcp` header: a page from
 //! another site cannot set it without a CORS preflight, which is never allowed.
 
-use memcp_core::access::{self, Rights};
-use memcp_core::export;
-use memcp_core::guide;
-use memcp_core::users::{self, User};
-use memcp_core::util::{self, iso};
-use memcp_core::{Error, Space, files};
+use pensine_core::access::{self, Rights};
+use pensine_core::export;
+use pensine_core::guide;
+use pensine_core::users::{self, User};
+use pensine_core::util::{self, iso};
+use pensine_core::{Error, Space, files};
 use rusqlite::Connection;
 use serde_json::{Value, json};
 
@@ -69,10 +69,10 @@ fn recover(app: &App, ctl: &Connection, req: &Request, now: i64) -> Response {
 /// `GET /node`: this node as a person shows it to another: its id, its name, the addresses it can be reached at and
 /// its link (what a QR code carries), without a ticket.
 fn node_card(app: &App, now: i64) -> Response {
-    let Ok(mut node) = memcp_core::directory::node_json(&app.brain, now) else {
+    let Ok(mut node) = pensine_core::directory::node_json(&app.brain, now) else {
         return err(500, "storage failed");
     };
-    let Ok(link) = memcp_core::directory::own_link(&app.brain, &app.public_url, None) else {
+    let Ok(link) = pensine_core::directory::own_link(&app.brain, &app.public_url, None) else {
         return err(500, "storage failed");
     };
     let text = link.to_link();
@@ -84,7 +84,7 @@ fn node_card(app: &App, now: i64) -> Response {
 
 /// The directory name of the node a request names: by `name`, by its `id`, or by the `peer` connection that reaches it.
 fn nodes_name(app: &App, body: &Value) -> Result<String, Response> {
-    let entries = memcp_core::directory::entries(&app.brain).map_err(fail)?;
+    let entries = pensine_core::directory::entries(&app.brain).map_err(fail)?;
     let text = |k: &str| {
         body.get(k)
             .and_then(Value::as_str)
@@ -96,7 +96,7 @@ fn nodes_name(app: &App, body: &Value) -> Result<String, Response> {
             text("name") == Some(e.name.as_str())
                 || text("peer").is_some_and(|p| e.link.as_deref() == Some(p))
                 || text("id").is_some_and(|i| {
-                    memcp_core::directory::valid_id(i).as_deref() == Some(e.node_id.as_str())
+                    pensine_core::directory::valid_id(i).as_deref() == Some(e.node_id.as_str())
                 })
         })
         .map(|e| e.name)
@@ -272,7 +272,8 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             // The facts in dispute in the person's spaces, with their alternatives (`disputes`).
             // A person who owns no space has none.
             "/disputes" => {
-                let owns = memcp_core::users::access_of(&ctl, &me.id).is_ok_and(|g| !g.is_empty());
+                let owns =
+                    pensine_core::users::access_of(&ctl, &me.id).is_ok_and(|g| !g.is_empty());
                 if !owns {
                     return Response::json(200, &serde_json::json!({ "count": 0, "disputes": [] }));
                 }
@@ -295,7 +296,7 @@ pub fn handle(app: &App, req: &Request, now: i64) -> Response {
             "/sync/policy" => {
                 let peer = req.query.get("peer").map(String::as_str).unwrap_or("");
                 match sync_policy_peer(app, &me, peer)
-                    .and_then(|()| memcp_core::policy::view(&app.brain, &me, peer).map_err(fail))
+                    .and_then(|()| pensine_core::policy::view(&app.brain, &me, peer).map_err(fail))
                 {
                     Ok(v) => Response::json(200, &v),
                     Err(r) => r,
@@ -372,7 +373,7 @@ fn sync_policy_peer(app: &App, me: &User, peer: &str) -> Result<(), Response> {
     if peer.is_empty() {
         return Err(err(400, "peer is required"));
     }
-    memcp_core::peers::get(&app.brain, me, peer, memcp_core::util::now())
+    pensine_core::peers::get(&app.brain, me, peer, pensine_core::util::now())
         .map(|_| ())
         .map_err(|_| err(403, "not a machine of yours"))
 }
@@ -386,14 +387,14 @@ fn sync_policy_set(
     me: &User,
     body: &Value,
 ) -> Result<Value, Response> {
-    use memcp_core::policy::{self, Policy};
+    use pensine_core::policy::{self, Policy};
     let peer = arg(body, "peer")?;
     sync_policy_peer(app, me, peer)?;
     if let Some(word) = body.get("later").and_then(Value::as_str) {
         let p = Policy::parse(word).map_err(fail)?;
         policy::set_later(&app.brain, me, peer, p).map_err(fail)?;
     } else {
-        let space = memcp_core::Space::new(arg(body, "space")?).map_err(fail)?;
+        let space = pensine_core::Space::new(arg(body, "space")?).map_err(fail)?;
         if !users::is_space_owner(ctl, &space, &me.id).map_err(fail)? {
             return Err(err(403, "not your space"));
         }
@@ -427,9 +428,10 @@ fn console_target(ctl: &Connection, me: &User, body: &Value) -> Result<User, Res
 pub(crate) fn page_caller(
     ctl: &Connection,
     me: &User,
-) -> Result<memcp_core::access::Caller, Response> {
-    let grants = memcp_core::users::access_of(ctl, &me.id).map_err(|e| err(500, &e.to_string()))?;
-    Ok(memcp_core::access::Caller {
+) -> Result<pensine_core::access::Caller, Response> {
+    let grants =
+        pensine_core::users::access_of(ctl, &me.id).map_err(|e| err(500, &e.to_string()))?;
+    Ok(pensine_core::access::Caller {
         id: "page".into(),
         agent: "page".into(),
         user_id: me.id.clone(),
@@ -439,9 +441,9 @@ pub(crate) fn page_caller(
         paths: Default::default(),
         read_only_forced: false,
         no_person_guide: true,
-        rate_per_min: memcp_core::access::DEFAULT_RATE_PER_MIN,
-        max_text: memcp_core::access::DEFAULT_MAX_TEXT,
-        kind: memcp_core::access::Kind::Console,
+        rate_per_min: pensine_core::access::DEFAULT_RATE_PER_MIN,
+        max_text: pensine_core::access::DEFAULT_MAX_TEXT,
+        kind: pensine_core::access::Kind::Console,
         local: false,
     })
 }
@@ -456,7 +458,7 @@ pub(crate) fn living(
     args: &Value,
 ) -> Result<Value, Response> {
     let caller = page_caller(ctl, me)?;
-    memcp_core::tools::call(&app.brain, &caller, tool, args).map_err(|e| err(400, &e.to_string()))
+    pensine_core::tools::call(&app.brain, &caller, tool, args).map_err(|e| err(400, &e.to_string()))
 }
 
 fn admin_only(me: &User) -> Result<(), Response> {
@@ -627,9 +629,10 @@ fn action(
         "/nodes/invite" => {
             // A link of this node with a one-time ticket: whoever scans it from a node of this person joins at once.
             let ticket = crate::join::make_ticket(app, &me.id, &me.name, util::now())?;
-            let link = memcp_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
-                .map_err(fail)?
-                .to_link();
+            let link =
+                pensine_core::directory::own_link(&app.brain, &app.public_url, Some(&ticket))
+                    .map_err(fail)?
+                    .to_link();
             Ok(json!({
                 "link": link, "qr": qr_svg(&link), "expires_in": crate::join::TICKET_TTL, "single_use": true,
             }))
@@ -637,7 +640,7 @@ fn action(
         "/nodes/via" => {
             // The address by which this node asks another one (one it told), or none to go back to the default.
             let name = nodes_name(app, body)?;
-            memcp_core::directory::set_via(
+            pensine_core::directory::set_via(
                 &app.brain,
                 &name,
                 body.get("address").and_then(Value::as_str),
@@ -668,7 +671,7 @@ fn action(
             // A code a device exchanges once, within ten minutes, for a key to the person's Inbox only: a device
             // never chooses a vault, the janitor or the person sorts what it sends.
             let (code, triage) =
-                memcp_core::pairing::create_for_peer(&app.brain, &me.id, &me.name, util::now())
+                pensine_core::pairing::create_for_peer(&app.brain, &me.id, &me.name, util::now())
                     .map_err(fail)?;
             // What a phone scans: one link, `memcp://join?server=…&code=…`, so that nothing is typed.
             let link = format!(
@@ -679,7 +682,7 @@ fn action(
             Ok(json!({
                 "code": code,
                 "server": app.public_url,
-                "expires_in": memcp_core::pairing::CODE_TTL,
+                "expires_in": pensine_core::pairing::CODE_TTL,
                 "triage": triage,
                 "link": link,
                 "qr": qr_svg(&link),
@@ -694,7 +697,7 @@ fn action(
         }
         "/triage/send" => {
             // The person decides where a capture of Inbox goes: the inbox of one of their vaults.
-            let from = memcp_core::triage::of(&app.brain, &me.id)
+            let from = pensine_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
             let to = Space::new(arg(body, "space")?).map_err(fail)?;
@@ -707,15 +710,21 @@ fn action(
                     "{to} is not one of your spaces"
                 ))));
             }
-            let id =
-                memcp_core::triage::send(&app.brain, &from, arg(body, "id")?, &to, &me.id, &me.id)
-                    .map_err(fail)?;
+            let id = pensine_core::triage::send(
+                &app.brain,
+                &from,
+                arg(body, "id")?,
+                &to,
+                &me.id,
+                &me.id,
+            )
+            .map_err(fail)?;
             Ok(json!({ "ok": true, "id": id, "space": to.as_str() }))
         }
         "/triage/send-many" => {
             // Several captures of Inbox at once, to the inbox of one vault. Each one is sent on its own:
             // one that fails stays where it is and is named in the answer, the others still go.
-            let from = memcp_core::triage::of(&app.brain, &me.id)
+            let from = pensine_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
             let to = Space::new(arg(body, "space")?).map_err(fail)?;
@@ -738,7 +747,7 @@ fn action(
             }
             let (mut sent, mut failed) = (0usize, Vec::<String>::new());
             for id in ids {
-                match memcp_core::triage::send(&app.brain, &from, id, &to, &me.id, &me.id) {
+                match pensine_core::triage::send(&app.brain, &from, id, &to, &me.id, &me.id) {
                     Ok(_) => sent += 1,
                     Err(_) => failed.push(id.to_string()),
                 }
@@ -749,10 +758,10 @@ fn action(
         }
         "/triage/retry-transcription" => {
             // A recording the node gave up on: the tag comes off, the node tries again at its next pass.
-            let from = memcp_core::triage::of(&app.brain, &me.id)
+            let from = pensine_core::triage::of(&app.brain, &me.id)
                 .map_err(fail)?
                 .ok_or_else(|| fail(Error::Invalid("no Inbox yet".into())))?;
-            memcp_core::files::mark_transcription_failed(
+            pensine_core::files::mark_transcription_failed(
                 &app.brain,
                 &from,
                 arg(body, "id")?,
@@ -881,7 +890,7 @@ fn action(
                         .collect()
                 })
                 .unwrap_or_default();
-            let tags = memcp_core::facts::normalize_tags(&tags).map_err(fail)?;
+            let tags = pensine_core::facts::normalize_tags(&tags).map_err(fail)?;
             let f = files::put_tagged(
                 &app.brain,
                 &space,
@@ -940,7 +949,7 @@ fn file_bytes(app: &App, ctl: &Connection, me: &User, req: &Request) -> Response
             };
             let out = app.brain.dir().join("outgoing");
             std::fs::create_dir_all(&out)?;
-            let link = out.join(memcp_core::text::hex(&util::random_bytes::<8>()));
+            let link = out.join(pensine_core::text::hex(&util::random_bytes::<8>()));
             if std::fs::hard_link(&path, &link).is_err() {
                 std::fs::copy(&path, &link)?;
             }
@@ -1155,7 +1164,7 @@ fn attention(ctl: &Connection, me: &User, now: i64) -> Result<Value, Error> {
 fn export_get(app: &App, me: &User) -> Response {
     let work = std::env::temp_dir().join(format!(
         "memcp-export-{}",
-        memcp_core::text::hex(&util::random_bytes::<8>())
+        pensine_core::text::hex(&util::random_bytes::<8>())
     ));
     // The tar is written to a file, block by block, and sent from it: a big memory is never held whole.
     let tar_path = work.with_extension("tar");
@@ -1238,7 +1247,7 @@ fn timeline(app: &App, ctl: &Connection, me: &User, req: &Request, now: i64) -> 
     let from = now - width * TIMELINE_BUCKETS;
     let build = || -> Result<Value, Error> {
         let reach = users::access_of(ctl, &me.id)?;
-        let triage = memcp_core::triage::of(&app.brain, &me.id)?;
+        let triage = pensine_core::triage::of(&app.brain, &me.id)?;
         let mut vaults = vec![];
         for s in app.brain.spaces()? {
             if !reach.contains_key(&s) || Some(&s) == triage.as_ref() {
@@ -1287,7 +1296,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
         let visible = |id: &str| id == me.id;
         let reach = users::access_of(ctl, &me.id)?;
         // Every memory has its Inbox from the start: it is where Note writes (docs/UI-SPEC.md, Note).
-        let triage = Some(memcp_core::triage::ensure(&app.brain, &me.id, &me.name)?);
+        let triage = Some(pensine_core::triage::ensure(&app.brain, &me.id, &me.name)?);
         let spaces: Vec<Value> = app
             .brain
             .spaces()?
@@ -1346,7 +1355,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
                 vec![]
             },
             "public_url": app.public_url,
-            "node": { "name": app.node_name, "version": env!("CARGO_PKG_VERSION"), "id": memcp_core::directory::node_id(&app.brain).ok() },
+            "node": { "name": app.node_name, "version": env!("CARGO_PKG_VERSION"), "id": pensine_core::directory::node_id(&app.brain).ok() },
             "catalogue": app.brain.catalogue()?.iter().map(|k| json!({
                 "key": k.key, "label": k.label, "description": k.description,
                 "feature": k.feature.map(|f| f.word()),
@@ -1362,7 +1371,7 @@ fn state(app: &App, ctl: &Connection, me: &User) -> Response {
             "spaces": spaces,
             // What waits in Inbox, for the person to decide when the janitor did not.
             "triage": match &triage {
-                Some(t) => memcp_core::triage::waiting(&app.brain, t, 300)?,
+                Some(t) => pensine_core::triage::waiting(&app.brain, t, 300)?,
                 None => Value::Null,
             },
             "connections": connections,

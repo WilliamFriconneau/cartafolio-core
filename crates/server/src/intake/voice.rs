@@ -321,7 +321,7 @@ pub fn transcribe(
             // What the recording says of its call (participants, app) goes on to its text.
             let call_tags: Vec<String> = tags_of(desc)
                 .into_iter()
-                .filter(|t| memcp_core::call::is_call_tag(t))
+                .filter(|t| pensine_core::call::is_call_tag(t))
                 .map(String::from)
                 .collect();
             one(
@@ -420,7 +420,7 @@ fn one(
     // A private folder for its files, under the state folder.
     let base = state_dir.join("work");
     std::fs::create_dir_all(&base).map_err(|e| Error::Io(e.to_string()))?;
-    memcp_core::fsx::set_private_dir(&base).map_err(|e| Error::Io(e.to_string()))?;
+    pensine_core::fsx::set_private_dir(&base).map_err(|e| Error::Io(e.to_string()))?;
     let work = base.join(id.replace(['/', '.'], "_"));
     let _ = std::fs::remove_dir_all(&work);
     std::fs::create_dir(&work).map_err(|e| Error::Io(e.to_string()))?;

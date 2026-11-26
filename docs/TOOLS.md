@@ -1824,7 +1824,7 @@ Example call and answer:
 
 ## Bank statement tools
 
-Offered by a node on a space of the money kind (crate `memcp-finances`): `finances_balances` (no argument), `finances_movements` (`account`, `from`, `to`, `filter`, `limit` 1 to 500), `finances_monthly` (`month` as yyyy-mm), `finances_overdraft_exit` (`months` 1 to 12, default 3: when each overdrawn account comes back above zero, an estimate from the average monthly net of the last complete months), `finances_rules` (`rules` object to replace the person's rules; needs write), `finances_import` (`file_id`, required; write; idempotent). Read tools need read on the space, `finances_import` and a `rules` change need write; errors are `denied` or `invalid`.
+Offered by a node on a space of the money kind (crate `pensine-finances`): `finances_balances` (no argument), `finances_movements` (`account`, `from`, `to`, `filter`, `limit` 1 to 500), `finances_monthly` (`month` as yyyy-mm), `finances_overdraft_exit` (`months` 1 to 12, default 3: when each overdrawn account comes back above zero, an estimate from the average monthly net of the last complete months), `finances_rules` (`rules` object to replace the person's rules; needs write), `finances_import` (`file_id`, required; write; idempotent). Read tools need read on the space, `finances_import` and a `rules` change need write; errors are `denied` or `invalid`.
 
 ## Design notes
 

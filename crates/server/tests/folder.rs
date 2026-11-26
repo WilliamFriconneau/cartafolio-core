@@ -6,11 +6,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::folders::{self, Mode};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space, util};
-use memcp_server::{cli, folder_sync};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::folders::{self, Mode};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space, util};
+use pensine_server::{cli, folder_sync};
 
 type Res = Result<(), Box<dyn Error>>;
 

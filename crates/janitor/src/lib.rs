@@ -15,7 +15,7 @@
 
 use std::collections::BTreeMap;
 
-use memcp_client::{Client, Error as ClientError, Retry};
+use pensine_client::{Client, Error as ClientError, Retry};
 use serde_json::{Value, json};
 
 mod config;
@@ -158,7 +158,7 @@ const MAX_FAILS: u64 = 3;
 
 impl Janitor {
     pub fn new(config: Config) -> Result<Janitor, String> {
-        if !memcp_client::allowed_url(&config.url) {
+        if !pensine_client::allowed_url(&config.url) {
             return Err(format!(
                 "{} is refused: the key goes over HTTPS, or in clear only to this machine or the own network",
                 config.url

@@ -27,7 +27,7 @@ jobs:
         run: sh packaging/macos/install-mac.sh --yes --from target/release --port 18791
       - name: A note, a file and an assistant's request through the node
         run: |
-          APP="$HOME/Library/Application Support/MemCP"
+          APP="$HOME/Library/Application Support/Pensine"
           for suffix in "" -manager -sync; do
             for brand in pensine silice; do
               test -x "$APP/bin/$brand$suffix" || exit 1
@@ -50,13 +50,13 @@ jobs:
           grep -q 'owner-inbox' spaces.txt
       - name: Logs
         if: always()
-        run: tail -n 50 "$HOME/Library/Logs/MemCP/"*.log || true
+        run: tail -n 50 "$HOME/Library/Logs/Pensine/"*.log || true
       - name: Uninstall
         run: |
           sh packaging/macos/install-mac.sh --uninstall --purge --yes --port 18791
           ! launchctl list | grep org.memcp
           ! ls "$HOME/Library/LaunchAgents/" | grep org.memcp
-          ! test -e "$HOME/Library/Application Support/MemCP"
+          ! test -e "$HOME/Library/Application Support/Pensine"
 
   windows:
     runs-on: windows-latest
@@ -73,7 +73,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          $root = Join-Path $env:LOCALAPPDATA 'MemCP'
+          $root = Join-Path $env:LOCALAPPDATA 'Pensine'
           foreach ($suffix in @('', '-manager', '-sync')) {
             $original = Join-Path $root "bin\memcp$suffix.exe"
             foreach ($brand in @('pensine', 'silice')) {
@@ -85,7 +85,7 @@ jobs:
           }
           $m = Join-Path $root 'bin\memcp.exe'
           $data = Join-Path $root 'data'
-          Get-ScheduledTask -TaskPath '\MemCP\' | Format-Table TaskName, State
+          Get-ScheduledTask -TaskPath '\Pensine\' | Format-Table TaskName, State
           if (-not (Test-Path (Join-Path $root 'memcp.toml'))) { throw 'no settings file' }
           & $m --data $data intake text "a note from the desktop test"
           if ($LASTEXITCODE -ne 0) { throw "text: $LASTEXITCODE" }
@@ -104,10 +104,10 @@ jobs:
       - name: Logs
         if: always()
         shell: pwsh
-        run: Get-ChildItem (Join-Path $env:LOCALAPPDATA 'MemCP\logs') -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
+        run: Get-ChildItem (Join-Path $env:LOCALAPPDATA 'Pensine\logs') -ErrorAction SilentlyContinue | ForEach-Object { "== $($_.Name)"; Get-Content $_.FullName -Tail 50 }
       - name: Uninstall
         shell: pwsh
         run: |
           ./packaging/windows/install.ps1 -Uninstall -Purge -Yes
-          if (Get-ScheduledTask -TaskPath '\MemCP\' -ErrorAction SilentlyContinue) { throw 'tasks left' }
-          if (Test-Path (Join-Path $env:LOCALAPPDATA 'MemCP')) { throw 'files left' }
+          if (Get-ScheduledTask -TaskPath '\Pensine\' -ErrorAction SilentlyContinue) { throw 'tasks left' }
+          if (Test-Path (Join-Path $env:LOCALAPPDATA 'Pensine')) { throw 'files left' }

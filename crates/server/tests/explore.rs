@@ -6,11 +6,11 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
-use memcp_core::text::Language;
-use memcp_core::users;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::text::Language;
+use pensine_core::users;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -325,7 +325,7 @@ fn a_stored_dashboard_counts_the_signs_and_lists_the_targets() -> Res {
         .find(|u| u.ha_user.as_deref() == Some(SAM.0))
         .ok_or("no person")?;
     let health = e.app.brain.add_vault(&me.id, &me.name, "health")?;
-    let today = memcp_core::util::iso(memcp_core::util::now());
+    let today = pensine_core::util::iso(pensine_core::util::now());
     let day = &today[..10];
     let entry = format!(
         "[App] day {day}: {}",

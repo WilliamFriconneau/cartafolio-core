@@ -6,13 +6,13 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use memcp_client::peer_sync::Peer;
-use memcp_core::access::{self, Rights};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space, users};
-use memcp_server::app::App;
-use memcp_server::net::{Listeners, serve_on};
+use pensine_client::peer_sync::Peer;
+use pensine_core::access::{self, Rights};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space, users};
+use pensine_server::app::App;
+use pensine_server::net::{Listeners, serve_on};
 
 const NOW: i64 = 1_794_800_000;
 
@@ -132,7 +132,7 @@ fn two_nodes_end_with_the_same_memory_and_a_second_pass_changes_nothing() {
     assert_eq!(texts(&srv, &space).len(), 6);
 
     // The server shows this peer, in step.
-    let status = memcp_core::sync::status(&srv, NOW + 130).expect("status");
+    let status = pensine_core::sync::status(&srv, NOW + 130).expect("status");
     let me = status
         .iter()
         .find(|p| p.peer == "peer-mac-ab12")
@@ -196,7 +196,7 @@ fn odd_peer() -> String {
         for rq in server.incoming_requests() {
             let url = rq.url().to_string();
             let body = if url.starts_with("/sync/spaces") {
-                serde_json::json!({ "protocol": memcp_core::sync::PROTOCOL,
+                serde_json::json!({ "protocol": pensine_core::sync::PROTOCOL,
                     "spaces": [{ "space": "sam-me", "kind": "custom", "writable": false }] })
             } else if url.starts_with("/sync/events") {
                 serde_json::json!({ "events": [{ "nothing": "of an event" }], "next": 1, "head": 1, "more": false })

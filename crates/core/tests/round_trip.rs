@@ -7,13 +7,13 @@ use std::error::Error;
 use std::path::PathBuf;
 
 use common::{Res, Temp, sp};
-use memcp_core::Brain;
-use memcp_core::export;
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::files;
-use memcp_core::merge::{self, Options, Policy};
-use memcp_core::text::Language;
-use memcp_core::users::{self, OWNER, User};
+use pensine_core::Brain;
+use pensine_core::export;
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::files;
+use pensine_core::merge::{self, Options, Policy};
+use pensine_core::text::Language;
+use pensine_core::users::{self, OWNER, User};
 
 fn say(b: &Brain, space: &str, text: &str, tags: &[&str]) -> Result<String, Box<dyn Error>> {
     let conn = b.open_space(&sp(space))?;

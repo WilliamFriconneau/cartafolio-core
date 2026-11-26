@@ -7,11 +7,11 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use base64::Engine as _;
-use memcp_core::access::{self, Rights};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::Request;
+use pensine_core::access::{self, Rights};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::Request;
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -146,7 +146,7 @@ fn a_money_space_publishes_the_finance_extension_and_pages_its_movements() -> Re
         "space_view",
         json!({ "space": "finances", "view": "capabilities" }),
     ));
-    assert_eq!(cap["contract"], memcp_core::view::CONTRACT);
+    assert_eq!(cap["contract"], pensine_core::view::CONTRACT);
     assert_eq!(cap["kind"], "money");
     assert_eq!(cap["sensitive"], true);
     let ext = cap["extensions"].as_array().ok_or("no extension")?;

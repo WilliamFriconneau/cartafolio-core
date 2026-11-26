@@ -1,10 +1,10 @@
 mod common;
 
 use common::{Res, Temp};
-use memcp_core::access::{self, Caller, Kind, Rights};
-use memcp_core::text::Language;
-use memcp_core::users::OWNER;
-use memcp_core::{Brain, Space, facts, sync, tools, util};
+use pensine_core::access::{self, Caller, Kind, Rights};
+use pensine_core::text::Language;
+use pensine_core::users::OWNER;
+use pensine_core::{Brain, Space, facts, sync, tools, util};
 use serde_json::{Value, json};
 
 fn node(root: &Temp, name: &str, space: &Space) -> Result<Brain, Box<dyn std::error::Error>> {

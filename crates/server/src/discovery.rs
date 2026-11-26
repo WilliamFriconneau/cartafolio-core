@@ -21,7 +21,7 @@ pub fn well_known(name: &str) -> Value {
         "version": env!("CARGO_PKG_VERSION"),
         "name": name,
         "join": "/join",
-        "view_contract": memcp_core::view::CONTRACT,
+        "view_contract": pensine_core::view::CONTRACT,
     })
 }
 

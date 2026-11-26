@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::access::{self, Rights};
-use memcp_core::tools;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
+use pensine_core::access::{self, Rights};
+use pensine_core::tools;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
 use serde_json::json;
 
 #[test]

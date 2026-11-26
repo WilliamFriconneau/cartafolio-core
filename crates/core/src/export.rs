@@ -428,9 +428,9 @@ fn export_vaults(
     write_private(&root.join("guides.json"), g.as_bytes())?;
     hashes.insert("guides.json".into(), sha_of(g.as_bytes()));
 
-    let readme = "This is the memory of one person, taken out of MemCP.\n\n\
+    let readme = "This is the memory of one person, taken out of Pensine.\n\n\
         readable/   each vault as a Markdown document: the facts in force, then the history.\n\
-        spaces/     each space as an SQLite database, complete, to be adopted by another MemCP.\n\
+        spaces/     each space as an SQLite database, complete, to be adopted by another Pensine.\n\
         files/      the photos and documents of each vault, named by their fingerprint.\n\
         guides.json the person's standing instructions, every version.\n\
         manifest.json the fingerprint of every file here, and what each vault holds.\n\n\
@@ -481,7 +481,7 @@ pub fn verify_export(dir: &Path) -> Result<Value> {
     let manifest: Value = serde_json::from_str(&text)
         .map_err(|e| Error::Invalid(format!("manifest.json is not valid: {e}")))?;
     if manifest["format"] != FORMAT && manifest["format"] != FORMER_FORMAT {
-        return Err(Error::Invalid("this is not a MemCP export".into()));
+        return Err(Error::Invalid("this is not a Pensine export".into()));
     }
     if manifest["version"].as_u64() != Some(u64::from(VERSION)) {
         return Err(Error::Invalid(format!(

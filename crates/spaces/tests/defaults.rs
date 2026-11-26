@@ -1,7 +1,7 @@
 //! The vaults proposed at « Commencer une mémoire », and hashtags as explicit keywords.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use memcp_spaces::*;
+use pensine_spaces::*;
 
 fn stamp() -> String {
     use std::sync::atomic::{AtomicU64, Ordering};

@@ -22,13 +22,13 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, RwLock};
 
-use memcp_core::text::{self, Language};
-use memcp_core::users::{self, User};
-use memcp_core::{Brain, Error};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
-use memcp_server::net::Handler;
-use memcp_server::oauth;
+use pensine_core::text::{self, Language};
+use pensine_core::users::{self, User};
+use pensine_core::{Brain, Error};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
+use pensine_server::net::Handler;
+use pensine_server::oauth;
 use serde_json::{Value, json};
 
 /// What the manager is told at start.
@@ -154,7 +154,7 @@ impl Manager {
         } else if let Some(u) = opts
             .listen
             .as_deref()
-            .and_then(memcp_server::app::listened_url)
+            .and_then(pensine_server::app::listened_url)
         {
             // No address given: the one it listens on.
             app.public_url = u;
@@ -267,9 +267,9 @@ impl Manager {
             .login_url
             .as_deref()
             .filter(|_| !self.opts.tailnet_users.is_empty());
-        let _ = memcp_core::directory::set_exposures(
+        let _ = pensine_core::directory::set_exposures(
             &app.brain,
-            &memcp_core::directory::exposures_from(
+            &pensine_core::directory::exposures_from(
                 self.opts.listen.as_deref().unwrap_or("127.0.0.1:8791"),
                 &app.public_url,
                 tailnet,
@@ -348,7 +348,7 @@ impl Manager {
         let u = users::user_by_name(&ctl, person)
             .map_err(fail)?
             .ok_or_else(|| (1, format!("unknown person: {person}")))?;
-        let token = memcp_core::access::console_token(&ctl, &u.id).map_err(fail)?;
+        let token = pensine_core::access::console_token(&ctl, &u.id).map_err(fail)?;
         println!("{token}");
         Ok(())
     }
@@ -431,7 +431,7 @@ impl Manager {
         };
         let path = req.path.trim_end_matches('/');
         if let Ok(ctl) = self.registry.brain.open_control() {
-            let _ = users::touch_seen(&ctl, &u.id, memcp_core::util::now());
+            let _ = users::touch_seen(&ctl, &u.id, pensine_core::util::now());
         }
         if is_personal_registry_path(path) {
             let r = self.registry.handle(req);
@@ -509,7 +509,7 @@ impl Manager {
                                         app.brain
                                             .open_control()
                                             .ok()
-                                            .and_then(|c| memcp_core::access::list(&c).ok())
+                                            .and_then(|c| pensine_core::access::list(&c).ok())
                                             .map_or(0, |l| l
                                                 .iter()
                                                 .filter(|c| c.revoked_at.is_none())
@@ -540,7 +540,7 @@ impl Manager {
         let Ok(ctl) = self.registry.brain.open_control() else {
             return r;
         };
-        let now = memcp_core::util::now();
+        let now = pensine_core::util::now();
         let person = |p: &User| json!({ "id": p.id, "name": p.name, "display": p.display });
         let all = users::list_users(&ctl).unwrap_or_default();
         let heir = users::heir_of(&ctl, &u.id)
@@ -586,14 +586,14 @@ impl Manager {
 
     /// Whether the request carries the console token of an administrator of the installation.
     fn console_admin_of(&self, req: &Request) -> bool {
-        let Some(token) = memcp_server::http::bearer_of(req.header("authorization")) else {
+        let Some(token) = pensine_server::http::bearer_of(req.header("authorization")) else {
             return false;
         };
         let Ok(ctl) = self.registry.brain.open_control() else {
             return false;
         };
-        let now = memcp_core::util::now();
-        memcp_core::access::authenticate_console(&ctl, &token, now)
+        let now = pensine_core::util::now();
+        pensine_core::access::authenticate_console(&ctl, &token, now)
             .ok()
             .flatten()
             .and_then(|id| users::user(&ctl, &id).ok().flatten())
@@ -613,7 +613,7 @@ impl Manager {
         let Some(app) = self.person_app(&user.name) else {
             return err(404, "this person has no installation yet");
         };
-        match oauth::invite_create(&app, &user.name, memcp_core::util::now()) {
+        match oauth::invite_create(&app, &user.name, pensine_core::util::now()) {
             Some((code, ends)) => Response::json(
                 200,
                 &json!({
@@ -636,7 +636,7 @@ impl Manager {
         if !approval && !q.contains_key("invite") {
             return None;
         }
-        if !approval && oauth::invite_blocked(&self.registry, req, memcp_core::util::now()) {
+        if !approval && oauth::invite_blocked(&self.registry, req, pensine_core::util::now()) {
             return Some(self.registry.handle(req));
         }
         let found = self.holder(|app| {
@@ -679,7 +679,7 @@ impl Manager {
 
 impl Handler for Manager {
     fn oversize(&self, ip: &str) {
-        self.registry.fail(memcp_core::util::now(), ip);
+        self.registry.fail(pensine_core::util::now(), ip);
     }
 
     fn body_limit(
@@ -689,7 +689,7 @@ impl Handler for Manager {
         headers: &std::collections::HashMap<String, String>,
         trusted: bool,
     ) -> u64 {
-        memcp_server::app::large_body_allowed(
+        pensine_server::app::large_body_allowed(
             method,
             path,
             headers,
@@ -751,7 +751,7 @@ impl Handler for Manager {
             ("POST", "/pair") => {
                 // Wrong codes are answered, and counted, by the registry: an address held off there is
                 // held off before any person's installation is asked.
-                let now = memcp_core::util::now();
+                let now = pensine_core::util::now();
                 let who = req.ip.clone().unwrap_or_else(|| "?".into());
                 if self.registry.blocked(now, &who) {
                     return reply(&self.registry);
@@ -762,7 +762,10 @@ impl Handler for Manager {
                 }
             }
             ("GET", "/.well-known/pensine" | "/.well-known/silice" | "/.well-known/memcp") => {
-                Response::json(200, &memcp_server::discovery::well_known(&self.node_name()))
+                Response::json(
+                    200,
+                    &pensine_server::discovery::well_known(&self.node_name()),
+                )
             }
             // An invitation ticket is kept by the person's installation that made it: the request goes there, else a
             // ticket made for anyone but the first administrator was « unknown ». The polls follow their request.
@@ -781,10 +784,10 @@ impl Handler for Manager {
             // An administrator's console token makes an invitation code for a person: `{"name": "<person>"}`.
             // Like the rest of the control plane, never to a request that came through Funnel.
             ("POST", "/admin/api/users/invite") => {
-                if !self.registry.console_admin || memcp_server::app::through_funnel(req) {
+                if !self.registry.console_admin || pensine_server::app::through_funnel(req) {
                     return err(404, "not found");
                 }
-                let now = memcp_core::util::now();
+                let now = pensine_core::util::now();
                 let from = App::console_guard_key(req);
                 if self.registry.console_blocked(now, &from) {
                     return err(429, "too many attempts").with("Retry-After", "900");
@@ -792,7 +795,7 @@ impl Handler for Manager {
                 if self.console_admin_of(req) {
                     self.make_invite(req)
                 } else {
-                    if memcp_server::http::bearer_of(req.header("authorization")).is_some() {
+                    if pensine_server::http::bearer_of(req.header("authorization")).is_some() {
                         self.registry.fail(now, &from);
                     }
                     err(401, "an administrator's console token is required")

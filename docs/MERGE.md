@@ -53,7 +53,7 @@ the name is refused. That is the only case it knows: every space is new.
 
 ## Order of work
 
-1. Engine in `memcp-core` (`merge.rs`): plan, preview, apply, with tests (same, renamed, conflicting,
+1. Engine in `pensine-core` (`merge.rs`): plan, preview, apply, with tests (same, renamed, conflicting,
    twice, interrupted).
 2. CLI `merge`.
 3. The page.

@@ -637,7 +637,7 @@ fn classify(fact: &Fact, space_kind: &str) -> (String, Value) {
                     "measure": id,
                     "value": fields.get(id).cloned().unwrap_or(Value::Null),
                     "unit": fields.get(format!("{id}_unit")).cloned().unwrap_or_else(|| {
-                        memcp_health::extra_measure(id)
+                        pensine_health::extra_measure(id)
                             .map(|(_, u)| u)
                             .filter(|u| !u.is_empty())
                             .map_or(Value::Null, Value::from)
@@ -676,12 +676,13 @@ fn classify(fact: &Fact, space_kind: &str) -> (String, Value) {
 }
 
 fn sign_label(id: &str) -> Option<String> {
-    let folded = memcp_health::text::fold(id);
-    memcp_health::builtin()
+    let folded = pensine_health::text::fold(id);
+    pensine_health::builtin()
         .manifestations()
         .iter()
         .find(|m| {
-            memcp_health::text::fold(&m.id) == folded || memcp_health::text::fold(&m.tag) == folded
+            pensine_health::text::fold(&m.id) == folded
+                || pensine_health::text::fold(&m.tag) == folded
         })
         .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned())
 }
@@ -689,13 +690,13 @@ fn sign_label(id: &str) -> Option<String> {
 /// The label of a measure, by its id or by its tag (`heart_rate` and `pouls`); a measure the referential does not know
 /// is named by its key, readable (`hrv_sdnn_ms` gives `Hrv sdnn ms`).
 fn measure_label(id: &str) -> Option<String> {
-    let known = memcp_health::builtin()
+    let known = pensine_health::builtin()
         .measure_defs()
         .iter()
         .find(|m| m.id == id || m.tag == id)
         .and_then(|m| m.labels.get("fr").or_else(|| m.labels.get("en")).cloned());
     known
-        .or_else(|| memcp_health::extra_measure(id).map(|(label, _)| label))
+        .or_else(|| pensine_health::extra_measure(id).map(|(label, _)| label))
         .or_else(|| {
             let words = id.replace(['_', '-'], " ");
             let mut c = words.trim().chars();

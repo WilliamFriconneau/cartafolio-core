@@ -4,8 +4,8 @@
 use std::collections::BTreeSet;
 use std::path::PathBuf;
 
-use memcp_server::config::{self, Settings, Value};
-use memcp_server::doctor;
+use pensine_server::config::{self, Settings, Value};
+use pensine_server::doctor;
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")

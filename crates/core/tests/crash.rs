@@ -9,13 +9,13 @@ use std::path::Path;
 use std::time::Duration;
 
 use common::{Res, Temp, sp};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::failpoint::{self, at};
-use memcp_core::files::{self, FileInfo};
-use memcp_core::moves::{self, Step};
-use memcp_core::sync::{self, Cursor};
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::failpoint::{self, at};
+use pensine_core::files::{self, FileInfo};
+use pensine_core::moves::{self, Step};
+use pensine_core::sync::{self, Cursor};
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
 
 type Out<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -42,7 +42,7 @@ fn recording(seed: u8) -> Vec<u8> {
 fn crash<T>(
     b: &Brain,
     point: &'static str,
-    op: impl FnOnce() -> memcp_core::Result<T>,
+    op: impl FnOnce() -> pensine_core::Result<T>,
 ) -> Out<Brain> {
     failpoint::arm(Some(point));
     let r = op();
@@ -111,7 +111,7 @@ fn consistent(b: &Brain) -> Res {
     Ok(())
 }
 
-fn put(b: &Brain, name: &str, bytes: &[u8]) -> memcp_core::Result<FileInfo> {
+fn put(b: &Brain, name: &str, bytes: &[u8]) -> pensine_core::Result<FileInfo> {
     files::put_tagged(
         b,
         &notes(),
@@ -253,7 +253,7 @@ fn catch_up(from: &Brain, to: &Brain) -> Res {
     }
 }
 
-fn erase(b: &Brain, f: &FileInfo, text: &str) -> memcp_core::Result<FileInfo> {
+fn erase(b: &Brain, f: &FileInfo, text: &str) -> pensine_core::Result<FileInfo> {
     files::erase(b, &notes(), "dictation", &f.id, &notes(), text)
 }
 
@@ -321,7 +321,7 @@ fn a_record_an_earlier_version_left_unlogged_is_logged_once_at_start() -> Res {
     // What a crash between the steps of an earlier version left: records with no event (the log is append-only, so
     // they are written as that version did), and a note left untyped.
     let (kept, gone) = (recording(4), recording(5));
-    let digest = |b: &[u8]| memcp_core::chunks::digest(b);
+    let digest = |b: &[u8]| pensine_core::chunks::digest(b);
     let dir = a.dir().join("files").join("notes");
     std::fs::create_dir_all(&dir)?;
     std::fs::write(dir.join(digest(&kept)), &kept)?;
@@ -442,7 +442,7 @@ fn a_note_whose_move_was_cut_off_is_left_to_the_move_then_corrected() -> Res {
     let b = Brain::open(b.dir())?;
     assert_eq!(b.recover()?.moves, 1);
     let home = b.open_space(&sp("home"))?;
-    let copy = memcp_core::triage::filed_id(&f.id, &sp("home"));
+    let copy = pensine_core::triage::filed_id(&f.id, &sp("home"));
     let fixed = facts::supersede(&home, &sp("home"), "me", &copy, fix, None)?;
     assert_eq!(fixed.kind, "decision", "an omitted kind keeps the old one");
     let active: i64 = conn.query_row(
@@ -536,7 +536,7 @@ fn a_pruning_cut_off_after_its_commit_loses_the_bytes_at_restart() -> Res {
         Cursor::Pushed,
         sync::head(&b, &notes())?,
     )?;
-    let later = memcp_core::util::now() + 90 * 86_400;
+    let later = pensine_core::util::now() + 90 * 86_400;
     let b = crash(&b, at::SYNC_PRUNE_BYTES, || {
         sync::prune_window(&b, &notes(), 30, later)
     })?;

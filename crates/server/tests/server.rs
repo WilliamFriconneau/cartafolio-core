@@ -8,12 +8,12 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::time::Duration;
 
-use memcp_core::access::{self, Rights};
-use memcp_core::guide;
-use memcp_core::text::Language;
-use memcp_core::{Brain, Space};
-use memcp_server::app::App;
-use memcp_server::http::{Request, Response};
+use pensine_core::access::{self, Rights};
+use pensine_core::guide;
+use pensine_core::text::Language;
+use pensine_core::{Brain, Space};
+use pensine_server::app::App;
+use pensine_server::http::{Request, Response};
 use serde_json::{Value, json};
 
 type Res = Result<(), Box<dyn Error>>;
@@ -28,7 +28,7 @@ fn sp(n: &str) -> Space {
 
 fn temp(tag: &str) -> PathBuf {
     let n = N.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("memcp-server-{tag}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pensine-server-{tag}-{}-{n}", std::process::id()));
     let _ = fs::remove_dir_all(&dir);
     dir
 }
@@ -125,7 +125,7 @@ fn read_before_write_requires_a_recent_read_from_the_same_connection() -> Res {
     let token = connect(&e, "writer", "work:rw", false)?;
     let other_token = connect(&e, "other-writer", "work:rw", false)?;
     let ctl = e.app.brain.open_control()?;
-    let now = memcp_core::util::now();
+    let now = pensine_core::util::now();
     let writer = access::authenticate(&ctl, &token, now)?.ok_or("missing writer")?;
     let other = access::authenticate(&ctl, &other_token, now)?.ok_or("missing other writer")?;
     let call_at = |caller: &access::Caller, name, args, at| {
@@ -283,7 +283,7 @@ fn space_reads_repeat_the_journal_handoff_without_initializing() -> Res {
     assert!(reminder.contains("Combine several messages on the same topic in one handoff"));
     assert!(reminder.contains("important reasoning"));
     assert!(reminder.contains("`health` (writable)"));
-    assert_eq!(unrestricted["notice"], memcp_core::tools::NOTICE);
+    assert_eq!(unrestricted["notice"], pensine_core::tools::NOTICE);
     assert_eq!(unrestricted["results"][0]["id"], id);
 
     let empty = text_of(&call(
@@ -685,7 +685,7 @@ fn the_default_ceiling_is_an_anti_flood_one_that_no_feed_meets() -> Res {
     for _ in 0..400 {
         assert_eq!(rpc(&e, &t, &[], ping.clone()).status, 200);
     }
-    assert_eq!(memcp_core::access::DEFAULT_RATE_PER_MIN, 6000);
+    assert_eq!(pensine_core::access::DEFAULT_RATE_PER_MIN, 6000);
     Ok(())
 }
 
@@ -835,7 +835,7 @@ fn http(port: u16, raw: &str) -> Result<(String, String), Box<dyn Error>> {
 #[test]
 fn a_second_server_refuses_the_same_data_directory() -> Res {
     let dir = temp("node-instance");
-    Brain::init(&dir, &[], memcp_core::text::Language::English)?;
+    Brain::init(&dir, &[], pensine_core::text::Language::English)?;
     let bin = env!("CARGO_BIN_EXE_memcp");
     let (first, port) = serve_on_a_free_port(bin, &dir, &[])?;
     let _first = Child(first, dir.clone());
@@ -1409,7 +1409,7 @@ fn an_app_deposits_under_its_own_ids_and_gets_its_cursor_back() -> Res {
 
 #[test]
 fn doctor_reads_an_installation_and_changes_nothing() -> Res {
-    use memcp_server::doctor;
+    use pensine_server::doctor;
     let e = env()?;
     let dir = e.app.brain.dir().to_path_buf();
     let t = connect(&e, "wide-key", "all", false)?;
@@ -1438,7 +1438,7 @@ fn doctor_reads_an_installation_and_changes_nothing() -> Res {
 
 #[test]
 fn doctor_fails_on_a_missing_vault_file_and_on_a_data_directory_that_is_not_there() -> Res {
-    use memcp_server::doctor;
+    use pensine_server::doctor;
     let e = env()?;
     let dir = e.app.brain.dir().to_path_buf();
     let first = e.app.brain.spaces()?.into_iter().next().ok_or("no vault")?;

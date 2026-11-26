@@ -43,7 +43,7 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
     }
     let node = match a.flags.get("--node") {
         Some(n) => n.clone(),
-        None => match memcp_core::env::var("MEMCP_NODE") {
+        None => match pensine_core::env::var("MEMCP_NODE") {
             Ok(n) if !n.trim().is_empty() => n,
             _ => return Ok(None),
         },
@@ -66,9 +66,9 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
         from_file(f)?
     } else if let Some(k) = a.flags.get("--key") {
         k.trim().to_string()
-    } else if let Ok(f) = memcp_core::env::var("MEMCP_KEY_FILE") {
+    } else if let Ok(f) = pensine_core::env::var("MEMCP_KEY_FILE") {
         from_file(&f)?
-    } else if let Ok(k) = memcp_core::env::var("MEMCP_KEY") {
+    } else if let Ok(k) = pensine_core::env::var("MEMCP_KEY") {
         k.trim().to_string()
     } else {
         return Err(bad(&format!(
@@ -86,7 +86,7 @@ pub fn target(a: &Args) -> Result<Option<Target>, Failure> {
             .flags
             .get("--agent")
             .cloned()
-            .or_else(|| memcp_core::env::var("MEMCP_AGENT").ok())
+            .or_else(|| pensine_core::env::var("MEMCP_AGENT").ok())
             .filter(|s| !s.is_empty()),
         json: a.switches.iter().any(|s| s == "--json"),
     }))
@@ -229,7 +229,7 @@ fn files_under(dir: &Path, out: &mut Vec<PathBuf>) -> std::io::Result<()> {
 
 /// The size of a chunk: 8 MiB, or `MEMCP_UPLOAD_CHUNK` bytes (between 1 KiB and 32 MiB) on a slow link, and for the tests.
 fn chunk() -> usize {
-    memcp_core::env::var("MEMCP_UPLOAD_CHUNK")
+    pensine_core::env::var("MEMCP_UPLOAD_CHUNK")
         .ok()
         .and_then(|v| v.parse::<usize>().ok())
         .map_or(CHUNK, |n| n.clamp(1024, 32 * 1024 * 1024))
@@ -390,7 +390,7 @@ pub fn run(t: &Target, raw: &[String], a: &Args) -> Result<(), Failure> {
                     return Ok(None);
                 }
                 // Each file or folder of a command is sent under an upload of its own.
-                send_path(t, &memcp_core::util::random_base32(16), word).map(Some)
+                send_path(t, &pensine_core::util::random_base32(16), word).map(Some)
             })?;
             let out = exec_words(t, &sent, a);
             // What was sent and not used (a refused command) is forgotten.
@@ -477,7 +477,7 @@ fn export(t: &Target, a: &Args) -> Result<(), Failure> {
         crate::sayln!("{}", json!({ "exported_to": dir.display().to_string() }));
         return Ok(());
     }
-    let manifest = memcp_core::export::verify_export(&dir).map_err(|e| (1, e.to_string()))?;
+    let manifest = pensine_core::export::verify_export(&dir).map_err(|e| (1, e.to_string()))?;
     crate::cli::export_report(
         manifest["person"]["name"].as_str().unwrap_or("?"),
         &dir,

@@ -1,7 +1,7 @@
 # Automatic tagging
 
 Every note is tagged **by the node, when it is written**, whatever app or assistant writes it. No model: a small,
-deterministic tagger in `memcp-core` (module `autotag`), the same for the node and for the janitor.
+deterministic tagger in `pensine-core` (module `autotag`), the same for the node and for the janitor.
 
 ## What a write gets
 
@@ -56,7 +56,7 @@ field: `field/caller/<name>` and `field/callee/<name>` (one per participant), `f
 - **Corrections.** `tags_set` adds or removes `field/caller/<name>` or `field/callee/<name>` (or sets a whole side with `fields:
   {"callee": ["bob", "+442079460958"]}`); the `personnes/` tag follows (a name that leaves both sides of the call leaves the note).
   Changing people, call fields and `appel` tags is never learned as words.
-- `memcp_core::call::people_names(brain, space?)` gives the distinct names of the `personnes/` tags with the number of active notes.
+- `pensine_core::call::people_names(brain, space?)` gives the distinct names of the `personnes/` tags with the number of active notes.
 
 ## The health patterns
 

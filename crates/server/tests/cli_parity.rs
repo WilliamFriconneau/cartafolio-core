@@ -3,8 +3,8 @@
 //! table.
 #![allow(clippy::expect_used)]
 
-use memcp_server::cli_table::{self, COMMANDS, Remote};
-use memcp_server::commands::USAGE;
+use pensine_server::cli_table::{self, COMMANDS, Remote};
+use pensine_server::commands::USAGE;
 
 #[test]
 fn every_command_of_the_usage_text_is_in_the_table_with_a_remote_form_or_a_reason() {
@@ -44,8 +44,8 @@ fn every_remote_command_is_a_command_the_local_line_knows() {
     // The word is read by the local dispatch (an error about missing words is fine, "unknown command" is not).
     let dir = std::env::temp_dir().join(format!("memcp-parity-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
-    memcp_core::Brain::init(&dir, &[], memcp_core::text::Language::English).expect("init");
-    let settings = memcp_server::config::Settings::default();
+    pensine_core::Brain::init(&dir, &[], pensine_core::text::Language::English).expect("init");
+    let settings = pensine_server::config::Settings::default();
     for c in COMMANDS {
         if !matches!(c.remote, Remote::Exec | Remote::Upload(_)) {
             continue;
@@ -59,9 +59,9 @@ fn every_remote_command_is_a_command_the_local_line_knows() {
         }
         let mut words: Vec<String> = c.words.split(' ').map(String::from).collect();
         words.push("zz".into());
-        let a = memcp_server::commands::parse(&words).expect("parse");
-        let (result, _, _) = memcp_server::out::capture(|| {
-            memcp_server::commands::dispatch(&dir, &a, &settings, None)
+        let a = pensine_server::commands::parse(&words).expect("parse");
+        let (result, _, _) = pensine_server::out::capture(|| {
+            pensine_server::commands::dispatch(&dir, &a, &settings, None)
         });
         if let Err((_, message)) = result {
             assert!(
@@ -93,6 +93,6 @@ fn the_table_of_docs_cli_is_the_generated_one() {
     assert_eq!(
         doc[from..to].trim(),
         table.trim(),
-        "docs/CLI.md is not the table of crates/server/src/cli_table.rs: MEMCP_BLESS=1 cargo test -p memcp-server --test cli_parity"
+        "docs/CLI.md is not the table of crates/server/src/cli_table.rs: MEMCP_BLESS=1 cargo test -p pensine-server --test cli_parity"
     );
 }

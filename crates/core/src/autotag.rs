@@ -297,7 +297,7 @@ pub fn health_hashtag(word: &str) -> Option<String> {
         return None;
     }
     let same = |t: &str| words(t).join(" ") == want;
-    let r = memcp_health::builtin();
+    let r = pensine_health::builtin();
     for m in r.manifestations() {
         if same(&m.id)
             || same(&m.tag)
@@ -509,7 +509,7 @@ pub fn add_to(
             break;
         }
         // A sign the person took off this note is their word: the tagger does not put it back (`signe-refuse/<sign>`).
-        if memcp_health::refused_sign(&t).is_some_and(|mark| tags.contains(&mark)) {
+        if pensine_health::refused_sign(&t).is_some_and(|mark| tags.contains(&mark)) {
             continue;
         }
         // A field the caller already gave (a call's participants, say) is not given a second value by the tagger.

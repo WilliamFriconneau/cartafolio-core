@@ -54,8 +54,8 @@ Pensine is also a manager of folders that other programs synchronise (Google Dri
 
 ## 3. Running on Windows (phase 4)
 
-- **State.** The whole workspace (the node, the janitor and the Swift interface) builds on Windows in CI, and the releases carry a Windows build of `memcp`, `memcp-janitor` and `memcp-sync` next to the macOS and Linux ones. What is not done: the **test suites** do not run on Windows yet (several use Unix file modes).
-- **Private files.** Unix keeps a data folder at `0700` and its files at `0600`. Windows has no such bits: a folder takes the access list of the folder it is made in, so the data directory belongs **under the person's own profile** (for example `%LOCALAPPDATA%\MemCP`), never in a shared folder. The code treats these calls as no-ops there (`fsx`), and `memcp doctor` does not check modes on Windows.
+- **State.** The whole workspace (the node, the janitor and the Swift interface) builds on Windows in CI, and the releases carry a Windows build of `memcp`, `pensine-janitor` and `memcp-sync` next to the macOS and Linux ones. What is not done: the **test suites** do not run on Windows yet (several use Unix file modes).
+- **Private files.** Unix keeps a data folder at `0700` and its files at `0600`. Windows has no such bits: a folder takes the access list of the folder it is made in, so the data directory belongs **under the person's own profile** (for example `%LOCALAPPDATA%\Pensine`), never in a shared folder. The code treats these calls as no-ops there (`fsx`), and `memcp doctor` does not check modes on Windows.
 - **Running.** `memcp serve` as a plain program, or as a service of the person's own account. The folders it mounts are any local or synchronised folder; paths with spaces, drive letters and long names are the next thing to test.
 
 ## 4. Backup with the nodes (phase 5)

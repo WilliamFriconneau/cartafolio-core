@@ -8,7 +8,7 @@
 //!   and the head of their log; which one is the person's Inbox; the archives this node knows of; whether it takes
 //!   offers.
 //! - `POST /mcp/<connection>/sync/spaces` `{space, kind, label, parent, position, since}`: a space of the person that the
-//!   peer has and this node lacks (see `memcp_core::swarm`); or `{space, archived_at}`: the peer archived it.
+//!   peer has and this node lacks (see `pensine_core::swarm`); or `{space, archived_at}`: the peer archived it.
 //! - `GET  /mcp/<connection>/sync/events?space=S&after=N[&limit=L][&chunks=1]`: the events of a space after the asker's
 //!   cursor, never the ones it sent itself. With `chunks=1` (an asker that takes chunks) a file bigger than travels whole
 //!   comes as the list of its chunks; without it, such a file is left out.
@@ -25,14 +25,14 @@
 //! The status, the directory and the offers of spaces need a full peer (`Caller::is_peer`: every space of the person,
 //! whole, may write); the log of a space (`spaces` read, `events`) is open to any machine of the person on the spaces
 //! it reaches (read for pulling, write for pushing), so a machine the person limited to some spaces keeps in step with
-//! those. The engine is `memcp_core::sync`; nothing here decides what a merge does.
+//! those. The engine is `pensine_core::sync`; nothing here decides what a merge does.
 //!
-//! This node's sync policy for the machine of the key (`memcp_core::policy`, under the connection's name) holds on every
+//! This node's sync policy for the machine of the key (`pensine_core::policy`, under the connection's name) holds on every
 //! route: a space set `off` is not listed, a space it does not give is not served (`events` read: 403), one it does not
 //! take is not written (`events` write: 403; an offer is `declined`, an archive `kept`), whatever the machine sends.
 
-use memcp_core::policy::{self, Policy};
-use memcp_core::{Space, access, directory, swarm, sync};
+use pensine_core::policy::{self, Policy};
+use pensine_core::{Space, access, directory, swarm, sync};
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -83,7 +83,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
     // The log is the whole vault: a vault reached only through tag paths is not the peer's to copy or to write.
     let whole = |s: &Space| caller.read_paths(s).is_none();
     // A machine the person paused is not served until they resume it (its status stays readable).
-    if op != "status" && memcp_core::peers::is_paused(&ctl, &caller.agent) {
+    if op != "status" && pensine_core::peers::is_paused(&ctl, &caller.agent) {
         return refused(423, "the sync with this machine is paused");
     }
     let space = || -> Result<Space, Response> {
@@ -113,7 +113,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             let list = body["peers"].as_array().cloned().unwrap_or_default();
             // What the person answered, on the peer, to the requests this node told it about.
             if let Some(answers) = body["answers"].as_array()
-                && let Ok(Some(me)) = memcp_core::users::user(&ctl, &caller.user_id)
+                && let Ok(Some(me)) = pensine_core::users::user(&ctl, &caller.user_id)
             {
                 crate::join::apply_answers(app, &ctl, &me, answers);
             }
@@ -133,8 +133,8 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
         }
         ("GET", "spaces") => {
             let mut out = Vec::new();
-            // The person's own box: the one a peer pairs with its own (see `memcp_core::swarm`).
-            let triage = memcp_core::triage::of(brain, &caller.user_id)
+            // The person's own box: the one a peer pairs with its own (see `pensine_core::swarm`).
+            let triage = pensine_core::triage::of(brain, &caller.user_id)
                 .ok()
                 .flatten();
             for s in brain.spaces().unwrap_or_default() {
@@ -181,7 +181,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
                     "protocol": sync::PROTOCOL, "version": env!("CARGO_PKG_VERSION"), "spaces": out,
                     "offers": full_peer, "archived": archived,
                     // Big files go in chunks of this size, both ways; a node of an earlier version says nothing here.
-                    "chunks": app.file_chunks.then_some(memcp_core::chunks::CHUNK_BYTES),
+                    "chunks": app.file_chunks.then_some(pensine_core::chunks::CHUNK_BYTES),
                     "later": policy::later(&ctl, &caller.agent).unwrap_or(Policy::Both).as_str(),
                 }),
             )
@@ -385,7 +385,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             if !held_here(brain, &space, file) {
                 return refused(404, "no such chunk here");
             }
-            match memcp_core::chunks::read(brain, &space, file, n, hash) {
+            match pensine_core::chunks::read(brain, &space, file, n, hash) {
                 Ok(Some(bytes)) => Response {
                     status: 200,
                     headers: vec![("Content-Type".into(), "application/octet-stream".into())],
@@ -409,7 +409,7 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
             }
             let file = req.query.get("file").map_or("", String::as_str);
             let hash = req.query.get("hash").map_or("", String::as_str);
-            match memcp_core::chunks::store(brain, &space, file, hash, &req.body) {
+            match pensine_core::chunks::store(brain, &space, file, hash, &req.body) {
                 Ok(()) => Response::json(200, &json!({ "stored": true })),
                 Err(e) => refused(400, &e.to_string()),
             }
@@ -419,8 +419,8 @@ pub fn handle(app: &App, req: &Request, now: i64, agent: &str, op: &str) -> Resp
 }
 
 /// Whether a file of this digest is the space's: a record of it, or chunks of it waited for here.
-fn held_here(brain: &memcp_core::Brain, space: &Space, file: &str) -> bool {
-    if !memcp_core::chunks::is_digest(file) {
+fn held_here(brain: &pensine_core::Brain, space: &Space, file: &str) -> bool {
+    if !pensine_core::chunks::is_digest(file) {
         return false;
     }
     let known = brain.open_space(space).is_ok_and(|c| {
@@ -431,7 +431,7 @@ fn held_here(brain: &memcp_core::Brain, space: &Space, file: &str) -> bool {
         )
         .unwrap_or(false)
     });
-    known || memcp_core::chunks::staged(brain, space, file) > 0
+    known || pensine_core::chunks::staged(brain, space, file) > 0
 }
 
 /// Why a request about a space is refused by the policy of this node.
@@ -467,7 +467,7 @@ fn note_sides(
         let Ok(space) = Space::new(name) else {
             continue;
         };
-        if memcp_core::users::is_space_owner(ctl, &space, &caller.user_id).unwrap_or(false) {
+        if pensine_core::users::is_space_owner(ctl, &space, &caller.user_id).unwrap_or(false) {
             let _ = policy::note_theirs(ctl, &caller.agent, space.as_str(), Some(p));
         }
     }
@@ -492,12 +492,12 @@ fn not_kept(done: &sync::Applied) -> Vec<Value> {
 /// What `GET /sync/status` answers: every peer of the memory (direct ones with their progress, and the nodes of the
 /// peer directory), this node, and this replica's window with what it pruned last.
 pub(crate) fn status_body(
-    brain: &memcp_core::Brain,
+    brain: &pensine_core::Brain,
     now: i64,
     user: &str,
 ) -> Result<Value, String> {
     let _ = directory::touch_self(brain, now);
-    let fail = |e: memcp_core::Error| e.to_string();
+    let fail = |e: pensine_core::Error| e.to_string();
     Ok(json!({
         "node": directory::node_json(brain, now).map_err(fail)?,
         "peers": sync::peers_view(brain, now).map_err(fail)?,
@@ -510,11 +510,11 @@ pub(crate) fn status_body(
 }
 
 /// How many disputes hold in the spaces a person owns. A space that cannot be opened counts none.
-fn dispute_count(brain: &memcp_core::Brain, user: &str) -> usize {
+fn dispute_count(brain: &pensine_core::Brain, user: &str) -> usize {
     let Ok(ctl) = brain.open_control() else {
         return 0;
     };
-    let spaces = memcp_core::users::access_of(&ctl, user).unwrap_or_default();
+    let spaces = pensine_core::users::access_of(&ctl, user).unwrap_or_default();
     spaces
         .keys()
         .filter_map(|s| brain.open_space(s).ok())

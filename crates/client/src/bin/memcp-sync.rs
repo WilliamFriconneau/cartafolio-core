@@ -10,13 +10,13 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use memcp_client::peer_sync::Peer;
-use memcp_core::Brain;
+use pensine_client::peer_sync::Peer;
+use pensine_core::Brain;
 
 const USAGE: &str = "usage: memcp-sync --data DIR --peer ADDRESS [--name NAME] [--token-env VAR] [--every SECONDS] [--node-name NAME] [--window-days N|off] [--person ID]\n       memcp-sync --data DIR --join ADDRESS [--join ADDRESS…] [--expect-id ID] --status-file FILE [--name NAME]";
 
 fn command_name() -> &'static str {
-    memcp_core::invoked_as("memcp-sync", "silice-sync", "pensine-sync")
+    pensine_core::invoked_as("memcp-sync", "silice-sync", "pensine-sync")
 }
 
 fn usage() -> String {
@@ -53,7 +53,7 @@ fn join(
     status_file: &str,
     name: &str,
 ) -> ExitCode {
-    use memcp_client::peer_sync::{join_poll, join_request_with, who_is_there};
+    use pensine_client::peer_sync::{join_poll, join_request_with, who_is_there};
     let write = |v: serde_json::Value| {
         let tmp = format!("{status_file}.tmp");
         if std::fs::write(&tmp, v.to_string()).is_ok() {
@@ -64,24 +64,24 @@ fn join(
         write(serde_json::json!({ "state": "failed", "error": e }));
         ExitCode::from(1)
     };
-    let ticket = memcp_core::env::var("MEMCP_JOIN_TICKET")
+    let ticket = pensine_core::env::var("MEMCP_JOIN_TICKET")
         .ok()
         .filter(|t| !t.is_empty());
     let own_id = Brain::open(&PathBuf::from(data))
         .ok()
-        .and_then(|b| memcp_core::directory::node_id(&b).ok());
-    let expect = expect.and_then(memcp_core::directory::valid_id);
+        .and_then(|b| pensine_core::directory::node_id(&b).ok());
+    let expect = expect.and_then(pensine_core::directory::valid_id);
     // The first address that answers and is the node meant.
     let mut last = "no address".to_string();
     let mut found = None;
     for a in addresses {
-        if !memcp_client::allowed_url(a) {
+        if !pensine_client::allowed_url(a) {
             last = "this address is refused: HTTPS, or in clear only on this machine or the own network".into();
             continue;
         }
         match who_is_there(a) {
             Ok(w) => {
-                let said = w["id"].as_str().and_then(memcp_core::directory::valid_id);
+                let said = w["id"].as_str().and_then(pensine_core::directory::valid_id);
                 if expect.is_some() && said != expect {
                     last = "the node at that address is not the one the link names".into();
                     continue;
@@ -244,7 +244,7 @@ fn main() -> ExitCode {
         eprintln!("{}", usage());
         return ExitCode::from(2);
     };
-    if !memcp_client::allowed_url(&peer) {
+    if !pensine_client::allowed_url(&peer) {
         eprintln!(
             "{}: this address is refused: HTTPS, or in clear only on this machine or the own network",
             command_name()
@@ -252,7 +252,7 @@ fn main() -> ExitCode {
         return ExitCode::from(2);
     }
     let var = value("--token-env").unwrap_or_else(|| "MEMCP_PEER_TOKEN".into());
-    let Ok(key) = memcp_core::env::var(&var) else {
+    let Ok(key) = pensine_core::env::var(&var) else {
         eprintln!("{}: no key in {var}", command_name());
         return ExitCode::from(2);
     };
@@ -281,7 +281,7 @@ fn main() -> ExitCode {
     }
     // `--node-name NAME`: the name this node goes by in the peer directory (else one it made for itself, kept).
     if let Some(n) = value("--node-name")
-        && let Err(e) = memcp_core::directory::set_own_name(&brain, &n)
+        && let Err(e) = pensine_core::directory::set_own_name(&brain, &n)
     {
         eprintln!("{}: {e}", command_name());
         return ExitCode::from(2);
@@ -298,7 +298,7 @@ fn main() -> ExitCode {
                 }
             },
         };
-        if let Err(e) = memcp_core::sync::set_window_days(&brain, days) {
+        if let Err(e) = pensine_core::sync::set_window_days(&brain, days) {
             eprintln!("{}: {e}", command_name());
             return ExitCode::from(2);
         }
@@ -308,7 +308,7 @@ fn main() -> ExitCode {
         let found = brain
             .open_control()
             .map_err(|e| e.to_string())
-            .and_then(|c| memcp_core::users::resolve(&c, &person).map_err(|e| e.to_string()));
+            .and_then(|c| pensine_core::users::resolve(&c, &person).map_err(|e| e.to_string()));
         match found {
             Ok(u) => peer = peer.with_person(&u.id),
             Err(e) => {
@@ -319,7 +319,7 @@ fn main() -> ExitCode {
     }
     // `MEMCP_SYNC_PARENT`: the node that started this loop (it sets it). When that node is gone (killed, crashed),
     // the loop ends: a node started again starts its own, and two loops with one peer must never pile up.
-    let parent = memcp_core::env::var("MEMCP_SYNC_PARENT")
+    let parent = pensine_core::env::var("MEMCP_SYNC_PARENT")
         .ok()
         .and_then(|p| p.trim().parse::<u32>().ok());
     loop {

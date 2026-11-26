@@ -3,10 +3,10 @@
 mod common;
 
 use common::{Res, Temp, brain};
-use memcp_core::facts::{self, NewFact, Remembered};
-use memcp_core::files;
-use memcp_core::triage;
-use memcp_core::users::OWNER;
+use pensine_core::facts::{self, NewFact, Remembered};
+use pensine_core::files;
+use pensine_core::triage;
+use pensine_core::users::OWNER;
 
 fn m4a() -> Vec<u8> {
     let mut b = vec![

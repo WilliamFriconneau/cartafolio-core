@@ -1,6 +1,6 @@
 #![warn(missing_docs)]
-//! The node's helpers, as the apps' Swift sees them. Nothing but a shell: the logic is the node's (`memcp-server`, its
-//! `intake` module, and `memcp-client` for joining by code), renamed for Swift.
+//! The node's helpers, as the apps' Swift sees them. Nothing but a shell: the logic is the node's (`pensine-server`, its
+//! `intake` module, and `pensine-client` for joining by code), renamed for Swift.
 //!
 //! What this crate offers:
 //!
@@ -80,10 +80,10 @@ impl std::error::Error for PairError {}
 /// background task. Once only per code.
 #[uniffi::export]
 pub fn pair(server: String, code: String, device: String) -> Result<Pairing, PairError> {
-    use memcp_client::Error as E;
-    match memcp_client::pair_allowing(&server, &code, &device, true) {
+    use pensine_client::Error as E;
+    match pensine_client::pair_allowing(&server, &code, &device, true) {
         Ok(p) => Ok(Pairing {
-            in_clear: !memcp_client::allowed_url(&p.url),
+            in_clear: !pensine_client::allowed_url(&p.url),
             agent: p.agent,
             url: p.url,
             key: p.key,
@@ -104,7 +104,7 @@ pub fn pair(server: String, code: String, device: String) -> Result<Pairing, Pai
 /// warning on the setup screen: nothing is refused for it.
 #[uniffi::export]
 pub fn address_allowed(url: String) -> bool {
-    memcp_client::allowed_url(&url)
+    pensine_client::allowed_url(&url)
 }
 
 /// An error the app can show as it is; `message` is in plain words.
@@ -141,12 +141,12 @@ impl std::fmt::Display for IntakeError {
 
 impl std::error::Error for IntakeError {}
 
-impl From<memcp_server::intake::Error> for IntakeError {
-    fn from(e: memcp_server::intake::Error) -> Self {
+impl From<pensine_server::intake::Error> for IntakeError {
+    fn from(e: pensine_server::intake::Error) -> Self {
         let message = e.to_string();
         match e {
-            memcp_server::intake::Error::Io(_) => IntakeError::Storage { message },
-            memcp_server::intake::Error::Invalid(_) => IntakeError::Invalid { message },
+            pensine_server::intake::Error::Io(_) => IntakeError::Storage { message },
+            pensine_server::intake::Error::Invalid(_) => IntakeError::Invalid { message },
         }
     }
 }
@@ -155,7 +155,7 @@ impl From<memcp_server::intake::Error> for IntakeError {
 /// extension only, on `127.0.0.1:8790`. Stops with `stop()` or when the app lets it go.
 #[derive(uniffi::Object)]
 pub struct BrowserLink {
-    link: std::sync::Mutex<memcp_server::intake::browser::BrowserLink>,
+    link: std::sync::Mutex<pensine_server::intake::browser::BrowserLink>,
 }
 
 /// The call the extension reports now.
@@ -174,8 +174,8 @@ impl BrowserLink {
     /// Listens before it returns: a port already taken is an error at once.
     #[uniffi::constructor]
     pub fn new() -> Result<Arc<BrowserLink>, IntakeError> {
-        let link = memcp_server::intake::browser::BrowserLink::start(
-            memcp_server::intake::browser::EXTENSION_PORT,
+        let link = pensine_server::intake::browser::BrowserLink::start(
+            pensine_server::intake::browser::EXTENSION_PORT,
         )?;
         Ok(Arc::new(BrowserLink {
             link: std::sync::Mutex::new(link),
@@ -217,7 +217,7 @@ impl BrowserLink {
 /// The extension's id, fixed by its key: the one the app hears.
 #[uniffi::export]
 pub fn browser_extension_id() -> String {
-    memcp_server::intake::browser::EXTENSION_ID.to_string()
+    pensine_server::intake::browser::EXTENSION_ID.to_string()
 }
 
 /// What a recording says, read on this Mac by Whisper (on its GPU). `pcm`: 16 kHz, mono, 32-bit float samples,
@@ -232,7 +232,7 @@ pub fn transcribe(
 ) -> Result<String, IntakeError> {
     let threads =
         std::thread::available_parallelism().map_or(4, |n| u32::try_from(n.get()).unwrap_or(4));
-    Ok(memcp_server::intake::local::transcribe(
+    Ok(pensine_server::intake::local::transcribe(
         Path::new(&model),
         Path::new(&pcm),
         "fr",
@@ -245,29 +245,29 @@ pub fn transcribe(
 /// Whether this Mac reads a recording itself: on mains, or on a battery not low and not in Low Power Mode.
 #[uniffi::export]
 pub fn should_transcribe(on_mains: bool, battery_percent: u8, low_power: bool) -> bool {
-    memcp_server::intake::plan::should_transcribe(on_mains, battery_percent, low_power)
+    pensine_server::intake::plan::should_transcribe(on_mains, battery_percent, low_power)
 }
 
 /// What the summarising model of the system is told, once per session.
 #[uniffi::export]
 pub fn summary_instructions() -> String {
-    memcp_server::intake::plan::SUMMARY_INSTRUCTIONS.to_string()
+    pensine_server::intake::plan::SUMMARY_INSTRUCTIONS.to_string()
 }
 
 /// The requests to make, one per piece of the transcript, in order.
 #[uniffi::export]
 pub fn summary_prompts(text: String) -> Vec<String> {
-    let pieces = memcp_server::intake::plan::summary_pieces(&text);
+    let pieces = pensine_server::intake::plan::summary_pieces(&text);
     let n = pieces.len();
     pieces
         .iter()
         .enumerate()
-        .map(|(i, p)| memcp_server::intake::plan::summary_prompt(p, i, n))
+        .map(|(i, p)| pensine_server::intake::plan::summary_prompt(p, i, n))
         .collect()
 }
 
 /// The request that joins the summaries of the pieces into one; `None` when there is only one.
 #[uniffi::export]
 pub fn summary_join_prompt(summaries: Vec<String>) -> Option<String> {
-    memcp_server::intake::plan::summary_join_prompt(&summaries)
+    pensine_server::intake::plan::summary_join_prompt(&summaries)
 }

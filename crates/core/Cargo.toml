@@ -1,6 +1,6 @@
 [package]
 publish = false
-name = "memcp-core"
+name = "pensine-core"
 description = "Memory core: isolated spaces, dated and sourced facts, supersede, search"
 version.workspace = true
 edition.workspace = true
@@ -10,7 +10,7 @@ repository.workspace = true
 
 [dependencies]
 base64 = "0.22"
-memcp-health = { path = "../health" }
+pensine-health = { path = "../health" }
 getrandom = "0.4.3"
 rusqlite = { version = "0.41", features = ["bundled"] }
 rust-stemmers = "1.2.0"

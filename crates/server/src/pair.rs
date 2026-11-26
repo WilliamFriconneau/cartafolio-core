@@ -3,7 +3,7 @@
 //! No key is needed (the device has none yet), so the route is guarded like the key routes: a few
 //! tries a minute per address, and an address that keeps failing is held off for a while.
 
-use memcp_core::{pairing, util};
+use pensine_core::{pairing, util};
 use serde_json::{Value, json};
 
 use crate::app::App;
@@ -45,7 +45,7 @@ pub fn exchange(app: &App, req: &Request) -> Response {
     };
     match pairing::redeem(&ctl, code, device, now) {
         Ok(p) => {
-            memcp_core::access::auth_event(
+            pensine_core::access::auth_event(
                 &ctl,
                 Some(&p.agent),
                 req.ip.as_deref(),

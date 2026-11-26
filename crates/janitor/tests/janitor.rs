@@ -8,8 +8,8 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 
-use memcp_client::Client;
-use memcp_janitor::{Config, Janitor};
+use pensine_client::Client;
+use pensine_janitor::{Config, Janitor};
 use serde_json::{Value, json};
 
 struct Rig {
@@ -27,14 +27,14 @@ fn rig(tag: &str) -> Rig {
 }
 
 /// The same, after `setup` has added spaces or changed the layout (it gets the engine and the person's id).
-fn rig_with(tag: &str, setup: &dyn Fn(&memcp_core::Brain, &str)) -> Rig {
-    use memcp_core::access::{self, Rights};
-    use memcp_core::text::Language;
-    use memcp_core::{Brain, users};
-    use memcp_server::app::App;
-    use memcp_server::net::{Listeners, serve_on};
+fn rig_with(tag: &str, setup: &dyn Fn(&pensine_core::Brain, &str)) -> Rig {
+    use pensine_core::access::{self, Rights};
+    use pensine_core::text::Language;
+    use pensine_core::{Brain, users};
+    use pensine_server::app::App;
+    use pensine_server::net::{Listeners, serve_on};
 
-    let dir = std::env::temp_dir().join(format!("memcp-janitor-{}-{tag}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pensine-janitor-{}-{tag}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).expect("dir");
     let brain = Brain::init(&dir.join("engine"), &[], Language::English).expect("init");
@@ -46,7 +46,7 @@ fn rig_with(tag: &str, setup: &dyn Fn(&memcp_core::Brain, &str)) -> Rig {
         for kind in ["me", "health", "work"] {
             brain.add_vault(&sam, "sam", kind).expect("vault");
         }
-        memcp_core::triage::ensure(&brain, &sam, "sam").expect("Inbox");
+        pensine_core::triage::ensure(&brain, &sam, "sam").expect("Inbox");
         setup(&brain, &sam);
         [("edge", "sam-inbox/inbox:rw"), ("janitor", "all")]
             .iter()
@@ -418,7 +418,7 @@ fn a_fact_of_a_library_is_never_touched_by_a_pass() {
 }
 
 fn fake() -> Config {
-    let dir = std::env::temp_dir().join(format!("memcp-janitor-fake-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("pensine-janitor-fake-{}", std::process::id()));
     std::fs::create_dir_all(&dir).expect("dir");
     std::fs::write(dir.join("k"), "hcp_x").expect("key");
     Config::parse(&format!(
@@ -533,7 +533,7 @@ fn a_note_no_keyword_places_goes_where_the_person_taught_the_node() {
     let r = rig("taught");
     let mut o = owner(&r);
     // The person sent two notes like this one to work: the node learned it (a file beside its databases).
-    let store = memcp_core::autotag::Store::open(&r.dir.join("engine"));
+    let store = pensine_core::autotag::Store::open(&r.dir.join("engine"));
     for text in [
         "Contrat assurance auto renouvelé",
         "Assurance auto contrat échéance",
@@ -558,7 +558,7 @@ fn a_note_with_a_person_goes_where_earlier_notes_with_that_person_went() {
     let r = rig("people");
     let mut o = owner(&r);
     // Earlier notes about Bob went to work: the node learned the person (a file beside its databases).
-    let store = memcp_core::autotag::Store::open(&r.dir.join("engine"));
+    let store = pensine_core::autotag::Store::open(&r.dir.join("engine"));
     store.learn_people_route(&["bob".to_string()], "sam-work");
     let edge = |text: &str, call: serde_json::Value| {
         let mut edge = Client::new(&format!("{}/edge", r.base), &r.edge);
@@ -689,7 +689,7 @@ fn a_word_that_comes_back_often_in_one_space_becomes_its_keyword_at_night() {
 
 #[test]
 fn a_note_said_as_a_command_names_its_board() {
-    use memcp_janitor::command_board;
+    use pensine_janitor::command_board;
     assert_eq!(
         command_board("J'ai une idée pour le projet Atlas"),
         Some(("ideas", false))
@@ -710,8 +710,8 @@ fn a_note_said_as_a_command_names_its_board() {
 }
 
 /// Spaces for the name tests: `sam-finances` (with its sub-space `sam-cars`) and `sam-health`, labelled « Santé ».
-fn name_spaces(brain: &memcp_core::Brain, sam: &str) {
-    use memcp_core::layout::Change;
+fn name_spaces(brain: &pensine_core::Brain, sam: &str) {
+    use pensine_core::layout::Change;
     let finances = brain
         .add_custom_space(sam, "sam", "Finances", None)
         .expect("finances");
@@ -789,13 +789,13 @@ fn a_note_to_file_in_two_spaces_is_copied_to_each_and_nothing_is_erased() {
 }
 
 /// Puts files into the person's Inbox (what a device would have sent): `(name, note, bytes)`.
-fn put_files(brain: &memcp_core::Brain, sam: &str, files: &[(&str, &str, &[u8])], tags: &[&str]) {
-    let space = memcp_core::triage::of(brain, sam)
+fn put_files(brain: &pensine_core::Brain, sam: &str, files: &[(&str, &str, &[u8])], tags: &[&str]) {
+    let space = pensine_core::triage::of(brain, sam)
         .expect("Inbox")
         .expect("made");
     let tags: Vec<String> = tags.iter().map(|t| (*t).to_string()).collect();
     for (name, note, bytes) in files {
-        memcp_core::files::put_tagged(brain, &space, "edge", name, note, bytes, &tags)
+        pensine_core::files::put_tagged(brain, &space, "edge", name, note, bytes, &tags)
             .expect("a file into Inbox");
     }
 }

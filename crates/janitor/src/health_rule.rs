@@ -20,17 +20,17 @@ pub const WAKE_UNKNOWN_HOUR: u32 = 5;
 /// The most tags the rule adds from what the note says.
 const MAX_DETECTED: usize = 12;
 
-/// The language the referential reads a note in: the one `memcp_health::lang_of` finds (French when the note looks
+/// The language the referential reads a note in: the one `pensine_health::lang_of` finds (French when the note looks
 /// French, so that a word of both languages in one sense only (`pain`, bread) is not read as a sign).
-fn language_of(text: &str) -> memcp_health::Lang {
-    memcp_health::lang_of(text)
+fn language_of(text: &str) -> pensine_health::Lang {
+    pensine_health::lang_of(text)
 }
 
 /// The tags the health referential finds in the note, as the node's own tagger names them: `alerte/<id>` for a red flag
 /// (first, so the cap never drops one), `signe/<name>` for a sign, `mesure/<name>` for a measure. The note's words stay
 /// untouched; the node adds the fields (the level, the value) when it writes the note.
 pub fn detected_tags(text: &str) -> Vec<String> {
-    let found = memcp_health::detect(text, language_of(text));
+    let found = pensine_health::detect(text, language_of(text));
     let mut tags: Vec<String> = Vec::new();
     let all = found
         .red_flags

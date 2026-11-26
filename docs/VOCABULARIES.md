@@ -38,7 +38,7 @@ list and a small adapter per format can come later.
 
 ## Order of work
 
-1. Table and `vocabulary import/list/remove` in `memcp-core`, tests (accents, plural, unique and shared terms).
+1. Table and `vocabulary import/list/remove` in `pensine-core`, tests (accents, plural, unique and shared terms).
 2. The router reads vocabularies after the `rules` note.
 3. The page: a Vocabularies block in the space, with name, source, number of terms, remove.
 4. Adapters for the common formats, when a real file is at hand.

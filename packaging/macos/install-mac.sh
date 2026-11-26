@@ -7,10 +7,10 @@
 #   sh install-mac.sh --uninstall   stop and remove the programs and the tasks; your memory is kept
 #
 # What goes where:
-#   ~/Library/Application Support/MemCP/bin      memcp, memcp-janitor
-#   ~/Library/Application Support/MemCP/data     the memory (a folder of databases: back it up, it is yours)
-#   ~/Library/Application Support/MemCP/memcp.toml  the node's settings: voice notes, watched folders (mode 600)
-#   ~/Library/Logs/MemCP                         node.log
+#   ~/Library/Application Support/Pensine/bin      memcp, memcp-janitor
+#   ~/Library/Application Support/Pensine/data     the memory (a folder of databases: back it up, it is yours)
+#   ~/Library/Application Support/Pensine/memcp.toml  the node's settings: voice notes, watched folders (mode 600)
+#   ~/Library/Logs/Pensine                         node.log
 #   ~/Library/LaunchAgents/org.memcp.node.plist  the task (a launchd agent of your user)
 #   Keychain, service memcp                      the keys of the assistants' connection and of this Mac (never in a file)
 #
@@ -35,8 +35,8 @@ REPO="${PENSINE_REPO:-${SILICE_REPO:-${MEMCP_REPO:-WilliamFriconneau/pensine-cor
 BASE="${PENSINE_RELEASE_BASE:-${SILICE_RELEASE_BASE:-${MEMCP_RELEASE_BASE:-https://github.com/$REPO/releases/download}}}"
 API="${PENSINE_API:-${SILICE_API:-${MEMCP_API:-https://api.github.com/repos/$REPO/releases/latest}}}"
 
-ROOT="${PENSINE_ROOT:-${SILICE_ROOT:-${MEMCP_ROOT:-$HOME/Library/Application Support/MemCP}}}"
-LOGS="${PENSINE_LOGS:-${SILICE_LOGS:-${MEMCP_LOGS:-$HOME/Library/Logs/MemCP}}}"
+ROOT="${PENSINE_ROOT:-${SILICE_ROOT:-${MEMCP_ROOT:-$HOME/Library/Application Support/Pensine}}}"
+LOGS="${PENSINE_LOGS:-${SILICE_LOGS:-${MEMCP_LOGS:-$HOME/Library/Logs/Pensine}}}"
 AGENTS="${PENSINE_AGENTS:-${SILICE_AGENTS:-${MEMCP_AGENTS:-$HOME/Library/LaunchAgents}}}"
 VERSION="${PENSINE_VERSION:-${SILICE_VERSION:-${MEMCP_VERSION:-}}}"
 FROM="${PENSINE_FROM:-${SILICE_FROM:-${MEMCP_FROM:-}}}"
@@ -317,7 +317,7 @@ keychain_has() { security find-generic-password -s "$1" -a "$2" >/dev/null 2>&1;
 keychain_move() {
   if keychain_has "$OLD_SERVICE" "$1" && ! keychain_has "$SERVICE" "$1"; then
     v=$(security find-generic-password -s "$OLD_SERVICE" -a "$1" -w 2>/dev/null || true)
-    if [ -n "$v" ] && security add-generic-password -U -s "$SERVICE" -a "$1" -l "MemCP" -w "$v"; then
+    if [ -n "$v" ] && security add-generic-password -U -s "$SERVICE" -a "$1" -l "Pensine" -w "$v"; then
       security delete-generic-password -s "$OLD_SERVICE" -a "$1" >/dev/null 2>&1 || true
     fi
     v=
@@ -336,7 +336,7 @@ if ! keychain_has "$SERVICE" "$DEVICE_ACCOUNT"; then
     -d "{\"code\":\"$CODE\",\"device\":\"this-mac\"}" "$NODE_URL/pair") || die "the pairing of this Mac failed"
   DEVICE_KEY=$(printf '%s' "$PAIRED" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$DEVICE_KEY" ] || die "no key in the pairing's answer"
-  security add-generic-password -U -s "$SERVICE" -a "$DEVICE_ACCOUNT" -l "MemCP, this Mac" -w "$DEVICE_KEY"
+  security add-generic-password -U -s "$SERVICE" -a "$DEVICE_ACCOUNT" -l "Pensine, this Mac" -w "$DEVICE_KEY"
   DEVICE_KEY=
   say "this Mac is paired with its memory: its captures go to the Inbox."
 fi
@@ -352,7 +352,7 @@ else
     die "no key could be made for the assistants' connection: $OUT"
   KEY=$(printf '%s\n' "$OUT" | grep -o 'hcp_[A-Za-z0-9_-]*' | head -1)
   [ -n "$KEY" ] || die "no key in the node's answer"
-  security add-generic-password -U -s "$SERVICE" -a "$CONNECTION_URL" -l "MemCP, assistants of this Mac" -w "$KEY"
+  security add-generic-password -U -s "$SERVICE" -a "$CONNECTION_URL" -l "Pensine, assistants of this Mac" -w "$KEY"
   KEY=
   say "a key for the assistants of this Mac is in the Keychain (service $SERVICE)."
 fi
