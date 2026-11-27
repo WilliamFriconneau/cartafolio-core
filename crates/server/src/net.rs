@@ -327,6 +327,20 @@ fn send(rq: tiny_http::Request, resp: http::Response) {
     let _ = rq.respond(out);
 }
 
+/// The loopback address to hold as well as `bound`. On macOS a program may open `127.0.0.1:PORT` while the node holds
+/// the wildcard `0.0.0.0:PORT`, and every local request then reaches that program, not the node (a 501 in the app).
+/// Holding the loopback address too closes that gap; any other address needs nothing.
+#[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+pub(crate) fn loopback_to_hold(bound: std::net::SocketAddr) -> Option<std::net::SocketAddr> {
+    match bound.ip() {
+        IpAddr::V4(ip) if ip.is_unspecified() => Some(std::net::SocketAddr::new(
+            std::net::Ipv4Addr::LOCALHOST.into(),
+            bound.port(),
+        )),
+        _ => None,
+    }
+}
+
 /// Listens until the process ends. `banner` is what is printed once the listeners are open.
 pub fn serve<H: Handler>(app: Arc<H>, l: &Listeners, banner: &str) -> Result<(), Failure> {
     tiny_http::set_read_timeout(Some(read_timeout()));
@@ -411,6 +425,24 @@ fn serve_server<H: Handler>(
     // The address really bound: the port is the system's when `listen` asks for port 0.
     eprintln!("{banner} listening on http://{}", server.server_addr());
     let mut workers = vec![];
+    // macOS lets another program take the loopback address under our wildcard: hold it too, or say who has it.
+    #[cfg(target_os = "macos")]
+    if let Some(lo) = server.server_addr().to_ip().and_then(loopback_to_hold) {
+        let srv = Arc::new(tiny_http::Server::http(lo).map_err(|e| {
+            (
+                1,
+                format!("cannot hold {lo}: another program already listens there ({e}); stop it, then start again"),
+            )
+        })?);
+        for _ in 0..l.threads.clamp(1, 16) {
+            let (srv, app) = (Arc::clone(&srv), Arc::clone(&app));
+            workers.push(std::thread::spawn(move || {
+                for rq in srv.incoming_requests() {
+                    respond(&app, rq, Mode::Main);
+                }
+            }));
+        }
+    }
     for _ in 0..l.threads.clamp(1, 16) {
         let (server, app) = (Arc::clone(&server), Arc::clone(&app));
         workers.push(std::thread::spawn(move || {
@@ -423,4 +455,29 @@ fn serve_server<H: Handler>(
         let _ = w.join();
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::loopback_to_hold;
+
+    fn addr(ip: [u8; 4]) -> std::net::SocketAddr {
+        std::net::SocketAddr::from((ip, 8791))
+    }
+
+    #[test]
+    fn a_wildcard_address_also_holds_its_loopback() {
+        assert_eq!(
+            loopback_to_hold(addr([0, 0, 0, 0])),
+            Some(addr([127, 0, 0, 1]))
+        );
+    }
+
+    #[test]
+    fn a_loopback_or_a_named_address_needs_nothing_more() {
+        assert_eq!(loopback_to_hold(addr([127, 0, 0, 1])), None);
+        assert_eq!(loopback_to_hold(addr([192, 168, 1, 14])), None);
+        let v6 = std::net::SocketAddr::from((std::net::Ipv6Addr::UNSPECIFIED, 8791));
+        assert_eq!(loopback_to_hold(v6), None);
+    }
 }
