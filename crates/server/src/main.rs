@@ -31,25 +31,6 @@ fn run(args: &[String]) -> Result<(), Failure> {
         println!("{}", usage());
         return Ok(());
     }
-    // The professions as Claude skills, in a plugin marketplace: built from the registry, no installation needed
-    // (`--data DIR` adds the person's own profiles of that memory).
-    if a.pos[0] == "skills-export" {
-        let dir = a
-            .pos
-            .get(1)
-            .ok_or_else(|| (2, format!("missing the folder to write\n\n{}", usage())))?;
-        let data = a.flags.get("--data").map(PathBuf::from);
-        let n = pensine_core::profession::export(
-            Path::new(dir),
-            env!("CARGO_PKG_VERSION"),
-            data.as_deref(),
-        )
-        .map_err(|e| (1, format!("{dir}: {e}")))?;
-        println!(
-            "{n} skills written in {dir} (a Claude plugin marketplace: .claude-plugin/marketplace.json)"
-        );
-        return Ok(());
-    }
     // Checking an export needs no installation.
     if a.pos[0] == "verify-export" {
         let dir = a

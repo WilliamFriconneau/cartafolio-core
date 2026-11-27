@@ -63,12 +63,7 @@ pub fn space_view(brain: &Brain, caller: &Caller, args: &Value) -> Result<Value,
     let view = opt(args, "view").unwrap_or_else(|| "capabilities".into());
     let now = util::now();
     match view.as_str() {
-        "capabilities" => {
-            let mut v = capabilities(caller, &space, &kind, label, now);
-            v["profession"] =
-                crate::profession::json_for(Some(brain.dir()), &kind, space.as_str(), None);
-            Ok(v)
-        }
+        "capabilities" => Ok(capabilities(caller, &space, &kind, label, now)),
         "dashboard" => {
             let conn = brain.open_space(&space)?;
             let dashboard = dashboard(&conn, &kind, now);

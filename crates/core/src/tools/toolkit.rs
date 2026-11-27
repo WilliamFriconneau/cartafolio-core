@@ -159,58 +159,6 @@ fn check_problem(problem: &str) -> Result<String, ToolError> {
     Ok(p.to_string())
 }
 
-pub(super) fn skills(
-    brain: &Brain,
-    caller: &Caller,
-    _name: &str,
-    args: &Value,
-) -> Result<Value, ToolError> {
-    let profile = args.get("profile").and_then(Value::as_str);
-    let mut out = vec![];
-    for space in read_spaces(caller, args)? {
-        let kind = kind_of(brain, &space);
-        let p = crate::profession::json_for(Some(brain.dir()), &kind, space.as_str(), profile);
-        if p.is_null() {
-            continue;
-        }
-        out.push(json!({ "space": space.as_str(), "kind": kind, "profession": p }));
-    }
-    let mut answer = json!({ "notice": NOTICE, "spaces": out });
-    // The person's keys (all spaces, not read-only) also see what waits for the person's decision.
-    if caller.all_spaces && !caller.read_only_forced {
-        answer["proposals_waiting"] = json!(crate::profession::pending(brain.dir()));
-    }
-    Ok(answer)
-}
-
-pub(super) fn profession_propose(
-    brain: &Brain,
-    caller: &Caller,
-    _name: &str,
-    args: &Value,
-) -> Result<Value, ToolError> {
-    if !caller.all_spaces || caller.read_only_forced {
-        return Err(ToolError::Denied(
-            "a profession is proposed with a key that reaches every space and may write".into(),
-        ));
-    }
-    let profile = args
-        .get("profile")
-        .filter(|p| p.is_object())
-        .ok_or_else(|| ToolError::Invalid("profile: an object (see `skills`)".into()))?;
-    let kept = crate::profession::propose(brain.dir(), profile).map_err(ToolError::Invalid)?;
-    Ok(json!({
-        "result": "proposed",
-        "profile": kept,
-        "next": format!(
-            "Nothing changes yet: a profession is an instruction, so the person accepts it themselves, with `memcp professions accept {}/{}` on the machine of the node.",
-            kept["kind"].as_str().unwrap_or(""),
-            kept["id"].as_str().unwrap_or("")
-        ),
-        "notice": NOTICE,
-    }))
-}
-
 pub(super) fn target_set(
     brain: &Brain,
     caller: &Caller,

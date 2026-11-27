@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Roles are gone.** The memory has no professions any more: the tools `skills` and `profession_propose`, the `profession` field of `space_view capabilities`, the assistants' instruction block that came from them, and the commands `skills-export` and `professions` are removed. A space is only a memory.
+- **The node holds the loopback address too** when it listens on the wildcard (macOS), and refuses to start with a clear message if another program has it.
+- **Crates and shown name are Pensine** (`pensine-*`); the old binary, service and variable names are still the ones in use for now.
+
 - **A target can be removed** from its editor on the page (two clicks), and the app gets the same action.
 - **Copying a code works on plain HTTP too**: the clipboard falls back to the old command when the secure API is refused.
 

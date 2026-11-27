@@ -90,13 +90,9 @@ date (`MEMCP_BLESS=1 cargo test -p pensine-server --test cli_parity` rewrites it
 | `prepare` | what the janitor's service unit runs first | yes | no: writes files on this machine | - |
 | `serve` | runs the node | yes | no: it is the node | - |
 | `mcp` | MCP on standard input and output | yes | no: standard input and output of a program on this machine; a remote assistant uses the node's MCP address | - |
-| `skills-export` | writes the professions as Claude skills (a plugin marketplace) | yes | no: writes a folder of this machine from the built-in professions | - |
 | `purge` | removes notes for good, by id, on this machine only | yes | no: deletes rows of the database of this machine, and must never be asked of a node by a key | - |
 | `repair provenance` | puts back the date, author, source and origin a retag lost | yes | no: edits rows of the database of this machine, after a count | - |
 | `tags remove` | takes tags off the notes that carry them | yes | no: edits rows of the database of this machine, after a count | - |
-| `professions` | lists the professions the person added and the proposals | yes | no: reads the professions file in the data folder of this machine | - |
-| `professions accept` | accepts an assistant's proposed profession | yes | no: moves a proposal inside the data folder of this machine | - |
-| `professions reject` | drops an assistant's proposed profession | yes | no: edits the proposals file in the data folder of this machine | - |
 | `verify-export` | checks an export folder | yes | no: checks a folder of this machine and needs no node | - |
 | `transcribe` | one pass over the recordings waiting | yes | no: the node does it by itself while it serves, from its own settings | - |
 | `watch` | looks at the folders of `watch` | yes | no: watches folders of this machine | - |

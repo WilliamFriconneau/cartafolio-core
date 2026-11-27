@@ -242,11 +242,6 @@ pub fn instructions(brain: &Brain, caller: &Caller) -> Result<String> {
             kinds.push(k);
         }
     }
-    let professions = crate::profession::instructions_for(Some(brain.dir()), &kinds);
-    if !professions.is_empty() {
-        out.push_str("\n\n");
-        out.push_str(&professions);
-    }
     // A vault reached only by paths (an app's layer, an inbox) is told nothing of what lies outside them:
     // not its guides, not its index, not its counters. The person's own guide goes only to a connection
     // that reaches at least one vault whole.

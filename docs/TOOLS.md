@@ -1323,33 +1323,6 @@ Example call and answer:
 
 A measure is `{ id, unit, labels, keywords, units: [{ id, label }], vital }`; a vital `{ id, unit, plausible: { min, max }, labels, usual_limit? }`; a red flag `{ id, first, message, keywords }` (`first`: the number to put first, `15` or `3114`).
 
-### `skills`
-
-What an assistant can do in a space: its profession (a title, what it is an expert of, its principles) and its skills, each with the moment to use it and the tool that does it. A space has the profession of its kind; a kind may have several profiles (health: `nurse`, `coach`, `doctor`), the first being the default. The professions are code, not notes: they are the same for every assistant, and the person adds or replaces profiles in the file `professions.json` of the node's data folder (a JSON array of profiles, the shape of this answer; a malformed profile is left out). The same is in `space_view capabilities` as `profession`. See [PROFESSIONS.md](PROFESSIONS.md).
-
-- **Seen with:** read access on at least one space (not a key limited to paths).
-- **Answer:** `{ notice, spaces: [{ space, kind, profession: { default, profiles: [{ id, kind, title, brief, principles, spaces, references, source, skills: [{ id, title, when, tool?, steps?, template?, tags?, example }] }] } }], proposals_waiting? }`; a space of a kind without a profession is left out; `source` is `built-in` or `person`; `proposals_waiting` (a key that reaches every space) lists the profiles an assistant proposed that the person has not accepted.
-- **Errors:** `denied` for a space the key does not read.
-- **Effects:** None.
-
-| Field | Type | Required | Limits |
-|---|---|---|---|
-| `profile` | string | no | one profile of the kind (`nurse`, `coach`, `doctor` in health) |
-| `space` | string | no | one space only; by default every space the key reads |
-
-### `profession_propose`
-
-Proposes a profession for the person to accept: a profile of skills for a kind of space, or for named spaces. `profile` is `{ id, kind, title, brief, principles?, spaces?, references?, skills }`; each skill has `id`, `title`, `when` and either a `tool` or `steps` (a recipe, in order, with the tools of the memory), and may carry a `template` (the shape of what it writes) and `tags`. A profession is an instruction, so nothing changes until the person accepts it on the machine of the node (`memcp professions accept KIND/ID`); `skills` shows the proposals that wait (`proposals_waiting`). See [PROFESSIONS.md](PROFESSIONS.md).
-
-- **Seen with:** a key that reaches every space and may write.
-- **Answer:** `{ result: "proposed", profile, next, notice }`.
-- **Errors:** `invalid` (a profile that has not the right shape, or 20 proposals already waiting); `denied`.
-- **Effects:** Writes the file of proposals beside the memory; changes nothing else.
-
-| Field | Type | Required | Limits |
-|---|---|---|---|
-| `profile` | object | yes | the profile, in the shape `skills` answers |
-
 ### `signs_review`
 
 The notes of a health space that carry signs and symptoms, newest first, with the signs they carry and the words of the note that brought each one up (`evidence`), so that what the tagger put on a note can be checked. To correct one, call `sign_set`.

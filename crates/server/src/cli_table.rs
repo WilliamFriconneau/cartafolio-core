@@ -91,12 +91,6 @@ pub const COMMANDS: &[Entry] = &[
         false,
     ),
     e(
-        "skills-export",
-        "writes the professions as Claude skills (a plugin marketplace)",
-        Remote::Local("writes a folder of this machine from the built-in professions"),
-        false,
-    ),
-    e(
         "purge",
         "removes notes for good, by id, on this machine only",
         Remote::Local(
@@ -114,24 +108,6 @@ pub const COMMANDS: &[Entry] = &[
         "tags remove",
         "takes tags off the notes that carry them",
         Remote::Local("edits rows of the database of this machine, after a count"),
-        false,
-    ),
-    e(
-        "professions",
-        "lists the professions the person added and the proposals",
-        Remote::Local("reads the professions file in the data folder of this machine"),
-        false,
-    ),
-    e(
-        "professions accept",
-        "accepts an assistant's proposed profession",
-        Remote::Local("moves a proposal inside the data folder of this machine"),
-        false,
-    ),
-    e(
-        "professions reject",
-        "drops an assistant's proposed profession",
-        Remote::Local("edits the proposals file in the data folder of this machine"),
         false,
     ),
     e(

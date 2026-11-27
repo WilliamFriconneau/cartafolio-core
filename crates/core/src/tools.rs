@@ -36,8 +36,7 @@ mod tagging;
 mod toolkit;
 mod transcription;
 
-const WRITE_TOOLS: [&str; 21] = [
-    "profession_propose",
+const WRITE_TOOLS: [&str; 20] = [
     "target_set",
     "sign_set",
     "dispute_resolve",
@@ -59,8 +58,7 @@ const WRITE_TOOLS: [&str; 21] = [
     "file_retire",
     "file_erase",
 ];
-const READ_TOOLS: [&str; 22] = [
-    "skills",
+const READ_TOOLS: [&str; 21] = [
     "signs_review",
     "disputes",
     "triage_waiting",
@@ -623,28 +621,6 @@ pub fn definitions(caller: &Caller) -> Vec<ToolDef> {
                     "kind": { "type": "string", "enum": ["manifestations", "measures", "vitals", "red_flags"] },
                     "query": { "type": "string" },
                     "lang": { "type": "string", "enum": ["auto", "fr", "en", "es"] }
-                }
-            }),
-        });
-        if caller.all_spaces && !caller.read_only_forced {
-            out.push(ToolDef {
-                name: "profession_propose",
-                description: "Proposes a profession (a profile of skills for a kind of space, or for named spaces) for the person to accept: `profile` is `{ id, kind, title, brief, principles, spaces?, references?, skills }`, each skill with `id`, `title`, `when` and either a `tool` or `steps` (a recipe, in order, with the tools of the memory), and optionally a `template` and `tags`. A profession is an instruction, so nothing changes until the person accepts it on the machine of the node (`memcp professions accept KIND/ID`). Use it when the person asks for a new profession, for example a game master for a space of role-playing games.".into(),
-                schema: json!({
-                    "type": "object",
-                    "properties": { "profile": { "type": "object", "description": "The profile, in the shape `skills` answers." } },
-                    "required": ["profile"]
-                }),
-            });
-        }
-        out.push(ToolDef {
-            name: "skills",
-            description: "What an assistant can do in a space: its profession (a title, what it is an expert of, its principles) and its skills, each with the moment to use it and the tool that does it. A space has the profession of its kind, and a kind may have several profiles (health: nurse, coach, doctor): the first is the default, `profile` keeps one. The same is in `space_view capabilities` (`profession`). Read it before working in a space you do not know.".into(),
-            schema: json!({
-                "type": "object",
-                "properties": {
-                    "space": space_prop(&readable, "One space only; by default every space you can read."),
-                    "profile": { "type": "string", "description": "One profile of the kind (`nurse`, `coach`, `doctor` in health)." }
                 }
             }),
         });
@@ -1608,10 +1584,6 @@ fn run(brain: &Brain, caller: &Caller, name: &str, args: &Value) -> Result<Value
             crate::tools::transcription::transcription_hints(brain, caller, name, args)
         }
         "health_referential" => crate::tools::health::health_referential(brain, caller, name, args),
-        "skills" => crate::tools::toolkit::skills(brain, caller, name, args),
-        "profession_propose" => {
-            crate::tools::toolkit::profession_propose(brain, caller, name, args)
-        }
         "target_set" => crate::tools::toolkit::target_set(brain, caller, name, args),
         "signs_review" => crate::tools::toolkit::signs_review(brain, caller, name, args),
         "sign_set" => crate::tools::toolkit::sign_set(brain, caller, name, args),

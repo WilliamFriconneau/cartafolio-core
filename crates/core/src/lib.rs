@@ -70,7 +70,6 @@ pub mod pairing;
 pub mod peers;
 pub mod people;
 pub mod policy;
-pub mod profession;
 pub mod recover;
 pub mod retag;
 pub mod rules;
