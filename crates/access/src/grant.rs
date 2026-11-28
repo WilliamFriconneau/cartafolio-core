@@ -36,6 +36,10 @@ impl Principal {
         &self.connection_name
     }
 
+    pub fn read_only(&self) -> bool {
+        self.read_only
+    }
+
     pub fn may_write(&self) -> bool {
         !self.read_only && self.grants.iter().any(|grant| grant.write)
     }

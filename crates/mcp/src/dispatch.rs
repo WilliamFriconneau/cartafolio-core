@@ -111,7 +111,7 @@ impl Mcp {
                 let input: Move = parse(args)?;
                 output(scope.move_facts(&input.ids, &input.to_space)?)
             }
-            "spaces" => output(scope.spaces()?),
+            "spaces" => output(scope.spaces_view()?),
             "space_create" => {
                 let input: SpaceCreate = parse(args)?;
                 scope.create_space(&input.name, &input.label, input.parent.as_deref())?;
@@ -134,8 +134,29 @@ impl Mcp {
                 scope.retire_file(&input.id, &input.reason)?;
                 Ok(json!({}))
             }
+            "access" => self.access(principal, &scope),
             _ => Err(ToolError::Internal),
         }
+    }
+
+    fn access(&self, principal: &Principal, scope: &Scope<'_>) -> Result<Value> {
+        let alias = self
+            .accounts
+            .alias_of(&principal.account)
+            .unwrap_or_else(|_| principal.account.clone());
+        let grants: Vec<Value> = principal
+            .grants
+            .iter()
+            .map(|grant| json!({"space": grant.space, "write": grant.write}))
+            .collect();
+        Ok(json!({
+            "account": principal.account,
+            "alias": alias,
+            "connection": principal.connection,
+            "read_only": principal.read_only(),
+            "grants": grants,
+            "visible_spaces": scope.spaces()?.len()
+        }))
     }
 }
 

@@ -6,7 +6,7 @@ use pensine_store::{
     Fact, FactStatus, FileInfo, Hit, ListQuery, NewFact, NewFile, Page, RecallQuery, Remembered,
     SpaceInfo, Store, StoreError,
 };
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::collections::HashSet;
 use std::fs::File;
 use std::io::Read;
@@ -58,6 +58,18 @@ impl Scope<'_> {
             }
         }
         Ok(visible)
+    }
+
+    pub fn spaces_view(&self) -> Result<Vec<Value>> {
+        self.spaces()?
+            .into_iter()
+            .map(|space| {
+                let writable = self.principal.can_write(&space.name);
+                let mut value = output(space)?;
+                value["writable"] = json!(writable);
+                Ok(value)
+            })
+            .collect()
     }
 
     pub fn create_space(&self, name: &str, label: &str, parent: Option<&str>) -> Result<()> {

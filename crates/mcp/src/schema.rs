@@ -5,6 +5,10 @@ use serde_json::{json, Map, Value};
 pub(crate) struct Tool {
     pub name: &'static str,
     pub write: bool,
+    title: &'static str,
+    read_only: bool,
+    destructive: bool,
+    idempotent: bool,
     fields: &'static [Field],
 }
 
@@ -35,14 +39,27 @@ const NOTE: &[Field] = &[
 ];
 
 macro_rules! tool {
-    ($name:literal, $write:literal, [$($fields:expr),* $(,)?]) => {
-        Tool { name: $name, write: $write, fields: &[$($fields),*] }
+    ($name:literal, $write:literal, $title:literal, $read_only:literal, $destructive:literal,
+     $idempotent:literal, [$($fields:expr),* $(,)?]) => {
+        Tool {
+            name: $name,
+            write: $write,
+            title: $title,
+            read_only: $read_only,
+            destructive: $destructive,
+            idempotent: $idempotent,
+            fields: &[$($fields),*],
+        }
     };
 }
 
 pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "remember",
+        true,
+        "Remember a note",
+        false,
+        false,
         true,
         [
             ("space", Text, true),
@@ -56,10 +73,18 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "remember_many",
         true,
+        "Remember several notes",
+        false,
+        false,
+        true,
         [("space", Text, true), ("notes", Notes, true)]
     ),
     tool!(
         "recall",
+        false,
+        "Search notes",
+        true,
+        false,
         false,
         [
             ("query", Text, true),
@@ -72,6 +97,10 @@ pub(crate) const TOOLS: &[Tool] = &[
     ),
     tool!(
         "list",
+        false,
+        "List notes",
+        true,
+        false,
         false,
         [
             ("space", Text, false),
@@ -87,13 +116,37 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "pin",
         true,
+        "Pin a note",
+        false,
+        false,
+        true,
         [("id", Text, true), ("pinned", PinSetting, false)]
     ),
-    tool!("read", false, [("id", Text, true)]),
-    tool!("history", false, [("id", Text, true)]),
+    tool!(
+        "read",
+        false,
+        "Read a note",
+        true,
+        false,
+        false,
+        [("id", Text, true)]
+    ),
+    tool!(
+        "history",
+        false,
+        "Note history",
+        true,
+        false,
+        false,
+        [("id", Text, true)]
+    ),
     tool!(
         "supersede",
         true,
+        "Replace a note",
+        false,
+        true,
+        false,
         [
             ("id", Text, true),
             ("text", Text, true),
@@ -101,21 +154,49 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("reason", Text, true)
         ]
     ),
-    tool!("retire", true, [("id", Text, true), ("reason", Text, true)]),
-    tool!("restore", true, [("id", Text, true)]),
+    tool!(
+        "retire",
+        true,
+        "Retire a note",
+        false,
+        true,
+        false,
+        [("id", Text, true), ("reason", Text, true)]
+    ),
+    tool!(
+        "restore",
+        true,
+        "Restore a note",
+        false,
+        false,
+        true,
+        [("id", Text, true)]
+    ),
     tool!(
         "tags_set",
+        true,
+        "Set a note's tags",
+        false,
+        false,
         true,
         [("id", Text, true), ("tags", Texts, true)]
     ),
     tool!(
         "move",
         true,
+        "Move notes",
+        false,
+        true,
+        false,
         [("ids", Texts, true), ("to_space", Text, true)]
     ),
-    tool!("spaces", false, []),
+    tool!("spaces", false, "List spaces", true, false, false, []),
     tool!(
         "space_create",
+        true,
+        "Create a space",
+        false,
+        false,
         true,
         [
             ("name", Text, true),
@@ -126,6 +207,10 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "space_move",
         true,
+        "Move a space",
+        false,
+        true,
+        false,
         [
             ("name", Text, true),
             ("label", Text, false),
@@ -135,6 +220,10 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "file_put",
         true,
+        "Store a file",
+        false,
+        false,
+        false,
         [
             ("space", Text, true),
             ("name", Text, true),
@@ -144,9 +233,21 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("note", Text, false)
         ]
     ),
-    tool!("file_get", false, [("id", Text, true)]),
+    tool!(
+        "file_get",
+        false,
+        "Read a file",
+        true,
+        false,
+        false,
+        [("id", Text, true)]
+    ),
     tool!(
         "file_list",
+        false,
+        "List files",
+        true,
+        false,
         false,
         [
             ("space", Text, false),
@@ -157,8 +258,13 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "file_retire",
         true,
+        "Retire a file",
+        false,
+        true,
+        false,
         [("id", Text, true), ("reason", Text, true)]
     ),
+    tool!("access", false, "Show access", true, false, false, []),
 ];
 
 pub(crate) fn tools(principal: &Principal) -> Vec<Value> {
@@ -166,7 +272,17 @@ pub(crate) fn tools(principal: &Principal) -> Vec<Value> {
         .iter()
         .filter(|tool| !tool.write || principal.may_write())
         .map(|tool| {
-            let mut spec = json!({"name":tool.name,"inputSchema":object(tool.fields)});
+            let mut spec = json!({
+                "name": tool.name,
+                "inputSchema": object(tool.fields),
+                "annotations": {
+                    "title": tool.title,
+                    "readOnlyHint": tool.read_only,
+                    "destructiveHint": tool.destructive,
+                    "idempotentHint": tool.idempotent,
+                    "openWorldHint": false
+                }
+            });
             let description = match tool.name {
                 "pin" => Some(texts::PIN_DESCRIPTION),
                 "list" => Some(texts::LIST_DESCRIPTION),

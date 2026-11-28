@@ -63,7 +63,7 @@ async fn a_granted_call_works_end_to_end() {
         .into_string()
         .unwrap();
     let list: serde_json::Value = serde_json::from_str(&list).unwrap();
-    assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 19);
+    assert_eq!(list["result"]["tools"].as_array().unwrap().len(), 20);
 
     let remember = ureq::post(&url)
         .set("Authorization", &auth)

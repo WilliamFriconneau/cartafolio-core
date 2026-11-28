@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use pensine_access::{Accounts, Principal};
+use pensine_access::{Accounts, Grant, Principal};
 use pensine_mcp::Mcp;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -59,7 +59,8 @@ fn tools_list_hides_write_tools_from_a_read_only_connection() {
             "history",
             "spaces",
             "file_get",
-            "file_list"
+            "file_list",
+            "access"
         ]
     );
     let list = tools.iter().find(|tool| tool["name"] == "list").unwrap();
@@ -124,7 +125,7 @@ fn initialization_and_file_round_trip() {
     assert_eq!(init["result"]["serverInfo"]["name"], "pensine");
     assert_eq!(init["result"]["capabilities"], json!({"tools":{}}));
     let response = request(&mcp, &principal, "tools/list", json!({}));
-    assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 19);
+    assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 20);
     let file = content(&call(
         &mcp,
         &principal,
@@ -178,11 +179,11 @@ fn file_get_reports_the_size_above_the_download_limit() {
 }
 
 #[test]
-fn tools_list_has_19_tools_and_hides_pin_from_read_only() {
+fn tools_list_has_20_tools_and_hides_pin_from_read_only() {
     let (_dir, mcp, owner) = setup(false);
     let response = request(&mcp, &owner, "tools/list", json!({}));
     let tools = response["result"]["tools"].as_array().unwrap();
-    assert_eq!(tools.len(), 19);
+    assert_eq!(tools.len(), 20);
     for name in ["pin", "list", "recall"] {
         let tool = tools.iter().find(|tool| tool["name"] == name).unwrap();
         assert_eq!(
@@ -297,4 +298,100 @@ fn pin_filters_list_and_recall_and_counts_active_pins() {
         content(&call(&mcp, &owner, "spaces", json!({})))[0]["pinned"],
         0
     );
+}
+
+#[test]
+fn tools_list_annotations_match_the_table() {
+    let (_dir, mcp, owner) = setup(false);
+    let response = request(&mcp, &owner, "tools/list", json!({}));
+    let tools = response["result"]["tools"].as_array().unwrap();
+    let expected = [
+        ("remember", false, false, true),
+        ("remember_many", false, false, true),
+        ("recall", true, false, false),
+        ("list", true, false, false),
+        ("pin", false, false, true),
+        ("read", true, false, false),
+        ("history", true, false, false),
+        ("supersede", false, true, false),
+        ("retire", false, true, false),
+        ("restore", false, false, true),
+        ("tags_set", false, false, true),
+        ("move", false, true, false),
+        ("spaces", true, false, false),
+        ("space_create", false, false, true),
+        ("space_move", false, true, false),
+        ("file_put", false, false, false),
+        ("file_get", true, false, false),
+        ("file_list", true, false, false),
+        ("file_retire", false, true, false),
+        ("access", true, false, false),
+    ];
+    assert_eq!(tools.len(), expected.len());
+    for (tool, (name, read_only, destructive, idempotent)) in tools.iter().zip(expected) {
+        assert_eq!(tool["name"], name);
+        let annotations = &tool["annotations"];
+        assert!(
+            annotations["title"]
+                .as_str()
+                .is_some_and(|title| !title.is_empty()),
+            "{name}"
+        );
+        assert_eq!(annotations["readOnlyHint"], read_only, "{name}");
+        assert_eq!(annotations["destructiveHint"], destructive, "{name}");
+        assert_eq!(annotations["idempotentHint"], idempotent, "{name}");
+        assert_eq!(annotations["openWorldHint"], false, "{name}");
+    }
+}
+
+#[test]
+fn access_reports_the_scope_of_a_scoped_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let accounts = Arc::new(Accounts::open(dir.path()).unwrap());
+    let account = accounts.account_create("demo").unwrap();
+    account.store.space_create("aa", "A", None).unwrap();
+    account.store.space_create("bb", "B", None).unwrap();
+    let (connection, key) = accounts
+        .connection_create(
+            "demo",
+            "Scoped",
+            vec![Grant {
+                space: "aa".into(),
+                write: true,
+            }],
+            false,
+        )
+        .unwrap();
+    let principal = accounts.authenticate(key.as_str()).unwrap();
+    let mcp = Mcp::new(accounts);
+    let scope = content(&call(&mcp, &principal, "access", json!({})));
+    assert_eq!(scope["account"], "demo");
+    assert_eq!(scope["alias"], "demo");
+    assert_eq!(scope["connection"], connection.id);
+    assert_eq!(scope["read_only"], false);
+    assert_eq!(scope["grants"], json!([{"space":"aa","write":true}]));
+    assert_eq!(scope["visible_spaces"], 1);
+}
+
+#[test]
+fn access_works_for_a_read_only_connection() {
+    let (_dir, mcp, principal) = setup(true);
+    let scope = content(&call(&mcp, &principal, "access", json!({})));
+    assert_eq!(scope["read_only"], true);
+    assert_eq!(scope["visible_spaces"], 1);
+    let response = request(&mcp, &principal, "tools/list", json!({}));
+    let tools = response["result"]["tools"].as_array().unwrap();
+    assert!(tools.iter().any(|tool| tool["name"] == "access"));
+}
+
+#[test]
+fn spaces_reports_writable_per_space() {
+    let (_dir, mcp, owner) = setup(false);
+    let spaces = content(&call(&mcp, &owner, "spaces", json!({})));
+    assert_eq!(spaces[0]["name"], "aa");
+    assert_eq!(spaces[0]["writable"], true);
+
+    let (_dir, mcp, reader) = setup(true);
+    let spaces = content(&call(&mcp, &reader, "spaces", json!({})));
+    assert_eq!(spaces[0]["writable"], false);
 }
