@@ -1,13 +1,14 @@
 use crate::{Authenticator, ServerError};
-use axum::extract::{DefaultBodyLimit, Form, Query, State};
+use axum::extract::{DefaultBodyLimit, Form, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::middleware::{self, Next};
 use axum::response::{Html, IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use pensine_access::{Accounts, Connection, Grant, Principal};
 use rand::{rngs::OsRng, TryRngCore};
-use rusqlite::{Connection as Database, OptionalExtension, TransactionBehavior};
+use rusqlite::{Connection as Database, OptionalExtension, Transaction, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
@@ -19,6 +20,8 @@ use std::time::Duration;
 use subtle::ConstantTimeEq;
 use url::{Host, Url};
 
+const INVITE_SELECTOR_LEN: usize = 12;
+const INVITE_ATTEMPT_LIMIT: u32 = 5;
 const INVITE_TTL: i64 = 600;
 const CODE_TTL: i64 = 300;
 const ACCESS_TTL: i64 = 3600;
@@ -47,11 +50,13 @@ impl OAuth {
             .ok_or_else(|| {
                 ServerError::Invalid("public_url must be an HTTPS or loopback origin".into())
             })?;
-        let db = Database::open(root.join("oauth.db")).map_err(db_error)?;
+        let mut db = Database::open(root.join("oauth.db")).map_err(db_error)?;
         db.busy_timeout(Duration::from_secs(5)).map_err(db_error)?;
-        db.execute_batch(
-            "BEGIN IMMEDIATE;
-             CREATE TABLE IF NOT EXISTS oauth_clients (
+        let tx = db
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(db_error)?;
+        tx.execute_batch(
+            "CREATE TABLE IF NOT EXISTS oauth_clients (
                 id TEXT PRIMARY KEY NOT NULL, name TEXT NOT NULL, redirects TEXT NOT NULL
              );
              CREATE TABLE IF NOT EXISTS oauth_invites (
@@ -70,9 +75,29 @@ impl OAuth {
                 client TEXT NOT NULL, scope TEXT NOT NULL, access_until INTEGER NOT NULL,
                 refresh_until INTEGER NOT NULL
              );
-             COMMIT;",
+             CREATE INDEX IF NOT EXISTS oauth_session_family ON oauth_sessions (client, scope);
+             CREATE TABLE IF NOT EXISTS oauth_rotated_refresh (
+                hash BLOB PRIMARY KEY NOT NULL, client TEXT NOT NULL, scope TEXT NOT NULL
+             );
+             CREATE INDEX IF NOT EXISTS oauth_rotated_family ON oauth_rotated_refresh (client, scope);",
         )
         .map_err(db_error)?;
+        let has_invite_selector: bool = tx
+            .query_row(
+                "SELECT EXISTS (SELECT 1 FROM pragma_table_info('oauth_invites') WHERE name = 'selector')",
+                [],
+                |row| row.get(0),
+            )
+            .map_err(db_error)?;
+        if !has_invite_selector {
+            tx.execute_batch(
+                "ALTER TABLE oauth_invites ADD COLUMN selector BLOB;
+                 ALTER TABLE oauth_invites ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0;
+                 CREATE UNIQUE INDEX oauth_invite_selector ON oauth_invites (selector);",
+            )
+            .map_err(db_error)?;
+        }
+        tx.commit().map_err(db_error)?;
         Ok(Self {
             accounts,
             db: Mutex::new(db),
@@ -98,8 +123,9 @@ impl OAuth {
         )
         .map_err(db_error)?;
         db.execute(
-            "INSERT INTO oauth_invites VALUES (?1, ?2, unixepoch() + ?3)",
-            (hash(&invite), account, INVITE_TTL),
+            "INSERT INTO oauth_invites (hash, account, expires_at, selector)
+             VALUES (?1, ?2, unixepoch() + ?3, ?4)",
+            (hash(&invite), account, INVITE_TTL, invite_selector(&invite)),
         )
         .map_err(db_error)?;
         Ok(invite)
@@ -150,6 +176,10 @@ impl Authenticator for OAuth {
 
 pub(crate) fn routes(oauth: Arc<OAuth>) -> Router {
     Router::new()
+        .route("/register", post(register))
+        .route("/authorize", get(authorize).post(consent))
+        .route("/token", post(token))
+        .route_layer(middleware::from_fn(oauth_no_store))
         .route(
             "/.well-known/oauth-protected-resource",
             get(protected_resource),
@@ -158,9 +188,6 @@ pub(crate) fn routes(oauth: Arc<OAuth>) -> Router {
             "/.well-known/oauth-authorization-server",
             get(authorization_server),
         )
-        .route("/register", post(register))
-        .route("/authorize", get(authorize).post(consent))
-        .route("/token", post(token))
         .layer(DefaultBodyLimit::max(16 * 1024))
         .with_state(oauth)
 }
@@ -226,7 +253,7 @@ async fn register(
         "INSERT INTO oauth_clients VALUES (?1, ?2, ?3)",
         (&id, &name, serde_json::to_string(&redirects)?),
     )?;
-    Ok(no_store((
+    Ok((
         StatusCode::CREATED,
         Json(json!({
             "client_id": id,
@@ -236,7 +263,8 @@ async fn register(
             "grant_types": ["authorization_code", "refresh_token"],
             "response_types": ["code"],
         })),
-    )))
+    )
+        .into_response())
 }
 
 #[derive(Serialize, Deserialize)]
@@ -304,10 +332,7 @@ impl Authorization {
         drop(query);
         let location = HeaderValue::from_str(url.as_str())
             .map_err(|_| OAuthError::BadRequest("invalid_redirect_uri"))?;
-        Ok(no_store((
-            StatusCode::FOUND,
-            [(header::LOCATION, location)],
-        )))
+        Ok((StatusCode::FOUND, [(header::LOCATION, location)]).into_response())
     }
 }
 
@@ -363,11 +388,26 @@ fn choose_spaces(oauth: &OAuth, fields: &Fields) -> Result<Response> {
     let request = Authorization::validate(oauth, fields)?;
     let mut db = oauth.db()?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let account = tx.query_row(
-        "DELETE FROM oauth_invites WHERE hash = ?1 AND expires_at > unixepoch() RETURNING account",
-        [hash(field(fields, "invite"))],
-        |row| row.get::<_, String>(0),
-    ).optional()?.ok_or(OAuthError::Forbidden)?;
+    let invite = field(fields, "invite");
+    let invite_hash = hash(invite);
+    let account = tx
+        .query_row(
+            "DELETE FROM oauth_invites WHERE hash = ?1 AND expires_at > unixepoch()
+             AND failed_attempts < ?2 RETURNING account",
+            (invite_hash, INVITE_ATTEMPT_LIMIT),
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    let Some(account) = account else {
+        tx.execute(
+            "UPDATE oauth_invites SET failed_attempts = failed_attempts + 1
+             WHERE selector = ?1 AND hash != ?2 AND expires_at > unixepoch()
+             AND failed_attempts < ?3",
+            (invite_selector(invite), invite_hash, INVITE_ATTEMPT_LIMIT),
+        )?;
+        tx.commit()?;
+        return Err(OAuthError::Forbidden);
+    };
     let spaces = oauth
         .accounts
         .account(&account)
@@ -381,6 +421,11 @@ fn choose_spaces(oauth: &OAuth, fields: &Fields) -> Result<Response> {
         escape_html(&request.name)
     );
     hidden(&mut page, "nonce", &nonce)?;
+    hidden(&mut page, "client_id", &request.client)?;
+    hidden(&mut page, "redirect_uri", &request.redirect)?;
+    if let Some(state) = &request.state {
+        hidden(&mut page, "state", state)?;
+    }
     for space in spaces {
         write!(
             page,
@@ -505,20 +550,19 @@ async fn token(State(oauth): State<Arc<OAuth>>, Form(fields): Form<Fields>) -> R
             }
             scope
         }
-        "refresh_token" => tx
-            .query_row(
-                "DELETE FROM oauth_sessions WHERE refresh_hash = ?1 AND client = ?2
-                AND refresh_until > unixepoch() RETURNING scope",
-                (hash(field(&fields, "refresh_token")), client),
-                |row| row.get(0),
-            )
-            .optional()?
-            .ok_or(OAuthError::BadRequest("invalid_grant"))?,
+        "refresh_token" => {
+            let refresh_hash = hash(field(&fields, "refresh_token"));
+            let Some(scope) = rotate_refresh(&tx, client, refresh_hash)? else {
+                tx.commit()?;
+                return Err(OAuthError::BadRequest("invalid_grant"));
+            };
+            scope
+        }
         _ => return Err(OAuthError::BadRequest("unsupported_grant_type")),
     };
     let access = random_secret()?;
     let refresh = random_secret()?;
-    tx.execute(
+    let expired = tx.execute(
         "DELETE FROM oauth_sessions WHERE refresh_until <= unixepoch()",
         [],
     )?;
@@ -533,14 +577,68 @@ async fn token(State(oauth): State<Arc<OAuth>>, Form(fields): Form<Fields>) -> R
             REFRESH_TTL,
         ),
     )?;
+    if expired > 0 {
+        prune_rotated_refreshes(&tx)?;
+    }
     tx.commit()?;
-    Ok(no_store(Json(json!({
+    Ok(Json(json!({
         "access_token": access,
         "refresh_token": refresh,
         "token_type": "Bearer",
         "expires_in": ACCESS_TTL,
         "scope": "memory",
-    }))))
+    }))
+    .into_response())
+}
+
+fn rotate_refresh(
+    tx: &Transaction<'_>,
+    client: &str,
+    refresh_hash: [u8; 32],
+) -> Result<Option<String>> {
+    let scope: Option<String> = tx
+        .query_row(
+            "DELETE FROM oauth_sessions WHERE refresh_hash = ?1 AND client = ?2
+             AND refresh_until > unixepoch() RETURNING scope",
+            (refresh_hash, client),
+            |row| row.get(0),
+        )
+        .optional()?;
+    if let Some(scope) = &scope {
+        tx.execute(
+            "INSERT INTO oauth_rotated_refresh (hash, client, scope) VALUES (?1, ?2, ?3)",
+            (refresh_hash, client, scope),
+        )?;
+    } else if let Some(reused_scope) = tx
+        .query_row(
+            "SELECT scope FROM oauth_rotated_refresh WHERE hash = ?1 AND client = ?2",
+            (refresh_hash, client),
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?
+    {
+        // The scope contains a unique ID minted when consent is granted.
+        tx.execute(
+            "DELETE FROM oauth_sessions WHERE client = ?1 AND scope = ?2",
+            (client, &reused_scope),
+        )?;
+        tx.execute(
+            "DELETE FROM oauth_rotated_refresh WHERE client = ?1 AND scope = ?2",
+            (client, &reused_scope),
+        )?;
+    }
+    Ok(scope)
+}
+
+fn prune_rotated_refreshes(tx: &Transaction<'_>) -> Result<()> {
+    tx.execute(
+        "DELETE FROM oauth_rotated_refresh AS rotated WHERE NOT EXISTS (
+            SELECT 1 FROM oauth_sessions AS active
+            WHERE active.client = rotated.client AND active.scope = rotated.scope
+         )",
+        [],
+    )?;
+    Ok(())
 }
 
 fn resource_matches(oauth: &OAuth, fields: &Fields) -> Result<()> {
@@ -583,6 +681,11 @@ fn hash(value: &str) -> [u8; 32] {
     Sha256::digest(value).into()
 }
 
+fn invite_selector(value: &str) -> Option<[u8; 32]> {
+    // The prefix identifies the invitation without counting failures against unrelated codes.
+    value.get(..INVITE_SELECTOR_LEN).map(hash)
+}
+
 fn escape_html(value: &str) -> String {
     value
         .replace('&', "&amp;")
@@ -601,17 +704,18 @@ fn hidden(page: &mut String, name: &str, value: &str) -> std::fmt::Result {
 }
 
 fn consent_page(body: String) -> Response {
-    no_store((
+    (
         [
             (header::CONTENT_SECURITY_POLICY, "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"),
             (header::REFERRER_POLICY, "no-referrer"),
         ],
         Html(format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Pensine consent</title>{body}</html>")),
-    ))
+    )
+        .into_response()
 }
 
-fn no_store(response: impl IntoResponse) -> Response {
-    let mut response = response.into_response();
+async fn oauth_no_store(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
     response
         .headers_mut()
         .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
@@ -634,7 +738,7 @@ impl IntoResponse for OAuthError {
             Self::Forbidden => (StatusCode::FORBIDDEN, "access_denied"),
             Self::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
         };
-        no_store((status, Json(json!({"error": error}))))
+        (status, Json(json!({"error": error}))).into_response()
     }
 }
 
