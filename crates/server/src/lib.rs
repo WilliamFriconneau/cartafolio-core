@@ -20,4 +20,6 @@ mod texts;
 
 pub use config::Config;
 pub use error::ServerError;
-pub use http::{serve_blocking, Authenticator, Handle, KeysAuthenticator, Server};
+pub use http::{
+    issue_invitation, serve_blocking, Authenticator, Handle, KeysAuthenticator, Server,
+};

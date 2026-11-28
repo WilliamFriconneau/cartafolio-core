@@ -178,6 +178,17 @@ async fn serve_admin(
 
 /// Starts both the main and the admin listeners and blocks until the process
 /// receives Ctrl-C or SIGTERM, then shuts them down.
+/// Issues a one-time OAuth code from the command line, for the operator of the machine (who can already read the
+/// data folder). It writes to the same OAuth database as the running server, so the code works at once.
+pub fn issue_invitation(data_dir: &std::path::Path, account: &str) -> Result<String, ServerError> {
+    let config = Config {
+        data_dir: data_dir.into(),
+        ..Config::default()
+    };
+    let accounts = Arc::new(Accounts::open(data_dir)?);
+    oauth::OAuth::open(config, accounts, "http://127.0.0.1".into())?.invitation(account)
+}
+
 pub fn serve_blocking(config: Config) -> Result<(), ServerError> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()

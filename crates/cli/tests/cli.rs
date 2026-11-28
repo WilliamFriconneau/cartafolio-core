@@ -172,3 +172,20 @@ fn account_alias_changes_the_alias_and_rejects_bad_ones() {
     );
     assert!(!unknown.status.success());
 }
+
+#[test]
+fn oauth_code_prints_one_short_code_and_refuses_an_unknown_account() {
+    let data = tempfile::tempdir().unwrap();
+    success(
+        data.path(),
+        &["account", "create", "main", "--alias", "first"],
+    );
+    let printed = success(data.path(), &["oauth-code", "--account", "main"]);
+    let code = printed.trim();
+    let groups: Vec<_> = code.split('-').collect();
+    assert_eq!(groups.len(), 3, "{printed:?}");
+    assert!(groups.iter().all(|g| g.len() == 4));
+    assert!(!run(data.path(), &["oauth-code", "--account", "nobody"])
+        .status
+        .success());
+}

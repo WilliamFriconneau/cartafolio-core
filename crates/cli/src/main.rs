@@ -27,6 +27,11 @@ enum Command {
     Serve(ServeArgs),
     /// Print the installed version.
     Version,
+    /// Print a one-time code (valid 10 minutes) to sign in an assistant with OAuth.
+    OauthCode {
+        #[arg(long, value_name = "ID")]
+        account: String,
+    },
     /// Export an account's notes and attachments.
     Export {
         #[arg(long, value_name = "ID")]
@@ -101,6 +106,13 @@ fn run(cli: Cli) -> Result<()> {
         }
         Command::Version => {
             writeln!(io::stdout().lock(), "pensine {}", env!("CARGO_PKG_VERSION"))?;
+            Ok(())
+        }
+        Command::OauthCode { account } => {
+            // The account must exist; the code goes to stdout alone so a script can capture it.
+            accounts()?.account(&account)?;
+            let code = pensine_server::issue_invitation(&cli.data, &account)?;
+            writeln!(io::stdout().lock(), "{code}")?;
             Ok(())
         }
         Command::Account(command) => command.run(&accounts()?, &mut io::stdout().lock()),
