@@ -78,15 +78,26 @@ fn setup(view: &Dashboard<'_>, address: Option<&str>) -> String {
 }
 
 fn feedback(view: &Dashboard<'_>) -> String {
-    let (message, secret) = match view.feedback {
-        Feedback::Code(code) => (view.texts.code_expiry, code),
-        Feedback::Key(key) => (view.texts.save_key, key),
-        _ => return String::new(),
-    };
-    format!(
-        "<p role=\"status\">{message} <code>{}</code></p>",
-        esc(secret)
-    )
+    let t = view.texts;
+    match view.feedback {
+        Feedback::Code(code) => format!(
+            "<div class=\"invitation\"><p role=\"status\">{}</p>\
+             <input aria-label=\"{}\" id=\"invitation-code\" readonly value=\"{}\">\
+             <button type=\"button\" data-copy=\"{}\">{}</button><p>{}</p></div>",
+            t.code_expiry,
+            t.one_time_code,
+            esc(code),
+            t.copied,
+            t.copy_code,
+            t.code_where
+        ),
+        Feedback::Key(key) => format!(
+            "<p role=\"status\">{} <code>{}</code></p>",
+            t.save_key,
+            esc(key)
+        ),
+        _ => String::new(),
+    }
 }
 
 fn radio(id: &str, name: &str, value: &str, label: &str, checked: bool) -> String {

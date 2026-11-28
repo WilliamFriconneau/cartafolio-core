@@ -1,6 +1,6 @@
 use super::{
-    field, hash, invite_selector, random_secret, resource_matches, Fields, InvitationRights, OAuth,
-    OAuthError, Result, Scope, CODE_TTL, INVITE_ATTEMPT_LIMIT, INVITE_TTL,
+    field, hash, invitations, random_secret, resource_matches, Fields, InvitationRights, OAuth,
+    OAuthError, Result, Scope, CODE_TTL, INVITE_TTL,
 };
 use crate::config::parse_public_origin;
 use crate::html::escape_html;
@@ -95,12 +95,24 @@ pub(super) async fn authorize(
     Query(fields): Query<Fields>,
 ) -> Result<Response> {
     let request = Authorization::validate(&oauth, &fields)?;
-    let t = for_request(&headers);
-    let mut page = format!(
-        "<h1>{} {}</h1><form method=\"post\" action=\"/authorize\">",
-        t.connect_to,
-        escape_html(&request.name)
-    );
+    code_page(&request, &fields, for_request(&headers), None)
+}
+
+fn code_page(
+    request: &Authorization,
+    fields: &Fields,
+    t: &Texts,
+    failure: Option<invitations::Failure>,
+) -> Result<Response> {
+    let mut page = format!("<h1>{} {}</h1>", t.connect_to, escape_html(&request.name));
+    if let Some(failure) = failure.as_ref() {
+        let message = match failure {
+            invitations::Failure::Rejected => t.code_invalid,
+            invitations::Failure::Limited(_) => t.code_limited,
+        };
+        write!(page, "<p role=\"alert\">{message}</p>")?;
+    }
+    page.push_str("<form method=\"post\" action=\"/authorize\">");
     for key in [
         "client_id",
         "redirect_uri",
@@ -117,10 +129,23 @@ pub(super) async fn authorize(
     }
     write!(
         page,
-        "<label>{} <input name=\"invite\" required></label><button>{}</button></form>",
+        "<label>{} <input name=\"invite\" autocomplete=\"off\" autocapitalize=\"characters\" \
+         spellcheck=\"false\" inputmode=\"text\" placeholder=\"K7QM-X2RD-9FHT\" required></label>\
+         <button>{}</button></form>",
         t.one_time_code, t.next
     )?;
-    Ok(consent_page(page, t))
+    let mut response = consent_page(page, t);
+    match failure {
+        Some(invitations::Failure::Rejected) => *response.status_mut() = StatusCode::FORBIDDEN,
+        Some(invitations::Failure::Limited(seconds)) => {
+            *response.status_mut() = StatusCode::TOO_MANY_REQUESTS;
+            response
+                .headers_mut()
+                .insert(header::RETRY_AFTER, HeaderValue::from(seconds));
+        }
+        None => {}
+    }
+    Ok(response)
 }
 
 pub(super) async fn consent(
@@ -150,25 +175,12 @@ fn present_rights(oauth: &OAuth, fields: &Fields, t: &Texts) -> Result<Response>
     let mut request = Authorization::validate(oauth, fields)?;
     let mut db = oauth.db()?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let invite = field(fields, "invite");
-    let invite_hash = hash(invite);
-    let invitation = tx
-        .query_row(
-            "DELETE FROM oauth_invites WHERE hash = ?1 AND expires_at > unixepoch()
-             AND failed_attempts < ?2 RETURNING account, rights",
-            (invite_hash, INVITE_ATTEMPT_LIMIT),
-            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
-        )
-        .optional()?;
-    let Some((account, rights)) = invitation else {
-        tx.execute(
-            "UPDATE oauth_invites SET failed_attempts = failed_attempts + 1
-             WHERE selector = ?1 AND hash != ?2 AND expires_at > unixepoch()
-             AND failed_attempts < ?3",
-            (invite_selector(invite), invite_hash, INVITE_ATTEMPT_LIMIT),
-        )?;
-        tx.commit()?;
-        return Err(OAuthError::Forbidden);
+    let (account, rights) = match invitations::consume(&tx, field(fields, "invite"))? {
+        Ok(invitation) => invitation,
+        Err(failure) => {
+            tx.commit()?;
+            return code_page(&request, fields, t, Some(failure));
+        }
     };
     request.rights = rights.as_deref().map(serde_json::from_str).transpose()?;
     let spaces = account_spaces(oauth, &account)?;

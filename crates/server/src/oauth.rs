@@ -1,4 +1,6 @@
 mod consent;
+mod invitation_code;
+mod invitations;
 mod registration;
 mod routes;
 mod token;
@@ -22,7 +24,6 @@ use std::collections::HashMap;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
 
-const INVITE_SELECTOR_LEN: usize = 12;
 const INVITE_ATTEMPT_LIMIT: u32 = 5;
 const INVITE_TTL: i64 = 600;
 const CODE_TTL: i64 = 300;
@@ -92,30 +93,7 @@ impl OAuth {
              CREATE INDEX IF NOT EXISTS oauth_rotated_family ON oauth_rotated_refresh (client, scope);",
         )
         .map_err(db_error)?;
-        let has_invite_selector: bool = tx
-            .query_row(
-                "SELECT EXISTS (SELECT 1 FROM pragma_table_info('oauth_invites') WHERE name = 'selector')",
-                [],
-                |row| row.get(0),
-            )
-            .map_err(db_error)?;
-        if !has_invite_selector {
-            tx.execute_batch(
-                "ALTER TABLE oauth_invites ADD COLUMN selector BLOB;
-                 ALTER TABLE oauth_invites ADD COLUMN failed_attempts INTEGER NOT NULL DEFAULT 0;
-                 CREATE UNIQUE INDEX oauth_invite_selector ON oauth_invites (selector);",
-            )
-            .map_err(db_error)?;
-        }
-        let has_invite_rights: bool = tx.query_row(
-            "SELECT EXISTS (SELECT 1 FROM pragma_table_info('oauth_invites') WHERE name = 'rights')",
-            [],
-            |row| row.get(0),
-        ).map_err(db_error)?;
-        if !has_invite_rights {
-            tx.execute("ALTER TABLE oauth_invites ADD COLUMN rights TEXT", [])
-                .map_err(db_error)?;
-        }
+        invitations::migrate(&tx).map_err(db_error)?;
         registration::migrate(&tx, config.oauth_registration_cap).map_err(db_error)?;
         tx.commit().map_err(db_error)?;
         Ok(Self {
@@ -154,23 +132,29 @@ impl OAuth {
             .map(serde_json::to_string)
             .transpose()
             .map_err(std::io::Error::other)?;
-        let invite = random_secret()?;
+        let invite = invitation_code::sample(|| {
+            let mut byte = [0];
+            OsRng
+                .try_fill_bytes(&mut byte)
+                .map_err(std::io::Error::other)?;
+            Ok(byte[0])
+        })?;
+        let normalized = invitation_code::normalize(&invite)
+            .ok_or_else(|| std::io::Error::other("Generated an invalid invitation code"))?;
         let db = self.db()?;
         db.execute(
             "DELETE FROM oauth_invites WHERE expires_at <= unixepoch()",
             [],
         )
         .map_err(db_error)?;
+        // Making a code needs a signed-in Home Assistant user, so it proves the owner is here: it clears the window
+        // of failed guesses, which anyone on the internet could otherwise fill to lock the consent page.
+        db.execute("DELETE FROM oauth_invite_failures", [])
+            .map_err(db_error)?;
         db.execute(
-            "INSERT INTO oauth_invites (hash, account, expires_at, selector, rights)
-             VALUES (?1, ?2, unixepoch() + ?3, ?4, ?5)",
-            (
-                hash(&invite),
-                account,
-                INVITE_TTL,
-                invite_selector(&invite),
-                rights,
-            ),
+            "INSERT INTO oauth_invites (hash, account, expires_at, rights)
+             VALUES (?1, ?2, unixepoch() + ?3, ?4)",
+            (hash(&normalized), account, INVITE_TTL, rights),
         )
         .map_err(db_error)?;
         Ok(invite)
@@ -322,11 +306,6 @@ fn random_secret() -> std::io::Result<String> {
 
 fn hash(value: &str) -> [u8; 32] {
     Sha256::digest(value).into()
-}
-
-fn invite_selector(value: &str) -> Option<[u8; 32]> {
-    // The prefix identifies the invitation without counting failures against unrelated codes.
-    value.get(..INVITE_SELECTOR_LEN).map(hash)
 }
 
 enum OAuthError {

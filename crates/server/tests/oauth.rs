@@ -7,6 +7,9 @@ mod registration;
 #[path = "oauth/security.rs"]
 mod security;
 
+#[path = "oauth/invitations.rs"]
+mod invitations;
+
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use pensine_access::Accounts;
 use pensine_server::{Config, Handle, Server};

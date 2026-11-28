@@ -1,32 +1,6 @@
 use super::*;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn five_wrong_codes_lock_the_invite() {
-    let mut env = Fixture::start().await;
-    let client = env.client();
-    let invite = env.handle.oauth_invitation("demo").unwrap();
-    let other_invite = env.handle.oauth_invitation("demo").unwrap();
-    let mut fields = env.authorize_fields(&client, "S256");
-    for attempt in 0..5 {
-        let wrong = format!("{}wrong-{attempt}", &invite[..12]);
-        fields.push(("invite", wrong));
-        assert_eq!(env.post("/authorize", &fields).status(), 403);
-        fields.pop();
-        if attempt == 3 {
-            env.restart().await;
-        }
-    }
-    let mut other_fields = fields.clone();
-    other_fields.push(("invite", other_invite));
-    assert_eq!(env.post("/authorize", &other_fields).status(), 200);
-    fields.push(("invite", invite));
-    let locked_before_restart = env.post("/authorize", &fields).status();
-    env.restart().await;
-    let locked_after_restart = env.post("/authorize", &fields).status();
-    assert_eq!([locked_before_restart, locked_after_restart], [403, 403]);
-}
-
-#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn the_consent_page_escapes_every_value() {
     let env = Fixture::start().await;
     let client = "client<script>\"'&";

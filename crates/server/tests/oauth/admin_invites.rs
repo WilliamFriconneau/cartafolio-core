@@ -1,6 +1,6 @@
 use super::{body, Fixture, Url, VERIFIER};
 
-async fn invitation(scope: &str) -> (Fixture, String, String) {
+async fn admin_invitation(scope: &str) -> (Fixture, String) {
     let env = Fixture::start().await;
     pensine_access::Accounts::open(env.dir.path())
         .unwrap()
@@ -30,15 +30,29 @@ async fn invitation(scope: &str) -> (Fixture, String, String) {
         .unwrap()
         .into_string()
         .unwrap();
+    (env, html)
+}
+
+async fn invitation(scope: &str) -> (Fixture, String, String) {
+    let (env, html) = admin_invitation(scope).await;
     assert!(html.contains("expires in 10 minutes") && html.contains("Connections and keys"));
     let invite = html
-        .split("<code>")
+        .split("id=\"invitation-code\" readonly value=\"")
         .nth(1)
         .unwrap()
-        .split('<')
+        .split('"')
         .next()
         .unwrap();
+    assert_eq!(invite.len(), 14);
     let client = env.client();
+    let mut authorize = Url::parse(&env.url("/authorize")).unwrap();
+    authorize
+        .query_pairs_mut()
+        .extend_pairs(env.authorize_fields(&client, "S256"));
+    assert_eq!(
+        env.agent.get(authorize.as_str()).call().unwrap().status(),
+        200
+    );
     let mut fields = env.authorize_fields(&client, "S256");
     fields.push(("invite", invite.into()));
     let consent = env.post("/authorize", &fields);
@@ -58,7 +72,7 @@ async fn the_consent_page_shows_the_rights_without_asking_again() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn the_invitation_carries_the_chosen_spaces_and_read_only_into_the_session() {
+async fn the_full_flow_with_the_short_code_issues_a_token_and_calls_mcp() {
     let (env, client, html) = invitation("selected").await;
     let nonce = html
         .split("name=\"nonce\" value=\"")
@@ -133,4 +147,16 @@ async fn the_invitation_carries_the_chosen_spaces_and_read_only_into_the_session
         .unwrap();
     assert!(revoked.contains("Assistants signed in with a code (0)"));
     assert_eq!(env.mcp(token, "aa").status(), 401);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_admin_page_shows_the_code_with_a_copy_button_and_expiry() {
+    let (_, html) = admin_invitation("all").await;
+    assert!(html.contains("id=\"invitation-code\""));
+    assert!(html.contains("user-select:all"));
+    assert_eq!(html.matches(">Copy code</button>").count(), 1);
+    assert!(html.contains("expires in 10 minutes"));
+    assert!(html.contains("Type it on the page that opens in your assistant"));
+    assert_eq!(html.matches("<script nonce=").count(), 1);
+    assert!(html.contains("input.select()"));
 }

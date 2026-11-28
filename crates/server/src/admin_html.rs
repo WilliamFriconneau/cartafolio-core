@@ -25,6 +25,8 @@ li,ol,form,p{margin:.4rem 0}ol,ul{padding-inline-start:1.4rem}
 fieldset{border:0;margin:.35rem 0;padding:0;min-inline-size:0}legend{float:left;width:100%;padding:0;margin:0 0 .4rem;font-weight:600}legend+*{clear:both}ol{list-style:none;padding:0;counter-reset:step}li{counter-increment:step}legend::before{content:counter(step) '. '}label.choice{display:block}
 input,button{font:inherit;max-width:100%;box-sizing:border-box}button{cursor:pointer}
 .address{display:flex;gap:.4rem;align-items:center}.address input{flex:1;min-width:0}
+.invitation{margin:.5rem 0;text-align:center}
+.invitation input{display:block;margin:.35rem auto;width:15ch;font:700 1.5rem monospace;text-align:center;user-select:all}
 .space-options,.key,.chatgpt{display:none}
 form:has(#selected:checked) .space-options,form:has(#key:checked) .key,form:has(#chatgpt:checked) .chatgpt{display:block}
 form:has(#key:checked) .oauth,form:not(:has(#claude:checked)) .claude{display:none}
