@@ -30,17 +30,25 @@ impl Mcp {
 
 mod texts {
     pub const INSTRUCTIONS: &str =
-        "Pinned notes are the person's standing targets. Read them first with list{pinned:true}. \
-         Use the space argument when focusing on a particular space. To see what recurs, look at \
-         the last 30 days with list{since} or use recall with search words and the same since cutoff. \
-         Set since to the cutoff in Unix seconds. Use tags_set to organize a note by topic and move \
-         to put it in the right space. Describe what the notes support and never invent a diagnosis.";
+        "Keep standing targets in one pinned note per space, tagged 'targets' and written in the \
+         language the person uses there. Read it first with list{space, pinned:true}. Keep it short \
+         and factual: one line per target with a plain label, start date, last seen date and a line of evidence \
+         from the notes. No diagnosis, advice or invented facts. Review the last 30 days with \
+         list{space, since}, using cursor if needed, or recall. Use Unix seconds for since. Update with supersede in the same \
+         space, keeping all tags including 'targets'. The pin stays. Drop targets with no sign for \
+         a long time. The old version stays in history. If asked for targets and no targets note \
+         exists, create it with remember, tag it 'targets', then pin it. Sort other notes with \
+         tags_set and move.";
 
     pub const PIN_DESCRIPTION: &str =
-        "Pin an active note in place. Omit pinned to pin it, or pass false to unpin it.";
+        "Pin an active note in place. Omit pinned to pin it, or pass false to unpin it. \
+         Pin the targets note after creating it.";
     pub const LIST_DESCRIPTION: &str =
         "List notes in a space or across accessible spaces. With pinned true, list pinned notes \
-         newest pin first. With pinned false, list unpinned notes.";
+         newest pin first. With pinned false, list unpinned notes. Pass space and pinned true \
+         to find the targets note for that space.";
+    pub const SUPERSEDE_DESCRIPTION: &str =
+        "Replace a note with a new version in the same space, keeping its pin and history.";
     pub const RECALL_DESCRIPTION: &str =
         "Search notes by relevance with a boost for pinned notes. Set pinned to true to search \
          only pinned notes or false to search only unpinned notes.";

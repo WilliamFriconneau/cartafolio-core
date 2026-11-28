@@ -154,6 +154,7 @@ pub(crate) fn tools(principal: &Principal) -> Vec<Value> {
             let description = match tool.name {
                 "pin" => Some(texts::PIN_DESCRIPTION),
                 "list" => Some(texts::LIST_DESCRIPTION),
+                "supersede" => Some(texts::SUPERSEDE_DESCRIPTION),
                 "recall" => Some(texts::RECALL_DESCRIPTION),
                 "spaces" => Some(texts::SPACES_DESCRIPTION),
                 _ => None,

@@ -201,12 +201,13 @@ fn tools_list_has_19_tools_and_hides_pin_from_read_only() {
 }
 
 #[test]
-fn initialize_carries_the_instructions() {
+fn initialize_instructions_describe_the_targets_note() {
     let (_dir, mcp, owner) = setup(false);
     let response = request(&mcp, &owner, "initialize", json!({}));
     let instructions = response["result"]["instructions"].as_str().unwrap();
     for phrase in [
-        "standing targets",
+        "targets",
+        "supersede",
         "pinned",
         "30 days",
         "since",
@@ -217,7 +218,40 @@ fn initialize_carries_the_instructions() {
     ] {
         assert!(instructions.contains(phrase), "{instructions}");
     }
-    assert!((65..=95).contains(&instructions.split_whitespace().count()));
+    assert!(instructions.split_whitespace().count() <= 140);
+}
+
+#[test]
+fn targets_note_keeps_its_pin_through_supersede_over_mcp() {
+    let (_dir, mcp, owner) = setup(false);
+    let saved = content(&call(
+        &mcp,
+        &owner,
+        "remember",
+        json!({"space":"aa","text":"Water the orchard","tags":["targets"]}),
+    ));
+    let old = &saved["fact"]["id"];
+    let pinned = content(&call(&mcp, &owner, "pin", json!({"id":old})));
+    assert_eq!(pinned["pinned"], true);
+
+    let updated = content(&call(
+        &mcp,
+        &owner,
+        "supersede",
+        json!({"id":old,"text":"Orchard watered","tags":["targets"],"reason":"New evidence"}),
+    ));
+    assert_ne!(updated["id"], *old);
+
+    let page = content(&call(
+        &mcp,
+        &owner,
+        "list",
+        json!({"space":"aa","pinned":true}),
+    ));
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["id"], updated["id"]);
+    assert_eq!(items[0]["tags"], json!(["targets"]));
 }
 
 #[test]
