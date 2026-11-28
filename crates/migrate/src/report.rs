@@ -205,7 +205,7 @@ fn send_todo(
     let known = client
         .call("read", json!({"id": todo_id}))
         .ok()
-        .is_some_and(|reply| reply.data["origin"] == json!([crate::ORIGIN, note.id]));
+        .is_some_and(|reply| reply.data["origin"] == json!([crate::origin(), note.id]));
     if known {
         *duplicates += 1;
         return;
@@ -287,7 +287,7 @@ fn retire(client: &Client<'_>, note: &Note, fact: &Value) -> Result<()> {
     if fact["status"] == "retired" {
         return Ok(());
     }
-    if fact["origin"] != json!([crate::ORIGIN, note.id]) || fact["status"] != "active" {
+    if fact["origin"] != json!([crate::origin(), note.id]) || fact["status"] != "active" {
         return Err("Cannot retire a note shared with a different origin or version".into());
     }
     let id = crate::rpc::text(&fact["id"])?;

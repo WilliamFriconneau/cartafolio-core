@@ -336,3 +336,12 @@ async fn the_default_limit_migrates_a_file_just_over_eight_megabytes() {
     assert!(report.contains("files sent=2"), "{report}");
     assert!(!report.contains("left on source"), "{report}");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_new_origin_app_replays_everything_and_the_duplicate_rule_decides() {
+    let fixture = Fixture::new().await;
+    success(fixture.run(&[]));
+    let report = success(fixture.run(&["--origin-app", "second-run"]));
+    // Same text and same tags: every note is a duplicate of the first run, nothing new is created.
+    assert!(report.contains("notes sent=0 duplicates=104"), "{report}");
+}

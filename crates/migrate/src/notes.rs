@@ -1,7 +1,6 @@
 use crate::{
     report::Report,
     rpc::{array, next, parse, text, Client, Result},
-    ORIGIN,
 };
 use pensine_store::normalize_tag;
 use serde::Deserialize;
@@ -32,7 +31,7 @@ pub struct Note {
 
 impl Note {
     pub fn arguments(&self) -> Value {
-        json!({"text":self.text,"tags":self.tags,"author":self.author,"at":self.at,"origin":[ORIGIN,self.id]})
+        json!({"text":self.text,"tags":self.tags,"author":self.author,"at":self.at,"origin":[crate::origin(),self.id]})
     }
 }
 
@@ -233,7 +232,7 @@ fn list_status(client: &Client<'_>, space: &str, retired: bool, pairs: &mut Pair
                 let [app, id] = array(origin)?.as_slice() else {
                     return Err("Invalid destination origin".into());
                 };
-                if app == ORIGIN
+                if app == crate::origin()
                     && pairs
                         .insert(text(id)?.into(), (text(&fact["text"])?.into(), retired))
                         .is_some()

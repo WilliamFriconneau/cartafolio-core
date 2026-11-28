@@ -19,7 +19,13 @@ use std::{
     process::ExitCode,
 };
 
-const ORIGIN: &str = "pensine-old";
+static ORIGIN_APP: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// The origin application name written on every migrated note: a run with a new name treats every note as new
+/// and lets the duplicate rule (text and tags) decide, without touching the aliases of an earlier run.
+pub(crate) fn origin() -> &'static str {
+    ORIGIN_APP.get().map_or("pensine-old", String::as_str)
+}
 
 #[derive(Parser)]
 #[command(about = "Copy an old Pensine node to a new Pensine server over MCP")]
@@ -44,6 +50,9 @@ struct Args {
     dry_run: bool,
     #[arg(long, default_value = "100", value_parser = clap::value_parser!(u16).range(1..))]
     batch: u16,
+    /// Origin application name written on migrated notes (a new name replays everything).
+    #[arg(long, default_value = "pensine-old")]
+    origin_app: String,
     /// Files larger than this many megabytes are left on the source.
     #[arg(long, default_value = "40", value_parser = clap::value_parser!(u64).range(1..=60))]
     max_file_mb: u64,
@@ -251,6 +260,7 @@ fn execute(args: &Args, output: &mut String) -> Result<(bool, Vec<String>)> {
 
 fn main() -> ExitCode {
     let args = Args::parse();
+    let _ = ORIGIN_APP.set(args.origin_app.clone());
     let mut output = String::new();
     match execute(&args, &mut output) {
         Ok((ok, mut keys)) => {
