@@ -36,14 +36,14 @@ pub struct Page<T> {
     pub next_cursor: Option<String>,
 }
 
-struct Cursor {
-    snapshot: i64,
-    created_at: i64,
-    rowid: i64,
+pub(crate) struct Cursor {
+    pub(crate) snapshot: i64,
+    pub(crate) created_at: i64,
+    pub(crate) rowid: i64,
 }
 
 impl Cursor {
-    fn parse(value: &str) -> Result<Self, StoreError> {
+    pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
         let invalid = || StoreError::Invalid("Invalid list cursor".into());
         let parts: Vec<_> = value.split('.').collect();
         let ["1", snapshot, created_at, rowid] = parts.as_slice() else {
@@ -60,7 +60,7 @@ impl Cursor {
         Ok(cursor)
     }
 
-    fn encode(&self) -> String {
+    pub(crate) fn encode(&self) -> String {
         format!("1.{}.{}.{}", self.snapshot, self.created_at, self.rowid)
     }
 }

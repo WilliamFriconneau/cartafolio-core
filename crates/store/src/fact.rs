@@ -136,7 +136,23 @@ impl Store {
         })
     }
 
-    fn write<T>(
+    pub fn move_facts(&self, ids: &[String], to_space: &str) -> Result<Vec<Fact>, StoreError> {
+        self.write(|tx| {
+            crate::space::require_space(tx, to_space)?;
+            ids.iter()
+                .map(|id| {
+                    let previous = head(tx, id, FactStatus::Active)?;
+                    let tags = previous.tags.clone();
+                    let mut new = revision(previous, tags);
+                    new.space = to_space.to_owned();
+                    set_status(tx, id, FactStatus::Retired, "moved")?;
+                    insert(tx, new, Some(id))
+                })
+                .collect()
+        })
+    }
+
+    pub(crate) fn write<T>(
         &self,
         operation: impl FnOnce(&Transaction<'_>) -> Result<T, StoreError>,
     ) -> Result<T, StoreError> {
@@ -253,6 +269,7 @@ fn revision(previous: Fact, tags: Vec<String>) -> NewFact {
 }
 
 fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fact, StoreError> {
+    crate::space::require_space(conn, &new.space)?;
     let created_at = validate_time(new.at)?;
     if new.text.chars().take(200_001).count() > 200_000 {
         return Err(StoreError::Invalid(
@@ -262,14 +279,6 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
     let tags = normalize_tags(&new.tags)?;
     let tags_json =
         serde_json::to_string(&tags).map_err(|error| StoreError::Invalid(error.to_string()))?;
-    let space_exists = conn.query_row(
-        "SELECT EXISTS(SELECT 1 FROM spaces WHERE name = ?1)",
-        [&new.space],
-        |row| row.get::<_, bool>(0),
-    )?;
-    if !space_exists {
-        return Err(StoreError::NotFound);
-    }
     if let Some(origin) = &new.origin {
         if replaces.is_some() && origin_fact_id(conn, origin)?.is_some() {
             return Err(StoreError::Conflict);
@@ -313,7 +322,7 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
     })
 }
 
-fn validate_time(at: Option<i64>) -> Result<i64, StoreError> {
+pub(crate) fn validate_time(at: Option<i64>) -> Result<i64, StoreError> {
     let now = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .ok()

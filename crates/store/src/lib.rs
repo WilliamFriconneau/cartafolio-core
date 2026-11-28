@@ -14,24 +14,43 @@ mod search_tests;
 
 mod error;
 mod fact;
+mod file;
 mod list;
 mod schema;
 mod search;
+mod space;
 mod tags;
 
 pub use error::StoreError;
 pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};
+pub use file::{FileInfo, FileStatus, NewFile};
 pub use list::{ListQuery, Page};
 pub use search::{Hit, RecallQuery};
+pub use space::SpaceInfo;
 pub use tags::normalize_tag;
 
 use rusqlite::{Connection, OpenFlags};
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::Duration;
 
+#[derive(Clone, Copy, Debug)]
+pub struct StoreOptions {
+    pub max_file_size: u64,
+}
+
+impl Default for StoreOptions {
+    fn default() -> Self {
+        Self {
+            max_file_size: 200_000_000,
+        }
+    }
+}
+
 pub struct Store {
+    blobs: PathBuf,
+    options: StoreOptions,
     writer: Mutex<Connection>,
     readers: [Mutex<Connection>; 2],
     schema_version: u32,
@@ -39,7 +58,13 @@ pub struct Store {
 
 impl Store {
     pub fn open(dir: &Path) -> Result<Self, StoreError> {
-        fs::create_dir_all(dir.join("blobs"))?;
+        Self::open_with(dir, StoreOptions::default())
+    }
+
+    pub fn open_with(dir: &Path, options: StoreOptions) -> Result<Self, StoreError> {
+        let blobs = dir.join("blobs");
+        fs::create_dir_all(&blobs)?;
+        let blobs = blobs.canonicalize()?;
         let database = dir.join("store.db");
         let mut writer = Connection::open(&database)?;
         configure(&writer)?;
@@ -59,6 +84,8 @@ impl Store {
         };
 
         Ok(Self {
+            blobs,
+            options,
             writer: Mutex::new(writer),
             readers: [open_reader()?, open_reader()?],
             schema_version,
