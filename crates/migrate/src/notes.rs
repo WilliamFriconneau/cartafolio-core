@@ -18,6 +18,7 @@ struct Fact {
     status: String,
 }
 
+#[derive(Clone)]
 pub struct Note {
     pub id: String,
     pub text: String,

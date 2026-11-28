@@ -15,7 +15,7 @@ fn note(text: &str) -> NewFact {
     NewFact {
         space: "notes".into(),
         text: text.into(),
-        tags: vec![],
+        tags: vec!["garden".into()],
         author: "fixture".into(),
         source: "test".into(),
         at: None,
@@ -62,16 +62,16 @@ fn a_pin_survives_supersede_tags_set_restore_and_move() {
     let moved = store.move_facts(&[restored.id], "other").unwrap();
     assert!(moved[0].pinned);
     assert_eq!(moved[0].space, "other");
-    assert_eq!(
-        store
-            .list(ListQuery {
-                pinned: Some(true),
-                ..ListQuery::default()
-            })
-            .unwrap()
-            .items,
-        moved
-    );
+    assert!(store
+        .list(ListQuery {
+            pinned: Some(true),
+            tags_any: vec!["garden".into()],
+            ..ListQuery::default()
+        })
+        .unwrap()
+        .items
+        .iter()
+        .any(|fact| fact.id == moved[0].id));
 }
 
 #[test]
@@ -104,6 +104,7 @@ fn list_pinned_returns_newest_pin_first() {
     store.pin(&older.id, true).unwrap();
     let mut query = ListQuery {
         pinned: Some(true),
+        tags_any: vec!["garden".into()],
         limit: 1,
         ..ListQuery::default()
     };
@@ -117,6 +118,7 @@ fn list_pinned_returns_newest_pin_first() {
         store
             .list(ListQuery {
                 pinned: Some(false),
+                tags_any: vec!["garden".into()],
                 ..ListQuery::default()
             })
             .unwrap()

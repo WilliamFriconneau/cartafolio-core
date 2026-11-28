@@ -84,6 +84,7 @@ pub(super) const MIGRATIONS: &[(u32, &str)] = &[
     CREATE INDEX facts_pin_time ON facts(pinned_at) WHERE pinned_at IS NOT NULL;
     ",
     ),
+    (5, "SELECT 1;"),
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
@@ -100,6 +101,9 @@ pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
             tx.execute_batch(sql)?;
             if version == 3 {
                 crate::search::backfill(&tx)?;
+            }
+            if version == 5 {
+                crate::todo::backfill(&tx)?;
             }
             tx.pragma_update(None, "user_version", version)?;
         }

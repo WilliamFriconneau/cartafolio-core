@@ -247,7 +247,7 @@ fn targets_note_keeps_its_pin_through_supersede_over_mcp() {
         &mcp,
         &owner,
         "list",
-        json!({"space":"aa","pinned":true}),
+        json!({"space":"aa","pinned":true,"tags":["targets"]}),
     ));
     let items = page["items"].as_array().unwrap();
     assert_eq!(items.len(), 1);
@@ -276,8 +276,9 @@ fn pin_filters_list_and_recall_and_counts_active_pins() {
         true
     );
     let page = content(&call(&mcp, &owner, "list", json!({"pinned":true})));
-    assert_eq!(page["items"].as_array().unwrap().len(), 1);
-    assert_eq!(page["items"][0]["id"], *id);
+    let pinned = page["items"].as_array().unwrap();
+    assert_eq!(pinned.len(), 2);
+    assert!(pinned.iter().any(|item| item["id"] == *id));
     let hits = content(&call(
         &mcp,
         &owner,
@@ -288,7 +289,7 @@ fn pin_filters_list_and_recall_and_counts_active_pins() {
     assert_eq!(hits[0]["fact"]["id"], *id);
     assert_eq!(
         content(&call(&mcp, &owner, "spaces", json!({})))[0]["pinned"],
-        1
+        2
     );
     assert_eq!(
         content(&call(&mcp, &owner, "pin", json!({"id":id,"pinned":false})))["pinned"],
@@ -296,7 +297,7 @@ fn pin_filters_list_and_recall_and_counts_active_pins() {
     );
     assert_eq!(
         content(&call(&mcp, &owner, "spaces", json!({})))[0]["pinned"],
-        0
+        1
     );
 }
 
@@ -394,4 +395,57 @@ fn spaces_reports_writable_per_space() {
     let (_dir, mcp, reader) = setup(true);
     let spaces = content(&call(&mcp, &reader, "spaces", json!({})));
     assert_eq!(spaces[0]["writable"], false);
+}
+
+#[test]
+fn list_pinned_returns_the_todo_note_of_each_granted_space() {
+    let dir = tempfile::tempdir().unwrap();
+    let accounts = Arc::new(Accounts::open(dir.path()).unwrap());
+    let account = accounts.account_create("demo").unwrap();
+    account.store.space_create("aa", "A", None).unwrap();
+    account
+        .store
+        .space_create("ab", "Child", Some("aa"))
+        .unwrap();
+    account.store.space_create("bb", "Hidden", None).unwrap();
+    let (_, key) = accounts
+        .connection_create(
+            "demo",
+            "Scoped",
+            vec![Grant {
+                space: "aa".into(),
+                write: true,
+            }],
+            false,
+        )
+        .unwrap();
+    let principal = accounts.authenticate(key.as_str()).unwrap();
+    let mcp = Mcp::new(accounts);
+
+    let spaces = content(&call(&mcp, &principal, "spaces", json!({})));
+    let spaces = spaces.as_array().unwrap();
+    assert_eq!(spaces.len(), 2);
+    let expected: Vec<&str> = spaces
+        .iter()
+        .map(|space| space["todo"].as_str().unwrap())
+        .collect();
+    let page = content(&call(&mcp, &principal, "list", json!({"pinned":true})));
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    for id in &expected {
+        assert!(items.iter().any(|item| item["id"] == *id));
+    }
+    assert!(items.iter().all(|item| item["tags"] == json!(["todo"])));
+
+    let denied = call(
+        &mcp,
+        &principal,
+        "retire",
+        json!({"id":expected[0],"reason":"Gone"}),
+    );
+    assert_eq!(denied["isError"], true);
+    assert_eq!(
+        denied["content"][0]["text"],
+        "the todo note of a space is permanent: update it with supersede"
+    );
 }

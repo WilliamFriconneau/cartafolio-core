@@ -151,7 +151,10 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("id", Text, true),
             ("text", Text, true),
             ("tags", Texts, false),
-            ("reason", Text, true)
+            ("reason", Text, true),
+            ("at", Integer, false),
+            ("origin", Origin, false),
+            ("author", Text, false)
         ]
     ),
     tool!(

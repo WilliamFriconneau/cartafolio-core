@@ -16,7 +16,7 @@ fn a_child_space_lists_under_its_parent() {
     );
     assert_eq!(spaces[1].label, "Été 🌱");
     assert_eq!(spaces[1].parent.as_deref(), Some("root"));
-    assert_eq!((spaces[1].notes, spaces[1].files), (0, 0));
+    assert_eq!((spaces[1].notes, spaces[1].files), (1, 0));
     assert!(matches!(
         store.space_create("child", "Duplicate", None),
         Err(StoreError::Conflict)
@@ -93,7 +93,7 @@ fn moving_notes_keeps_their_history_and_tags() {
     assert_eq!(moved[0].tags, old.tags);
     assert_eq!(moved[0].text, old.text);
     let spaces = store.spaces().unwrap();
-    assert_eq!((spaces[0].notes, spaces[1].notes), (0, 1));
+    assert_eq!((spaces[0].notes, spaces[1].notes), (1, 2));
     let hits = store
         .recall(RecallQuery {
             text: "orchard".into(),

@@ -23,6 +23,7 @@ mod search;
 mod space;
 mod sweep;
 mod tags;
+mod todo;
 
 pub use error::StoreError;
 pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};

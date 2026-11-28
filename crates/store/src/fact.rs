@@ -121,13 +121,20 @@ impl Store {
         Ok(facts)
     }
 
-    pub fn supersede(&self, id: &str, new: NewFact, reason: &str) -> Result<Fact, StoreError> {
+    pub fn supersede(&self, id: &str, mut new: NewFact, reason: &str) -> Result<Fact, StoreError> {
         self.write(|tx| {
             let previous = head(tx, id, FactStatus::Active)?;
             if new.space != previous.space {
                 return Err(StoreError::Invalid(
                     "A replacement must be in the same space".into(),
                 ));
+            }
+            if crate::todo::is_todo(&previous) {
+                let mut tags = normalize_tags(&new.tags)?;
+                if !tags.iter().any(|tag| tag == crate::todo::TAG) {
+                    tags.push(crate::todo::TAG.into());
+                }
+                new.tags = tags;
             }
             set_status(tx, id, FactStatus::Superseded, reason)?;
             insert(tx, new, Some(id))
@@ -136,7 +143,10 @@ impl Store {
 
     pub fn retire(&self, id: &str, reason: &str) -> Result<(), StoreError> {
         self.write(|tx| {
-            head(tx, id, FactStatus::Active)?;
+            let fact = head(tx, id, FactStatus::Active)?;
+            if crate::todo::is_todo(&fact) {
+                return Err(crate::todo::permanent_error());
+            }
             set_status(tx, id, FactStatus::Retired, reason)
         })
     }
@@ -152,6 +162,10 @@ impl Store {
     pub fn tags_set(&self, id: &str, tags: Vec<String>) -> Result<Fact, StoreError> {
         self.write(|tx| {
             let previous = head(tx, id, FactStatus::Active)?;
+            let tags = normalize_tags(&tags)?;
+            if crate::todo::is_todo(&previous) && !tags.iter().any(|tag| tag == crate::todo::TAG) {
+                return Err(crate::todo::permanent_error());
+            }
             set_status(tx, id, FactStatus::Superseded, "Tags updated")?;
             insert(tx, revision(previous, tags), Some(id))
         })
@@ -163,6 +177,9 @@ impl Store {
             ids.iter()
                 .map(|id| {
                     let previous = head(tx, id, FactStatus::Active)?;
+                    if crate::todo::is_todo(&previous) {
+                        return Err(crate::todo::permanent_error());
+                    }
                     let tags = previous.tags.clone();
                     let mut new = revision(previous, tags);
                     new.space = to_space.to_owned();
@@ -289,7 +306,11 @@ fn revision(previous: Fact, tags: Vec<String>) -> NewFact {
     }
 }
 
-fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fact, StoreError> {
+pub(crate) fn insert(
+    conn: &Connection,
+    new: NewFact,
+    replaces: Option<&str>,
+) -> Result<Fact, StoreError> {
     crate::space::require_space(conn, &new.space)?;
     let created_at = validate_time(new.at)?;
     if new.text.chars().take(200_001).count() > 200_000 {
@@ -298,6 +319,9 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
         ));
     }
     let tags = normalize_tags(&new.tags)?;
+    if tags.iter().any(|tag| tag == crate::todo::TAG) {
+        crate::todo::ensure_single(conn, &new.space, replaces)?;
+    }
     let tags_json =
         serde_json::to_string(&tags).map_err(|error| StoreError::Invalid(error.to_string()))?;
     if let Some(origin) = &new.origin {

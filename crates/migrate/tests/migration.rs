@@ -21,7 +21,7 @@ async fn migrates_every_active_note_with_time_author_and_tags() {
     let fixture = Fixture::new().await;
     success(fixture.run(&[]));
     let spaces = fixture.account.store.spaces().unwrap();
-    assert_eq!(spaces.iter().map(|s| s.notes).sum::<u64>(), 312);
+    assert_eq!(spaces.iter().map(|s| s.notes).sum::<u64>(), 316);
     assert_eq!(
         spaces
             .iter()
@@ -36,6 +36,7 @@ async fn migrates_every_active_note_with_time_author_and_tags() {
         .store
         .list(ListQuery {
             spaces: vec!["inbox".into()],
+            pinned: Some(false),
             ..ListQuery::default()
         })
         .unwrap();
@@ -146,7 +147,14 @@ async fn the_integrity_line_detects_a_difference() {
     let fixture = Fixture::new().await;
     success(fixture.run(&["--only", "root"]));
     let store = &fixture.account.store;
-    let fact = store.list(ListQuery::default()).unwrap().items.remove(0);
+    let fact = store
+        .list(ListQuery {
+            pinned: Some(false),
+            ..ListQuery::default()
+        })
+        .unwrap()
+        .items
+        .remove(0);
     store
         .supersede(
             &fact.id,
@@ -235,5 +243,50 @@ async fn a_space_mapping_overrides_inbox_routing() {
     let spaces = fixture.account.store.spaces().unwrap();
     assert_eq!(spaces.len(), 1);
     assert_eq!(spaces[0].name, "imported");
-    assert_eq!(spaces[0].notes, 104);
+    assert_eq!(spaces[0].notes, 105);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_migration_tool_turns_an_old_todo_tag_into_the_todo_content() {
+    let fixture = Fixture::new().await;
+    fixture.old_todo_note();
+    let report = success(fixture.run(&["--only", "root"]));
+    assert!(report.contains("errors=0"), "{report}");
+    let store = &fixture.account.store;
+    let todo = store
+        .list(ListQuery {
+            spaces: vec!["root".into()],
+            tags_all: vec!["todo".into()],
+            ..ListQuery::default()
+        })
+        .unwrap();
+    assert_eq!(todo.items.len(), 1);
+    let note = &todo.items[0];
+    assert_eq!(note.text, "Fictional todo entry");
+    assert_eq!(
+        note.origin.as_ref(),
+        Some(&("pensine-old".to_string(), "root-todo".to_string()))
+    );
+    assert!(note.pinned);
+    let rerun = success(fixture.run(&["--only", "root"]));
+    assert!(rerun.contains("notes sent=0 duplicates=105"), "{rerun}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_todo_note_never_counts_in_the_integrity_line_as_missing() {
+    let fixture = Fixture::new().await;
+    let report = success(fixture.run(&["--only", "root"]));
+    assert!(report.contains("old count=104 new count=104"), "{report}");
+    assert!(report.contains("errors=0"), "{report}");
+    assert!(!report.contains("Missing origin"), "{report}");
+    let store = &fixture.account.store;
+    let root = store
+        .spaces()
+        .unwrap()
+        .into_iter()
+        .find(|space| space.name == "root")
+        .unwrap();
+    let todo = store.read(root.todo.as_deref().unwrap()).unwrap();
+    assert!(todo.origin.is_none());
+    assert!(todo.pinned);
 }

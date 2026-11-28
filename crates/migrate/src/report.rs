@@ -50,9 +50,50 @@ impl Report {
         self.notes.entry(target.into()).or_default().push(note);
     }
 
-    pub fn send_notes(&mut self, client: &Client<'_>, batch_size: usize) {
-        for (space, notes) in &self.notes {
-            for batch in notes
+    pub fn send_notes(
+        &mut self,
+        client: &Client<'_>,
+        batch_size: usize,
+        todos: &BTreeMap<String, String>,
+    ) {
+        let mut sent = 0;
+        let mut duplicates = 0;
+        let mut errors = Vec::new();
+        let mut renamed = Vec::new();
+        for (space, notes) in &mut self.notes {
+            let active_todo: Vec<usize> = notes
+                .iter()
+                .enumerate()
+                .filter(|(_, note)| !note.retired && has_todo(note))
+                .map(|(index, _)| index)
+                .collect();
+            let superseded = match (active_todo.as_slice(), todos.get(space.as_str())) {
+                ([index], Some(_)) => Some(*index),
+                _ => None,
+            };
+            for (index, note) in notes.iter_mut().enumerate() {
+                if Some(index) != superseded && has_todo(note) {
+                    rename_todo(note);
+                    renamed.push(note.id.clone());
+                }
+            }
+            if let (Some(index), Some(todo_id)) = (superseded, todos.get(space.as_str())) {
+                send_todo(
+                    client,
+                    &notes[index],
+                    todo_id,
+                    &mut sent,
+                    &mut duplicates,
+                    &mut errors,
+                );
+            }
+            let remaining: Vec<Note> = notes
+                .iter()
+                .enumerate()
+                .filter(|(index, _)| Some(*index) != superseded)
+                .map(|(_, note)| note.clone())
+                .collect();
+            for batch in remaining
                 .split_inclusive(|note| note.retired)
                 .flat_map(|group| group.chunks(batch_size))
             {
@@ -60,11 +101,17 @@ impl Report {
                     client,
                     space,
                     batch,
-                    &mut self.sent,
-                    &mut self.duplicates,
-                    &mut self.errors,
+                    &mut sent,
+                    &mut duplicates,
+                    &mut errors,
                 );
             }
+        }
+        self.sent += sent;
+        self.duplicates += duplicates;
+        self.errors.extend(errors);
+        for id in renamed {
+            self.notice(format!("todo tag renamed to todo-old for note {id:?}"));
         }
     }
 
@@ -130,6 +177,43 @@ impl Report {
             line(out, format_args!("{:?}: error: {error}", self.source));
         }
         self.errors.is_empty()
+    }
+}
+
+fn has_todo(note: &Note) -> bool {
+    note.tags.iter().any(|tag| tag == "todo")
+}
+
+fn rename_todo(note: &mut Note) {
+    for tag in &mut note.tags {
+        if tag == "todo" {
+            *tag = "todo-old".into();
+        }
+    }
+}
+
+fn send_todo(
+    client: &Client<'_>,
+    note: &Note,
+    todo_id: &str,
+    sent: &mut usize,
+    duplicates: &mut usize,
+    errors: &mut Vec<String>,
+) {
+    let known = client
+        .call("read", json!({"id": todo_id}))
+        .ok()
+        .is_some_and(|reply| reply.data["origin"] == json!([crate::ORIGIN, note.id]));
+    if known {
+        *duplicates += 1;
+        return;
+    }
+    let mut arguments = note.arguments();
+    arguments["id"] = json!(todo_id);
+    arguments["reason"] = json!("Migrated todo note");
+    match client.call("supersede", arguments) {
+        Ok(_) => *sent += 1,
+        Err(error) => errors.push(format!("Destination todo note {:?}: {error}", note.id)),
     }
 }
 

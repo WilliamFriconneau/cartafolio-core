@@ -98,7 +98,7 @@ fn export_twice_changes_nothing() {
     let id = put(&store);
     store.export(&out).unwrap();
     let before = snapshot(&out);
-    assert_eq!(before.len(), 3);
+    assert_eq!(before.len(), 4);
     assert_eq!(
         fs::read(out.join(format!("notes/_files/{id}/sample.bin"))).unwrap(),
         [0, 1, 2]

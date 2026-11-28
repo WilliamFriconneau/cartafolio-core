@@ -21,6 +21,7 @@ const SPACES: [&str; 3] = ["root", "child", "capture"];
 #[derive(Default)]
 struct Old {
     delta: AtomicUsize,
+    todo: AtomicUsize,
     refuse: AtomicUsize,
     bad_note: AtomicUsize,
     fail: AtomicUsize,
@@ -91,6 +92,9 @@ impl Fixture {
     pub fn delta(&self) {
         self.old.delta.store(1, Ordering::Relaxed);
     }
+    pub fn old_todo_note(&self) {
+        self.old.todo.store(1, Ordering::Relaxed);
+    }
     pub fn refuse(&self) {
         self.old.refuse.store(1, Ordering::Relaxed);
     }
@@ -120,6 +124,14 @@ fn fact(space: &str, n: usize) -> Value {
         "type":"note", "created_at":1000+n, "author":"Synthetic scribe",
         "tags": if n == 0 { vec!["ÉTÉ", "bad tag", if space == "capture" {"inbox"} else {"sample"}] } else { vec!["sample"] },
         "status": if n == 999 {"retired"} else {"active"}
+    })
+}
+
+fn todo_fact(space: &str) -> Value {
+    json!({
+        "id":format!("{space}-todo"), "space":space, "text":"Fictional todo entry",
+        "type":"note", "created_at":500, "author":"Synthetic scribe",
+        "tags":["TODO"], "status":"active"
     })
 }
 
@@ -160,10 +172,16 @@ async fn old_call(
                     .as_str()
                     .map_or(0, |x| x.parse::<usize>().unwrap());
                 assert_eq!(args["view"], "chronology");
-                let count = 104 + old.delta.load(Ordering::Relaxed);
+                let todo = old.todo.load(Ordering::Relaxed) == 1;
+                let count = 104 + old.delta.load(Ordering::Relaxed) + usize::from(todo);
                 let end = (offset + 35).min(count);
                 let items: Vec<_> = (offset..end)
                     .map(|i| {
+                        if todo && i == 0 {
+                            let mut note = todo_fact(space);
+                            note["text"] = json!("truncated");
+                            return note;
+                        }
                         let mut note = fact(space, count - 1 - i);
                         note["text"] = json!("truncated");
                         note
@@ -172,11 +190,18 @@ async fn old_call(
                 json!({"items":items,"page":{"next_cursor": (end < count).then(||end.to_string())}})
             }
             "read_fact" => {
-                let (space, n) = args["id"].as_str().unwrap().rsplit_once('-').unwrap();
-                let mut value = fact(space, n.parse().unwrap());
-                if n == "2" && old.bad_note.load(Ordering::Relaxed) == 1 {
-                    value["text"] = json!("x".repeat(200_001));
-                }
+                let id = args["id"].as_str().unwrap();
+                let value = match id.strip_suffix("-todo") {
+                    Some(space) => todo_fact(space),
+                    None => {
+                        let (space, n) = id.rsplit_once('-').unwrap();
+                        let mut value = fact(space, n.parse().unwrap());
+                        if n == "2" && old.bad_note.load(Ordering::Relaxed) == 1 {
+                            value["text"] = json!("x".repeat(200_001));
+                        }
+                        value
+                    }
+                };
                 json!({"fact":value})
             }
             "stats" => json!({"root":{"retired":1},"child":{"retired":1},"capture":{"retired":1}}),

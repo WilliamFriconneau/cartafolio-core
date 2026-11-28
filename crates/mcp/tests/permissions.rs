@@ -160,8 +160,9 @@ fn permission_matrix_matches_missing_resources() {
         ]}),
     );
     assert_eq!(replay["content"][0]["text"], "not found");
+    // The visible note and the space's permanent todo note; the rolled-back batch left nothing.
     let notes = answer(call(&mcp, &principal, "list", json!({"space":"aa"})));
-    assert_eq!(notes["items"].as_array().unwrap().len(), 1);
+    assert_eq!(notes["items"].as_array().unwrap().len(), 2);
 
     let moved = store.move_facts(&[private], "aa").unwrap().remove(0);
     let history = answer(call(&mcp, &principal, "history", json!({"id":moved.id})));
@@ -254,8 +255,13 @@ fn the_pin_tool_respects_grants() {
     let reader = principal(true);
     let mcp = Mcp::new(accounts);
     account.store.pin(&hidden, true).unwrap();
+    // Only the granted space's own todo note is pinned and visible: the hidden pinned note is not.
     let page = answer(call(&mcp, &writer, "list", json!({"pinned":true})));
-    assert_eq!(page["items"], json!([]));
+    let items = page["items"].as_array().unwrap();
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0]["space"], "aa");
+    assert_eq!(items[0]["tags"], json!(["todo"]));
+    assert_ne!(items[0]["id"], json!(hidden));
     let hits = answer(call(
         &mcp,
         &writer,

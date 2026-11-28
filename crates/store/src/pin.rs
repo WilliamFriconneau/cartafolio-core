@@ -5,6 +5,9 @@ impl Store {
     pub fn pin(&self, id: &str, pinned: bool) -> Result<Fact, StoreError> {
         self.write(|tx| {
             let mut fact = head(tx, id, FactStatus::Active)?;
+            if !pinned && crate::todo::is_todo(&fact) {
+                return Err(crate::todo::permanent_error());
+            }
             // Break clock ties in write order, even across different store handles.
             tx.execute(
                 "UPDATE facts SET pinned = ?2, pinned_at = CASE WHEN ?2 THEN

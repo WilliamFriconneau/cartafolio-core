@@ -10,6 +10,7 @@ pub struct SpaceInfo {
     pub notes: u64,
     pub files: u64,
     pub pinned: u64,
+    pub todo: Option<String>,
 }
 
 impl Store {
@@ -41,6 +42,7 @@ impl Store {
             if inserted == 0 {
                 return Err(StoreError::Conflict);
             }
+            crate::todo::insert(tx, name)?;
             Ok(())
         })
     }
@@ -107,7 +109,10 @@ impl Store {
              SELECT s.name, s.label, s.parent, s.position,
                     (SELECT count(*) FROM facts WHERE space = s.name AND status = 'active'),
                     coalesce(f.total, 0),
-                    (SELECT count(*) FROM facts WHERE space = s.name AND status = 'active' AND pinned = 1)
+                    (SELECT count(*) FROM facts WHERE space = s.name AND status = 'active' AND pinned = 1),
+                    (SELECT facts.id FROM facts JOIN fact_tags ON fact_tags.fact_id = facts.id
+                     WHERE facts.space = s.name AND facts.status = 'active' AND fact_tags.tag = 'todo'
+                     ORDER BY facts.rowid LIMIT 1)
              FROM tree t JOIN spaces s USING (name)
              LEFT JOIN active_files f ON f.space = s.name ORDER BY t.path",
         )?;
@@ -121,6 +126,7 @@ impl Store {
                     notes: row.get(4)?,
                     files: row.get(5)?,
                     pinned: row.get(6)?,
+                    todo: row.get(7)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

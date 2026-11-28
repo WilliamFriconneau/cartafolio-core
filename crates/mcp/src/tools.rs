@@ -1,4 +1,6 @@
-use crate::dispatch::{output, FileList, FilePut, List, Note, Recall, Result, ToolError};
+use crate::dispatch::{
+    output, FileList, FilePut, List, Note, Recall, Result, Supersede, ToolError,
+};
 use crate::texts;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use pensine_access::Principal;
@@ -174,26 +176,26 @@ impl Scope<'_> {
             .collect()
     }
 
-    pub fn supersede(
-        &self,
-        id: &str,
-        text: String,
-        tags: Option<Vec<String>>,
-        reason: &str,
-    ) -> Result<Fact> {
-        let previous = self.write_fact(id)?;
+    pub fn supersede(&self, input: Supersede) -> Result<Fact> {
+        let previous = self.write_fact(&input.id)?;
+        let author = input
+            .author
+            .filter(|_| self.principal.can_write_root())
+            .unwrap_or_else(|| self.principal.connection_name().to_owned());
         let replacement = Self::new_fact(
             &previous.space,
             Note {
-                text,
-                tags: tags.unwrap_or(previous.tags),
-                at: None,
-                origin: None,
+                text: input.text,
+                tags: input.tags.unwrap_or(previous.tags),
+                at: input.at,
+                origin: input.origin,
                 author: None,
             },
-            self.principal.connection.clone(),
+            author,
         );
-        Ok(self.store.supersede(id, replacement, reason)?)
+        Ok(self
+            .store
+            .supersede(&input.id, replacement, &input.reason)?)
     }
 
     pub fn move_facts(&self, ids: &[String], target: &str) -> Result<Vec<Fact>> {

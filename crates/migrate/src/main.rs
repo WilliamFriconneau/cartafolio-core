@@ -83,6 +83,7 @@ impl Migration<'_> {
                 spaces::create(new, space, &mut existing)?;
             }
         }
+        let todos = self.todo_ids()?;
         let stats = self
             .args
             .include_retired
@@ -94,7 +95,13 @@ impl Migration<'_> {
             })
             .flatten();
         for space in plan.iter().filter(|space| space.selected) {
-            reports.push(self.copy_space(space, &mut existing, &mut targets, stats.as_ref())?);
+            reports.push(self.copy_space(
+                space,
+                &mut existing,
+                &mut targets,
+                stats.as_ref(),
+                &todos,
+            )?);
         }
         Ok(self.verify(output, reports, targets))
     }
@@ -105,6 +112,7 @@ impl Migration<'_> {
         existing: &mut BTreeSet<String>,
         targets: &mut BTreeSet<String>,
         stats: Option<&Value>,
+        todos: &BTreeMap<String, String>,
     ) -> Result<Report> {
         let mut report = Report::new(space.old.clone());
         targets.insert(space.new.clone());
@@ -143,7 +151,7 @@ impl Migration<'_> {
             report.add_note(target, note);
         }
         if let Some(new) = &self.new {
-            report.send_notes(new, usize::from(self.args.batch));
+            report.send_notes(new, usize::from(self.args.batch), todos);
         }
         files::copy(
             &self.old,
@@ -156,6 +164,20 @@ impl Migration<'_> {
             archive.finish()?;
         }
         Ok(report)
+    }
+
+    fn todo_ids(&self) -> Result<BTreeMap<String, String>> {
+        let Some(new) = &self.new else {
+            return Ok(BTreeMap::new());
+        };
+        let spaces = new.call("spaces", json!({}))?.data;
+        let mut todos = BTreeMap::new();
+        for space in rpc::array(&spaces)? {
+            if let Some(todo) = space["todo"].as_str() {
+                todos.insert(rpc::text(&space["name"])?.to_owned(), todo.to_owned());
+            }
+        }
+        Ok(todos)
     }
 
     fn verify(&self, output: &mut String, reports: Vec<Report>, targets: BTreeSet<String>) -> bool {

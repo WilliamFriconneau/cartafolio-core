@@ -87,10 +87,7 @@ impl Mcp {
                 let id: Id = parse(args)?;
                 output(scope.history(&id.id)?)
             }
-            "supersede" => {
-                let input: Supersede = parse(args)?;
-                output(scope.supersede(&input.id, input.text, input.tags, &input.reason)?)
-            }
+            "supersede" => output(scope.supersede(parse(args)?)?),
             "retire" => {
                 let input: Reason = parse(args)?;
                 scope.write_fact(&input.id)?;
@@ -233,11 +230,14 @@ struct Reason {
 }
 
 #[derive(Deserialize)]
-struct Supersede {
-    id: String,
-    text: String,
-    tags: Option<Vec<String>>,
-    reason: String,
+pub(crate) struct Supersede {
+    pub(crate) id: String,
+    pub(crate) text: String,
+    pub(crate) tags: Option<Vec<String>>,
+    pub(crate) reason: String,
+    pub(crate) at: Option<i64>,
+    pub(crate) origin: Option<(String, String)>,
+    pub(crate) author: Option<String>,
 }
 
 #[derive(Deserialize)]
