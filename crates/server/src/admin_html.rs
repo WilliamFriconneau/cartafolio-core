@@ -22,7 +22,7 @@ body{font:1rem system-ui,sans-serif;max-width:44rem;margin:1rem auto;padding:0 .
 h1{font-size:1.3rem;margin:0 0 .5rem}header{margin-bottom:1rem}
 details{border-top:1px solid GrayText;padding:.65rem 0}summary{cursor:pointer;font-weight:600}
 li,ol,form,p{margin:.4rem 0}ol,ul{padding-inline-start:1.4rem}
-fieldset{border:0;margin:.35rem 0;padding:0;min-inline-size:0}label.choice{display:block}
+fieldset{border:0;margin:.35rem 0;padding:0;min-inline-size:0}legend{float:left;width:100%;padding:0;margin:0 0 .4rem;font-weight:600}legend+*{clear:both}ol{list-style:none;padding:0;counter-reset:step}li{counter-increment:step}legend::before{content:counter(step) '. '}label.choice{display:block}
 input,button{font:inherit;max-width:100%;box-sizing:border-box}button{cursor:pointer}
 .address{display:flex;gap:.4rem;align-items:center}.address input{flex:1;min-width:0}
 .space-options,.key,.chatgpt{display:none}
