@@ -1,0 +1,24 @@
+[package]
+name = "pensine-migrate"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+base64 = "0.22"
+clap.workspace = true
+pensine-store = { path = "../store" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tempfile.workspace = true
+ureq = { version = "2", default-features = false, features = ["tls"] }
+
+[dev-dependencies]
+axum.workspace = true
+pensine-access = { path = "../access" }
+pensine-server = { path = "../server" }
+tokio = { workspace = true, features = ["rt-multi-thread", "net", "macros"] }

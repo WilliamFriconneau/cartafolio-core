@@ -70,7 +70,7 @@ impl Mcp {
                 output(scope.remember(&input.space, input.notes)?)
             }
             "recall" => output(scope.recall(parse(args)?)?),
-            "list" => output(scope.list(parse(args)?)?),
+            "list" => scope.list(parse(args)?),
             "read" => {
                 let id: Id = parse(args)?;
                 output(scope.visible_fact(scope.fact(&id.id)?)?)
@@ -167,6 +167,7 @@ pub(crate) struct Note {
     pub tags: Vec<String>,
     pub at: Option<i64>,
     pub origin: Option<(String, String)>,
+    pub author: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -183,6 +184,8 @@ pub(crate) struct Recall {
 #[derive(Deserialize)]
 pub(crate) struct List {
     pub space: Option<String>,
+    pub status: Option<String>,
+    pub origin_aliases: Option<bool>,
     pub pinned: Option<bool>,
     #[serde(default)]
     pub tags: Vec<String>,
@@ -247,11 +250,13 @@ pub(crate) struct FilePut {
     pub name: String,
     pub mime: Option<String>,
     pub base64: String,
+    pub if_absent: Option<bool>,
     pub note: Option<String>,
 }
 
 #[derive(Deserialize)]
 pub(crate) struct FileList {
     pub space: Option<String>,
+    pub cursor: Option<String>,
     pub limit: Option<usize>,
 }

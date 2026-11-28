@@ -18,18 +18,20 @@ enum Kind {
     Texts,
     Integer,
     Origin,
+    Status,
     Notes,
     Parent,
     Limit(u16),
 }
 
-use Kind::{Boolean, Integer, Limit, Notes, Origin, Parent, PinSetting, Text, Texts};
+use Kind::{Boolean, Integer, Limit, Notes, Origin, Parent, PinSetting, Status, Text, Texts};
 
 const NOTE: &[Field] = &[
     ("text", Text, true),
     ("tags", Texts, false),
     ("at", Integer, false),
     ("origin", Origin, false),
+    ("author", Text, false),
 ];
 
 macro_rules! tool {
@@ -42,7 +44,14 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "remember",
         true,
-        [("space", Text, true), NOTE[0], NOTE[1], NOTE[2], NOTE[3]]
+        [
+            ("space", Text, true),
+            NOTE[0],
+            NOTE[1],
+            NOTE[2],
+            NOTE[3],
+            NOTE[4]
+        ]
     ),
     tool!(
         "remember_many",
@@ -70,7 +79,9 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("pinned", Boolean, false),
             ("since", Integer, false),
             ("limit", Limit(200), false),
-            ("cursor", Text, false)
+            ("cursor", Text, false),
+            ("status", Status, false),
+            ("origin_aliases", Boolean, false)
         ]
     ),
     tool!(
@@ -129,6 +140,7 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("name", Text, true),
             ("mime", Text, false),
             ("base64", Text, true),
+            ("if_absent", Boolean, false),
             ("note", Text, false)
         ]
     ),
@@ -136,7 +148,11 @@ pub(crate) const TOOLS: &[Tool] = &[
     tool!(
         "file_list",
         false,
-        [("space", Text, false), ("limit", Limit(200), false)]
+        [
+            ("space", Text, false),
+            ("limit", Limit(200), false),
+            ("cursor", Text, false)
+        ]
     ),
     tool!(
         "file_retire",
@@ -187,6 +203,7 @@ fn property(kind: Kind) -> Value {
         Texts => json!({"type":"array","items":property(Text)}),
         Integer => json!({"type":"integer"}),
         Origin => json!({"type":"array","items":property(Text),"minItems":2,"maxItems":2}),
+        Status => json!({"type":"string","enum":["active","retired","superseded"]}),
         Notes => json!({"type":"array","items":object(NOTE)}),
         Parent => json!({"type":["string","null"]}),
         Limit(maximum) => json!({"type":"integer","minimum":1,"maximum":maximum}),
@@ -230,6 +247,7 @@ fn valid_value(kind: Kind, value: &Value) -> bool {
         Origin => value
             .as_array()
             .is_some_and(|items| items.len() == 2 && items.iter().all(Value::is_string)),
+        Status => matches!(value.as_str(), Some("active" | "retired" | "superseded")),
         Notes => value
             .as_array()
             .is_some_and(|items| items.iter().all(|item| valid_object(NOTE, item))),

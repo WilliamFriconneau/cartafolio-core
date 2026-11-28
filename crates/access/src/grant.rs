@@ -12,6 +12,7 @@ pub struct Principal {
     pub account: String,
     pub connection: String,
     pub grants: Vec<Grant>,
+    connection_name: String,
     read_only: bool,
     scope: Account,
 }
@@ -25,9 +26,14 @@ impl Principal {
             account: account.id.clone(),
             connection: connection.id,
             grants: connection.grants,
+            connection_name: connection.name,
             read_only: connection.read_only,
             scope: account,
         })
+    }
+
+    pub fn connection_name(&self) -> &str {
+        &self.connection_name
     }
 
     pub fn may_write(&self) -> bool {

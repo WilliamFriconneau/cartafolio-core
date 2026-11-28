@@ -27,7 +27,7 @@ mod tags;
 pub use error::StoreError;
 pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};
 pub use file::{FileInfo, FileStatus, NewFile};
-pub use list::{ListQuery, Page};
+pub use list::{ListQuery, OriginAliases, Page};
 pub use search::{Hit, RecallQuery};
 pub use space::SpaceInfo;
 pub use sweep::BlobSweep;

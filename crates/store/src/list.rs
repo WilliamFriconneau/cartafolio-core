@@ -2,6 +2,9 @@ use crate::fact::{fact_from_row, Fact, FactStatus, COLUMNS};
 use crate::tags::{fold_tag, normalize_tags};
 use crate::{Store, StoreError};
 use rusqlite::named_params;
+use std::collections::HashMap;
+
+pub type OriginAliases = HashMap<String, Vec<[String; 2]>>;
 
 #[derive(Clone, Debug)]
 pub struct ListQuery {
@@ -82,6 +85,25 @@ impl Cursor {
 }
 
 impl Store {
+    /// Reads the additional origins assigned to deduplicated facts.
+    pub fn origin_aliases(&self, ids: &[String]) -> Result<OriginAliases, StoreError> {
+        let conn = self.reader()?;
+        let mut stmt = conn.prepare(
+            "SELECT fact_id, origin_app, origin_id FROM duplicate_origins
+             WHERE fact_id IN (SELECT value FROM json_each(?1))
+             ORDER BY origin_app, origin_id",
+        )?;
+        let mut rows = stmt.query([json_array(ids)?])?;
+        let mut aliases = OriginAliases::new();
+        while let Some(row) = rows.next()? {
+            aliases
+                .entry(row.get(0)?)
+                .or_default()
+                .push([row.get(1)?, row.get(2)?]);
+        }
+        Ok(aliases)
+    }
+
     pub fn list(&self, query: ListQuery) -> Result<Page<Fact>, StoreError> {
         if !(1..=200).contains(&query.limit) {
             return Err(StoreError::Invalid("List limit must be 1 to 200".into()));

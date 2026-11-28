@@ -277,3 +277,60 @@ fn the_pin_tool_respects_grants() {
         true
     );
 }
+
+#[test]
+fn author_is_honoured_only_for_the_owner_grant() {
+    let dir = tempfile::tempdir().unwrap();
+    let accounts = Arc::new(Accounts::open(dir.path()).unwrap());
+    let account = accounts.account_create("demo").unwrap();
+    account.store.space_create("aa", "Visible", None).unwrap();
+    let mcp = Mcp::new(accounts.clone());
+
+    for (index, grants) in [
+        vec![Grant {
+            space: "*".into(),
+            write: true,
+        }],
+        vec![
+            Grant {
+                space: "*".into(),
+                write: false,
+            },
+            Grant {
+                space: "aa".into(),
+                write: true,
+            },
+        ],
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let (connection, key) = accounts
+            .connection_create("demo", &format!("Writer {index}"), grants, false)
+            .unwrap();
+        let principal = accounts.authenticate(key.as_str()).unwrap();
+        let expected = if index == 0 {
+            "fictional author"
+        } else {
+            connection.name.as_str()
+        };
+        let single = answer(call(
+            &mcp,
+            &principal,
+            "remember",
+            json!({
+                "space":"aa","text":format!("single {index}"),"author":"fictional author"
+            }),
+        ));
+        assert_eq!(single["fact"]["author"], expected);
+        let batch = answer(call(
+            &mcp,
+            &principal,
+            "remember_many",
+            json!({
+                "space":"aa","notes":[{"text":format!("batch {index}"),"author":"fictional author"}]
+            }),
+        ));
+        assert_eq!(batch[0]["fact"]["author"], expected);
+    }
+}

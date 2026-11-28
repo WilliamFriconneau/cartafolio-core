@@ -45,6 +45,15 @@ pub struct FileInfo {
 
 impl Store {
     pub fn file_put(&self, new: NewFile<impl Read>) -> Result<FileInfo, StoreError> {
+        self.put_file(new, false)
+    }
+
+    /// Stores a file once per active space, name, and content digest.
+    pub fn file_put_if_absent(&self, new: NewFile<impl Read>) -> Result<FileInfo, StoreError> {
+        self.put_file(new, true)
+    }
+
+    fn put_file(&self, new: NewFile<impl Read>, if_absent: bool) -> Result<FileInfo, StoreError> {
         {
             let conn = self.reader()?;
             require_space(&conn, &new.space)?;
@@ -61,6 +70,19 @@ impl Store {
         let path = blob_path(&self.blobs, &sha256)?;
         let created_at = validate_time(None)?;
         self.write(|tx| {
+            if if_absent {
+                let existing = tx.query_row(
+                    &format!(
+                        "SELECT {COLUMNS} FROM files WHERE space = ?1 AND name = ?2
+                         AND sha256 = ?3 AND status = 'active' ORDER BY rowid LIMIT 1"
+                    ),
+                    params![new.space, new.name, sha256],
+                    file_from_row,
+                ).optional()?;
+                if let Some(file) = existing {
+                    return Ok(file);
+                }
+            }
             let file = tx.query_row(
                 &format!(
                     "INSERT INTO files (id, space, name, mime, size, sha256, note, created_at, status)

@@ -3,8 +3,8 @@ use crate::texts;
 use base64::{engine::general_purpose::STANDARD, Engine};
 use pensine_access::Principal;
 use pensine_store::{
-    Fact, FileInfo, Hit, ListQuery, NewFact, NewFile, Page, RecallQuery, Remembered, SpaceInfo,
-    Store, StoreError,
+    Fact, FactStatus, FileInfo, Hit, ListQuery, NewFact, NewFile, Page, RecallQuery, Remembered,
+    SpaceInfo, Store, StoreError,
 };
 use serde_json::Value;
 use std::collections::HashSet;
@@ -123,12 +123,12 @@ impl Scope<'_> {
         Ok(history)
     }
 
-    fn new_fact(&self, space: &str, note: Note) -> NewFact {
+    fn new_fact(space: &str, note: Note, author: String) -> NewFact {
         NewFact {
             space: space.into(),
             text: note.text,
             tags: note.tags,
-            author: self.principal.connection.clone(),
+            author,
             source: "mcp".into(),
             at: note.at,
             origin: note.origin,
@@ -139,7 +139,14 @@ impl Scope<'_> {
         self.writable(space)?;
         let notes = notes
             .into_iter()
-            .map(|note| self.new_fact(space, note))
+            .map(|mut note| {
+                let author = note
+                    .author
+                    .take()
+                    .filter(|_| self.principal.can_write_root())
+                    .unwrap_or_else(|| self.principal.connection_name().to_owned());
+                Self::new_fact(space, note, author)
+            })
             .collect();
         let results = self.store.remember_many_checked(notes, |result| {
             self.principal
@@ -163,14 +170,16 @@ impl Scope<'_> {
         reason: &str,
     ) -> Result<Fact> {
         let previous = self.write_fact(id)?;
-        let replacement = self.new_fact(
+        let replacement = Self::new_fact(
             &previous.space,
             Note {
                 text,
                 tags: tags.unwrap_or(previous.tags),
                 at: None,
                 origin: None,
+                author: None,
             },
+            self.principal.connection.clone(),
         );
         Ok(self.store.supersede(id, replacement, reason)?)
     }
@@ -211,10 +220,10 @@ impl Scope<'_> {
             .collect()
     }
 
-    pub fn list(&self, query: List) -> Result<Page<Fact>> {
+    pub fn list(&self, query: List) -> Result<Value> {
         let spaces = self.read_spaces(query.space.as_deref())?;
         if spaces.is_empty() {
-            return Ok(Page {
+            return output(Page::<Fact> {
                 items: Vec::new(),
                 next_cursor: None,
             });
@@ -222,6 +231,11 @@ impl Scope<'_> {
         let defaults = ListQuery::default();
         let mut page = self.store.list(ListQuery {
             spaces,
+            status: match query.status.as_deref() {
+                Some("retired") => Some(FactStatus::Retired),
+                Some("superseded") => Some(FactStatus::Superseded),
+                _ => None,
+            },
             pinned: query.pinned,
             tags_any: query.tags,
             since: query.since,
@@ -234,7 +248,16 @@ impl Scope<'_> {
             .into_iter()
             .map(|fact| self.visible_fact(fact))
             .collect::<Result<_>>()?;
-        Ok(page)
+        let mut result = output(&page)?;
+        if query.origin_aliases == Some(true) {
+            let ids = page
+                .items
+                .iter()
+                .map(|fact| fact.id.clone())
+                .collect::<Vec<_>>();
+            result["origin_aliases"] = output(self.store.origin_aliases(&ids)?)?;
+        }
+        Ok(result)
     }
 
     pub fn put_file(&self, input: FilePut) -> Result<FileInfo> {
@@ -242,7 +265,7 @@ impl Scope<'_> {
         let bytes = STANDARD
             .decode(input.base64)
             .map_err(|_| ToolError::Message(texts::INVALID_BASE64.into()))?;
-        Ok(self.store.file_put(NewFile {
+        let file = NewFile {
             space: input.space,
             name: input.name,
             mime: input
@@ -251,7 +274,12 @@ impl Scope<'_> {
             reader: bytes.as_slice(),
             max_size: u64::MAX,
             note: input.note,
-        })?)
+        };
+        if input.if_absent == Some(true) {
+            Ok(self.store.file_put_if_absent(file)?)
+        } else {
+            Ok(self.store.file_put(file)?)
+        }
     }
 
     pub fn get_file(&self, id: &str) -> Result<Value> {
@@ -283,6 +311,7 @@ impl Scope<'_> {
         let defaults = ListQuery::default();
         Ok(self.store.file_list(ListQuery {
             spaces,
+            cursor: query.cursor,
             limit: query.limit.unwrap_or(defaults.limit),
             ..defaults
         })?)
