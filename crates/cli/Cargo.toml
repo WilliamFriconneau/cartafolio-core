@@ -8,5 +8,12 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+pensine-access = { path = "../access" }
 pensine-server = { path = "../server" }
 clap = { workspace = true, features = ["derive"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+ureq = { version = "2", default-features = false }

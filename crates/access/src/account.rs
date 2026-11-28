@@ -1,4 +1,4 @@
-use crate::alias::{backfill_aliases, insert_default_alias};
+use crate::alias::{backfill_aliases, insert_default_alias, validate_alias};
 use crate::AccessError;
 use pensine_store::Store;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
@@ -79,6 +79,14 @@ impl Accounts {
     }
 
     pub fn account_create(&self, id: &str) -> Result<Account, AccessError> {
+        self.account_create_with_alias(id, None)
+    }
+
+    pub fn account_create_with_alias(
+        &self,
+        id: &str,
+        alias: Option<&str>,
+    ) -> Result<Account, AccessError> {
         if id.is_empty()
             || !id
                 .bytes()
@@ -99,7 +107,19 @@ impl Accounts {
         {
             return Err(AccessError::Conflict);
         }
-        insert_default_alias(&tx, id, id)?;
+        if let Some(alias) = alias {
+            validate_alias(alias)?;
+            if tx.execute(
+                "INSERT INTO account_aliases (account, alias) VALUES (?1, ?2)
+                 ON CONFLICT(alias) DO NOTHING",
+                (id, alias),
+            )? == 0
+            {
+                return Err(AccessError::Invalid("This alias is already taken".into()));
+            }
+        } else {
+            insert_default_alias(&tx, id, id)?;
+        }
         let account = self.open_account(id)?;
         tx.commit()?;
         cache.insert(id.to_owned(), account.clone());
@@ -145,6 +165,17 @@ impl Accounts {
         tx.commit()?;
         cache.insert(id, account.clone());
         Ok(account)
+    }
+
+    /// Lists account ids and their public aliases in id order.
+    pub fn account_list(&self) -> Result<Vec<(String, String)>, AccessError> {
+        let db = self.db()?;
+        let mut statement =
+            db.prepare("SELECT account, alias FROM account_aliases ORDER BY account")?;
+        let accounts = statement
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?
+            .collect::<rusqlite::Result<_>>()?;
+        Ok(accounts)
     }
 
     pub fn account(&self, id: &str) -> Result<Account, AccessError> {

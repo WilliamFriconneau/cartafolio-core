@@ -158,3 +158,28 @@ fn a_retired_file_leaves_lists_but_not_the_disk() {
     assert_eq!(store.file_get(&uploaded.id).unwrap().1, path);
     assert!(path.is_file());
 }
+
+#[test]
+fn sweeps_unreferenced_blobs_and_staging_files() {
+    let (dir, store) = store();
+    let live = store.file_put(file("sample.txt")).unwrap();
+    let (_, live_path) = store.file_get(&live.id).unwrap();
+    let blobs = dir.path().join("blobs");
+    let orphan_hash = "a".repeat(64);
+    let orphan = blobs.join("aa").join(orphan_hash);
+    fs::create_dir_all(orphan.parent().unwrap()).unwrap();
+    fs::write(&orphan, b"unused").unwrap();
+    let temp = blobs.join(".tmpInterrupted");
+    fs::write(&temp, b"incomplete").unwrap();
+    let unrelated = blobs.join("unrelated");
+    fs::write(&unrelated, b"keep").unwrap();
+
+    let found = store.sweep_blobs(false).unwrap();
+    assert_eq!(found.orphans, std::slice::from_ref(&orphan));
+    assert_eq!(found.temporary, std::slice::from_ref(&temp));
+    assert!(orphan.exists() && temp.exists());
+    assert_eq!(store.sweep_blobs(true).unwrap(), found);
+    assert!(!orphan.exists() && !temp.exists());
+    assert!(live_path.exists() && unrelated.exists());
+    assert!(store.sweep_blobs(false).unwrap().orphans.is_empty());
+}

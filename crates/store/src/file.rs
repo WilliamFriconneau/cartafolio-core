@@ -9,7 +9,8 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use tempfile::NamedTempFile;
 
-const COLUMNS: &str = "id, space, name, mime, size, sha256, note, created_at, status, reason";
+pub(crate) const COLUMNS: &str =
+    "id, space, name, mime, size, sha256, note, created_at, status, reason";
 
 pub struct NewFile<R> {
     pub space: String,
@@ -53,6 +54,9 @@ impl Store {
             .max_size
             .min(self.options.max_file_size)
             .min(i64::MAX as u64);
+        // Keep the staging file protected until it is persisted or dropped.
+        let staging_lock = self.blob_staging_lock()?;
+        staging_lock.lock_shared()?;
         let (temp, size, sha256) = stage(&self.blobs, new.reader, limit)?;
         let path = blob_path(&self.blobs, &sha256)?;
         let created_at = validate_time(None)?;
@@ -181,7 +185,7 @@ impl Store {
     }
 }
 
-fn validate_name(name: &str) -> Result<(), StoreError> {
+pub(crate) fn validate_name(name: &str) -> Result<(), StoreError> {
     if name.is_empty()
         || name == "."
         || name.contains(['/', '\\'])
@@ -226,14 +230,14 @@ fn stage(
     Ok((temp, size, format!("{:x}", hasher.finalize())))
 }
 
-fn blob_path(blobs: &Path, sha256: &str) -> Result<PathBuf, StoreError> {
+pub(crate) fn blob_path(blobs: &Path, sha256: &str) -> Result<PathBuf, StoreError> {
     if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
         return Err(StoreError::Invalid("Invalid stored SHA-256 digest".into()));
     }
     Ok(blobs.join(&sha256[..2]).join(sha256))
 }
 
-fn file_from_row(row: &Row<'_>) -> rusqlite::Result<FileInfo> {
+pub(crate) fn file_from_row(row: &Row<'_>) -> rusqlite::Result<FileInfo> {
     let status: String = row.get(8)?;
     let status = match status.as_str() {
         "active" => FileStatus::Active,

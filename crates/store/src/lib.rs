@@ -13,6 +13,7 @@ mod open_tests;
 mod search_tests;
 
 mod error;
+mod export;
 mod fact;
 mod file;
 mod list;
@@ -20,6 +21,7 @@ mod pin;
 mod schema;
 mod search;
 mod space;
+mod sweep;
 mod tags;
 
 pub use error::StoreError;
@@ -28,6 +30,7 @@ pub use file::{FileInfo, FileStatus, NewFile};
 pub use list::{ListQuery, Page};
 pub use search::{Hit, RecallQuery};
 pub use space::SpaceInfo;
+pub use sweep::BlobSweep;
 pub use tags::normalize_tag;
 
 use rusqlite::{Connection, OpenFlags};
@@ -51,6 +54,7 @@ impl Default for StoreOptions {
 
 pub struct Store {
     blobs: PathBuf,
+    staging_lock_path: PathBuf,
     options: StoreOptions,
     writer: Mutex<Connection>,
     readers: [Mutex<Connection>; 2],
@@ -86,6 +90,7 @@ impl Store {
 
         Ok(Self {
             blobs,
+            staging_lock_path: dir.canonicalize()?.join(".blob-sweep-lock"),
             options,
             writer: Mutex::new(writer),
             readers: [open_reader()?, open_reader()?],

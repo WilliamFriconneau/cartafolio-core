@@ -692,7 +692,12 @@ name = "pensine"
 version = "0.1.0"
 dependencies = [
  "clap",
+ "pensine-access",
  "pensine-server",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "ureq",
 ]
 
 [[package]]
