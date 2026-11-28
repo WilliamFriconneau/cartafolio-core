@@ -60,10 +60,10 @@ async fn admin_guard(
         .map(str::trim)
         .filter(|value| !value.is_empty());
     let Some(ha_id) = ha_id else {
-        return StatusCode::FORBIDDEN.into_response();
+        return refused();
     };
-    if request.method() == Method::POST && !same_origin(&headers) {
-        return StatusCode::FORBIDDEN.into_response();
+    if request.method() == Method::POST && cross_site(&headers) {
+        return refused();
     }
     let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(&state.csrf_secret) else {
         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -123,7 +123,7 @@ async fn connections_create(
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields, &user.csrf) {
-        return Ok(StatusCode::FORBIDDEN.into_response());
+        return Ok(refused());
     }
     let name = fields.get("name").map_or("", |name| name.trim());
     if name.is_empty() {
@@ -168,7 +168,7 @@ async fn connection_revoke(
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields, &user.csrf) {
-        return Ok(StatusCode::FORBIDDEN.into_response());
+        return Ok(refused());
     }
     let id = fields.get("id").map_or("", String::as_str);
     match state.accounts.connection_revoke(&user.account.id, id) {
@@ -184,7 +184,7 @@ async fn oauth_invite(
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields, &user.csrf) {
-        return Ok(StatusCode::FORBIDDEN.into_response());
+        return Ok(refused());
     }
     let Some(rights) = invitation_rights(&user.account, &fields)? else {
         return render(
@@ -207,7 +207,7 @@ async fn oauth_revoke(
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields, &user.csrf) {
-        return Ok(StatusCode::FORBIDDEN.into_response());
+        return Ok(refused());
     }
     let id = fields.get("id").map_or("", String::as_str);
     match state.oauth.revoke_session(&user.account.id, id) {
@@ -223,7 +223,7 @@ async fn alias_change(
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields, &user.csrf) {
-        return Ok(StatusCode::FORBIDDEN.into_response());
+        return Ok(refused());
     }
     let alias = fields.get("alias").map_or("", String::as_str);
     match state.accounts.set_alias(&user.account.id, alias) {
@@ -332,31 +332,23 @@ fn forwarded_https(headers: &HeaderMap) -> bool {
         .is_some_and(|value| value == "https")
 }
 
-fn same_origin(headers: &HeaderMap) -> bool {
-    let Some(source) = headers
-        .get(header::ORIGIN)
-        .or_else(|| headers.get(header::REFERER))
-    else {
-        return true;
-    };
-    let Some(source) = source
-        .to_str()
-        .ok()
-        .and_then(|source| url::Url::parse(source).ok())
-    else {
-        return false;
-    };
-    // The ingress peer is checked before interpreting forwarded headers.
-    let host = headers
-        .get("x-forwarded-host")
-        .or_else(|| headers.get(header::HOST));
-    let scheme = if forwarded_https(headers) {
-        "https"
-    } else {
-        "http"
-    };
-    let expected = host
-        .and_then(|host| host.to_str().ok())
-        .and_then(|host| url::Url::parse(&format!("{scheme}://{host}")).ok());
-    expected.is_some_and(|expected| expected.origin() == source.origin())
+/// Browsers say how a form post relates to the page in `Sec-Fetch-Site`. Behind the Home Assistant ingress the `Origin`
+/// is Home Assistant's own address, which this server cannot know, so it is not compared (comparing it refused every
+/// legitimate post); a request the browser marks `cross-site` is refused, and every post also needs the CSRF token bound
+/// to the signed-in user and the strict cookie.
+fn cross_site(headers: &HeaderMap) -> bool {
+    headers
+        .get("sec-fetch-site")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|value| value.eq_ignore_ascii_case("cross-site"))
+}
+
+/// A refusal a person can read: an empty body would be downloaded as a file by the browser.
+fn refused() -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        [(header::CONTENT_TYPE, "text/plain; charset=utf-8")],
+        "Refused: the form has expired or came from another site. Reload the page and try again.\n",
+    )
+        .into_response()
 }

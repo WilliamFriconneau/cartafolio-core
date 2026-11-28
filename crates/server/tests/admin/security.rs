@@ -55,17 +55,69 @@ async fn the_csrf_token_is_bound_to_the_user() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn a_cross_origin_admin_post_is_refused() {
+async fn a_cross_site_admin_post_is_refused_with_a_readable_body() {
     let dir = tempfile::tempdir().unwrap();
     let handle = Server::start(admin_config(&dir, Ipv4Addr::LOCALHOST.into()))
         .await
         .unwrap();
-    // An origin mismatch is rejected even before form extraction.
+    // Even with a valid token and cookie, a post the browser marks cross-site is refused...
+    let token = csrf_token(&handle, "aaaa");
     let result = ureq::post(&admin_url(&handle, "/connections"))
         .set("X-Remote-User-Id", "aaaa")
-        .set("Origin", "https://other.example")
-        .call();
-    assert!(matches!(result, Err(ureq::Error::Status(403, _))));
+        .set("Cookie", &format!("pensine_csrf={token}"))
+        .set("Sec-Fetch-Site", "cross-site")
+        .send_form(&[("name", "Owner"), ("csrf", &token)]);
+    // ...with a text a person can read: an empty body would be downloaded as a file by the browser.
+    match result {
+        Err(ureq::Error::Status(403, response)) => {
+            assert!(response.content_type().starts_with("text/plain"));
+            assert!(response.into_string().unwrap().contains("Refused"));
+        }
+        other => panic!("expected a readable 403, got {other:?}"),
+    }
+    handle.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_post_through_the_ingress_with_the_home_assistant_origin_is_accepted() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = Server::start(admin_config(&dir, Ipv4Addr::LOCALHOST.into()))
+        .await
+        .unwrap();
+    // Behind the ingress the browser's Origin and Referer are Home Assistant's own address, never this server's.
+    let token = csrf_token(&handle, "aaaa");
+    let response = ureq::post(&admin_url(&handle, "/oauth"))
+        .set("X-Remote-User-Id", "aaaa")
+        .set("Cookie", &format!("pensine_csrf={token}"))
+        .set("Origin", "http://homeassistant.local:8123")
+        .set(
+            "Referer",
+            "http://homeassistant.local:8123/hassio/ingress/sample/",
+        )
+        .set("Sec-Fetch-Site", "same-origin")
+        .send_form(&[("csrf", &token), ("assistant", "claude"), ("scope", "all")])
+        .unwrap();
+    assert_eq!(response.status(), 200);
+    assert!(response.content_type().starts_with("text/html"));
+    assert!(response.into_string().unwrap().len() > 500);
+    handle.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_post_without_the_token_is_refused_with_a_readable_body() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = Server::start(admin_config(&dir, Ipv4Addr::LOCALHOST.into()))
+        .await
+        .unwrap();
+    let result = ureq::post(&admin_url(&handle, "/oauth"))
+        .set("X-Remote-User-Id", "aaaa")
+        .send_form(&[("assistant", "claude"), ("scope", "all")]);
+    match result {
+        Err(ureq::Error::Status(403, response)) => {
+            assert!(response.content_type().starts_with("text/plain"));
+        }
+        other => panic!("expected a readable 403, got {other:?}"),
+    }
     handle.shutdown();
 }
 
