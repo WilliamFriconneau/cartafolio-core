@@ -18,6 +18,7 @@ pub struct Report {
     duplicates: usize,
     pub tags_dropped: usize,
     pub files_sent: usize,
+    pub fallback_reads: usize,
 }
 
 impl Report {
@@ -31,6 +32,7 @@ impl Report {
             duplicates: 0,
             tags_dropped: 0,
             files_sent: 0,
+            fallback_reads: 0,
         }
     }
 

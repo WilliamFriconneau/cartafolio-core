@@ -290,3 +290,35 @@ async fn a_todo_note_never_counts_in_the_integrity_line_as_missing() {
     assert!(todo.origin.is_none());
     assert!(todo.pinned);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_page_is_never_followed_by_read_fact_when_the_item_is_complete() {
+    let fixture = Fixture::new().await;
+    success(fixture.run(&[]));
+    assert_eq!(fixture.read_fact_calls(), 0);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn progress_goes_to_stderr_without_note_text() {
+    let fixture = Fixture::new().await;
+    let output = fixture.run(&[]);
+    assert!(output.status.success());
+    let stderr = String::from_utf8(output.stderr).unwrap();
+    assert!(stderr.contains("space root:"), "{stderr}");
+    assert!(stderr.contains("notes read"), "{stderr}");
+    assert!(!stderr.contains("Fictional"), "{stderr}");
+    let stdout = String::from_utf8(output.stdout).unwrap();
+    assert!(
+        !stdout.contains("space root:"),
+        "progress belongs on stderr"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_missing_field_falls_back_to_read_fact_and_is_counted() {
+    let fixture = Fixture::new().await;
+    fixture.strip_tags_from_pages();
+    let report = success(fixture.run(&[]));
+    assert!(fixture.read_fact_calls() > 0);
+    assert!(report.contains("needed a second read"), "{report}");
+}

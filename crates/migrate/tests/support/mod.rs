@@ -25,6 +25,8 @@ struct Old {
     refuse: AtomicUsize,
     bad_note: AtomicUsize,
     fail: AtomicUsize,
+    read_fact_calls: AtomicUsize,
+    strip_tags: AtomicUsize,
 }
 
 pub struct Fixture {
@@ -107,6 +109,12 @@ impl Fixture {
     pub fn failed_requests(&self) -> usize {
         self.old.fail.load(Ordering::Relaxed)
     }
+    pub fn read_fact_calls(&self) -> usize {
+        self.old.read_fact_calls.load(Ordering::Relaxed)
+    }
+    pub fn strip_tags_from_pages(&self) {
+        self.old.strip_tags.store(1, Ordering::Relaxed);
+    }
     pub fn new_key(&self) -> &str {
         &self.key
     }
@@ -175,21 +183,33 @@ async fn old_call(
                 let todo = old.todo.load(Ordering::Relaxed) == 1;
                 let count = 104 + old.delta.load(Ordering::Relaxed) + usize::from(todo);
                 let end = (offset + 35).min(count);
+                // The real old node truncates the text only when a text_limit is asked for.
+                let truncate = !args["text_limit"].is_null();
                 let items: Vec<_> = (offset..end)
                     .map(|i| {
-                        if todo && i == 0 {
-                            let mut note = todo_fact(space);
+                        let mut note = if todo && i == 0 {
+                            todo_fact(space)
+                        } else {
+                            let n = count - 1 - i;
+                            let mut note = fact(space, n);
+                            if n == 2 && old.bad_note.load(Ordering::Relaxed) == 1 {
+                                note["text"] = json!("x".repeat(200_001));
+                            }
+                            note
+                        };
+                        if truncate {
                             note["text"] = json!("truncated");
-                            return note;
                         }
-                        let mut note = fact(space, count - 1 - i);
-                        note["text"] = json!("truncated");
+                        if old.strip_tags.load(Ordering::Relaxed) == 1 {
+                            note.as_object_mut().unwrap().remove("tags");
+                        }
                         note
                     })
                     .collect();
                 json!({"items":items,"page":{"next_cursor": (end < count).then(||end.to_string())}})
             }
             "read_fact" => {
+                old.read_fact_calls.fetch_add(1, Ordering::Relaxed);
                 let id = args["id"].as_str().unwrap();
                 let value = match id.strip_suffix("-todo") {
                     Some(space) => todo_fact(space),

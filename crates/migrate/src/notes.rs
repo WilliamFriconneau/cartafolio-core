@@ -7,6 +7,7 @@ use pensine_store::normalize_tag;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashSet};
+use std::time::Instant;
 
 #[derive(Deserialize)]
 struct Fact {
@@ -76,8 +77,15 @@ pub fn read(
     report: &mut Report,
 ) -> Vec<Note> {
     let mut notes = Vec::new();
+    let fallbacks_before = report.fallback_reads;
     if let Err(error) = active(client, space, report, &mut notes) {
         report.error(error);
+    }
+    if report.fallback_reads > fallbacks_before {
+        report.notice(format!(
+            "Space {space}: {} notes needed a second read",
+            report.fallback_reads - fallbacks_before
+        ));
     }
     if retired {
         if let Err(error) = read_retired(client, space, retired_count, report, &mut notes) {
@@ -94,10 +102,11 @@ fn active(
     report: &mut Report,
     notes: &mut Vec<Note>,
 ) -> Result<()> {
-    let mut args =
-        json!({"space":space,"view":"chronology","type":"note","limit":200,"text_limit":1});
+    // No text_limit: a chronology item then carries the complete record, so one call serves a page of 200.
+    let mut args = json!({"space":space,"view":"chronology","type":"note","limit":200});
     let mut cursors = HashSet::new();
     let mut ids = HashSet::new();
+    let started = Instant::now();
     loop {
         let page = client.call("space_view", args.clone())?.data;
         for item in array(&page["items"])? {
@@ -109,21 +118,34 @@ fn active(
                 report.error(format!("Duplicate source note {id:?}"));
                 continue;
             }
-            let note = client
-                .call("read_fact", json!({"id":id}))
-                .and_then(|reply| {
-                    let raw = reply.data["fact"].clone();
-                    if raw["id"] != id || raw["space"] != space || raw["status"] != "active" {
-                        return Err("Source note changed or belongs to a different space".into());
-                    }
-                    decode(raw, report)
-                });
+            let note = if is_complete(item, space) {
+                decode(item.clone(), report)
+            } else {
+                report.fallback_reads += 1;
+                client
+                    .call("read_fact", json!({"id":id}))
+                    .and_then(|reply| {
+                        let raw = reply.data["fact"].clone();
+                        if raw["id"] != id || raw["space"] != space || raw["status"] != "active" {
+                            return Err(
+                                "Source note changed or belongs to a different space".into()
+                            );
+                        }
+                        decode(raw, report)
+                    })
+            };
             match note {
                 Ok(Some(note)) => notes.push(note),
                 Ok(None) => {}
                 Err(error) => report.error(format!("Source note {id:?}: {error}")),
             }
         }
+        // Progress only: the space name, a count and the elapsed time, never a note.
+        eprintln!(
+            "space {space}: {} notes read, {}s",
+            ids.len(),
+            started.elapsed().as_secs()
+        );
         let Some(cursor) = next(&page["page"]["next_cursor"], &mut cursors)? else {
             if page["page"]["has_more"] == true {
                 return Err("Source chronology omitted its next cursor".into());
@@ -132,6 +154,16 @@ fn active(
         };
         args["cursor"] = json!(cursor);
     }
+}
+
+/// Whether a chronology item already holds everything a note needs, so that no second read is made.
+fn is_complete(item: &Value, space: &str) -> bool {
+    item["text"].is_string()
+        && item["tags"].is_array()
+        && item["author"].is_string()
+        && item["created_at"].is_number()
+        && item["space"] == space
+        && item["status"] == "active"
 }
 
 fn read_retired(
