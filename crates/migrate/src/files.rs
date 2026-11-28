@@ -10,8 +10,6 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::HashSet;
 
-const DOWNLOAD_LIMIT: u64 = 8_000_000;
-
 #[derive(Deserialize)]
 struct FileInfo {
     id: String,
@@ -29,6 +27,7 @@ pub fn copy(
     space: &Space,
     mut archive: Option<&mut Archive>,
     report: &mut Report,
+    limit: u64,
 ) -> Result<()> {
     let inventory = match inventory(old, &space.old) {
         Ok(inventory) => inventory,
@@ -52,10 +51,10 @@ pub fn copy(
                 continue;
             }
         };
-        let too_large = file.size > DOWNLOAD_LIMIT;
+        let too_large = file.size > limit;
         if too_large {
             report.notice(format!(
-                "File {:?} left on source: over {DOWNLOAD_LIMIT} bytes",
+                "File {:?} left on source: over {limit} bytes",
                 file.id
             ));
         }

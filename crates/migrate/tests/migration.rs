@@ -99,7 +99,13 @@ async fn retired_notes_are_skipped_unless_asked() {
 async fn files_are_copied_once() {
     let fixture = Fixture::new().await;
     let archive = tempfile::tempdir().unwrap();
-    let report = success(fixture.run(&["--archive", archive.path().to_str().unwrap()]));
+    // A limit of 8 MB leaves the 8,000,001-byte file on the source.
+    let report = success(fixture.run(&[
+        "--max-file-mb",
+        "8",
+        "--archive",
+        archive.path().to_str().unwrap(),
+    ]));
     assert!(report.contains("files sent=1"));
     assert!(report.contains("over 8000000 bytes"));
     let manifest = std::fs::read_to_string(archive.path().join("root.jsonl")).unwrap();
@@ -121,7 +127,7 @@ async fn files_are_copied_once() {
             .join(file["record"]["blob"].as_str().unwrap());
         assert_eq!(std::fs::metadata(archived).unwrap().len(), size);
     }
-    let report = success(fixture.run(&[]));
+    let report = success(fixture.run(&["--max-file-mb", "8"]));
     assert!(!report.contains("files sent=1"));
     let (meta, path) = fixture
         .account
@@ -321,4 +327,12 @@ async fn a_missing_field_falls_back_to_read_fact_and_is_counted() {
     let report = success(fixture.run(&[]));
     assert!(fixture.read_fact_calls() > 0);
     assert!(report.contains("needed a second read"), "{report}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_default_limit_migrates_a_file_just_over_eight_megabytes() {
+    let fixture = Fixture::new().await;
+    let report = success(fixture.run(&[]));
+    assert!(report.contains("files sent=2"), "{report}");
+    assert!(!report.contains("left on source"), "{report}");
 }

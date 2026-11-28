@@ -44,6 +44,9 @@ struct Args {
     dry_run: bool,
     #[arg(long, default_value = "100", value_parser = clap::value_parser!(u16).range(1..))]
     batch: u16,
+    /// Files larger than this many megabytes are left on the source.
+    #[arg(long, default_value = "40", value_parser = clap::value_parser!(u64).range(1..=60))]
+    max_file_mb: u64,
 }
 
 fn parse_mapping(value: &str) -> Result<(String, String)> {
@@ -159,6 +162,7 @@ impl Migration<'_> {
             space,
             archive.as_mut(),
             &mut report,
+            self.args.max_file_mb * 1_000_000,
         )?;
         if let Some(archive) = archive {
             archive.finish()?;
