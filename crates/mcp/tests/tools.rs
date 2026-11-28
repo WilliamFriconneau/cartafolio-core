@@ -63,7 +63,7 @@ fn tools_list_hides_write_tools_from_a_read_only_connection() {
         ]
     );
     let list = tools.iter().find(|tool| tool["name"] == "list").unwrap();
-    assert_eq!(list["inputSchema"]["required"], json!(["space"]));
+    assert_eq!(list["inputSchema"]["required"], json!([]));
     let denied = call(
         &mcp,
         &principal,
@@ -124,7 +124,7 @@ fn initialization_and_file_round_trip() {
     assert_eq!(init["result"]["serverInfo"]["name"], "pensine");
     assert_eq!(init["result"]["capabilities"], json!({"tools":{}}));
     let response = request(&mcp, &principal, "tools/list", json!({}));
-    assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 18);
+    assert_eq!(response["result"]["tools"].as_array().unwrap().len(), 19);
     let file = content(&call(
         &mcp,
         &principal,
@@ -175,4 +175,92 @@ fn file_get_reports_the_size_above_the_download_limit() {
         .as_str()
         .unwrap()
         .contains("8000001 bytes"));
+}
+
+#[test]
+fn tools_list_has_19_tools_and_hides_pin_from_read_only() {
+    let (_dir, mcp, owner) = setup(false);
+    let response = request(&mcp, &owner, "tools/list", json!({}));
+    let tools = response["result"]["tools"].as_array().unwrap();
+    assert_eq!(tools.len(), 19);
+    for name in ["pin", "list", "recall"] {
+        let tool = tools.iter().find(|tool| tool["name"] == name).unwrap();
+        assert_eq!(
+            tool["inputSchema"]["properties"]["pinned"]["type"],
+            "boolean"
+        );
+        assert!(tool["description"].is_string());
+    }
+    let (_dir, mcp, reader) = setup(true);
+    let response = request(&mcp, &reader, "tools/list", json!({}));
+    assert!(response["result"]["tools"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .all(|tool| tool["name"] != "pin"));
+}
+
+#[test]
+fn initialize_carries_the_instructions() {
+    let (_dir, mcp, owner) = setup(false);
+    let response = request(&mcp, &owner, "initialize", json!({}));
+    let instructions = response["result"]["instructions"].as_str().unwrap();
+    for phrase in [
+        "standing targets",
+        "pinned",
+        "30 days",
+        "since",
+        "recall",
+        "tags_set",
+        "move",
+        "diagnosis",
+    ] {
+        assert!(instructions.contains(phrase), "{instructions}");
+    }
+    assert!((65..=95).contains(&instructions.split_whitespace().count()));
+}
+
+#[test]
+fn pin_filters_list_and_recall_and_counts_active_pins() {
+    let (_dir, mcp, owner) = setup(false);
+    let saved = content(&call(
+        &mcp,
+        &owner,
+        "remember",
+        json!({"space":"aa","text":"Orchard east"}),
+    ));
+    let id = &saved["fact"]["id"];
+    content(&call(
+        &mcp,
+        &owner,
+        "remember",
+        json!({"space":"aa","text":"Orchard west"}),
+    ));
+    assert_eq!(
+        content(&call(&mcp, &owner, "pin", json!({"id":id})))["pinned"],
+        true
+    );
+    let page = content(&call(&mcp, &owner, "list", json!({"pinned":true})));
+    assert_eq!(page["items"].as_array().unwrap().len(), 1);
+    assert_eq!(page["items"][0]["id"], *id);
+    let hits = content(&call(
+        &mcp,
+        &owner,
+        "recall",
+        json!({"query":"orchard","pinned":true}),
+    ));
+    assert_eq!(hits.as_array().unwrap().len(), 1);
+    assert_eq!(hits[0]["fact"]["id"], *id);
+    assert_eq!(
+        content(&call(&mcp, &owner, "spaces", json!({})))[0]["pinned"],
+        1
+    );
+    assert_eq!(
+        content(&call(&mcp, &owner, "pin", json!({"id":id,"pinned":false})))["pinned"],
+        false
+    );
+    assert_eq!(
+        content(&call(&mcp, &owner, "spaces", json!({})))[0]["pinned"],
+        0
+    );
 }

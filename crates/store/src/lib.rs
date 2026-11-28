@@ -16,6 +16,7 @@ mod error;
 mod fact;
 mod file;
 mod list;
+mod pin;
 mod schema;
 mod search;
 mod space;

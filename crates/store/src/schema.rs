@@ -76,6 +76,14 @@ pub(super) const MIGRATIONS: &[(u32, &str)] = &[
     );
     ",
     ),
+    (
+        4,
+        "
+    ALTER TABLE facts ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE facts ADD COLUMN pinned_at INTEGER;
+    CREATE INDEX facts_pin_time ON facts(pinned_at) WHERE pinned_at IS NOT NULL;
+    ",
+    ),
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {

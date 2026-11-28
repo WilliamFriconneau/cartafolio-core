@@ -20,7 +20,7 @@ fn upgrading_from_version_2_indexes_existing_versions_once() {
     drop(conn);
     for _ in 0..2 {
         let store = Store::open(dir.path()).unwrap();
-        assert_eq!(store.schema_version(), 3);
+        assert_eq!(store.schema_version(), 4);
         let mut hits = store
             .recall(RecallQuery {
                 text: "cheval".into(),
@@ -28,6 +28,7 @@ fn upgrading_from_version_2_indexes_existing_versions_once() {
                 ..RecallQuery::default()
             })
             .unwrap();
+        assert!(hits.iter().all(|hit| !hit.fact.pinned));
         hits.sort_by(|left, right| left.fact.id.cmp(&right.fact.id));
         assert_eq!(
             hits.iter()

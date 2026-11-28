@@ -1,4 +1,4 @@
-use crate::fact::fact_from_row;
+use crate::fact::{fact_from_row, COLUMNS};
 use crate::list::{json_array, tag_filter};
 use crate::{Fact, Store, StoreError};
 use rusqlite::{named_params, Connection};
@@ -31,12 +31,22 @@ impl Default for RecallQuery {
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Hit {
     pub fact: Fact,
+    /// FTS5 bm25 score, multiplied by 1.5 for pinned facts. Lower scores rank first.
     pub score: f64,
     pub snippet: String,
 }
 
 impl Store {
     pub fn recall(&self, query: RecallQuery) -> Result<Vec<Hit>, StoreError> {
+        self.recall_with_pin_filter(query, None)
+    }
+
+    /// Searches with a pin filter applied before ranking and limiting the results.
+    pub fn recall_with_pin_filter(
+        &self,
+        query: RecallQuery,
+        pinned: Option<bool>,
+    ) -> Result<Vec<Hit>, StoreError> {
         let mut terms = HashSet::new();
         let expression = words(&query.text)
             .filter_map(|(_, word)| terms.insert(word.clone()).then(|| quote(&word)))
@@ -50,37 +60,40 @@ impl Store {
         }
 
         let conn = self.reader()?;
-        let mut stmt = conn.prepare_cached(
+        let mut stmt = conn.prepare_cached(&format!(
             "WITH ranked AS MATERIALIZED (
-                SELECT facts.rowid AS fact_rowid, facts.created_at, bm25(fts) AS score
+                SELECT facts.rowid AS fact_rowid, facts.created_at AS fact_created_at,
+                       bm25(fts) * CASE WHEN facts.pinned THEN 1.5 ELSE 1.0 END AS score
                 FROM fts
                 CROSS JOIN search_facts ON search_facts.rowid = fts.rowid
                 CROSS JOIN facts ON facts.id = search_facts.fact_id
                 WHERE fts MATCH :expression
                   AND (:include_retired OR facts.status = 'active')
+                  AND (:pinned IS NULL OR facts.pinned = :pinned)
                   AND (:since IS NULL OR facts.created_at >= :since)
                   AND (:spaces = '[]' OR facts.space IN (SELECT value FROM json_each(:spaces)))
                   AND (:tags_any = '[]' OR EXISTS (
                       SELECT 1 FROM fact_tags
                       WHERE fact_id = facts.id AND tag IN (SELECT value FROM json_each(:tags_any))
                   ))
-                ORDER BY score, created_at DESC, fact_rowid DESC
+                ORDER BY score, fact_created_at DESC, fact_rowid DESC
                 LIMIT :limit
              )
-             SELECT facts.*, ranked.score
+             SELECT {COLUMNS}, ranked.score
              FROM ranked CROSS JOIN facts ON facts.rowid = ranked.fact_rowid
-             ORDER BY ranked.score, ranked.created_at DESC, ranked.fact_rowid DESC",
-        )?;
+             ORDER BY ranked.score, ranked.fact_created_at DESC, ranked.fact_rowid DESC"
+        ))?;
         let rows = stmt.query_map(
             named_params! {
                 ":expression": expression,
                 ":include_retired": query.include_retired,
                 ":since": query.since,
+                ":pinned": pinned,
                 ":spaces": json_array(&query.spaces)?,
                 ":tags_any": tag_filter(&query.tags_any)?,
                 ":limit": query.limit,
             },
-            |row| Ok((fact_from_row(row)?, row.get(12)?)),
+            |row| Ok((fact_from_row(row)?, row.get(13)?)),
         )?;
         let matches = rows.collect::<Result<Vec<_>, _>>()?;
         drop(stmt);

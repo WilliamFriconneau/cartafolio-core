@@ -226,3 +226,54 @@ fn scoped_writes_require_a_writable_source_and_destination() {
     ));
     assert_eq!(moved[0]["space"], "ac");
 }
+
+#[test]
+fn the_pin_tool_respects_grants() {
+    let dir = tempfile::tempdir().unwrap();
+    let accounts = Arc::new(Accounts::open(dir.path()).unwrap());
+    let account = accounts.account_create("demo").unwrap();
+    account.store.space_create("aa", "Visible", None).unwrap();
+    account.store.space_create("bb", "Hidden", None).unwrap();
+    let visible = note(&account.store, "aa", "Visible sample", None);
+    let hidden = note(&account.store, "bb", "Hidden sample", None);
+    let principal = |read_only| {
+        let (_, key) = accounts
+            .connection_create(
+                "demo",
+                if read_only { "Reader" } else { "Writer" },
+                vec![Grant {
+                    space: "aa".into(),
+                    write: true,
+                }],
+                read_only,
+            )
+            .unwrap();
+        accounts.authenticate(key.as_str()).unwrap()
+    };
+    let writer = principal(false);
+    let reader = principal(true);
+    let mcp = Mcp::new(accounts);
+    account.store.pin(&hidden, true).unwrap();
+    let page = answer(call(&mcp, &writer, "list", json!({"pinned":true})));
+    assert_eq!(page["items"], json!([]));
+    let hits = answer(call(
+        &mcp,
+        &writer,
+        "recall",
+        json!({"query":"sample","pinned":true}),
+    ));
+    assert_eq!(hits, json!([]));
+    let missing = call(&mcp, &writer, "pin", json!({"id":"missing"}));
+    assert_eq!(missing["content"][0]["text"], "not found");
+    assert_eq!(call(&mcp, &writer, "pin", json!({"id":hidden})), missing);
+    let denied = call(&mcp, &reader, "pin", json!({"id":visible}));
+    assert_eq!(denied["content"][0]["text"], "Write access required");
+    assert_eq!(
+        answer(call(&mcp, &reader, "read", json!({"id":visible})))["pinned"],
+        false
+    );
+    assert_eq!(
+        answer(call(&mcp, &writer, "pin", json!({"id":visible})))["pinned"],
+        true
+    );
+}

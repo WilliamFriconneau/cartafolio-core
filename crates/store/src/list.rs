@@ -11,6 +11,7 @@ pub struct ListQuery {
     pub since: Option<i64>,
     pub until: Option<i64>,
     pub status: Option<FactStatus>,
+    pub pinned: Option<bool>,
     pub limit: usize,
     pub cursor: Option<String>,
 }
@@ -24,6 +25,7 @@ impl Default for ListQuery {
             since: None,
             until: None,
             status: None,
+            pinned: None,
             limit: 50,
             cursor: None,
         }
@@ -44,11 +46,18 @@ pub(crate) struct Cursor {
 
 impl Cursor {
     pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
+        Self::parse_version(value, "1")
+    }
+
+    fn parse_version(value: &str, expected: &str) -> Result<Self, StoreError> {
         let invalid = || StoreError::Invalid("Invalid list cursor".into());
         let parts: Vec<_> = value.split('.').collect();
-        let ["1", snapshot, created_at, rowid] = parts.as_slice() else {
+        let [version, snapshot, created_at, rowid] = parts.as_slice() else {
             return Err(invalid());
         };
+        if *version != expected {
+            return Err(invalid());
+        }
         let cursor = Self {
             snapshot: snapshot.parse().map_err(|_| invalid())?,
             created_at: created_at.parse().map_err(|_| invalid())?,
@@ -61,7 +70,14 @@ impl Cursor {
     }
 
     pub(crate) fn encode(&self) -> String {
-        format!("1.{}.{}.{}", self.snapshot, self.created_at, self.rowid)
+        self.encode_version("1")
+    }
+
+    fn encode_version(&self, version: &str) -> String {
+        format!(
+            "{version}.{}.{}.{}",
+            self.snapshot, self.created_at, self.rowid
+        )
     }
 }
 
@@ -70,7 +86,16 @@ impl Store {
         if !(1..=200).contains(&query.limit) {
             return Err(StoreError::Invalid("List limit must be 1 to 200".into()));
         }
-        let cursor = query.cursor.as_deref().map(Cursor::parse).transpose()?;
+        let (sort, version) = if query.pinned == Some(true) {
+            ("pinned_at", "2")
+        } else {
+            ("created_at", "1")
+        };
+        let cursor = query
+            .cursor
+            .as_deref()
+            .map(|value| Cursor::parse_version(value, version))
+            .transpose()?;
         let spaces = json_array(&query.spaces)?;
         let tags_any = tag_filter(&query.tags_any)?;
         let tags_all = tag_filter(&query.tags_all)?;
@@ -82,10 +107,11 @@ impl Store {
             "WITH boundary(snapshot) AS (
                 SELECT coalesce(:snapshot, (SELECT coalesce(max(rowid), 0) FROM facts))
              )
-             SELECT {COLUMNS}, facts.rowid, boundary.snapshot
+             SELECT {COLUMNS}, facts.rowid, boundary.snapshot, {sort}
              FROM facts CROSS JOIN boundary
              WHERE status = :status AND facts.rowid <= boundary.snapshot
-               AND (:rowid IS NULL OR (created_at, facts.rowid) < (:at, :rowid))
+               AND (:pinned IS NULL OR pinned = :pinned)
+               AND (:rowid IS NULL OR ({sort}, facts.rowid) < (:at, :rowid))
                AND (:since IS NULL OR created_at >= :since)
                AND (:until IS NULL OR created_at <= :until)
                AND (:spaces = '[]' OR space IN (SELECT value FROM json_each(:spaces)))
@@ -99,7 +125,7 @@ impl Store {
                        SELECT 1 FROM fact_tags WHERE fact_id = facts.id AND tag = required.value
                    )
                )
-             ORDER BY created_at DESC, facts.rowid DESC
+             ORDER BY {sort} DESC, facts.rowid DESC
              LIMIT :limit"
         ))?;
         let mut rows = stmt.query(named_params! {
@@ -107,6 +133,7 @@ impl Store {
             ":at": cursor.as_ref().map(|c| c.created_at),
             ":rowid": cursor.as_ref().map(|c| c.rowid),
             ":status": status,
+            ":pinned": query.pinned,
             ":since": query.since,
             ":until": query.until,
             ":spaces": spaces,
@@ -120,14 +147,16 @@ impl Store {
             if items.len() == query.limit {
                 return Ok(Page {
                     items,
-                    next_cursor: last.as_ref().map(Cursor::encode),
+                    next_cursor: last
+                        .as_ref()
+                        .map(|cursor: &Cursor| cursor.encode_version(version)),
                 });
             }
             let fact = fact_from_row(row)?;
             last = Some(Cursor {
-                snapshot: row.get(13)?,
-                created_at: fact.created_at,
-                rowid: row.get(12)?,
+                snapshot: row.get(14)?,
+                created_at: row.get(15)?,
+                rowid: row.get(13)?,
             });
             items.push(fact);
         }

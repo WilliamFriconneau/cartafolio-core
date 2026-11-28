@@ -39,6 +39,7 @@ impl Mcp {
                 "protocolVersion": "2025-03-26",
                 "serverInfo": {"name": "pensine", "version": env!("CARGO_PKG_VERSION")},
                 "capabilities": {"tools": {}},
+                "instructions": texts::INSTRUCTIONS,
             }),
             "ping" => json!({}),
             "tools/list" => json!({"tools": schema::tools(principal)}),

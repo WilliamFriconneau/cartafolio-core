@@ -75,6 +75,14 @@ impl Mcp {
                 let id: Id = parse(args)?;
                 output(scope.visible_fact(scope.fact(&id.id)?)?)
             }
+            "pin" => {
+                let input: Pin = parse(args)?;
+                scope.write_fact(&input.id)?;
+                output(
+                    scope
+                        .visible_fact(scope.store.pin(&input.id, input.pinned.unwrap_or(true))?)?,
+                )
+            }
             "history" => {
                 let id: Id = parse(args)?;
                 output(scope.history(&id.id)?)
@@ -163,6 +171,7 @@ pub(crate) struct Note {
 
 #[derive(Deserialize)]
 pub(crate) struct Recall {
+    pub pinned: Option<bool>,
     pub query: String,
     pub space: Option<String>,
     #[serde(default)]
@@ -173,7 +182,8 @@ pub(crate) struct Recall {
 
 #[derive(Deserialize)]
 pub(crate) struct List {
-    pub space: String,
+    pub space: Option<String>,
+    pub pinned: Option<bool>,
     #[serde(default)]
     pub tags: Vec<String>,
     pub since: Option<i64>,
@@ -184,6 +194,12 @@ pub(crate) struct List {
 #[derive(Deserialize)]
 struct Id {
     id: String,
+}
+
+#[derive(Deserialize)]
+struct Pin {
+    id: String,
+    pinned: Option<bool>,
 }
 
 #[derive(Deserialize)]

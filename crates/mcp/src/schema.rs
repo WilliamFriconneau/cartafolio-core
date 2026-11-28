@@ -13,6 +13,8 @@ type Field = (&'static str, Kind, bool);
 #[derive(Clone, Copy)]
 enum Kind {
     Text,
+    Boolean,
+    PinSetting,
     Texts,
     Integer,
     Origin,
@@ -21,7 +23,7 @@ enum Kind {
     Limit(u16),
 }
 
-use Kind::{Integer, Limit, Notes, Origin, Parent, Text, Texts};
+use Kind::{Boolean, Integer, Limit, Notes, Origin, Parent, PinSetting, Text, Texts};
 
 const NOTE: &[Field] = &[
     ("text", Text, true),
@@ -55,6 +57,7 @@ pub(crate) const TOOLS: &[Tool] = &[
             ("space", Text, false),
             ("tags", Texts, false),
             ("since", Integer, false),
+            ("pinned", Boolean, false),
             ("limit", Limit(50), false)
         ]
     ),
@@ -62,12 +65,18 @@ pub(crate) const TOOLS: &[Tool] = &[
         "list",
         false,
         [
-            ("space", Text, true),
+            ("space", Text, false),
             ("tags", Texts, false),
+            ("pinned", Boolean, false),
             ("since", Integer, false),
             ("limit", Limit(200), false),
             ("cursor", Text, false)
         ]
+    ),
+    tool!(
+        "pin",
+        true,
+        [("id", Text, true), ("pinned", PinSetting, false)]
     ),
     tool!("read", false, [("id", Text, true)]),
     tool!("history", false, [("id", Text, true)]),
@@ -140,7 +149,20 @@ pub(crate) fn tools(principal: &Principal) -> Vec<Value> {
     TOOLS
         .iter()
         .filter(|tool| !tool.write || principal.may_write())
-        .map(|tool| json!({"name":tool.name,"inputSchema":object(tool.fields)}))
+        .map(|tool| {
+            let mut spec = json!({"name":tool.name,"inputSchema":object(tool.fields)});
+            let description = match tool.name {
+                "pin" => Some(texts::PIN_DESCRIPTION),
+                "list" => Some(texts::LIST_DESCRIPTION),
+                "recall" => Some(texts::RECALL_DESCRIPTION),
+                "spaces" => Some(texts::SPACES_DESCRIPTION),
+                _ => None,
+            };
+            if let Some(description) = description {
+                spec["description"] = json!(description);
+            }
+            spec
+        })
         .collect()
 }
 
@@ -159,6 +181,8 @@ fn object(fields: &[Field]) -> Value {
 fn property(kind: Kind) -> Value {
     match kind {
         Text => json!({"type":"string"}),
+        Boolean => json!({"type":"boolean"}),
+        PinSetting => json!({"type":"boolean","default":true}),
         Texts => json!({"type":"array","items":property(Text)}),
         Integer => json!({"type":"integer"}),
         Origin => json!({"type":"array","items":property(Text),"minItems":2,"maxItems":2}),
@@ -197,6 +221,7 @@ fn valid_object(fields: &[Field], value: &Value) -> bool {
 fn valid_value(kind: Kind, value: &Value) -> bool {
     match kind {
         Text => value.is_string(),
+        Boolean | PinSetting => value.is_boolean(),
         Texts => value
             .as_array()
             .is_some_and(|items| items.iter().all(Value::is_string)),

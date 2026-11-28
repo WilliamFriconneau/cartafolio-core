@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 pub(crate) const COLUMNS: &str =
     "id, space, text, tags_json, author, source, origin_app, origin_id,
-     created_at, replaces, status, reason";
+     created_at, replaces, status, reason, pinned";
 
 #[derive(Clone, Debug)]
 pub struct NewFact {
@@ -31,6 +31,7 @@ pub struct Fact {
     pub replaces: Option<String>,
     pub status: FactStatus,
     pub reason: Option<String>,
+    pub pinned: bool,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
@@ -249,7 +250,7 @@ fn read(conn: &Connection, id: &str) -> Result<Fact, StoreError> {
     .ok_or(StoreError::NotFound)
 }
 
-fn head(conn: &Connection, id: &str, status: FactStatus) -> Result<Fact, StoreError> {
+pub(crate) fn head(conn: &Connection, id: &str, status: FactStatus) -> Result<Fact, StoreError> {
     let fact = read(conn, id)?;
     if fact.status != status
         || conn.query_row(
@@ -308,16 +309,18 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
         .origin
         .as_ref()
         .map_or((None, None), |(app, entry)| (Some(app), Some(entry)));
-    let id: String = conn.query_row(
+    let (id, pinned): (String, bool) = conn.query_row(
         "INSERT INTO facts (id, space, text, tags_json, author, source, origin_app, origin_id,
-                            created_at, replaces, status)
-         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'active')
-         RETURNING id",
+                            created_at, replaces, status, pinned, pinned_at)
+         VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'active',
+                 coalesce((SELECT pinned FROM facts WHERE id = ?9), 0),
+                 (SELECT pinned_at FROM facts WHERE id = ?9))
+         RETURNING id, pinned",
         params![
             new.space, new.text, tags_json, new.author, new.source, app, entry, created_at,
             replaces
         ],
-        |row| row.get(0),
+        |row| Ok((row.get(0)?, row.get(1)?)),
     )?;
     let mut insert_tag = conn.prepare_cached(
         "INSERT INTO fact_tags (fact_id, tag) VALUES (?1, ?2)
@@ -339,6 +342,7 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
         replaces: replaces.map(str::to_owned),
         status: FactStatus::Active,
         reason: None,
+        pinned,
     })
 }
 
@@ -381,5 +385,6 @@ pub(crate) fn fact_from_row(row: &Row<'_>) -> rusqlite::Result<Fact> {
         replaces: row.get(9)?,
         status,
         reason: row.get(11)?,
+        pinned: row.get(12)?,
     })
 }

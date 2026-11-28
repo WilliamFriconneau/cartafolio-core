@@ -9,6 +9,7 @@ pub struct SpaceInfo {
     pub position: i64,
     pub notes: u64,
     pub files: u64,
+    pub pinned: u64,
 }
 
 impl Store {
@@ -105,7 +106,8 @@ impl Store {
              )
              SELECT s.name, s.label, s.parent, s.position,
                     (SELECT count(*) FROM facts WHERE space = s.name AND status = 'active'),
-                    coalesce(f.total, 0)
+                    coalesce(f.total, 0),
+                    (SELECT count(*) FROM facts WHERE space = s.name AND status = 'active' AND pinned = 1)
              FROM tree t JOIN spaces s USING (name)
              LEFT JOIN active_files f ON f.space = s.name ORDER BY t.path",
         )?;
@@ -118,6 +120,7 @@ impl Store {
                     position: row.get(3)?,
                     notes: row.get(4)?,
                     files: row.get(5)?,
+                    pinned: row.get(6)?,
                 })
             })?
             .collect::<Result<Vec<_>, _>>()?;

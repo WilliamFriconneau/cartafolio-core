@@ -192,14 +192,17 @@ impl Scope<'_> {
             return Ok(Vec::new());
         }
         let defaults = RecallQuery::default();
-        let hits = self.store.recall(RecallQuery {
-            text: query.query,
-            spaces,
-            tags_any: query.tags,
-            since: query.since,
-            limit: query.limit.unwrap_or(defaults.limit),
-            ..defaults
-        })?;
+        let hits = self.store.recall_with_pin_filter(
+            RecallQuery {
+                text: query.query,
+                spaces,
+                tags_any: query.tags,
+                since: query.since,
+                limit: query.limit.unwrap_or(defaults.limit),
+                ..defaults
+            },
+            query.pinned,
+        )?;
         hits.into_iter()
             .map(|mut hit| {
                 hit.fact = self.visible_fact(hit.fact)?;
@@ -209,10 +212,17 @@ impl Scope<'_> {
     }
 
     pub fn list(&self, query: List) -> Result<Page<Fact>> {
-        self.principal.space_permissions(&query.space)?;
+        let spaces = self.read_spaces(query.space.as_deref())?;
+        if spaces.is_empty() {
+            return Ok(Page {
+                items: Vec::new(),
+                next_cursor: None,
+            });
+        }
         let defaults = ListQuery::default();
         let mut page = self.store.list(ListQuery {
-            spaces: vec![query.space],
+            spaces,
+            pinned: query.pinned,
             tags_any: query.tags,
             since: query.since,
             limit: query.limit.unwrap_or(defaults.limit),
