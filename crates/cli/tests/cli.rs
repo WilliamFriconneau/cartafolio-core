@@ -153,7 +153,7 @@ fn account_alias_changes_the_alias_and_rejects_bad_ones() {
     .success());
     let changed = run(
         data.path(),
-        &["account", "alias", "--account", "main", "will"],
+        &["account", "alias", "--account", "main", "renamed"],
     );
     assert!(
         changed.status.success(),
@@ -161,7 +161,7 @@ fn account_alias_changes_the_alias_and_rejects_bad_ones() {
         String::from_utf8_lossy(&changed.stderr)
     );
     let list = String::from_utf8(run(data.path(), &["account", "list"]).stdout).unwrap();
-    assert!(list.contains("main\twill"), "{list}");
+    assert!(list.contains("main\trenamed"), "{list}");
     for bad in ["a", "mcp", "Will", "-x", "x-"] {
         let refused = run(data.path(), &["account", "alias", "--account", "main", bad]);
         assert!(!refused.status.success(), "{bad} should be refused");
