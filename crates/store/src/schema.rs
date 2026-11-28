@@ -66,6 +66,16 @@ pub(super) const MIGRATIONS: &[(u32, &str)] = &[
     );
     ",
     ),
+    (
+        3,
+        "
+    DELETE FROM fts;
+    CREATE TABLE search_facts (
+        rowid INTEGER PRIMARY KEY,
+        fact_id TEXT NOT NULL UNIQUE REFERENCES facts(id)
+    );
+    ",
+    ),
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
@@ -80,6 +90,9 @@ pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
         }
         if current < version {
             tx.execute_batch(sql)?;
+            if version == 3 {
+                crate::search::backfill(&tx)?;
+            }
             tx.pragma_update(None, "user_version", version)?;
         }
         tx.commit()?;

@@ -4,11 +4,11 @@ use std::sync::Barrier;
 use std::thread;
 
 #[test]
-fn opens_an_empty_folder_and_is_at_version_2() {
+fn opens_an_empty_folder_and_is_at_version_3() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("new");
     let store = Store::open(&path).unwrap();
-    assert_eq!(store.schema_version(), 2);
+    assert_eq!(store.schema_version(), 3);
     assert!(path.join("store.db").is_file());
     assert!(path.join("blobs").is_dir());
     for conn in std::iter::once(&store.writer).chain(store.readers.iter()) {
@@ -45,7 +45,7 @@ fn reopens_without_changing_anything() {
     let database = dir.path().join("store.db");
     let before = fs::read(&database).unwrap();
     let reopened = Store::open(dir.path()).unwrap();
-    assert_eq!(reopened.schema_version(), 2);
+    assert_eq!(reopened.schema_version(), 3);
     let label: String = reopened.readers[0]
         .lock()
         .unwrap()
@@ -115,7 +115,7 @@ fn upgrades_a_version_1_store_without_losing_spaces() {
     drop(conn);
 
     let store = Store::open(dir.path()).unwrap();
-    assert_eq!(store.schema_version(), 2);
+    assert_eq!(store.schema_version(), 3);
     let saved = store
         .remember(crate::NewFact {
             space: "notes".into(),

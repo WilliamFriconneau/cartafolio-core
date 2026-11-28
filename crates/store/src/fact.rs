@@ -297,6 +297,7 @@ fn insert(conn: &Connection, new: NewFact, replaces: Option<&str>) -> Result<Fac
     for tag in &tags {
         insert_tag.execute((&id, fold_tag(tag)))?;
     }
+    crate::search::index(conn, &id, &new.text, &tags)?;
     Ok(Fact {
         id,
         space: new.space,

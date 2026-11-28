@@ -138,7 +138,7 @@ impl Store {
     }
 }
 
-fn tag_filter(tags: &[String]) -> Result<String, StoreError> {
+pub(crate) fn tag_filter(tags: &[String]) -> Result<String, StoreError> {
     let folded: Vec<_> = normalize_tags(tags)?
         .iter()
         .map(|tag| fold_tag(tag))
@@ -146,6 +146,6 @@ fn tag_filter(tags: &[String]) -> Result<String, StoreError> {
     json_array(&folded)
 }
 
-fn json_array(values: &[String]) -> Result<String, StoreError> {
+pub(crate) fn json_array(values: &[String]) -> Result<String, StoreError> {
     serde_json::to_string(values).map_err(|error| StoreError::Invalid(error.to_string()))
 }

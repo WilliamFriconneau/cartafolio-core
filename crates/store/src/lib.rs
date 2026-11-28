@@ -9,16 +9,20 @@
 
 #[cfg(test)]
 mod open_tests;
+#[cfg(test)]
+mod search_tests;
 
 mod error;
 mod fact;
 mod list;
 mod schema;
+mod search;
 mod tags;
 
 pub use error::StoreError;
 pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};
 pub use list::{ListQuery, Page};
+pub use search::{Hit, RecallQuery};
 pub use tags::normalize_tag;
 
 use rusqlite::{Connection, OpenFlags};
