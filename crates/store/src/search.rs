@@ -28,7 +28,7 @@ impl Default for RecallQuery {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Hit {
     pub fact: Fact,
     pub score: f64,

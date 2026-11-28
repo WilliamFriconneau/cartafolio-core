@@ -6,3 +6,13 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+pensine-access = { path = "../access" }
+pensine-store = { path = "../store" }
+serde_json.workspace = true
+serde.workspace = true
+base64 = "0.22"
+
+[dev-dependencies]
+tempfile.workspace = true

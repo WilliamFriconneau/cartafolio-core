@@ -18,7 +18,7 @@ pub struct NewFact {
     pub origin: Option<(String, String)>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Fact {
     pub id: String,
     pub space: String,
@@ -33,7 +33,8 @@ pub struct Fact {
     pub reason: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum FactStatus {
     Active,
     Superseded,
@@ -50,14 +51,15 @@ impl FactStatus {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "snake_case")]
 pub enum Outcome {
     Created,
     Duplicate,
     Replayed,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Remembered {
     pub fact: Fact,
     pub outcome: Outcome,
@@ -69,7 +71,25 @@ impl Store {
     }
 
     pub fn remember_many(&self, notes: Vec<NewFact>) -> Result<Vec<Remembered>, StoreError> {
-        self.write(|tx| notes.into_iter().map(|new| remember(tx, new)).collect())
+        self.remember_many_checked(notes, |_| Ok(()))
+    }
+
+    /// Checks each result before committing the batch, including origin replays.
+    pub fn remember_many_checked(
+        &self,
+        notes: Vec<NewFact>,
+        check: impl Fn(&Remembered) -> Result<(), StoreError>,
+    ) -> Result<Vec<Remembered>, StoreError> {
+        self.write(|tx| {
+            notes
+                .into_iter()
+                .map(|new| {
+                    let result = remember(tx, new)?;
+                    check(&result)?;
+                    Ok(result)
+                })
+                .collect()
+        })
     }
 
     pub fn read(&self, id: &str) -> Result<Fact, StoreError> {

@@ -1,7 +1,7 @@
 use crate::{Store, StoreError};
 use rusqlite::Connection;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct SpaceInfo {
     pub name: String,
     pub label: String,
@@ -65,6 +65,26 @@ impl Store {
             )?;
             Ok(())
         })
+    }
+
+    /// Returns the space and its ancestors, starting with the requested space.
+    pub fn space_chain(&self, name: &str) -> Result<Vec<String>, StoreError> {
+        let conn = self.reader()?;
+        let mut stmt = conn.prepare(
+            "WITH RECURSIVE ancestors(name, parent, depth) AS (
+                SELECT name, parent, 0 FROM spaces WHERE name = ?1
+                UNION ALL
+                SELECT s.name, s.parent, a.depth + 1 FROM spaces s JOIN ancestors a ON s.name = a.parent
+             )
+             SELECT name FROM ancestors ORDER BY depth",
+        )?;
+        let chain = stmt
+            .query_map([name], |row| row.get(0))?
+            .collect::<Result<Vec<_>, _>>()?;
+        if chain.is_empty() {
+            return Err(StoreError::NotFound);
+        }
+        Ok(chain)
     }
 
     pub fn spaces(&self) -> Result<Vec<SpaceInfo>, StoreError> {

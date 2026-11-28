@@ -30,7 +30,7 @@ impl Default for ListQuery {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub next_cursor: Option<String>,
