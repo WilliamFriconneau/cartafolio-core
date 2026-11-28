@@ -706,7 +706,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 
 [[package]]
 name = "pensine"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "clap",
  "pensine-access",
@@ -721,7 +721,7 @@ dependencies = [
 
 [[package]]
 name = "pensine-access"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "pensine-store",
  "rand",
@@ -735,7 +735,7 @@ dependencies = [
 
 [[package]]
 name = "pensine-mcp"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64",
  "pensine-access",
@@ -747,7 +747,7 @@ dependencies = [
 
 [[package]]
 name = "pensine-migrate"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "base64",
@@ -765,7 +765,7 @@ dependencies = [
 
 [[package]]
 name = "pensine-server"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "axum",
  "base64",
@@ -789,7 +789,7 @@ dependencies = [
 
 [[package]]
 name = "pensine-store"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "rusqlite",
  "serde",
