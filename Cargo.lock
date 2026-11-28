@@ -706,6 +706,7 @@ dependencies = [
  "subtle",
  "tempfile",
  "thiserror",
+ "unicode-normalization",
 ]
 
 [[package]]

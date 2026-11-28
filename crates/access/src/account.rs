@@ -1,3 +1,4 @@
+use crate::alias::{backfill_aliases, insert_default_alias};
 use crate::AccessError;
 use pensine_store::Store;
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
@@ -29,6 +30,10 @@ const MIGRATIONS: &[&str] = &[
         account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),
         name TEXT NOT NULL,
         created_at INTEGER NOT NULL
+     );",
+    "CREATE TABLE account_aliases (
+        account TEXT PRIMARY KEY NOT NULL REFERENCES accounts(id),
+        alias TEXT NOT NULL UNIQUE
      );",
 ];
 
@@ -94,6 +99,7 @@ impl Accounts {
         {
             return Err(AccessError::Conflict);
         }
+        insert_default_alias(&tx, id, id)?;
         let account = self.open_account(id)?;
         tx.commit()?;
         cache.insert(id.to_owned(), account.clone());
@@ -108,43 +114,37 @@ impl Accounts {
                 "A Home Assistant user id is required".into(),
             ));
         }
-        let existing: Option<String> = self
-            .db()?
+        let mut cache = self.cache.lock().map_err(|_| AccessError::Conflict)?;
+        let mut db = self.db()?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let existing: Option<String> = tx
             .query_row(
                 "SELECT account_id FROM ha_users WHERE ha_id = ?1",
                 [ha_id],
                 |row| row.get(0),
             )
             .optional()?;
-        let account_id = match existing {
-            Some(account_id) => {
-                self.db()?.execute(
-                    "UPDATE ha_users SET name = ?2 WHERE ha_id = ?1",
-                    (ha_id, name),
-                )?;
-                account_id
-            }
-            None => {
-                let account_id = account_id_for_ha_user(ha_id);
-                match self.account(&account_id) {
-                    Ok(_) => {}
-                    Err(AccessError::NotFound) => match self.account_create(&account_id) {
-                        Ok(_) => {}
-                        Err(AccessError::Conflict) => {}
-                        Err(error) => return Err(error),
-                    },
-                    Err(error) => return Err(error),
-                }
-                self.db()?.execute(
-                    "INSERT INTO ha_users (ha_id, account_id, name, created_at)
-                     VALUES (?1, ?2, ?3, ?4)
-                     ON CONFLICT(ha_id) DO UPDATE SET name = excluded.name",
-                    (ha_id, &account_id, name, now()?),
-                )?;
-                account_id
-            }
+        let id = existing.unwrap_or_else(|| account_id_for_ha_user(ha_id));
+        if tx.execute(
+            "INSERT INTO accounts VALUES (?1) ON CONFLICT DO NOTHING",
+            [&id],
+        )? > 0
+        {
+            insert_default_alias(&tx, &id, name)?;
+        }
+        tx.execute(
+            "INSERT INTO ha_users (ha_id, account_id, name, created_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(ha_id) DO UPDATE SET name = excluded.name",
+            (ha_id, &id, name, now()?),
+        )?;
+        let account = match cache.get(&id) {
+            Some(account) => account.clone(),
+            None => self.open_account(&id)?,
         };
-        self.account(&account_id)
+        tx.commit()?;
+        cache.insert(id, account.clone());
+        Ok(account)
     }
 
     pub fn account(&self, id: &str) -> Result<Account, AccessError> {
@@ -218,6 +218,9 @@ fn migrate(db: &mut Connection) -> Result<(), AccessError> {
         }
         if current < version {
             tx.execute_batch(sql)?;
+            if version == 3 {
+                backfill_aliases(&tx)?;
+            }
             tx.pragma_update(None, "user_version", version)?;
         }
         tx.commit()?;

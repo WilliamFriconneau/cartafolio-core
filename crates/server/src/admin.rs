@@ -1,6 +1,6 @@
 use crate::admin_html::{
-    csrf_matches, disk_used, grants_from_form, new_csrf, page, render_connections, render_oauth,
-    space_depth,
+    csrf_matches, disk_used, grants_from_form, new_csrf, page, render_alias, render_connections,
+    render_oauth, space_depth,
 };
 use crate::error::ServerError;
 use crate::html::escape_html;
@@ -23,6 +23,7 @@ pub(crate) struct AdminState {
     pub oauth: Arc<OAuth>,
     pub trusted_proxy: IpAddr,
     pub data_dir: PathBuf,
+    pub public_url: Option<String>,
     pub version: &'static str,
 }
 
@@ -32,6 +33,7 @@ pub(crate) fn router(state: AdminState) -> Router {
             "/connections",
             get(connections_page).post(connections_create),
         )
+        .route("/alias", post(alias_change))
         .route("/connections/revoke", post(connection_revoke))
         .route("/oauth", get(oauth_page).post(oauth_invite))
         .route("/oauth/revoke", post(oauth_revoke))
@@ -62,9 +64,9 @@ async fn admin_guard(
     };
     let name = headers
         .get("x-remote-user-name")
-        .and_then(|value| value.to_str().ok())
+        .and_then(|value| std::str::from_utf8(value.as_bytes()).ok())
         .map(str::trim)
-        .unwrap_or("Home Assistant user");
+        .unwrap_or("");
     match state.accounts.account_for_ha_user(ha_id, name) {
         Ok(account) => {
             request.extensions_mut().insert(account);
@@ -81,7 +83,7 @@ async fn connections_page(
     State(state): State<AdminState>,
     Extension(account): Extension<Account>,
 ) -> Result<Response, ServerError> {
-    render_connections_page(&state, &account).await
+    render_connections_page(&state, &account, None)
 }
 
 async fn connections_create(
@@ -133,7 +135,7 @@ async fn connection_revoke(
         Ok(()) | Err(AccessError::NotFound) => {}
         Err(error) => return Err(error.into()),
     }
-    render_connections_page(&state, &account).await
+    render_connections_page(&state, &account, None)
 }
 
 async fn oauth_page(
@@ -222,16 +224,40 @@ async fn status_page(
     page("Status", &body, &csrf)
 }
 
-async fn render_connections_page(
+async fn alias_change(
+    State(state): State<AdminState>,
+    Extension(account): Extension<Account>,
+    headers: HeaderMap,
+    Form(fields): Form<HashMap<String, String>>,
+) -> Result<Response, ServerError> {
+    if !csrf_matches(&headers, &fields) {
+        return Ok(StatusCode::FORBIDDEN.into_response());
+    }
+    let alias = fields.get("alias").map_or("", String::as_str);
+    match state.accounts.set_alias(&account.id, alias) {
+        Ok(()) => render_connections_page(&state, &account, None),
+        Err(AccessError::Invalid(message)) => {
+            let mut response = render_connections_page(&state, &account, Some(&message))?;
+            *response.status_mut() = StatusCode::BAD_REQUEST;
+            Ok(response)
+        }
+        Err(error) => Err(error.into()),
+    }
+}
+
+fn render_connections_page(
     state: &AdminState,
     account: &Account,
+    alias_error: Option<&str>,
 ) -> Result<Response, ServerError> {
     let csrf = new_csrf()?;
     let connections = state.accounts.connections(&account.id)?;
     let spaces = account.store.spaces()?;
+    let alias = state.accounts.alias_of(&account.id)?;
+    let alias_form = render_alias(state.public_url.as_deref(), &alias, alias_error, &csrf);
     page(
         "Connections",
-        &render_connections(&account.id, &connections, &spaces, &csrf),
+        &render_connections(&account.id, &alias_form, &connections, &spaces, &csrf),
         &csrf,
     )
 }

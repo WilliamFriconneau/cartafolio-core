@@ -13,6 +13,7 @@ mod config;
 mod error;
 mod html;
 mod http;
+mod mcp_http;
 mod oauth;
 
 pub use config::Config;

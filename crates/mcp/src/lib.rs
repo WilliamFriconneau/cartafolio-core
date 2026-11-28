@@ -22,6 +22,10 @@ impl Mcp {
     pub fn new(accounts: Arc<Accounts>) -> Self {
         Self { accounts }
     }
+
+    pub fn accounts(&self) -> &Accounts {
+        &self.accounts
+    }
 }
 
 mod texts {

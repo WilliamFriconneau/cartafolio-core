@@ -217,3 +217,47 @@ async fn a_user_cannot_see_or_change_another_users_connections() {
     assert!(still_there);
     handle.shutdown();
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_admin_shows_the_mcp_address_and_changes_the_alias() {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = Server::start(Config {
+        public_url: Some("https://pensine.example/".into()),
+        ..admin_config(&dir, IpAddr::V4(Ipv4Addr::LOCALHOST))
+    })
+    .await
+    .unwrap();
+    let response = ureq::get(&admin_url(&handle, "/connections"))
+        .set("X-Remote-User-Id", "user-a")
+        .set("X-Remote-User-Name", "Sample User")
+        .call()
+        .unwrap();
+    let token = csrf_cookie(&response);
+    let page = response.into_string().unwrap();
+    assert!(page.contains("readonly value=\"https://pensine.example/mcp/sample-user\""));
+
+    let post = |alias| {
+        ureq::post(&admin_url(&handle, "/alias"))
+            .set("X-Remote-User-Id", "user-a")
+            .set("Cookie", &format!("pensine_csrf={token}"))
+            .send_form(&[("alias", alias), ("csrf", &token)])
+            .unwrap_or_else(|error| match error {
+                ureq::Error::Status(_, response) => response,
+                other => panic!("{other}"),
+            })
+    };
+    assert!(matches!(
+        ureq::post(&admin_url(&handle, "/alias"))
+            .set("X-Remote-User-Id", "user-a")
+            .send_form(&[("alias", "new-alias")]),
+        Err(ureq::Error::Status(403, _))
+    ));
+    let invalid = post("mcp");
+    assert_eq!(invalid.status(), 400);
+    assert!(invalid.into_string().unwrap().contains("reserved"));
+    let changed = post("new-alias");
+    assert_eq!(changed.status(), 200);
+    let changed = changed.into_string().unwrap();
+    assert!(changed.contains("readonly value=\"https://pensine.example/mcp/new-alias\""));
+    handle.shutdown();
+}

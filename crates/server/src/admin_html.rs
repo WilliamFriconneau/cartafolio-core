@@ -16,11 +16,13 @@ const STYLE: &str = "body{font-family:system-ui,sans-serif;max-width:48rem;margi
 
 pub(super) fn render_connections(
     account_id: &str,
+    alias_form: &str,
     connections: &[Connection],
     spaces: &[SpaceInfo],
     csrf: &str,
 ) -> String {
     let mut body = format!("<h1>Connections for {}</h1>", escape_html(account_id));
+    body.push_str(alias_form);
     if connections.is_empty() {
         body.push_str("<p>No connections yet.</p>");
     } else {
@@ -65,6 +67,32 @@ pub(super) fn render_connections(
         ));
     }
     body.push_str("</fieldset><button>Create</button></form>");
+    body
+}
+
+pub(super) fn render_alias(
+    public_url: Option<&str>,
+    alias: &str,
+    error: Option<&str>,
+    csrf: &str,
+) -> String {
+    let mut body = match public_url {
+        Some(url) => format!(
+            "<p><label>MCP address <input size=\"48\" readonly value=\"{}/mcp/{}\"></label></p>",
+            escape_html(url.trim_end_matches('/')),
+            escape_html(alias),
+        ),
+        None => "<p>Set the public address (public_url) to show your MCP address.</p>".into(),
+    };
+    if let Some(error) = error {
+        body.push_str(&format!("<p role=\"alert\">{}</p>", escape_html(error)));
+    }
+    body.push_str(&format!(
+        "<form method=\"post\" action=\"alias\">{}<label>Alias <input name=\"alias\" \
+         value=\"{}\" required maxlength=\"32\"></label> <button>Save alias</button></form>",
+        csrf_field(csrf),
+        escape_html(alias),
+    ));
     body
 }
 
