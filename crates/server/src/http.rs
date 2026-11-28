@@ -105,6 +105,8 @@ impl Server {
         if let Some(oauth) = &oauth {
             router = router.merge(oauth::routes(oauth.clone()));
         }
+        // One trace layer over every route, the OAuth ones included: only the method, the path, the status and the time.
+        let router = router.layer(axum::middleware::from_fn(crate::mcp_http::trace_request));
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         for listener in bound.listeners {
             let router = router.clone();

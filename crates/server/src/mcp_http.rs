@@ -4,7 +4,7 @@ use crate::{Authenticator, Config};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, FromRequest, MatchedPath, Path, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Version};
-use axum::middleware::{self, Next};
+use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
@@ -32,7 +32,6 @@ pub(super) fn router(state: AppState) -> Router {
         .route("/mcp", get(mcp_not_allowed).post(mcp_handler))
         .route("/mcp/{alias}", get(mcp_not_allowed).post(alias_handler))
         .layer(DefaultBodyLimit::max(max_body))
-        .layer(middleware::from_fn(trace_request))
         .with_state(state)
 }
 
@@ -230,7 +229,7 @@ fn json_response(status: StatusCode, body: &str) -> Response {
     response
 }
 
-async fn trace_request(request: Request, next: Next) -> Response {
+pub(crate) async fn trace_request(request: Request, next: Next) -> Response {
     let method = request.method().clone();
     let path = request
         .extensions()

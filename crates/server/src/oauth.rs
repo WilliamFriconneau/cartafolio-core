@@ -310,7 +310,6 @@ fn hash(value: &str) -> [u8; 32] {
 
 enum OAuthError {
     BadRequest(&'static str),
-    Forbidden,
     RegistrationCapacity,
     Internal,
 }
@@ -322,7 +321,6 @@ impl IntoResponse for OAuthError {
             Self::RegistrationCapacity => {
                 (StatusCode::SERVICE_UNAVAILABLE, "registration_capacity")
             }
-            Self::Forbidden => (StatusCode::FORBIDDEN, "access_denied"),
             Self::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
         };
         (status, Json(json!({"error": error}))).into_response()

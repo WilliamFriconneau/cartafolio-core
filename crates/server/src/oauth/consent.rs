@@ -162,10 +162,16 @@ pub(super) async fn consent(
             })
         })
     {
-        return Err(OAuthError::Forbidden);
+        tracing::warn!(
+            sec_fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok()),
+            origin = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()),
+            expected = %oauth.issuer(),
+            "consent refused: the request does not come from the consent page of this server"
+        );
+        return Ok(refusal(for_request(&headers)));
     }
     if fields.contains_key("nonce") {
-        decide(&oauth, &fields)
+        decide(&oauth, &fields, for_request(&headers))
     } else {
         present_rights(&oauth, &fields, for_request(&headers))
     }
@@ -203,14 +209,25 @@ fn present_rights(oauth: &OAuth, fields: &Fields, t: &Texts) -> Result<Response>
     Ok(consent_page(page, t))
 }
 
-fn decide(oauth: &OAuth, fields: &Fields) -> Result<Response> {
+/// A readable refusal for the consent flow: raw JSON or an empty body would be shown or downloaded by the browser.
+fn refusal(t: &Texts) -> Response {
+    let mut response = consent_page(format!("<p>{}</p>", t.request_expired), t);
+    *response.status_mut() = StatusCode::FORBIDDEN;
+    response
+}
+
+fn decide(oauth: &OAuth, fields: &Fields, t: &Texts) -> Result<Response> {
     let mut db = oauth.db()?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
-    let (account, request): (String, String) = tx.query_row(
+    let found: Option<(String, String)> = tx.query_row(
         "DELETE FROM oauth_consent WHERE hash = ?1 AND expires_at > unixepoch() RETURNING account, request",
         [hash(field(fields, "nonce"))],
         |row| Ok((row.get(0)?, row.get(1)?)),
-    ).optional()?.ok_or(OAuthError::Forbidden)?;
+    ).optional()?;
+    let Some((account, request)) = found else {
+        tracing::warn!("decision refused: unknown, already used or expired consent request");
+        return Ok(refusal(t));
+    };
     let mut request: Authorization = serde_json::from_str(&request)?;
     let response = match field(fields, "decision") {
         "deny" => request.callback(oauth, "error", "access_denied")?,

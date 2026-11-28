@@ -133,3 +133,53 @@ async fn creating_a_code_clears_the_failure_window() {
     // ...but making that code (which needs a signed-in Home Assistant user) cleared the window.
     assert_eq!(submit(&env, &client, &stale, "en").status(), 200);
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn an_unknown_consent_nonce_is_refused_with_a_readable_page_not_json() {
+    let env = Fixture::start().await;
+    let client = env.client();
+    let mut fields = env.authorize_fields(&client, "S256");
+    fields.push(("nonce", "never-issued".into()));
+    fields.push(("decision", "allow".into()));
+    let response = env
+        .agent
+        .post(&env.url("/authorize"))
+        .set("Accept-Language", "fr")
+        .send_form(
+            &fields
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_else(status_response);
+    assert_eq!(response.status(), 403);
+    assert!(response.content_type().starts_with("text/html"));
+    let page = response.into_string().unwrap();
+    assert!(
+        page.contains("Recommencez depuis votre assistant"),
+        "{page}"
+    );
+    assert!(!page.contains("access_denied"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn a_consent_post_from_another_origin_is_refused_with_a_readable_page_not_json() {
+    let env = Fixture::start().await;
+    let client = env.client();
+    let mut fields = env.authorize_fields(&client, "S256");
+    fields.push(("invite", "ABCD-EFGH-JKMN".into()));
+    let response = env
+        .agent
+        .post(&env.url("/authorize"))
+        .set("Origin", "https://elsewhere.example")
+        .send_form(
+            &fields
+                .iter()
+                .map(|(k, v)| (*k, v.as_str()))
+                .collect::<Vec<_>>(),
+        )
+        .unwrap_or_else(status_response);
+    assert_eq!(response.status(), 403);
+    assert!(response.content_type().starts_with("text/html"));
+    assert!(!response.into_string().unwrap().contains("access_denied"));
+}

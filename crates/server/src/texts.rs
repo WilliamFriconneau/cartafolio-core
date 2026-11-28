@@ -38,6 +38,7 @@ translations! {
     copy_code => "Copy code", "Copier le code";
     code_where => "Type it on the page that opens in your assistant.", "Saisissez-le sur la page qui s’ouvre dans votre assistant.";
     code_invalid => "This code is wrong, expired or already used. Create a new one in the Pensine panel of Home Assistant.", "Ce code est incorrect, a expiré ou a déjà été utilisé. Créez-en un nouveau dans le panneau Pensine de Home Assistant.";
+    request_expired => "This request expired or was already used. Start again from your assistant.", "Cette demande a expiré ou a déjà été utilisée. Recommencez depuis votre assistant.";
     code_limited => "Too many attempts. Wait a few minutes before trying again.", "Trop de tentatives. Patientez quelques minutes avant de réessayer.";
     code_expiry => "This one-time code expires in 10 minutes.", "Ce code à usage unique expire dans 10 minutes.";
     select_space => "Select at least one space.", "Cochez au moins un espace.";
