@@ -210,8 +210,8 @@ impl Store {
 pub(crate) fn validate_name(name: &str) -> Result<(), StoreError> {
     if name.is_empty()
         || name == "."
+        || name == ".."
         || name.contains(['/', '\\'])
-        || name.contains("..")
         || name.chars().any(char::is_control)
     {
         return Err(StoreError::Invalid(

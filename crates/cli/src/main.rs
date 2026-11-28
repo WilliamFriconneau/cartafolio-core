@@ -91,6 +91,12 @@ fn run(cli: Cli) -> Result<()> {
                 None => Config::default(),
             };
             config.data_dir = cli.data;
+            // Request lines only (method, path, status, duration): never a body, a key or a note.
+            tracing_subscriber::fmt()
+                .with_max_level(tracing::Level::INFO)
+                .with_ansi(false)
+                .with_target(false)
+                .init();
             Ok(serve_blocking(config)?)
         }
         Command::Version => {

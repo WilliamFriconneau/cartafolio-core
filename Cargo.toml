@@ -17,6 +17,7 @@ sha2 = "0.10"
 rand = "0.9"
 thiserror = "2"
 tracing = "0.1"
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
 tempfile = "3"
 unicode-normalization = "0.1"
 clap = { version = "4", features = ["derive"] }

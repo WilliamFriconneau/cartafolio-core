@@ -76,13 +76,21 @@ fn identical_bytes_are_stored_once() {
 #[test]
 fn a_path_like_name_is_refused() {
     let (dir, store) = store();
-    for name in ["../x", "a/b", "a\\b", "a..b", "a\nb", "", "."] {
+    for name in ["../x", "a/b", "a\\b", "a\nb", "", ".", ".."] {
         assert!(matches!(
             store.file_put(file(name)),
             Err(StoreError::Invalid(_))
         ));
     }
     assert_eq!(fs::read_dir(dir.path().join("blobs")).unwrap().count(), 0);
+}
+
+#[test]
+fn dots_inside_a_bare_name_are_fine() {
+    let (_dir, store) = store();
+    for name in ["a..b", "report..final.pdf", "...", "x...", "..hidden"] {
+        assert!(store.file_put(file(name)).is_ok(), "{name}");
+    }
 }
 
 struct CountingReader<'a>(&'a Cell<usize>);

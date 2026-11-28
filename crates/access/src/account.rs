@@ -167,6 +167,38 @@ impl Accounts {
         Ok(account)
     }
 
+    /// Links a Home Assistant user to an existing account, so that the person who opens the page lands on
+    /// that account (for example one filled by a migration) and not on a new empty one.
+    pub fn link_ha_user(
+        &self,
+        ha_id: &str,
+        account_id: &str,
+        name: &str,
+    ) -> Result<(), AccessError> {
+        if ha_id.trim().is_empty() {
+            return Err(AccessError::Invalid(
+                "A Home Assistant user id is required".into(),
+            ));
+        }
+        let mut db = self.db()?;
+        let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let exists: bool = tx.query_row(
+            "SELECT EXISTS(SELECT 1 FROM accounts WHERE id = ?1)",
+            [account_id],
+            |row| row.get(0),
+        )?;
+        if !exists {
+            return Err(AccessError::NotFound);
+        }
+        tx.execute(
+            "INSERT INTO ha_users (ha_id, account_id, name, created_at) VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(ha_id) DO UPDATE SET account_id = excluded.account_id, name = excluded.name",
+            (ha_id, account_id, name, now()?),
+        )?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Lists account ids and their public aliases in id order.
     pub fn account_list(&self) -> Result<Vec<(String, String)>, AccessError> {
         let db = self.db()?;

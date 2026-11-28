@@ -8,6 +8,8 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+tracing.workspace = true
+tracing-subscriber.workspace = true
 pensine-access = { path = "../access" }
 pensine-server = { path = "../server" }
 clap = { workspace = true, features = ["derive"] }

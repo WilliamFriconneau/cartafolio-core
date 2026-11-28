@@ -14,6 +14,17 @@ pub(crate) enum AccountCommand {
     },
     /// List account ids and aliases.
     List,
+    /// Link a Home Assistant user to an existing account.
+    Link {
+        #[arg(long, value_name = "ID")]
+        account: String,
+        /// The Home Assistant user id (shown in the user's profile).
+        #[arg(long = "ha-user", value_name = "ID")]
+        ha_user: String,
+        /// Display name kept with the link.
+        #[arg(long, value_name = "NAME", default_value = "")]
+        name: String,
+    },
 }
 
 impl AccountCommand {
@@ -27,6 +38,14 @@ impl AccountCommand {
                 for (id, alias) in accounts.account_list()? {
                     writeln!(out, "{id}\t{alias}")?;
                 }
+            }
+            Self::Link {
+                account,
+                ha_user,
+                name,
+            } => {
+                accounts.link_ha_user(&ha_user, &account, &name)?;
+                writeln!(out, "Linked Home Assistant user to account {account}")?;
             }
         }
         Ok(())

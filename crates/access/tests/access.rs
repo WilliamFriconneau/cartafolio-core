@@ -137,3 +137,47 @@ fn a_revoked_key_stops_working_at_once() {
     ));
     assert!(accounts.connections("demo").unwrap().is_empty());
 }
+
+#[test]
+fn a_linked_ha_user_lands_on_the_existing_account() {
+    let (_dir, accounts) = setup();
+    accounts
+        .account_create_with_alias("migrated", Some("migrated"))
+        .unwrap();
+    accounts
+        .link_ha_user("a1b2c3d4e5f6", "migrated", "Alice")
+        .unwrap();
+    let landed = accounts
+        .account_for_ha_user("a1b2c3d4e5f6", "Alice")
+        .unwrap();
+    assert_eq!(landed.id, "migrated");
+}
+
+#[test]
+fn linking_moves_a_user_who_already_has_an_empty_account() {
+    let (_dir, accounts) = setup();
+    let empty = accounts
+        .account_for_ha_user("a1b2c3d4e5f6", "Alice")
+        .unwrap();
+    assert_eq!(empty.id, "u-a1b2c3d4e5f6");
+    accounts
+        .account_create_with_alias("migrated", Some("migrated"))
+        .unwrap();
+    accounts
+        .link_ha_user("a1b2c3d4e5f6", "migrated", "Alice")
+        .unwrap();
+    let landed = accounts
+        .account_for_ha_user("a1b2c3d4e5f6", "Alice")
+        .unwrap();
+    assert_eq!(landed.id, "migrated");
+}
+
+#[test]
+fn linking_to_an_unknown_account_or_with_an_empty_id_is_refused() {
+    let (_dir, accounts) = setup();
+    assert!(accounts.link_ha_user("abc", "nobody", "Alice").is_err());
+    accounts
+        .account_create_with_alias("real", Some("real"))
+        .unwrap();
+    assert!(accounts.link_ha_user("  ", "real", "Alice").is_err());
+}
