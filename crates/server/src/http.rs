@@ -5,6 +5,7 @@ use crate::mcp_http::{router, AppState};
 use crate::oauth::{self, OAuth};
 use pensine_access::{Accounts, Principal};
 use pensine_mcp::Mcp;
+use rand::{rngs::OsRng, TryRngCore};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::sync::Arc;
 use tokio::sync::watch;
@@ -33,7 +34,10 @@ pub struct Server;
 
 impl Server {
     pub async fn start(config: Config) -> Result<Handle, ServerError> {
-        let accounts = Arc::new(Accounts::open(&config.data_dir)?);
+        let accounts = Arc::new(Accounts::open_with_file_quota(
+            &config.data_dir,
+            config.file_quota,
+        )?);
         let mcp = Arc::new(Mcp::new(accounts.clone()));
         let authenticators: Vec<Arc<dyn Authenticator>> =
             vec![Arc::new(KeysAuthenticator::new(accounts.clone()))];
@@ -55,6 +59,7 @@ impl Server {
         accounts: Option<Arc<Accounts>>,
     ) -> Result<Handle, ServerError> {
         check_bindable(&config)?;
+        let admission = crate::admission::Admission::new(&config)?;
         let bound = bind(config.listen).await?;
         let oauth = accounts
             .clone()
@@ -77,6 +82,7 @@ impl Server {
             authenticators.push(oauth.clone());
         }
         let state = AppState {
+            admission: Arc::new(admission),
             config: config.clone(),
             mcp,
             authenticators: Arc::new(authenticators),
@@ -91,11 +97,14 @@ impl Server {
             let router = router.clone();
             let mut receiver = shutdown_rx.clone();
             tokio::spawn(async move {
-                let _ = axum::serve(listener, router)
-                    .with_graceful_shutdown(async move {
-                        let _ = receiver.changed().await;
-                    })
-                    .await;
+                let _ = axum::serve(
+                    listener,
+                    router.into_make_service_with_connect_info::<SocketAddr>(),
+                )
+                .with_graceful_shutdown(async move {
+                    let _ = receiver.changed().await;
+                })
+                .await;
             });
         }
         let admin_addr = serve_admin(&config, accounts, oauth.clone(), shutdown_rx.clone()).await?;
@@ -124,7 +133,12 @@ async fn serve_admin(
     };
     let listener = tokio::net::TcpListener::bind(admin_listen).await?;
     let addr = listener.local_addr()?;
+    let mut csrf_secret = [0; 32];
+    OsRng
+        .try_fill_bytes(&mut csrf_secret)
+        .map_err(std::io::Error::other)?;
     let state = AdminState {
+        csrf_secret,
         accounts,
         oauth,
         trusted_proxy: config.admin_trusted_proxy,

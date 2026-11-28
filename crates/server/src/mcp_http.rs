@@ -1,20 +1,23 @@
+use crate::admission::{Admission, Admitted};
 use crate::oauth::OAuth;
 use crate::{Authenticator, Config};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, FromRequest, MatchedPath, Path, Request, State};
-use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, StatusCode, Version};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
 use axum::Router;
-use pensine_access::{validate_alias, AccessError, Principal};
+use pensine_access::{validate_alias, AccessError, AccountOperations, Principal};
 use pensine_mcp::Mcp;
 use serde_json::{json, Value};
 use std::sync::Arc;
-use std::time::Instant;
+use std::time::{Duration, Instant};
+use tokio::time::{timeout_at, Instant as Deadline};
 
 #[derive(Clone)]
 pub(super) struct AppState {
+    pub admission: Arc<Admission>,
     pub config: Config,
     pub mcp: Arc<Mcp>,
     pub authenticators: Arc<Vec<Arc<dyn Authenticator>>>,
@@ -52,11 +55,12 @@ async fn mcp_not_allowed() -> Response {
     response
 }
 
-async fn mcp_handler(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
-    let Some(principal) = authenticate(&state, &headers) else {
+async fn mcp_handler(State(state): State<AppState>, request: Request) -> Response {
+    let deadline = Deadline::now() + state.config.request_timeout;
+    let Some(principal) = authenticate(&state, request.headers()) else {
         return unauthorized(state.config.public_url().as_deref(), "");
     };
-    dispatch(&state, principal, body).await
+    read_and_dispatch(&state, principal, request, deadline).await
 }
 
 async fn alias_handler(
@@ -64,6 +68,7 @@ async fn alias_handler(
     Path(alias): Path<String>,
     request: Request,
 ) -> Response {
+    let deadline = Deadline::now() + state.config.request_timeout;
     if validate_alias(&alias).is_err() {
         return StatusCode::NOT_FOUND.into_response();
     }
@@ -76,29 +81,96 @@ async fn alias_handler(
         Ok(_) | Err(AccessError::NotFound) => return StatusCode::NOT_FOUND.into_response(),
         Err(_) => return internal_error(),
     }
-    match Bytes::from_request(request, &state).await {
-        Ok(body) => dispatch(&state, principal, body).await,
-        Err(error) => error.into_response(),
+    read_and_dispatch(&state, principal, request, deadline).await
+}
+
+async fn read_and_dispatch(
+    state: &AppState,
+    principal: Principal,
+    request: Request,
+    deadline: Deadline,
+) -> Response {
+    let Some(permit) = state.admission.enter(&principal.account, deadline).await else {
+        return busy();
+    };
+    let read_deadline = deadline.min(Deadline::now() + state.config.read_timeout);
+    let version = request.version();
+    let body = match timeout_at(read_deadline, Bytes::from_request(request, state)).await {
+        Ok(Ok(body)) => body,
+        Ok(Err(error)) => return error.into_response(),
+        Err(_) => {
+            let mut response = StatusCode::REQUEST_TIMEOUT.into_response();
+            if matches!(version, Version::HTTP_10 | Version::HTTP_11) {
+                response
+                    .headers_mut()
+                    .insert(header::CONNECTION, HeaderValue::from_static("close"));
+            }
+            return response;
+        }
+    };
+    let lock_deadline = deadline.min(Deadline::now() + state.config.account_lock_timeout);
+    let operations = match timeout_at(lock_deadline, lock_account(state, &principal)).await {
+        Ok(Ok(operations)) if Deadline::now() < lock_deadline => operations,
+        Ok(Err(_)) => return internal_error(),
+        _ => return busy(),
+    };
+    dispatch(state, principal, body, operations, permit, deadline).await
+}
+
+async fn lock_account(
+    state: &AppState,
+    principal: &Principal,
+) -> Result<AccountOperations, AccessError> {
+    let account = state.mcp.accounts().account(&principal.account)?;
+    loop {
+        if let Some(operations) = account.try_lock_operations()? {
+            return Ok(operations);
+        }
+        tokio::time::sleep(Duration::from_millis(5)).await;
     }
 }
 
-async fn dispatch(state: &AppState, principal: Principal, body: Bytes) -> Response {
-    let request: Value = match serde_json::from_slice(&body) {
-        Ok(value) => value,
-        Err(_) => return parse_error(),
-    };
+async fn dispatch(
+    state: &AppState,
+    principal: Principal,
+    body: Bytes,
+    operations: AccountOperations,
+    permit: Admitted,
+    deadline: Deadline,
+) -> Response {
     let mcp = state.mcp.clone();
-    let timeout = state.config.request_timeout;
-    let task = tokio::task::spawn_blocking(move || mcp.handle(&principal, request));
-    let result = match tokio::time::timeout(timeout, task).await {
-        Ok(Ok(value)) => value,
+    // A synchronous operation already underway can finish atomically after a timeout.
+    // The worker owns both capacity permits and the account lock until it exits.
+    let task = tokio::task::spawn_blocking(move || {
+        let _permit = permit;
+        if Deadline::now() >= deadline {
+            return Err(StatusCode::GATEWAY_TIMEOUT);
+        }
+        let request: Value = serde_json::from_slice(&body).map_err(|_| StatusCode::BAD_REQUEST)?;
+        if Deadline::now() >= deadline {
+            return Err(StatusCode::GATEWAY_TIMEOUT);
+        }
+        Ok(mcp.handle_admitted(&principal, request, &operations))
+    });
+    let _abort = AbortOnDrop(task.abort_handle());
+    let result = match timeout_at(deadline, task).await {
+        Ok(Ok(Ok(value))) => value,
+        Ok(Ok(Err(StatusCode::BAD_REQUEST))) => return parse_error(),
         Ok(Err(_)) => return internal_error(),
-        Err(_) => return StatusCode::GATEWAY_TIMEOUT.into_response(),
+        Ok(Ok(Err(_))) | Err(_) => return StatusCode::GATEWAY_TIMEOUT.into_response(),
     };
     if result.is_null() {
         return StatusCode::ACCEPTED.into_response();
     }
     json_response(StatusCode::OK, &result.to_string())
+}
+
+struct AbortOnDrop(tokio::task::AbortHandle);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 fn authenticate(state: &AppState, headers: &HeaderMap) -> Option<Principal> {
@@ -111,6 +183,14 @@ fn authenticate(state: &AppState, headers: &HeaderMap) -> Option<Principal> {
         .authenticators
         .iter()
         .find_map(|authenticator| authenticator.authenticate(bearer))
+}
+
+fn busy() -> Response {
+    let mut response = StatusCode::SERVICE_UNAVAILABLE.into_response();
+    response
+        .headers_mut()
+        .insert(header::RETRY_AFTER, HeaderValue::from_static("1"));
+    response
 }
 
 fn unauthorized(issuer: Option<&str>, resource_path: &str) -> Response {

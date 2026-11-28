@@ -22,8 +22,10 @@ options:
   tailscale: true
   tailscale_hostname: pensine
   public_url: ''
+  allow_plain_http: false
 schema:
   tailscale: bool
   tailscale_hostname: str
   tailscale_authkey: password?
   public_url: str?
+  allow_plain_http: bool

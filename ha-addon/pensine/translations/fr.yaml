@@ -11,3 +11,6 @@ configuration:
   public_url:
     name: Adresse publique
     description: L’origine HTTPS de votre proxy lorsque Tailscale est désactivé.
+  allow_plain_http:
+    name: Autoriser HTTP en clair
+    description: Autorise le port 8791 hors de la boucle locale quand Tailscale est désactivé. Utilisez un proxy TLS.

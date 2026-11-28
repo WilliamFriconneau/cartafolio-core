@@ -9,6 +9,7 @@
 
 mod admin;
 mod admin_html;
+mod admission;
 mod config;
 mod error;
 mod html;

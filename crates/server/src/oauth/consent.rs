@@ -36,7 +36,7 @@ impl Authorization {
         let row: Option<(String, String)> = oauth
             .db()?
             .query_row(
-                "SELECT name, redirects FROM oauth_clients WHERE id = ?1",
+                "SELECT name, redirects FROM oauth_clients WHERE id = ?1 AND last_used > unixepoch() - 30 * 86400",
                 [client],
                 |row| Ok((row.get(0)?, row.get(1)?)),
             )

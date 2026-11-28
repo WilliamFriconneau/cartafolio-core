@@ -14,9 +14,11 @@ mod alias;
 mod error;
 mod grant;
 mod key;
+mod operations;
 
 pub use account::{Account, Accounts};
 pub use alias::validate_alias;
 pub use error::AccessError;
 pub use grant::{Grant, Principal};
 pub use key::{Connection, SecretKey};
+pub use operations::AccountOperations;

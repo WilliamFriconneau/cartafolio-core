@@ -2,6 +2,8 @@
 
 #[path = "oauth/admin_invites.rs"]
 mod admin_invites;
+#[path = "oauth/registration.rs"]
+mod registration;
 #[path = "oauth/security.rs"]
 mod security;
 

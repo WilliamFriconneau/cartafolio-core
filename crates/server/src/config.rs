@@ -17,7 +17,20 @@ pub struct Config {
     pub public_url_file: Option<PathBuf>,
     pub data_dir: PathBuf,
     pub max_body: usize,
+    /// End-to-end MCP deadline, including admission and the body. A synchronous
+    /// operation already running can finish after the client receives 504.
+    /// Its account lock and admission permits remain held until it exits.
     pub request_timeout: Duration,
+    /// Maximum time to read an authenticated, admitted MCP body.
+    pub read_timeout: Duration,
+    pub account_lock_timeout: Duration,
+    pub account_in_flight: usize,
+    pub account_queue: usize,
+    pub global_in_flight: usize,
+    pub global_queue: usize,
+    pub oauth_registration_cap: usize,
+    pub oauth_registrations_per_minute: usize,
+    pub file_quota: pensine_store::FileQuota,
     pub admin_listen: Option<SocketAddr>,
     pub admin_trusted_proxy: IpAddr,
 }
@@ -32,6 +45,15 @@ impl Default for Config {
             data_dir: PathBuf::from("data"),
             max_body: DEFAULT_MAX_BODY,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            read_timeout: DEFAULT_REQUEST_TIMEOUT,
+            account_lock_timeout: Duration::from_secs(5),
+            account_in_flight: 4,
+            account_queue: 16,
+            global_in_flight: 64,
+            global_queue: 16,
+            oauth_registration_cap: 200,
+            oauth_registrations_per_minute: 10,
+            file_quota: pensine_store::FileQuota::default(),
             admin_listen: None,
             admin_trusted_proxy: IpAddr::V4(DEFAULT_ADMIN_PROXY),
         }
@@ -45,6 +67,17 @@ struct FileConfig {
     listen: Option<String>,
     #[serde(default)]
     allow_remote: bool,
+    allow_plain_http: Option<bool>,
+    read_timeout: Option<u64>,
+    account_lock_timeout: Option<u64>,
+    account_in_flight: Option<usize>,
+    account_queue: Option<usize>,
+    global_in_flight: Option<usize>,
+    global_queue: Option<usize>,
+    oauth_registration_cap: Option<usize>,
+    oauth_registrations_per_minute: Option<usize>,
+    file_quota_bytes: Option<u64>,
+    file_quota_count: Option<u64>,
     #[serde(default)]
     public_url: Option<String>,
     public_url_file: Option<PathBuf>,
@@ -114,6 +147,11 @@ impl Config {
             })?,
             None => defaults.admin_trusted_proxy,
         };
+        let listen = if file.allow_plain_http == Some(false) && !listen.ip().is_loopback() {
+            SocketAddr::new(Ipv4Addr::LOCALHOST.into(), listen.port())
+        } else {
+            listen
+        };
         Ok(Config {
             listen,
             allow_remote: file.allow_remote,
@@ -125,6 +163,32 @@ impl Config {
                 .request_timeout
                 .map(Duration::from_secs)
                 .unwrap_or(defaults.request_timeout),
+            read_timeout: file
+                .read_timeout
+                .map(Duration::from_secs)
+                .unwrap_or(defaults.read_timeout),
+            account_lock_timeout: file
+                .account_lock_timeout
+                .map(Duration::from_secs)
+                .unwrap_or(defaults.account_lock_timeout),
+            account_in_flight: file.account_in_flight.unwrap_or(defaults.account_in_flight),
+            account_queue: file.account_queue.unwrap_or(defaults.account_queue),
+            global_in_flight: file.global_in_flight.unwrap_or(defaults.global_in_flight),
+            global_queue: file.global_queue.unwrap_or(defaults.global_queue),
+            oauth_registration_cap: file
+                .oauth_registration_cap
+                .unwrap_or(defaults.oauth_registration_cap),
+            oauth_registrations_per_minute: file
+                .oauth_registrations_per_minute
+                .unwrap_or(defaults.oauth_registrations_per_minute),
+            file_quota: pensine_store::FileQuota {
+                max_bytes: file
+                    .file_quota_bytes
+                    .unwrap_or(defaults.file_quota.max_bytes),
+                max_files: file
+                    .file_quota_count
+                    .unwrap_or(defaults.file_quota.max_files),
+            },
             admin_listen,
             admin_trusted_proxy,
         })

@@ -4,12 +4,14 @@ use crate::error::ServerError;
 use crate::oauth::{InvitationRights, OAuth};
 use crate::texts::{for_request, Texts};
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Extension, Form, Request, State};
-use axum::http::{HeaderMap, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
+use hmac::{Hmac, Mac};
 use pensine_access::{AccessError, Account, Accounts, Grant};
+use sha2::Sha256;
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -22,6 +24,7 @@ pub(crate) struct AdminState {
     pub trusted_proxy: IpAddr,
     pub data_dir: PathBuf,
     pub config: Config,
+    pub csrf_secret: [u8; 32],
     pub version: &'static str,
 }
 
@@ -37,6 +40,7 @@ pub(crate) fn router(state: AdminState) -> Router {
         .route("/status", get(admin_page))
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), admin_guard))
+        .layer(middleware::from_fn(admin_headers))
         .with_state(state)
 }
 
@@ -58,6 +62,14 @@ async fn admin_guard(
     let Some(ha_id) = ha_id else {
         return StatusCode::FORBIDDEN.into_response();
     };
+    if request.method() == Method::POST && !same_origin(&headers) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let Ok(mut mac) = Hmac::<Sha256>::new_from_slice(&state.csrf_secret) else {
+        return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+    };
+    mac.update(ha_id.as_bytes());
+    let csrf = format!("{:x}", mac.finalize().into_bytes());
     let name = headers
         .get("x-remote-user-name")
         .and_then(|value| std::str::from_utf8(value.as_bytes()).ok())
@@ -72,6 +84,8 @@ async fn admin_guard(
             };
             request.extensions_mut().insert(AdminUser {
                 account,
+                csrf,
+                secure_cookie: forwarded_https(&headers),
                 user,
                 texts: for_request(&headers),
             });
@@ -87,6 +101,8 @@ async fn admin_guard(
 #[derive(Clone)]
 struct AdminUser {
     account: Account,
+    csrf: String,
+    secure_cookie: bool,
     user: String,
     texts: &'static Texts,
 }
@@ -106,7 +122,7 @@ async fn connections_create(
     headers: HeaderMap,
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
-    if !csrf_matches(&headers, &fields) {
+    if !csrf_matches(&headers, &fields, &user.csrf) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let name = fields.get("name").map_or("", |name| name.trim());
@@ -151,7 +167,7 @@ async fn connection_revoke(
     headers: HeaderMap,
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
-    if !csrf_matches(&headers, &fields) {
+    if !csrf_matches(&headers, &fields, &user.csrf) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let id = fields.get("id").map_or("", String::as_str);
@@ -167,7 +183,7 @@ async fn oauth_invite(
     headers: HeaderMap,
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
-    if !csrf_matches(&headers, &fields) {
+    if !csrf_matches(&headers, &fields, &user.csrf) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let Some(rights) = invitation_rights(&user.account, &fields)? else {
@@ -190,7 +206,7 @@ async fn oauth_revoke(
     headers: HeaderMap,
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
-    if !csrf_matches(&headers, &fields) {
+    if !csrf_matches(&headers, &fields, &user.csrf) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let id = fields.get("id").map_or("", String::as_str);
@@ -206,7 +222,7 @@ async fn alias_change(
     headers: HeaderMap,
     Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
-    if !csrf_matches(&headers, &fields) {
+    if !csrf_matches(&headers, &fields, &user.csrf) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let alias = fields.get("alias").map_or("", String::as_str);
@@ -238,7 +254,9 @@ fn render(
         sessions: &state.oauth.sessions(id)?,
         spaces: &user.account.store.spaces()?,
         version: state.version,
-        data_dir: &state.data_dir,
+        data_dir: &state.data_dir.join("accounts").join(id).join("blobs"),
+        csrf: &user.csrf,
+        secure_cookie: user.secure_cookie,
         fields,
         feedback,
     })
@@ -291,4 +309,54 @@ fn legacy_key_grants(
 
 fn checked(fields: &Fields, name: &str) -> bool {
     fields.get(name).is_some_and(|value| value == "1")
+}
+
+async fn admin_headers(request: Request, next: Next) -> Response {
+    let mut response = next.run(request).await;
+    let headers = response.headers_mut();
+    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    headers.insert(header::PRAGMA, HeaderValue::from_static("no-cache"));
+    headers.insert(
+        header::X_FRAME_OPTIONS,
+        HeaderValue::from_static("SAMEORIGIN"),
+    );
+    headers
+        .entry(header::CONTENT_SECURITY_POLICY)
+        .or_insert(HeaderValue::from_static("frame-ancestors 'self'"));
+    response
+}
+
+fn forwarded_https(headers: &HeaderMap) -> bool {
+    headers
+        .get("x-forwarded-proto")
+        .is_some_and(|value| value == "https")
+}
+
+fn same_origin(headers: &HeaderMap) -> bool {
+    let Some(source) = headers
+        .get(header::ORIGIN)
+        .or_else(|| headers.get(header::REFERER))
+    else {
+        return true;
+    };
+    let Some(source) = source
+        .to_str()
+        .ok()
+        .and_then(|source| url::Url::parse(source).ok())
+    else {
+        return false;
+    };
+    // The ingress peer is checked before interpreting forwarded headers.
+    let host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get(header::HOST));
+    let scheme = if forwarded_https(headers) {
+        "https"
+    } else {
+        "http"
+    };
+    let expected = host
+        .and_then(|host| host.to_str().ok())
+        .and_then(|host| url::Url::parse(&format!("{scheme}://{host}")).ok());
+    expected.is_some_and(|expected| expected.origin() == source.origin())
 }

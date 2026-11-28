@@ -1,5 +1,8 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "admin/security.rs"]
+mod security;
+
 use pensine_access::Accounts;
 use pensine_server::{Config, Handle, Server};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};

@@ -11,3 +11,6 @@ configuration:
   public_url:
     name: Public address
     description: The HTTPS origin of your proxy when Tailscale is off.
+  allow_plain_http:
+    name: Allow plain HTTP
+    description: Allow port 8791 to listen outside loopback when Tailscale is off. Use a TLS proxy.

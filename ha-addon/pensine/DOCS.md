@@ -33,10 +33,12 @@ Copy the key when it appears and set it as the client's bearer token.
 | `tailscale` | Starts an independent Tailscale node and Funnel. On by default. |
 | `tailscale_hostname` | The node name in your tailnet. Defaults to `pensine`. |
 | `tailscale_authkey` | Optional key for joining the tailnet without manual approval. |
+| `allow_plain_http` | Allows a non-loopback HTTP listener when Tailscale is off. Off by default. |
 | `public_url` | HTTPS origin of your own proxy when Tailscale is off. |
 
-With Tailscale off, enable port 8791 in the add-on's Network tab and put a TLS
-proxy in front of it. Tokens travel in clear on port 8791.
+With Tailscale off, set `allow_plain_http: true`, enable port 8791 in the
+add-on's Network tab, and put a TLS proxy in front of it. The option defaults
+to false and keeps Pensine on loopback. Tokens travel in clear on port 8791.
 
 ## Backups
 

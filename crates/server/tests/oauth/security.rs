@@ -36,7 +36,7 @@ async fn the_consent_page_escapes_every_value() {
     // Registration generates URL-safe IDs, so seed a client to exercise escaping of its ID.
     let db = rusqlite::Connection::open(env.dir.path().join("oauth.db")).unwrap();
     db.execute(
-        "INSERT INTO oauth_clients (id, name, redirects) VALUES (?1, ?2, ?3)",
+        "INSERT INTO oauth_clients (id, name, redirects, last_used) VALUES (?1, ?2, ?3, unixepoch())",
         (client, name, json!([redirect]).to_string()),
     )
     .unwrap();

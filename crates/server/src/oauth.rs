@@ -1,4 +1,5 @@
 mod consent;
+mod registration;
 mod routes;
 mod token;
 
@@ -11,9 +12,9 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use pensine_access::validate_alias;
-use pensine_access::{Accounts, Connection, Grant, Principal};
+use pensine_access::{Accounts, Principal};
 use rand::{rngs::OsRng, TryRngCore};
-use rusqlite::{Connection as Database, OptionalExtension, TransactionBehavior};
+use rusqlite::{Connection as Database, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
@@ -34,6 +35,7 @@ type Result<T> = std::result::Result<T, OAuthError>;
 pub(crate) struct OAuth {
     accounts: Arc<Accounts>,
     db: Mutex<Database>,
+    registration_rate: registration::RegistrationRate,
     config: Config,
     fallback_issuer: String,
 }
@@ -51,6 +53,11 @@ impl OAuth {
         {
             return Err(ServerError::Invalid(
                 "public_url must be an HTTPS or loopback origin".into(),
+            ));
+        }
+        if config.oauth_registration_cap > 200 {
+            return Err(ServerError::Invalid(
+                "OAuth registration cap cannot exceed 200".into(),
             ));
         }
         let mut db = Database::open(config.data_dir.join("oauth.db")).map_err(db_error)?;
@@ -109,10 +116,12 @@ impl OAuth {
             tx.execute("ALTER TABLE oauth_invites ADD COLUMN rights TEXT", [])
                 .map_err(db_error)?;
         }
+        registration::migrate(&tx, config.oauth_registration_cap).map_err(db_error)?;
         tx.commit().map_err(db_error)?;
         Ok(Self {
             accounts,
             db: Mutex::new(db),
+            registration_rate: registration::RegistrationRate::default(),
             config,
             fallback_issuer,
         })
@@ -165,42 +174,6 @@ impl OAuth {
         )
         .map_err(db_error)?;
         Ok(invite)
-    }
-
-    fn principal(&self, bearer: &str) -> Result<Option<Principal>> {
-        let scope = self
-            .db()?
-            .query_row(
-                "SELECT scope FROM oauth_sessions WHERE access_hash = ?1 AND access_until > unixepoch()",
-                [hash(bearer)],
-                |row| row.get::<_, String>(0),
-            )
-            .optional()?;
-        let Some(scope) = scope else {
-            return Ok(None);
-        };
-        let scope: Scope = serde_json::from_str(&scope)?;
-        let account = self
-            .accounts
-            .account(&scope.account)
-            .map_err(ServerError::from)?;
-        let connection = Connection {
-            id: scope.id,
-            account: scope.account,
-            name: scope.name,
-            grants: scope
-                .spaces
-                .into_iter()
-                .map(|space| Grant {
-                    space,
-                    write: !scope.read_only,
-                })
-                .collect(),
-            read_only: scope.read_only,
-        };
-        Ok(Some(
-            Principal::new(account, connection).map_err(ServerError::from)?,
-        ))
     }
 
     pub(crate) fn sessions(
@@ -359,6 +332,7 @@ fn invite_selector(value: &str) -> Option<[u8; 32]> {
 enum OAuthError {
     BadRequest(&'static str),
     Forbidden,
+    RegistrationCapacity,
     Internal,
 }
 
@@ -366,6 +340,9 @@ impl IntoResponse for OAuthError {
     fn into_response(self) -> Response {
         let (status, error) = match self {
             Self::BadRequest(error) => (StatusCode::BAD_REQUEST, error),
+            Self::RegistrationCapacity => {
+                (StatusCode::SERVICE_UNAVAILABLE, "registration_capacity")
+            }
             Self::Forbidden => (StatusCode::FORBIDDEN, "access_denied"),
             Self::Internal => (StatusCode::INTERNAL_SERVER_ERROR, "server_error"),
         };

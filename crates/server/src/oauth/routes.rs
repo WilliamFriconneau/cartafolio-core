@@ -15,7 +15,13 @@ use std::sync::Arc;
 
 pub(crate) fn routes(oauth: Arc<OAuth>) -> Router {
     Router::new()
-        .route("/register", post(register))
+        .route(
+            "/register",
+            post(register).layer(middleware::from_fn_with_state(
+                oauth.clone(),
+                super::registration::limit,
+            )),
+        )
         .route("/authorize", get(authorize).post(consent))
         .route("/token", post(token))
         .route_layer(middleware::from_fn(oauth_no_store))
@@ -104,10 +110,7 @@ async fn register(
         .client_name
         .unwrap_or_else(|| "OAuth client".into());
     let id = random_secret()?;
-    oauth.db()?.execute(
-        "INSERT INTO oauth_clients VALUES (?1, ?2, ?3)",
-        (&id, &name, serde_json::to_string(&redirects)?),
-    )?;
+    oauth.register_client(&id, &name, &redirects)?;
     Ok((
         StatusCode::CREATED,
         Json(json!({

@@ -40,6 +40,7 @@ start_funnel() {
     bashio::log.info "Pensine public address: https://$dns"
 }
 
+allow_plain_http=false
 if bashio::config.true 'tailscale'; then
     socket=/var/run/tailscale/tailscaled.sock
     mkdir -p /data/tailscale /var/run/tailscale
@@ -51,6 +52,15 @@ if bashio::config.true 'tailscale'; then
 else
     listen=0.0.0.0:8791
     allow_remote=true
+    exposed_port=$(bashio::addon.port '8791/tcp' || true)
+    if [ -n "$exposed_port" ] && [ "$exposed_port" != null ]; then
+        if bashio::config.true 'allow_plain_http'; then
+            allow_plain_http=true
+            bashio::log.warning "Port 8791 serves plain HTTP. Use a TLS proxy to protect credentials in transit."
+        else
+            bashio::log.warning "Port 8791 is mapped but Pensine listens only on loopback. Enable allow_plain_http to opt in."
+        fi
+    fi
     public_url=
     if bashio::config.has_value 'public_url'; then
         public_url=$(bashio::config 'public_url')
@@ -59,6 +69,7 @@ fi
 
 {
     printf 'listen = "%s"\n' "$listen"
+    printf 'allow_plain_http = %s\n' "$allow_plain_http"
     printf 'allow_remote = %s\n' "$allow_remote"
     printf 'public_url_file = "%s"\n' "$address_file"
     if [ -n "$public_url" ]; then

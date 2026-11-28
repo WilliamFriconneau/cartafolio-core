@@ -1,6 +1,6 @@
 use crate::texts;
 use crate::{schema::TOOLS, tools::Scope, Mcp};
-use pensine_access::{AccessError, Principal};
+use pensine_access::{AccessError, AccountOperations, Principal};
 use pensine_store::StoreError;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -44,17 +44,32 @@ impl From<AccessError> for ToolError {
 pub(crate) type Result<T> = std::result::Result<T, ToolError>;
 
 impl Mcp {
-    pub(crate) fn call(&self, principal: &Principal, name: &str, args: Value) -> Result<Value> {
+    pub(crate) fn call(
+        &self,
+        principal: &Principal,
+        name: &str,
+        args: Value,
+        operations: Option<&AccountOperations>,
+    ) -> Result<Value> {
         let tool = TOOLS
             .iter()
             .find(|tool| tool.name == name)
             .ok_or_else(|| ToolError::Message(texts::UNKNOWN_TOOL.into()))?;
         tool.validate(&args)?;
-        let account = self.accounts.account(&principal.account)?;
-        if !principal.belongs_to(&account) {
+        let owned;
+        let account = match operations {
+            Some(guard) => guard.account(),
+            None => {
+                owned = self
+                    .accounts
+                    .account(&principal.account)?
+                    .lock_operations()?;
+                owned.account()
+            }
+        };
+        if !principal.belongs_to(account) {
             return Err(StoreError::NotFound.into());
         }
-        let _operations = account.lock_operations()?;
         let scope = Scope {
             principal,
             store: &account.store,
@@ -152,7 +167,8 @@ impl Mcp {
             "connection": principal.connection,
             "read_only": principal.read_only(),
             "grants": grants,
-            "visible_spaces": scope.spaces()?.len()
+            "visible_spaces": scope.spaces()?.len(),
+            "file_storage": scope.store.file_storage()?
         }))
     }
 }

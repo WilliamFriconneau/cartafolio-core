@@ -1,6 +1,6 @@
 use crate::alias::{backfill_aliases, insert_default_alias, validate_alias};
 use crate::AccessError;
-use pensine_store::Store;
+use pensine_store::{FileQuota, Store, StoreOptions};
 use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -41,24 +41,22 @@ const MIGRATIONS: &[&str] = &[
 pub struct Account {
     pub id: String,
     pub store: Arc<Store>,
-    operations: Arc<Mutex<()>>,
-}
-
-impl Account {
-    /// Serializes operations that resolve permissions and then use the result.
-    pub fn lock_operations(&self) -> Result<MutexGuard<'_, ()>, AccessError> {
-        self.operations.lock().map_err(|_| AccessError::Conflict)
-    }
+    pub(crate) operations: Arc<crate::operations::Operations>,
 }
 
 pub struct Accounts {
     root: PathBuf,
+    file_quota: FileQuota,
     writer: Mutex<Connection>,
     cache: Mutex<HashMap<String, Account>>,
 }
 
 impl Accounts {
     pub fn open(root: &Path) -> Result<Self, AccessError> {
+        Self::open_with_file_quota(root, FileQuota::default())
+    }
+
+    pub fn open_with_file_quota(root: &Path, file_quota: FileQuota) -> Result<Self, AccessError> {
         fs::create_dir_all(root.join("accounts"))?;
         let root = root.canonicalize()?;
         let mut db = Connection::open(root.join("access.db"))?;
@@ -73,6 +71,7 @@ impl Accounts {
         migrate(&mut db)?;
         Ok(Self {
             root,
+            file_quota,
             writer: Mutex::new(db),
             cache: Mutex::new(HashMap::new()),
         })
@@ -231,7 +230,11 @@ impl Accounts {
     fn open_account(&self, id: &str) -> Result<Account, AccessError> {
         Ok(Account {
             id: id.into(),
-            store: Arc::new(Store::open(&self.root.join("accounts").join(id))?),
+            store: Arc::new(Store::open_with_quota(
+                &self.root.join("accounts").join(id),
+                StoreOptions::default(),
+                self.file_quota,
+            )?),
             operations: Arc::default(),
         })
     }

@@ -66,22 +66,57 @@ impl Store {
         // Keep the staging file protected until it is persisted or dropped.
         let staging_lock = self.blob_staging_lock()?;
         staging_lock.lock_shared()?;
-        let (temp, size, sha256) = stage(&self.blobs, new.reader, limit)?;
+        // Serialize reservations across Store handles and processes until commit.
+        let _reservation = self.reserve_upload()?;
+        let usage = self.file_storage()?;
+        let has_room = usage.can_reserve(limit);
+        let (temp, size, sha256) = if has_room {
+            stage(&self.blobs, new.reader, limit)?
+        } else if if_absent {
+            // At quota, an exact replay may repair a blob already charged to this account.
+            let Some(replay_limit) = self.replay_size_limit(&new.space, &new.name)? else {
+                return Err(crate::quota::exceeded());
+            };
+            let limit = limit.min(replay_limit);
+            let mut bytes = Vec::new();
+            new.reader.take(limit + 1).read_to_end(&mut bytes)?;
+            if bytes.len() as u64 > limit {
+                return Err(crate::quota::exceeded());
+            }
+            let hash = format!("{:x}", Sha256::digest(&bytes));
+            let reader = self.reader()?;
+            let Some(file) = existing_file(&reader, &new.space, &new.name, &hash)? else {
+                return Err(crate::quota::exceeded());
+            };
+            if blob_path(&self.blobs, &hash)?.try_exists()? {
+                return Ok(file);
+            }
+            drop(reader);
+            stage(&self.blobs, bytes.as_slice(), limit)?
+        } else {
+            return Err(crate::quota::exceeded());
+        };
         let path = blob_path(&self.blobs, &sha256)?;
         let created_at = validate_time(None)?;
-        self.write(|tx| {
+        temp.as_file().sync_all()?;
+        #[cfg(test)]
+        self.durability_events.lock().unwrap().push("blob");
+        let shard = path
+            .parent()
+            .ok_or_else(|| StoreError::Invalid("Invalid blob path".into()))?;
+        fs::create_dir_all(shard)?;
+        let mut temp = if path.try_exists()? { None } else { Some(temp) };
+        let result = self.write(|tx| {
+            #[cfg(test)]
+            self.durability_events.lock().unwrap().push("transaction");
             if if_absent {
-                let existing = tx.query_row(
-                    &format!(
-                        "SELECT {COLUMNS} FROM files WHERE space = ?1 AND name = ?2
-                         AND sha256 = ?3 AND status = 'active' ORDER BY rowid LIMIT 1"
-                    ),
-                    params![new.space, new.name, sha256],
-                    file_from_row,
-                ).optional()?;
-                if let Some(file) = existing {
+                if let Some(file) = existing_file(tx, &new.space, &new.name, &sha256)? {
+                    self.persist_blob(&mut temp, &path, shard)?;
                     return Ok(file);
                 }
+            }
+            if !has_room {
+                return Err(crate::quota::exceeded());
             }
             let file = tx.query_row(
                 &format!(
@@ -92,15 +127,41 @@ impl Store {
                 params![new.space, new.name, new.mime, size, sha256, new.note, created_at],
                 file_from_row,
             )?;
-            if !path.try_exists()? {
-                if let Some(parent) = path.parent() {
-                    fs::create_dir_all(parent)?;
-                }
-                temp.as_file().sync_all()?;
-                temp.persist(&path).map_err(|err| err.error)?;
-            }
+            self.persist_blob(&mut temp, &path, shard)?;
             Ok(file)
-        })
+        });
+        #[cfg(test)]
+        if result.is_ok() {
+            self.durability_events.lock().unwrap().push("commit");
+        }
+        result
+    }
+
+    fn replay_size_limit(&self, space: &str, name: &str) -> Result<Option<u64>, StoreError> {
+        Ok(self.reader()?.query_row(
+            "SELECT MAX(size) FROM files WHERE space = ?1 AND name = ?2 AND status = 'active'",
+            (space, name),
+            |row| row.get(0),
+        )?)
+    }
+
+    fn persist_blob(
+        &self,
+        temp: &mut Option<NamedTempFile>,
+        path: &Path,
+        shard: &Path,
+    ) -> Result<(), StoreError> {
+        if let Some(temp) = temp.take() {
+            temp.persist(path).map_err(|err| err.error)?;
+        }
+        // Also sync an existing path left by an interrupted upload.
+        fs::File::open(shard)?.sync_all()?;
+        #[cfg(test)]
+        self.durability_events.lock().unwrap().push("shard");
+        fs::File::open(&self.blobs)?.sync_all()?;
+        #[cfg(test)]
+        self.durability_events.lock().unwrap().push("blobs");
+        Ok(())
     }
 
     pub fn file_get(&self, id: &str) -> Result<(FileInfo, PathBuf), StoreError> {
@@ -189,6 +250,8 @@ impl Store {
         })?;
         // Commit the retirement before deleting bytes, then recheck under the write lock.
         // A retry can finish cleanup if removing the blob failed.
+        let staging_lock = self.blob_staging_lock()?;
+        staging_lock.lock()?;
         self.write(|tx| {
             let still_active = tx.query_row(
                 "SELECT EXISTS(SELECT 1 FROM files WHERE sha256 = ?1 AND status = 'active')",
@@ -205,6 +268,24 @@ impl Store {
             Ok(())
         })
     }
+}
+
+fn existing_file(
+    db: &rusqlite::Connection,
+    space: &str,
+    name: &str,
+    sha256: &str,
+) -> Result<Option<FileInfo>, StoreError> {
+    Ok(db
+        .query_row(
+            &format!(
+                "SELECT {COLUMNS} FROM files WHERE space = ?1 AND name = ?2
+                 AND sha256 = ?3 AND status = 'active' ORDER BY rowid LIMIT 1"
+            ),
+            (space, name, sha256),
+            file_from_row,
+        )
+        .optional()?)
 }
 
 pub(crate) fn validate_name(name: &str) -> Result<(), StoreError> {

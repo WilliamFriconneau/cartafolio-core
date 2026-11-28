@@ -1,5 +1,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "http/availability.rs"]
+mod availability;
 #[path = "http/public_address.rs"]
 mod public_address;
 

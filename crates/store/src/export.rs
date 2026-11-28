@@ -17,10 +17,15 @@ impl Store {
             return Err(invalid_path());
         }
         let out = out.canonicalize()?;
-        self.write(|tx| {
-            export_facts(tx, &out)?;
-            export_files(tx, &out, &self.blobs)
-        })
+        // Keep blobs referenced by the read snapshot available until copying finishes.
+        let staging_lock = self.blob_staging_lock()?;
+        staging_lock.lock_shared()?;
+        let reader = self.reader()?;
+        let snapshot = reader.unchecked_transaction()?;
+        export_facts(&snapshot, &out)?;
+        export_files(&snapshot, &out, &self.blobs)?;
+        snapshot.commit()?;
+        Ok(())
     }
 }
 

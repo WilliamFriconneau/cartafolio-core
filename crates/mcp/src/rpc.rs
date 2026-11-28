@@ -1,6 +1,6 @@
 use crate::texts;
 use crate::{schema, Mcp};
-use pensine_access::Principal;
+use pensine_access::{AccountOperations, Principal};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -17,6 +17,24 @@ fn empty_arguments() -> Value {
 
 impl Mcp {
     pub fn handle(&self, principal: &Principal, request: Value) -> Value {
+        self.handle_inner(principal, request, None)
+    }
+
+    pub fn handle_admitted(
+        &self,
+        principal: &Principal,
+        request: Value,
+        operations: &AccountOperations,
+    ) -> Value {
+        self.handle_inner(principal, request, Some(operations))
+    }
+
+    fn handle_inner(
+        &self,
+        principal: &Principal,
+        request: Value,
+        operations: Option<&AccountOperations>,
+    ) -> Value {
         let Some(object) = request.as_object() else {
             return rpc_error(&Value::Null, -32600, texts::INVALID_REQUEST);
         };
@@ -47,7 +65,7 @@ impl Mcp {
                 let Ok(call) = serde_json::from_value::<Call>(request["params"].clone()) else {
                     return rpc_error(id, -32602, texts::INVALID_PARAMS);
                 };
-                match self.call(principal, &call.name, call.arguments) {
+                match self.call(principal, &call.name, call.arguments, operations) {
                     Ok(result) => content(false, result.to_string()),
                     Err(error) => content(true, error.to_string()),
                 }

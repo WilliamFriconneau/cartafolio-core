@@ -1,6 +1,6 @@
 use super::{
-    field, hash, random_secret, resource_matches, Fields, OAuth, OAuthError, Result, ACCESS_TTL,
-    REFRESH_TTL,
+    field, hash, random_secret, registration::touch, resource_matches, Fields, OAuth, OAuthError,
+    Result, ACCESS_TTL, REFRESH_TTL,
 };
 use axum::extract::{Form, State};
 use axum::response::{IntoResponse, Response};
@@ -56,6 +56,9 @@ pub(super) async fn token(
         }
         _ => return Err(OAuthError::BadRequest("unsupported_grant_type")),
     };
+    if touch(&tx, client)? == 0 {
+        return Err(OAuthError::BadRequest("invalid_grant"));
+    }
     let access = random_secret()?;
     let refresh = random_secret()?;
     let expired = tx.execute(
@@ -135,4 +138,56 @@ fn prune_rotated_refreshes(tx: &Transaction<'_>) -> Result<()> {
         [],
     )?;
     Ok(())
+}
+
+impl OAuth {
+    pub(super) fn principal(&self, bearer: &str) -> Result<Option<pensine_access::Principal>> {
+        use pensine_access::{Connection, Grant, Principal};
+        let db = self.db()?;
+        let session = db
+            .query_row(
+                "SELECT session.scope, session.client, client.last_used < unixepoch()
+             FROM oauth_sessions session JOIN oauth_clients client ON client.id = session.client
+             WHERE session.access_hash = ?1 AND session.access_until > unixepoch()
+               AND client.last_used > unixepoch() - 30 * 86400",
+                [hash(bearer)],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, bool>(2)?,
+                    ))
+                },
+            )
+            .optional()?;
+        let Some((scope, client, needs_touch)) = session else {
+            return Ok(None);
+        };
+        if needs_touch && touch(&db, &client)? == 0 {
+            return Ok(None);
+        }
+        drop(db);
+        let scope: super::Scope = serde_json::from_str(&scope)?;
+        let account = self
+            .accounts
+            .account(&scope.account)
+            .map_err(crate::ServerError::from)?;
+        let connection = Connection {
+            id: scope.id,
+            account: scope.account,
+            name: scope.name,
+            grants: scope
+                .spaces
+                .into_iter()
+                .map(|space| Grant {
+                    space,
+                    write: !scope.read_only,
+                })
+                .collect(),
+            read_only: scope.read_only,
+        };
+        Ok(Some(
+            Principal::new(account, connection).map_err(crate::ServerError::from)?,
+        ))
+    }
 }

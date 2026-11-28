@@ -286,7 +286,7 @@ impl Scope<'_> {
                 .mime
                 .unwrap_or_else(|| "application/octet-stream".into()),
             reader: bytes.as_slice(),
-            max_size: u64::MAX,
+            max_size: bytes.len() as u64,
             note: input.note,
         };
         if input.if_absent == Some(true) {

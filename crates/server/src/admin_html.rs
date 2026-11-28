@@ -63,6 +63,8 @@ pub(super) struct Dashboard<'a> {
     pub sessions: &'a [SessionInfo],
     pub spaces: &'a [SpaceInfo],
     pub version: &'a str,
+    pub csrf: &'a str,
+    pub secure_cookie: bool,
     pub data_dir: &'a Path,
     pub fields: Option<&'a HashMap<String, String>>,
     pub feedback: Feedback<'a>,
@@ -83,7 +85,7 @@ impl Dashboard<'_> {
 }
 
 pub(super) fn dashboard(view: Dashboard<'_>) -> Result<Response, ServerError> {
-    let csrf = random_token()?;
+    let csrf = view.csrf;
     let nonce = random_token()?;
     let t = view.texts;
     let address = view
@@ -93,8 +95,8 @@ pub(super) fn dashboard(view: Dashboard<'_>) -> Result<Response, ServerError> {
         || format!("<p>{}</p>", t.no_public),
         |url| address_line(t.address, url, t),
     );
-    let guide = guide::render(&view, &csrf, address.as_deref());
-    let sections = sections::render(&view, &csrf);
+    let guide = guide::render(&view, csrf, address.as_deref());
+    let sections = sections::render(&view, csrf);
     let error = match view.feedback {
         Feedback::Error(message) => format!("<p role=\"alert\">{message}</p>"),
         _ => String::new(),
@@ -113,23 +115,23 @@ pub(super) fn dashboard(view: Dashboard<'_>) -> Result<Response, ServerError> {
     };
     let mut response = (status, Html(html)).into_response();
     let headers = response.headers_mut();
+    let secure = if view.secure_cookie { "; Secure" } else { "" };
     headers.insert(
         header::SET_COOKIE,
         header_value(&format!(
-            "{CSRF_COOKIE}={csrf}; Path=/; HttpOnly; SameSite=Strict"
+            "{CSRF_COOKIE}={csrf}; Path=/; HttpOnly; SameSite=Strict{secure}"
         ))?,
     );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
         header_value(&format!(
-        "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; base-uri 'none'"
+        "default-src 'none'; script-src 'nonce-{nonce}'; style-src 'nonce-{nonce}'; base-uri 'none'; frame-ancestors 'self'"
     ))?,
     );
     headers.insert(
         header::REFERRER_POLICY,
         HeaderValue::from_static("no-referrer"),
     );
-    headers.insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
     Ok(response)
 }
 
@@ -166,12 +168,19 @@ fn random_token() -> Result<String, ServerError> {
     Ok(token)
 }
 
-pub(super) fn csrf_matches(headers: &HeaderMap, fields: &HashMap<String, String>) -> bool {
+pub(super) fn csrf_matches(
+    headers: &HeaderMap,
+    fields: &HashMap<String, String>,
+    expected: &str,
+) -> bool {
     match (
         cookie_value(headers, CSRF_COOKIE),
         fields.get("csrf").map(String::as_str),
     ) {
-        (Some(cookie), Some(field)) => !cookie.is_empty() && cookie == field,
+        (Some(cookie), Some(field)) => bool::from(
+            subtle::ConstantTimeEq::ct_eq(cookie.as_bytes(), expected.as_bytes())
+                & subtle::ConstantTimeEq::ct_eq(field.as_bytes(), expected.as_bytes()),
+        ),
         _ => false,
     }
 }

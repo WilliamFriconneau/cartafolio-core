@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use pensine_store::{ListQuery, NewFile, Store, StoreError, StoreOptions};
+use pensine_store::{FileQuota, ListQuery, NewFile, Store, StoreError, StoreOptions};
 use std::cell::Cell;
 use std::fs;
 use std::io::{self, Read};
@@ -190,4 +190,50 @@ fn sweeps_unreferenced_blobs_and_staging_files() {
     assert!(!orphan.exists() && !temp.exists());
     assert!(live_path.exists() && unrelated.exists());
     assert!(store.sweep_blobs(false).unwrap().orphans.is_empty());
+}
+
+#[test]
+fn if_absent_replay_restages_a_missing_blob() {
+    let (_dir, store) = store();
+    let saved = store.file_put_if_absent(file("replay.txt")).unwrap();
+    let (_, path) = store.file_get(&saved.id).unwrap();
+    fs::remove_file(&path).unwrap();
+    assert_eq!(store.file_put_if_absent(file("replay.txt")).unwrap(), saved);
+    assert_eq!(fs::read(path).unwrap(), b"abc");
+}
+
+#[test]
+fn a_file_over_the_account_quota_is_refused_before_staging() {
+    for quota in [
+        FileQuota {
+            max_bytes: 3,
+            max_files: 2,
+        },
+        FileQuota {
+            max_bytes: 10,
+            max_files: 1,
+        },
+    ] {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::open_with_quota(dir.path(), StoreOptions::default(), quota).unwrap();
+        store.space_create("notes", "Notes", None).unwrap();
+        let saved = store.file_put(file("first.txt")).unwrap();
+        let bytes = Cell::new(0);
+        let refused = store.file_put(NewFile {
+            reader: CountingReader(&bytes),
+            max_size: 3,
+            space: "notes".into(),
+            name: "unwritten.txt".into(),
+            mime: "text/plain".into(),
+            note: None,
+        });
+        assert!(matches!(refused, Err(StoreError::Invalid(message)) if message.contains("quota")));
+        assert_eq!(bytes.get(), 0);
+        assert_eq!(fs::read_dir(dir.path().join("blobs")).unwrap().count(), 1);
+
+        let (_, path) = store.file_get(&saved.id).unwrap();
+        fs::remove_file(&path).unwrap();
+        assert_eq!(store.file_put_if_absent(file("first.txt")).unwrap(), saved);
+        assert_eq!(fs::read(path).unwrap(), b"abc");
+    }
 }

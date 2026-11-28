@@ -8,6 +8,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used))]
 
 #[cfg(test)]
+mod durability_tests;
+#[cfg(test)]
 mod open_tests;
 #[cfg(test)]
 mod search_tests;
@@ -18,6 +20,7 @@ mod fact;
 mod file;
 mod list;
 mod pin;
+mod quota;
 mod schema;
 mod search;
 mod space;
@@ -29,6 +32,7 @@ pub use error::StoreError;
 pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};
 pub use file::{FileInfo, FileStatus, NewFile};
 pub use list::{ListQuery, OriginAliases, Page};
+pub use quota::{FileQuota, FileStorage};
 pub use search::{Hit, RecallQuery};
 pub use space::SpaceInfo;
 pub use sweep::BlobSweep;
@@ -57,9 +61,12 @@ pub struct Store {
     blobs: PathBuf,
     staging_lock_path: PathBuf,
     options: StoreOptions,
+    quota: FileQuota,
     writer: Mutex<Connection>,
     readers: [Mutex<Connection>; 2],
     schema_version: u32,
+    #[cfg(test)]
+    durability_events: Mutex<Vec<&'static str>>,
 }
 
 impl Store {
@@ -68,6 +75,14 @@ impl Store {
     }
 
     pub fn open_with(dir: &Path, options: StoreOptions) -> Result<Self, StoreError> {
+        Self::open_with_quota(dir, options, FileQuota::default())
+    }
+
+    pub fn open_with_quota(
+        dir: &Path,
+        options: StoreOptions,
+        quota: FileQuota,
+    ) -> Result<Self, StoreError> {
         let blobs = dir.join("blobs");
         fs::create_dir_all(&blobs)?;
         let blobs = blobs.canonicalize()?;
@@ -93,9 +108,12 @@ impl Store {
             blobs,
             staging_lock_path: dir.canonicalize()?.join(".blob-sweep-lock"),
             options,
+            quota,
             writer: Mutex::new(writer),
             readers: [open_reader()?, open_reader()?],
             schema_version,
+            #[cfg(test)]
+            durability_events: Mutex::default(),
         })
     }
 
