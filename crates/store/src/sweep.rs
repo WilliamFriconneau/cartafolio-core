@@ -21,6 +21,17 @@ impl Store {
 
     /// Reports orphan blobs and interrupted uploads, optionally removing them.
     pub fn sweep_blobs(&self, fix: bool) -> Result<BlobSweep, StoreError> {
+        self.sweep(fix, fix)
+    }
+
+    /// What a server may do on its own at startup: remove interrupted uploads (temporary files) and REPORT orphan
+    /// blobs without deleting them. An orphan is only disk space, while deleting blobs on a wrong guess (a database
+    /// restored empty, a wrong folder) would lose files for good: removing orphans is an explicit operator action.
+    pub fn recover_interrupted(&self) -> Result<BlobSweep, StoreError> {
+        self.sweep(false, true)
+    }
+
+    fn sweep(&self, remove_orphans: bool, remove_temporary: bool) -> Result<BlobSweep, StoreError> {
         // Acquire the staging lock before the database lock, as uploads do.
         let staging_lock = self.blob_staging_lock()?;
         staging_lock.lock()?;
@@ -46,8 +57,13 @@ impl Store {
             }
             report.orphans.sort_unstable();
             report.temporary.sort_unstable();
-            if fix {
-                for path in report.orphans.iter().chain(&report.temporary) {
+            if remove_orphans {
+                for path in &report.orphans {
+                    fs::remove_file(path)?;
+                }
+            }
+            if remove_temporary {
+                for path in &report.temporary {
                     fs::remove_file(path)?;
                 }
             }

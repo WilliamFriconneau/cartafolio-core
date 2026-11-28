@@ -81,6 +81,19 @@ impl Server {
         if let Some(oauth) = &oauth {
             authenticators.push(oauth.clone());
         }
+        if let Some(accounts) = &accounts {
+            // Remove uploads interrupted before their rename, and only report orphan blobs (a crash between SQLite
+            // and the filesystem leaves some): deleting files at startup on a guess is never worth the risk.
+            for (id, _) in accounts.account_list()? {
+                let report = accounts.account(&id)?.store.recover_interrupted()?;
+                if !report.orphans.is_empty() {
+                    tracing::warn!(
+                        orphans = report.orphans.len(),
+                        "orphan blob files kept; remove them with `pensine check --fix`"
+                    );
+                }
+            }
+        }
         let state = AppState {
             admission: Arc::new(admission),
             config: config.clone(),
