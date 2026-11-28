@@ -141,3 +141,34 @@ fn check_finds_and_fixes_orphan_blobs() {
     assert!(!orphan.exists() && !temp.exists());
     assert!(!success(dir.path(), &["check"]).contains(&digest));
 }
+
+#[test]
+fn account_alias_changes_the_alias_and_rejects_bad_ones() {
+    let data = tempfile::tempdir().unwrap();
+    assert!(run(
+        data.path(),
+        &["account", "create", "main", "--alias", "first"]
+    )
+    .status
+    .success());
+    let changed = run(
+        data.path(),
+        &["account", "alias", "--account", "main", "will"],
+    );
+    assert!(
+        changed.status.success(),
+        "{}",
+        String::from_utf8_lossy(&changed.stderr)
+    );
+    let list = String::from_utf8(run(data.path(), &["account", "list"]).stdout).unwrap();
+    assert!(list.contains("main\twill"), "{list}");
+    for bad in ["a", "mcp", "Will", "-x", "x-"] {
+        let refused = run(data.path(), &["account", "alias", "--account", "main", bad]);
+        assert!(!refused.status.success(), "{bad} should be refused");
+    }
+    let unknown = run(
+        data.path(),
+        &["account", "alias", "--account", "nobody", "fine"],
+    );
+    assert!(!unknown.status.success());
+}

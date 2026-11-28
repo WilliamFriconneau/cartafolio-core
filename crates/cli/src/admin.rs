@@ -14,6 +14,13 @@ pub(crate) enum AccountCommand {
     },
     /// List account ids and aliases.
     List,
+    /// Change the public alias of an account (the last part of its MCP address).
+    Alias {
+        #[arg(long, value_name = "ID")]
+        account: String,
+        /// New alias: 2 to 32 characters of a-z, 0-9 and '-'.
+        name: String,
+    },
     /// Link a Home Assistant user to an existing account.
     Link {
         #[arg(long, value_name = "ID")]
@@ -38,6 +45,10 @@ impl AccountCommand {
                 for (id, alias) in accounts.account_list()? {
                     writeln!(out, "{id}\t{alias}")?;
                 }
+            }
+            Self::Alias { account, name } => {
+                accounts.set_alias(&account, &name)?;
+                writeln!(out, "Alias of account {account} is now {name}")?;
             }
             Self::Link {
                 account,
