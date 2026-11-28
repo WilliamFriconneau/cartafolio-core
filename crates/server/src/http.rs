@@ -1,5 +1,6 @@
 use crate::config::Config;
 use crate::error::ServerError;
+use crate::oauth::{self, OAuth};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Request, State};
 use axum::http::header;
@@ -43,8 +44,8 @@ impl Server {
         let accounts = Arc::new(Accounts::open(&config.data_dir)?);
         let mcp = Arc::new(Mcp::new(accounts.clone()));
         let authenticators: Vec<Arc<dyn Authenticator>> =
-            vec![Arc::new(KeysAuthenticator::new(accounts))];
-        Self::start_with(config, mcp, authenticators).await
+            vec![Arc::new(KeysAuthenticator::new(accounts.clone()))];
+        Self::start_inner(config, mcp, authenticators, Some(accounts)).await
     }
 
     pub async fn start_with(
@@ -52,14 +53,50 @@ impl Server {
         mcp: Arc<Mcp>,
         authenticators: Vec<Arc<dyn Authenticator>>,
     ) -> Result<Handle, ServerError> {
+        Self::start_inner(config, mcp, authenticators, None).await
+    }
+
+    async fn start_inner(
+        config: Config,
+        mcp: Arc<Mcp>,
+        mut authenticators: Vec<Arc<dyn Authenticator>>,
+        accounts: Option<Arc<Accounts>>,
+    ) -> Result<Handle, ServerError> {
         check_bindable(&config)?;
         let bound = bind(config.listen).await?;
+        let oauth = accounts
+            .map(|accounts| {
+                let fallback = format!(
+                    "http://{}",
+                    SocketAddr::new(
+                        if !bound.local_addr.ip().is_loopback() {
+                            IpAddr::V4(Ipv4Addr::LOCALHOST)
+                        } else {
+                            bound.local_addr.ip()
+                        },
+                        bound.local_addr.port(),
+                    )
+                );
+                OAuth::open(
+                    &config.data_dir,
+                    accounts,
+                    config.public_url.as_deref().unwrap_or(&fallback),
+                )
+                .map(Arc::new)
+            })
+            .transpose()?;
+        if let Some(oauth) = &oauth {
+            authenticators.push(oauth.clone());
+        }
         let state = AppState {
             config,
             mcp,
             authenticators: Arc::new(authenticators),
         };
-        let router = router(state);
+        let mut router = router(state);
+        if let Some(oauth) = &oauth {
+            router = router.merge(oauth::routes(oauth.clone()));
+        }
         let (shutdown_tx, shutdown_rx) = watch::channel(false);
         for listener in bound.listeners {
             let router = router.clone();
@@ -75,6 +112,7 @@ impl Server {
         Ok(Handle {
             local_addr: bound.local_addr,
             shutdown: shutdown_tx,
+            oauth,
         })
     }
 }
@@ -82,11 +120,20 @@ impl Server {
 pub struct Handle {
     local_addr: SocketAddr,
     shutdown: watch::Sender<bool>,
+    oauth: Option<Arc<OAuth>>,
 }
 
 impl Handle {
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    /// Issues a one-time OAuth code for an account already verified by a trusted caller.
+    pub fn oauth_invitation(&self, account: &str) -> Result<String, ServerError> {
+        self.oauth
+            .as_ref()
+            .ok_or_else(|| ServerError::Invalid("OAuth is unavailable".into()))?
+            .invitation(account)
     }
 
     pub fn shutdown(&self) {

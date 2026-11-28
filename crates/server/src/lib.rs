@@ -10,6 +10,7 @@
 mod config;
 mod error;
 mod http;
+mod oauth;
 
 pub use config::Config;
 pub use error::ServerError;

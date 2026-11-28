@@ -607,17 +607,23 @@ name = "pensine-server"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64",
  "pensine-access",
  "pensine-mcp",
  "pensine-store",
+ "rand",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sha2",
+ "subtle",
  "tempfile",
  "thiserror",
  "tokio",
  "toml",
  "tracing",
  "ureq",
+ "url",
 ]
 
 [[package]]
