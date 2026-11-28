@@ -1,14 +1,16 @@
 use super::{
-    field, hash, invite_selector, random_secret, resource_matches, Fields, OAuth, OAuthError,
-    Result, Scope, CODE_TTL, INVITE_ATTEMPT_LIMIT, INVITE_TTL,
+    field, hash, invite_selector, random_secret, resource_matches, Fields, InvitationRights, OAuth,
+    OAuthError, Result, Scope, CODE_TTL, INVITE_ATTEMPT_LIMIT, INVITE_TTL,
 };
 use crate::config::parse_public_origin;
 use crate::html::escape_html;
+use crate::texts::{for_request, Texts};
 use crate::ServerError;
 use axum::extract::{Form, Query, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
+use pensine_store::SpaceInfo;
 use rusqlite::{OptionalExtension, TransactionBehavior};
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
@@ -22,6 +24,8 @@ struct Authorization {
     redirect: String,
     challenge: String,
     state: Option<String>,
+    #[serde(default)]
+    rights: Option<InvitationRights>,
 }
 
 impl Authorization {
@@ -64,6 +68,7 @@ impl Authorization {
             redirect: redirect.into(),
             challenge: challenge.into(),
             state: fields.get("state").cloned(),
+            rights: None,
         })
     }
 
@@ -86,11 +91,14 @@ impl Authorization {
 
 pub(super) async fn authorize(
     State(oauth): State<Arc<OAuth>>,
+    headers: HeaderMap,
     Query(fields): Query<Fields>,
 ) -> Result<Response> {
     let request = Authorization::validate(&oauth, &fields)?;
+    let t = for_request(&headers);
     let mut page = format!(
-        "<h1>Connect to {}</h1><form method=\"post\" action=\"/authorize\">",
+        "<h1>{} {}</h1><form method=\"post\" action=\"/authorize\">",
+        t.connect_to,
         escape_html(&request.name)
     );
     for key in [
@@ -107,8 +115,12 @@ pub(super) async fn authorize(
             hidden(&mut page, key, value)?;
         }
     }
-    page.push_str("<label>One-time code <input name=\"invite\" required></label><button>Continue</button></form>");
-    Ok(consent_page(page))
+    write!(
+        page,
+        "<label>{} <input name=\"invite\" required></label><button>{}</button></form>",
+        t.one_time_code, t.next
+    )?;
+    Ok(consent_page(page, t))
 }
 
 pub(super) async fn consent(
@@ -130,25 +142,25 @@ pub(super) async fn consent(
     if fields.contains_key("nonce") {
         decide(&oauth, &fields)
     } else {
-        choose_spaces(&oauth, &fields)
+        present_rights(&oauth, &fields, for_request(&headers))
     }
 }
 
-fn choose_spaces(oauth: &OAuth, fields: &Fields) -> Result<Response> {
-    let request = Authorization::validate(oauth, fields)?;
+fn present_rights(oauth: &OAuth, fields: &Fields, t: &Texts) -> Result<Response> {
+    let mut request = Authorization::validate(oauth, fields)?;
     let mut db = oauth.db()?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
     let invite = field(fields, "invite");
     let invite_hash = hash(invite);
-    let account = tx
+    let invitation = tx
         .query_row(
             "DELETE FROM oauth_invites WHERE hash = ?1 AND expires_at > unixepoch()
-             AND failed_attempts < ?2 RETURNING account",
+             AND failed_attempts < ?2 RETURNING account, rights",
             (invite_hash, INVITE_ATTEMPT_LIMIT),
-            |row| row.get::<_, String>(0),
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
         )
         .optional()?;
-    let Some(account) = account else {
+    let Some((account, rights)) = invitation else {
         tx.execute(
             "UPDATE oauth_invites SET failed_attempts = failed_attempts + 1
              WHERE selector = ?1 AND hash != ?2 AND expires_at > unixepoch()
@@ -158,33 +170,10 @@ fn choose_spaces(oauth: &OAuth, fields: &Fields) -> Result<Response> {
         tx.commit()?;
         return Err(OAuthError::Forbidden);
     };
-    let spaces = oauth
-        .accounts
-        .account(&account)
-        .map_err(ServerError::from)?
-        .store
-        .spaces()
-        .map_err(std::io::Error::other)?;
+    request.rights = rights.as_deref().map(serde_json::from_str).transpose()?;
+    let spaces = account_spaces(oauth, &account)?;
     let nonce = random_secret()?;
-    let mut page = format!(
-        "<h1>Choose spaces for {}</h1><form method=\"post\" action=\"/authorize\">",
-        escape_html(&request.name)
-    );
-    hidden(&mut page, "nonce", &nonce)?;
-    hidden(&mut page, "client_id", &request.client)?;
-    hidden(&mut page, "redirect_uri", &request.redirect)?;
-    if let Some(state) = &request.state {
-        hidden(&mut page, "state", state)?;
-    }
-    for space in spaces {
-        write!(
-            page,
-            "<label><input type=\"checkbox\" name=\"v_{}\" value=\"1\"> {}</label><br>",
-            escape_html(&space.name),
-            escape_html(&space.label)
-        )?;
-    }
-    page.push_str("<label><input type=\"checkbox\" name=\"readonly\" value=\"1\"> Read only</label><br>        <button name=\"decision\" value=\"allow\">Allow</button>         <button name=\"decision\" value=\"deny\">Deny</button></form>");
+    let page = render_rights(&request, &spaces, &nonce, t)?;
     tx.execute(
         "DELETE FROM oauth_consent WHERE expires_at <= unixepoch()",
         [],
@@ -199,7 +188,7 @@ fn choose_spaces(oauth: &OAuth, fields: &Fields) -> Result<Response> {
         ),
     )?;
     tx.commit()?;
-    Ok(consent_page(page))
+    Ok(consent_page(page, t))
 }
 
 fn decide(oauth: &OAuth, fields: &Fields) -> Result<Response> {
@@ -210,30 +199,20 @@ fn decide(oauth: &OAuth, fields: &Fields) -> Result<Response> {
         [hash(field(fields, "nonce"))],
         |row| Ok((row.get(0)?, row.get(1)?)),
     ).optional()?.ok_or(OAuthError::Forbidden)?;
-    let request: Authorization = serde_json::from_str(&request)?;
+    let mut request: Authorization = serde_json::from_str(&request)?;
     let response = match field(fields, "decision") {
         "deny" => request.callback(oauth, "error", "access_denied")?,
         "allow" => {
-            let spaces: Vec<_> = oauth
-                .accounts
-                .account(&account)
-                .map_err(ServerError::from)?
-                .store
-                .spaces()
-                .map_err(std::io::Error::other)?
-                .into_iter()
-                .filter(|space| field(fields, &format!("v_{}", space.name)) == "1")
-                .map(|space| space.name)
-                .collect();
-            if spaces.is_empty() {
-                return Err(OAuthError::BadRequest("select_at_least_one_space"));
-            }
+            let rights = match request.rights.take() {
+                None => legacy_rights(oauth, &account, fields)?,
+                Some(rights) => rights,
+            };
             let scope = Scope {
                 id: random_secret()?,
                 account,
                 name: request.name.clone(),
-                spaces,
-                read_only: field(fields, "readonly") == "1",
+                spaces: rights.spaces,
+                read_only: rights.read_only,
             };
             let code = random_secret()?;
             tx.execute(
@@ -259,6 +238,108 @@ fn decide(oauth: &OAuth, fields: &Fields) -> Result<Response> {
     Ok(response)
 }
 
+fn account_spaces(oauth: &OAuth, account: &str) -> Result<Vec<SpaceInfo>> {
+    Ok(oauth
+        .accounts
+        .account(account)
+        .map_err(ServerError::from)?
+        .store
+        .spaces()
+        .map_err(std::io::Error::other)?)
+}
+
+fn legacy_rights(oauth: &OAuth, account: &str, fields: &Fields) -> Result<InvitationRights> {
+    let spaces: Vec<_> = account_spaces(oauth, account)?
+        .into_iter()
+        .filter(|space| field(fields, &format!("v_{}", space.name)) == "1")
+        .map(|space| space.name)
+        .collect();
+    if spaces.is_empty() {
+        return Err(OAuthError::BadRequest("select_at_least_one_space"));
+    }
+    Ok(InvitationRights {
+        spaces,
+        read_only: field(fields, "readonly") == "1",
+    })
+}
+
+fn render_rights(
+    request: &Authorization,
+    spaces: &[SpaceInfo],
+    nonce: &str,
+    t: &Texts,
+) -> Result<String> {
+    let heading = if request.rights.is_some() {
+        t.rights_for
+    } else {
+        t.choose_for
+    };
+    let mut page = format!(
+        "<h1>{heading} {}</h1><form method=\"post\" action=\"/authorize\">",
+        escape_html(&request.name),
+    );
+    hidden(&mut page, "nonce", nonce)?;
+    hidden(&mut page, "client_id", &request.client)?;
+    hidden(&mut page, "redirect_uri", &request.redirect)?;
+    if let Some(state) = &request.state {
+        hidden(&mut page, "state", state)?;
+    }
+    if let Some(rights) = &request.rights {
+        summarize_rights(&mut page, rights, spaces, t)?;
+    } else {
+        for space in spaces {
+            write!(
+                page,
+                "<label><input type=\"checkbox\" name=\"v_{}\" value=\"1\"> {}</label><br>",
+                escape_html(&space.name),
+                escape_html(&space.label)
+            )?;
+        }
+        write!(
+            page,
+            "<label><input type=\"checkbox\" name=\"readonly\" value=\"1\"> {}</label><br>",
+            t.read_only
+        )?;
+    }
+    write!(
+        page,
+        "<button name=\"decision\" value=\"allow\">{}</button> \
+        <button name=\"decision\" value=\"deny\">{}</button></form>",
+        t.allow, t.deny
+    )?;
+    Ok(page)
+}
+
+fn summarize_rights(
+    page: &mut String,
+    rights: &InvitationRights,
+    spaces: &[SpaceInfo],
+    t: &Texts,
+) -> std::fmt::Result {
+    let mode = if rights.read_only {
+        t.read_only
+    } else {
+        t.read_write
+    };
+    write!(page, "<p>{mode}</p><ul>")?;
+    for name in &rights.spaces {
+        let label = if name == "*" {
+            t.all
+        } else {
+            spaces
+                .iter()
+                .find(|space| space.name == *name)
+                .map_or(name.as_str(), |space| space.label.as_str())
+        };
+        write!(page, "<li>{}</li>", escape_html(label))?;
+    }
+    page.push_str("</ul>");
+    if !rights.spaces.iter().any(|name| name == "*") {
+        write!(page, "<p>{}</p>", t.children)?;
+    }
+    Ok(())
+}
+
 fn hidden(page: &mut String, name: &str, value: &str) -> std::fmt::Result {
     write!(
         page,
@@ -267,13 +348,21 @@ fn hidden(page: &mut String, name: &str, value: &str) -> std::fmt::Result {
     )
 }
 
-fn consent_page(body: String) -> Response {
+fn consent_page(body: String, t: &Texts) -> Response {
     (
         [
-            (header::CONTENT_SECURITY_POLICY, "default-src 'none'; frame-ancestors 'none'; base-uri 'none'"),
+            (
+                header::CONTENT_SECURITY_POLICY,
+                "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+            ),
             (header::REFERRER_POLICY, "no-referrer"),
         ],
-        Html(format!("<!doctype html><html lang=\"en\"><meta charset=\"utf-8\"><title>Pensine consent</title>{body}</html>")),
+        Html(format!(
+            "<!doctype html><html lang=\"{}\"><meta charset=\"utf-8\">\
+            <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\
+            <title>{}</title>{body}</html>",
+            t.lang, t.consent_title
+        )),
     )
         .into_response()
 }

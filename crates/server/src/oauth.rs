@@ -100,6 +100,15 @@ impl OAuth {
             )
             .map_err(db_error)?;
         }
+        let has_invite_rights: bool = tx.query_row(
+            "SELECT EXISTS (SELECT 1 FROM pragma_table_info('oauth_invites') WHERE name = 'rights')",
+            [],
+            |row| row.get(0),
+        ).map_err(db_error)?;
+        if !has_invite_rights {
+            tx.execute("ALTER TABLE oauth_invites ADD COLUMN rights TEXT", [])
+                .map_err(db_error)?;
+        }
         tx.commit().map_err(db_error)?;
         Ok(Self {
             accounts,
@@ -123,7 +132,19 @@ impl OAuth {
     }
 
     pub(crate) fn invitation(&self, account: &str) -> std::result::Result<String, ServerError> {
+        self.scoped_invitation(account, None)
+    }
+
+    pub(crate) fn scoped_invitation(
+        &self,
+        account: &str,
+        rights: Option<&InvitationRights>,
+    ) -> std::result::Result<String, ServerError> {
         self.accounts.account(account)?;
+        let rights = rights
+            .map(serde_json::to_string)
+            .transpose()
+            .map_err(std::io::Error::other)?;
         let invite = random_secret()?;
         let db = self.db()?;
         db.execute(
@@ -132,9 +153,15 @@ impl OAuth {
         )
         .map_err(db_error)?;
         db.execute(
-            "INSERT INTO oauth_invites (hash, account, expires_at, selector)
-             VALUES (?1, ?2, unixepoch() + ?3, ?4)",
-            (hash(&invite), account, INVITE_TTL, invite_selector(&invite)),
+            "INSERT INTO oauth_invites (hash, account, expires_at, selector, rights)
+             VALUES (?1, ?2, unixepoch() + ?3, ?4, ?5)",
+            (
+                hash(&invite),
+                account,
+                INVITE_TTL,
+                invite_selector(&invite),
+                rights,
+            ),
         )
         .map_err(db_error)?;
         Ok(invite)
@@ -268,6 +295,12 @@ impl Authenticator for OAuth {
     fn authenticate(&self, bearer: &str) -> Option<Principal> {
         self.principal(bearer).ok().flatten()
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub(crate) struct InvitationRights {
+    pub spaces: Vec<String>,
+    pub read_only: bool,
 }
 
 #[derive(Serialize, Deserialize)]

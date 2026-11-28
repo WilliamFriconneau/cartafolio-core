@@ -117,7 +117,7 @@ async fn a_key_appears_once() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn the_pages_escape_every_value() {
+async fn the_page_escapes_every_value() {
     let dir = tempfile::tempdir().unwrap();
     let accounts = Accounts::open(dir.path()).unwrap();
     let account = accounts.account_for_ha_user("aaaa", "Alice").unwrap();
@@ -260,4 +260,85 @@ async fn the_admin_shows_the_mcp_address_and_changes_the_alias() {
     let changed = changed.into_string().unwrap();
     assert!(changed.contains("readonly value=\"https://pensine.example/mcp/new-alias\""));
     handle.shutdown();
+}
+
+async fn get_dashboard(public_url: Option<&str>, language: &str) -> (String, String) {
+    let dir = tempfile::tempdir().unwrap();
+    let handle = Server::start(Config {
+        public_url: public_url.map(str::to_owned),
+        ..admin_config(&dir, IpAddr::V4(Ipv4Addr::LOCALHOST))
+    })
+    .await
+    .unwrap();
+    let response = ureq::get(&admin_url(&handle, "/"))
+        .set("X-Remote-User-Id", "aaaa")
+        .set("X-Remote-User-Name", "Sample User")
+        .set("Accept-Language", language)
+        .call()
+        .unwrap();
+    let csp = response
+        .header("Content-Security-Policy")
+        .unwrap()
+        .to_owned();
+    let html = response.into_string().unwrap();
+    handle.shutdown();
+    (html, csp)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_page_closes_every_section_but_the_connect_guide() {
+    let (html, _) = get_dashboard(None, "en").await;
+    assert_eq!(html.matches("<details open>").count(), 1);
+    assert!(html.contains("<details open><summary>Connect an assistant</summary>"));
+    for summary in [
+        "Connections and keys (0)",
+        "Assistants signed in with a code (0)",
+        "Spaces (0)",
+        "Status:",
+    ] {
+        assert!(html.contains(&format!("<details><summary>{summary}")));
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_address_line_shows_the_public_address_alias_and_a_copy_button() {
+    let (html, _) = get_dashboard(Some("https://pensine.example/"), "en").await;
+    let header = html.split("</header>").next().unwrap();
+    assert!(header.contains("Sample User"));
+    assert!(header.contains("readonly value=\"https://pensine.example/mcp/sample-user\""));
+    assert!(header.contains(">Copy</button>"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_page_is_french_when_the_browser_asks_for_french_and_english_otherwise() {
+    let (french, _) = get_dashboard(None, "fr-CA,en;q=0.8").await;
+    assert!(french.contains("lang=\"fr\"") && french.contains("Que peut-il atteindre ?"));
+    let (english, _) = get_dashboard(None, "en,fr;q=0.8").await;
+    assert!(english.contains("lang=\"en\"") && english.contains("What can it reach?"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn no_public_address_shows_the_hint_instead_of_a_broken_address() {
+    let (html, _) = get_dashboard(None, "en").await;
+    assert!(html.contains("Turn on Tailscale in the add-on options, then reload"));
+    assert!(!html.contains("/mcp/"));
+    assert!(!html.contains(">Copy</button>"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn the_csp_header_allows_only_the_nonce() {
+    let (html, csp) = get_dashboard(Some("https://pensine.example"), "en").await;
+    let nonce = html
+        .split("<script nonce=\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap();
+    assert!(!nonce.is_empty());
+    assert_eq!(html.matches("<script").count(), 1);
+    assert!(csp
+        .split(';')
+        .any(|part| part.trim() == format!("script-src 'nonce-{nonce}'")));
+    assert!(csp.contains("default-src 'none'"));
 }

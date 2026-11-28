@@ -15,6 +15,7 @@ mod html;
 mod http;
 mod mcp_http;
 mod oauth;
+mod texts;
 
 pub use config::Config;
 pub use error::ServerError;

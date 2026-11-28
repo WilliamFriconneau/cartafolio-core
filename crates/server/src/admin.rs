@@ -1,18 +1,15 @@
-use crate::admin_html::{
-    csrf_matches, disk_used, grants_from_form, new_csrf, page, render_alias, render_connections,
-    render_oauth, space_depth,
-};
+use crate::admin_html::{csrf_matches, dashboard, Dashboard, Feedback};
 use crate::config::Config;
 use crate::error::ServerError;
-use crate::html::escape_html;
-use crate::oauth::OAuth;
+use crate::oauth::{InvitationRights, OAuth};
+use crate::texts::{for_request, Texts};
 use axum::extract::{ConnectInfo, DefaultBodyLimit, Extension, Form, Request, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::middleware::{self, Next};
-use axum::response::{IntoResponse, Response};
+use axum::response::{IntoResponse, Redirect, Response};
 use axum::routing::{get, post};
 use axum::Router;
-use pensine_access::{AccessError, Account, Accounts};
+use pensine_access::{AccessError, Account, Accounts, Grant};
 use std::collections::HashMap;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
@@ -30,17 +27,14 @@ pub(crate) struct AdminState {
 
 pub(crate) fn router(state: AdminState) -> Router {
     Router::new()
-        .route("/", get(connections_page))
-        .route(
-            "/connections",
-            get(connections_page).post(connections_create),
-        )
+        .route("/", get(admin_page))
+        .route("/connections", get(admin_page).post(connections_create))
         .route("/alias", post(alias_change))
         .route("/connections/revoke", post(connection_revoke))
-        .route("/oauth", get(oauth_page).post(oauth_invite))
+        .route("/oauth", get(admin_page).post(oauth_invite))
         .route("/oauth/revoke", post(oauth_revoke))
-        .route("/spaces", get(spaces_page))
-        .route("/status", get(status_page))
+        .route("/spaces", get(admin_page))
+        .route("/status", get(admin_page))
         .layer(DefaultBodyLimit::max(1024 * 1024))
         .route_layer(middleware::from_fn_with_state(state.clone(), admin_guard))
         .with_state(state)
@@ -71,7 +65,16 @@ async fn admin_guard(
         .unwrap_or("");
     match state.accounts.account_for_ha_user(ha_id, name) {
         Ok(account) => {
-            request.extensions_mut().insert(account);
+            let user = if name.is_empty() {
+                account.id.clone()
+            } else {
+                name.to_owned()
+            };
+            request.extensions_mut().insert(AdminUser {
+                account,
+                user,
+                texts: for_request(&headers),
+            });
             next.run(request).await
         }
         Err(error) => {
@@ -81,196 +84,211 @@ async fn admin_guard(
     }
 }
 
-async fn connections_page(
+#[derive(Clone)]
+struct AdminUser {
+    account: Account,
+    user: String,
+    texts: &'static Texts,
+}
+
+type Fields = HashMap<String, String>;
+
+async fn admin_page(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
 ) -> Result<Response, ServerError> {
-    render_connections_page(&state, &account, None)
+    render(&state, &user, None, Feedback::None)
 }
 
 async fn connections_create(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
     headers: HeaderMap,
-    Form(fields): Form<HashMap<String, String>>,
+    Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
-    let name = fields
-        .get("name")
-        .map(String::as_str)
-        .unwrap_or("")
-        .trim()
-        .to_owned();
+    let name = fields.get("name").map_or("", |name| name.trim());
     if name.is_empty() {
-        return Err(ServerError::Invalid("A connection name is required".into()));
+        return render(
+            &state,
+            &user,
+            Some(&fields),
+            Feedback::Error(user.texts.name_required),
+        );
     }
-    let spaces = account.store.spaces()?;
-    let (grants, read_only) = grants_from_form(&fields, &spaces);
-    let (_connection, key) =
-        state
-            .accounts
-            .connection_create(&account.id, &name, grants, read_only)?;
-    let csrf = new_csrf()?;
-    let body = format!(
-        "<h1>Connection created</h1><p>Name: {}</p>\
-         <p>This key is shown once. Copy it now; it cannot be shown again.</p>\
-         <p><code>{}</code></p><p><a href=\"connections\">Back to connections</a></p>",
-        escape_html(&name),
-        escape_html(key.as_str()),
-    );
-    page("Connection created", &body, &csrf)
+    let (grants, read_only) = if fields.contains_key("scope") {
+        let Some(rights) = invitation_rights(&user.account, &fields)? else {
+            return render(
+                &state,
+                &user,
+                Some(&fields),
+                Feedback::Error(user.texts.select_space),
+            );
+        };
+        let grants = rights
+            .spaces
+            .into_iter()
+            .map(|space| Grant {
+                space,
+                write: !rights.read_only,
+            })
+            .collect();
+        (grants, rights.read_only)
+    } else {
+        legacy_key_grants(&user.account, &fields)?
+    };
+    let (_, key) = state
+        .accounts
+        .connection_create(&user.account.id, name, grants, read_only)?;
+    render(&state, &user, Some(&fields), Feedback::Key(key.as_str()))
 }
 
 async fn connection_revoke(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
     headers: HeaderMap,
-    Form(fields): Form<HashMap<String, String>>,
+    Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
-    let id = fields.get("id").map(String::as_str).unwrap_or("");
-    match state.accounts.connection_revoke(&account.id, id) {
-        Ok(()) | Err(AccessError::NotFound) => {}
-        Err(error) => return Err(error.into()),
+    let id = fields.get("id").map_or("", String::as_str);
+    match state.accounts.connection_revoke(&user.account.id, id) {
+        Ok(()) | Err(AccessError::NotFound) => Ok(Redirect::to("../").into_response()),
+        Err(error) => Err(error.into()),
     }
-    render_connections_page(&state, &account, None)
-}
-
-async fn oauth_page(
-    State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
-) -> Result<Response, ServerError> {
-    render_oauth_page(&state, &account).await
 }
 
 async fn oauth_invite(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
     headers: HeaderMap,
-    Form(fields): Form<HashMap<String, String>>,
+    Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
-    let code = state.oauth.invitation(&account.id)?;
-    let csrf = new_csrf()?;
-    let body = format!(
-        "<h1>Code created</h1><p>This one-time code is valid for 10 minutes.</p>\
-         <p><code>{}</code></p><p><a href=\"oauth\">Back to OAuth</a></p>",
-        escape_html(&code),
-    );
-    page("Code created", &body, &csrf)
+    let Some(rights) = invitation_rights(&user.account, &fields)? else {
+        return render(
+            &state,
+            &user,
+            Some(&fields),
+            Feedback::Error(user.texts.select_space),
+        );
+    };
+    let code = state
+        .oauth
+        .scoped_invitation(&user.account.id, Some(&rights))?;
+    render(&state, &user, Some(&fields), Feedback::Code(&code))
 }
 
 async fn oauth_revoke(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
     headers: HeaderMap,
-    Form(fields): Form<HashMap<String, String>>,
+    Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
-    let id = fields.get("id").map(String::as_str).unwrap_or("");
-    match state.oauth.revoke_session(&account.id, id) {
-        Ok(()) | Err(ServerError::Invalid(_)) => {}
-        Err(error) => return Err(error),
+    let id = fields.get("id").map_or("", String::as_str);
+    match state.oauth.revoke_session(&user.account.id, id) {
+        Ok(()) | Err(ServerError::Invalid(_)) => Ok(Redirect::to("../").into_response()),
+        Err(error) => Err(error),
     }
-    render_oauth_page(&state, &account).await
-}
-
-async fn spaces_page(
-    State(_state): State<AdminState>,
-    Extension(account): Extension<Account>,
-) -> Result<Response, ServerError> {
-    let csrf = new_csrf()?;
-    let spaces = account.store.spaces()?;
-    let mut body = String::from("<h1>Spaces</h1><ul>");
-    for space in &spaces {
-        let depth = space_depth(space, &spaces);
-        body.push_str(&format!(
-            "<li>{}{} — {} notes, {} files</li>",
-            "&nbsp;&nbsp;".repeat(depth),
-            escape_html(&space.label),
-            space.notes,
-            space.files,
-        ));
-    }
-    body.push_str("</ul>");
-    page("Spaces", &body, &csrf)
-}
-
-async fn status_page(
-    State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
-) -> Result<Response, ServerError> {
-    let csrf = new_csrf()?;
-    let spaces = account.store.spaces()?;
-    let notes: u64 = spaces.iter().map(|space| space.notes).sum();
-    let files: u64 = spaces.iter().map(|space| space.files).sum();
-    let body = format!(
-        "<h1>Status</h1><dl>\
-         <dt>Version</dt><dd>{}</dd>\
-         <dt>Notes</dt><dd>{}</dd>\
-         <dt>Files</dt><dd>{}</dd>\
-         <dt>Disk used</dt><dd>{} bytes</dd></dl>",
-        escape_html(state.version),
-        notes,
-        files,
-        disk_used(&state.data_dir),
-    );
-    page("Status", &body, &csrf)
 }
 
 async fn alias_change(
     State(state): State<AdminState>,
-    Extension(account): Extension<Account>,
+    Extension(user): Extension<AdminUser>,
     headers: HeaderMap,
-    Form(fields): Form<HashMap<String, String>>,
+    Form(fields): Form<Fields>,
 ) -> Result<Response, ServerError> {
     if !csrf_matches(&headers, &fields) {
         return Ok(StatusCode::FORBIDDEN.into_response());
     }
     let alias = fields.get("alias").map_or("", String::as_str);
-    match state.accounts.set_alias(&account.id, alias) {
-        Ok(()) => render_connections_page(&state, &account, None),
-        Err(AccessError::Invalid(message)) => {
-            let mut response = render_connections_page(&state, &account, Some(&message))?;
-            *response.status_mut() = StatusCode::BAD_REQUEST;
-            Ok(response)
-        }
+    match state.accounts.set_alias(&user.account.id, alias) {
+        Ok(()) => render(&state, &user, None, Feedback::None),
+        Err(AccessError::Invalid(_) | AccessError::Conflict) => render(
+            &state,
+            &user,
+            None,
+            Feedback::Error(user.texts.invalid_alias),
+        ),
         Err(error) => Err(error.into()),
     }
 }
 
-fn render_connections_page(
+fn render(
     state: &AdminState,
-    account: &Account,
-    alias_error: Option<&str>,
+    user: &AdminUser,
+    fields: Option<&Fields>,
+    feedback: Feedback<'_>,
 ) -> Result<Response, ServerError> {
-    let csrf = new_csrf()?;
-    let connections = state.accounts.connections(&account.id)?;
-    let spaces = account.store.spaces()?;
-    let alias = state.accounts.alias_of(&account.id)?;
-    let alias_form = render_alias(
-        state.config.public_url().as_deref(),
-        &alias,
-        alias_error,
-        &csrf,
-    );
-    page(
-        "Connections",
-        &render_connections(&account.id, &alias_form, &connections, &spaces, &csrf),
-        &csrf,
-    )
+    let id = &user.account.id;
+    dashboard(Dashboard {
+        user: &user.user,
+        texts: user.texts,
+        public_url: state.config.public_url().as_deref(),
+        alias: &state.accounts.alias_of(id)?,
+        connections: &state.accounts.connections(id)?,
+        sessions: &state.oauth.sessions(id)?,
+        spaces: &user.account.store.spaces()?,
+        version: state.version,
+        data_dir: &state.data_dir,
+        fields,
+        feedback,
+    })
 }
 
-async fn render_oauth_page(state: &AdminState, account: &Account) -> Result<Response, ServerError> {
-    let csrf = new_csrf()?;
-    let sessions = state.oauth.sessions(&account.id)?;
-    page("OAuth", &render_oauth(&sessions, &csrf), &csrf)
+fn invitation_rights(
+    account: &Account,
+    fields: &Fields,
+) -> Result<Option<InvitationRights>, ServerError> {
+    let spaces = match fields.get("scope").map(String::as_str) {
+        Some("all") => vec!["*".into()],
+        Some("selected") => account
+            .store
+            .spaces()?
+            .into_iter()
+            .filter(|space| checked(fields, &format!("s_{}", space.name)))
+            .map(|space| space.name)
+            .collect(),
+        _ => return Ok(None),
+    };
+    Ok((!spaces.is_empty()).then(|| InvitationRights {
+        spaces,
+        read_only: checked(fields, "read_only"),
+    }))
+}
+
+fn legacy_key_grants(
+    account: &Account,
+    fields: &Fields,
+) -> Result<(Vec<Grant>, bool), ServerError> {
+    let read_only = checked(fields, "read_only");
+    let mut grants: Vec<_> = account
+        .store
+        .spaces()?
+        .into_iter()
+        .filter(|space| checked(fields, &format!("s_{}", space.name)))
+        .map(|space| Grant {
+            write: !read_only && checked(fields, &format!("w_{}", space.name)),
+            space: space.name,
+        })
+        .collect();
+    if grants.is_empty() {
+        grants.push(Grant {
+            space: "*".into(),
+            write: !read_only,
+        });
+    }
+    Ok((grants, read_only))
+}
+
+fn checked(fields: &Fields, name: &str) -> bool {
+    fields.get(name).is_some_and(|value| value == "1")
 }
