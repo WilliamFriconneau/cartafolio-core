@@ -6,3 +6,7 @@ license.workspace = true
 
 [lints]
 workspace = true
+
+[dependencies]
+pensine-server = { path = "../server" }
+clap = { workspace = true, features = ["derive"] }

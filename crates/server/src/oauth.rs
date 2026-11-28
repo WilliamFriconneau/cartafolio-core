@@ -1,3 +1,4 @@
+use crate::html::escape_html;
 use crate::{Authenticator, ServerError};
 use axum::extract::{DefaultBodyLimit, Form, Query, Request, State};
 use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
@@ -165,6 +166,93 @@ impl OAuth {
         Ok(Some(
             Principal::new(account, connection).map_err(ServerError::from)?,
         ))
+    }
+
+    pub(crate) fn sessions(
+        &self,
+        account: &str,
+    ) -> std::result::Result<Vec<SessionInfo>, ServerError> {
+        let db = self.db()?;
+        let mut stmt = db
+            .prepare("SELECT client, scope, refresh_until FROM oauth_sessions")
+            .map_err(db_error)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            })
+            .map_err(db_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_error)?;
+        drop(stmt);
+        let mut sessions = Vec::new();
+        for (client_id, scope_json, refresh_until) in rows {
+            let scope: Scope = match serde_json::from_str(&scope_json) {
+                Ok(scope) => scope,
+                Err(_) => continue,
+            };
+            if scope.account != account {
+                continue;
+            }
+            let client = db
+                .query_row(
+                    "SELECT name FROM oauth_clients WHERE id = ?1",
+                    [&client_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .map_err(db_error)
+                .unwrap_or(client_id);
+            sessions.push(SessionInfo {
+                id: scope.id,
+                name: scope.name,
+                client,
+                spaces: scope.spaces,
+                read_only: scope.read_only,
+                refresh_until,
+            });
+        }
+        Ok(sessions)
+    }
+
+    pub(crate) fn revoke_session(
+        &self,
+        account: &str,
+        id: &str,
+    ) -> std::result::Result<(), ServerError> {
+        let db = self.db()?;
+        let mut stmt = db
+            .prepare("SELECT access_hash, refresh_hash, scope FROM oauth_sessions")
+            .map_err(db_error)?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, Vec<u8>>(0)?,
+                    row.get::<_, Vec<u8>>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            })
+            .map_err(db_error)?
+            .collect::<rusqlite::Result<Vec<_>>>()
+            .map_err(db_error)?;
+        drop(stmt);
+        for (access_hash, refresh_hash, scope_json) in rows {
+            let scope: Scope = match serde_json::from_str(&scope_json) {
+                Ok(scope) => scope,
+                Err(_) => continue,
+            };
+            if scope.account == account && scope.id == id {
+                db.execute(
+                    "DELETE FROM oauth_sessions WHERE access_hash = ?1 AND refresh_hash = ?2",
+                    (access_hash, refresh_hash),
+                )
+                .map_err(db_error)?;
+                return Ok(());
+            }
+        }
+        Err(ServerError::Invalid("OAuth session not found".into()))
     }
 }
 
@@ -461,6 +549,15 @@ struct Scope {
     read_only: bool,
 }
 
+pub(crate) struct SessionInfo {
+    pub id: String,
+    pub name: String,
+    pub client: String,
+    pub spaces: Vec<String>,
+    pub read_only: bool,
+    pub refresh_until: i64,
+}
+
 fn decide(oauth: &OAuth, fields: &Fields) -> Result<Response> {
     let mut db = oauth.db()?;
     let tx = db.transaction_with_behavior(TransactionBehavior::Immediate)?;
@@ -684,15 +781,6 @@ fn hash(value: &str) -> [u8; 32] {
 fn invite_selector(value: &str) -> Option<[u8; 32]> {
     // The prefix identifies the invitation without counting failures against unrelated codes.
     value.get(..INVITE_SELECTOR_LEN).map(hash)
-}
-
-fn escape_html(value: &str) -> String {
-    value
-        .replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
 }
 
 fn hidden(page: &mut String, name: &str, value: &str) -> std::fmt::Result {

@@ -6,6 +6,7 @@ use std::time::Duration;
 
 pub const DEFAULT_MAX_BODY: usize = 64 * 1024 * 1024;
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
+pub const DEFAULT_ADMIN_PROXY: Ipv4Addr = Ipv4Addr::new(172, 30, 32, 2);
 
 #[derive(Debug, Clone)]
 pub struct Config {
@@ -15,6 +16,8 @@ pub struct Config {
     pub data_dir: PathBuf,
     pub max_body: usize,
     pub request_timeout: Duration,
+    pub admin_listen: Option<SocketAddr>,
+    pub admin_trusted_proxy: IpAddr,
 }
 
 impl Default for Config {
@@ -26,6 +29,8 @@ impl Default for Config {
             data_dir: PathBuf::from("data"),
             max_body: DEFAULT_MAX_BODY,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
+            admin_listen: None,
+            admin_trusted_proxy: IpAddr::V4(DEFAULT_ADMIN_PROXY),
         }
     }
 }
@@ -45,6 +50,10 @@ struct FileConfig {
     max_body: Option<usize>,
     #[serde(default)]
     request_timeout: Option<u64>,
+    #[serde(default)]
+    admin_listen: Option<String>,
+    #[serde(default)]
+    admin_trusted_proxy: Option<String>,
 }
 
 impl Config {
@@ -65,6 +74,20 @@ impl Config {
                 .map_err(|_| ServerError::Invalid(format!("invalid listen address: {listen}")))?,
             None => defaults.listen,
         };
+        let admin_listen = file
+            .admin_listen
+            .map(|address| {
+                address.parse().map_err(|_| {
+                    ServerError::Invalid(format!("invalid admin_listen address: {address}"))
+                })
+            })
+            .transpose()?;
+        let admin_trusted_proxy = match file.admin_trusted_proxy {
+            Some(address) => address.parse().map_err(|_| {
+                ServerError::Invalid(format!("invalid admin_trusted_proxy address: {address}"))
+            })?,
+            None => defaults.admin_trusted_proxy,
+        };
         Ok(Config {
             listen,
             allow_remote: file.allow_remote,
@@ -75,6 +98,8 @@ impl Config {
                 .request_timeout
                 .map(Duration::from_secs)
                 .unwrap_or(defaults.request_timeout),
+            admin_listen,
+            admin_trusted_proxy,
         })
     }
 }
@@ -107,6 +132,25 @@ mod tests {
         assert_eq!(config.data_dir, PathBuf::from("/tmp/elsewhere"));
         assert_eq!(config.max_body, 1234);
         assert_eq!(config.request_timeout, Duration::from_secs(5));
+    }
+
+    #[test]
+    fn the_admin_listener_is_off_by_default() {
+        let config = Config::default();
+        assert_eq!(config.admin_listen, None);
+        assert_eq!(config.admin_trusted_proxy, IpAddr::V4(DEFAULT_ADMIN_PROXY));
+    }
+
+    #[test]
+    fn parses_the_admin_fields() {
+        let text = "admin_listen = \"0.0.0.0:8099\"\n\
+                    admin_trusted_proxy = \"172.30.32.2\"\n";
+        let config = Config::from_toml(text).unwrap();
+        assert_eq!(config.admin_listen, Some("0.0.0.0:8099".parse().unwrap()));
+        assert_eq!(
+            config.admin_trusted_proxy,
+            "172.30.32.2".parse::<IpAddr>().unwrap()
+        );
     }
 
     #[test]

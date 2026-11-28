@@ -1,0 +1,26 @@
+name: Pensine
+version: "0.1.0"
+slug: pensine
+description: >-
+  A memory service for assistants: spaces, notes with history, files, and
+  full-text search, exposed over MCP with OAuth and bearer keys.
+init: false
+ingress: true
+ingress_port: 8099
+ingress_entry: ""
+panel_icon: mdi:brain
+panel_title: Pensine
+arch:
+  - amd64
+  - aarch64
+ports:
+  8791/tcp: null
+ports_description:
+  8791/tcp: MCP endpoint
+map: []
+options:
+  allow_remote: false
+  public_url: ""
+schema:
+  allow_remote: bool
+  public_url: str

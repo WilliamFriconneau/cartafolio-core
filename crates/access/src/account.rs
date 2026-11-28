@@ -1,13 +1,15 @@
 use crate::AccessError;
 use pensine_store::Store;
-use rusqlite::{Connection, TransactionBehavior};
+use rusqlite::{Connection, OptionalExtension, TransactionBehavior};
+use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const MIGRATIONS: &[&str] = &["CREATE TABLE accounts (id TEXT PRIMARY KEY NOT NULL);
+const MIGRATIONS: &[&str] = &[
+    "CREATE TABLE accounts (id TEXT PRIMARY KEY NOT NULL);
      CREATE TABLE connections (
         id TEXT PRIMARY KEY NOT NULL,
         account TEXT NOT NULL REFERENCES accounts(id),
@@ -21,7 +23,14 @@ const MIGRATIONS: &[&str] = &["CREATE TABLE accounts (id TEXT PRIMARY KEY NOT NU
         space TEXT NOT NULL,
         write INTEGER NOT NULL,
         PRIMARY KEY(connection, space)
-     );"];
+     );",
+    "CREATE TABLE ha_users (
+        ha_id TEXT PRIMARY KEY NOT NULL,
+        account_id TEXT NOT NULL UNIQUE REFERENCES accounts(id),
+        name TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+     );",
+];
 
 #[derive(Clone)]
 pub struct Account {
@@ -91,6 +100,53 @@ impl Accounts {
         Ok(account)
     }
 
+    /// Maps a Home Assistant user to its account, creating the account on the
+    /// first sight with a deterministic id derived from the Home Assistant id.
+    pub fn account_for_ha_user(&self, ha_id: &str, name: &str) -> Result<Account, AccessError> {
+        if ha_id.trim().is_empty() {
+            return Err(AccessError::Invalid(
+                "A Home Assistant user id is required".into(),
+            ));
+        }
+        let existing: Option<String> = self
+            .db()?
+            .query_row(
+                "SELECT account_id FROM ha_users WHERE ha_id = ?1",
+                [ha_id],
+                |row| row.get(0),
+            )
+            .optional()?;
+        let account_id = match existing {
+            Some(account_id) => {
+                self.db()?.execute(
+                    "UPDATE ha_users SET name = ?2 WHERE ha_id = ?1",
+                    (ha_id, name),
+                )?;
+                account_id
+            }
+            None => {
+                let account_id = account_id_for_ha_user(ha_id);
+                match self.account(&account_id) {
+                    Ok(_) => {}
+                    Err(AccessError::NotFound) => match self.account_create(&account_id) {
+                        Ok(_) => {}
+                        Err(AccessError::Conflict) => {}
+                        Err(error) => return Err(error),
+                    },
+                    Err(error) => return Err(error),
+                }
+                self.db()?.execute(
+                    "INSERT INTO ha_users (ha_id, account_id, name, created_at)
+                     VALUES (?1, ?2, ?3, ?4)
+                     ON CONFLICT(ha_id) DO UPDATE SET name = excluded.name",
+                    (ha_id, &account_id, name, now()?),
+                )?;
+                account_id
+            }
+        };
+        self.account(&account_id)
+    }
+
     pub fn account(&self, id: &str) -> Result<Account, AccessError> {
         let mut cache = self.cache.lock().map_err(|_| AccessError::Conflict)?;
         if let Some(account) = cache.get(id) {
@@ -120,6 +176,34 @@ impl Accounts {
     pub(crate) fn db(&self) -> Result<MutexGuard<'_, Connection>, AccessError> {
         self.writer.lock().map_err(|_| AccessError::Conflict)
     }
+}
+
+fn account_id_for_ha_user(ha_id: &str) -> String {
+    let sanitised: String = ha_id
+        .to_lowercase()
+        .chars()
+        .filter(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == '-')
+        .take(12)
+        .collect();
+    if sanitised.is_empty() {
+        let digest = Sha256::digest(ha_id.as_bytes());
+        let hex: String = digest
+            .iter()
+            .take(6)
+            .map(|byte| format!("{byte:02x}"))
+            .collect();
+        format!("u-{hex}")
+    } else {
+        format!("u-{sanitised}")
+    }
+}
+
+fn now() -> Result<i64, AccessError> {
+    let seconds = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| AccessError::Invalid("System clock is out of range".into()))?
+        .as_secs();
+    i64::try_from(seconds).map_err(|_| AccessError::Invalid("System clock is out of range".into()))
 }
 
 fn migrate(db: &mut Connection) -> Result<(), AccessError> {

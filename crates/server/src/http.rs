@@ -1,3 +1,4 @@
+use crate::admin::{self, AdminState};
 use crate::config::Config;
 use crate::error::ServerError;
 use crate::oauth::{self, OAuth};
@@ -65,6 +66,7 @@ impl Server {
         check_bindable(&config)?;
         let bound = bind(config.listen).await?;
         let oauth = accounts
+            .clone()
             .map(|accounts| {
                 let fallback = format!(
                     "http://{}",
@@ -89,7 +91,7 @@ impl Server {
             authenticators.push(oauth.clone());
         }
         let state = AppState {
-            config,
+            config: config.clone(),
             mcp,
             authenticators: Arc::new(authenticators),
         };
@@ -109,16 +111,91 @@ impl Server {
                     .await;
             });
         }
+        let admin_addr = serve_admin(&config, accounts, oauth.clone(), shutdown_rx.clone()).await?;
         Ok(Handle {
             local_addr: bound.local_addr,
+            admin_addr,
             shutdown: shutdown_tx,
             oauth,
         })
     }
 }
 
+async fn serve_admin(
+    config: &Config,
+    accounts: Option<Arc<Accounts>>,
+    oauth: Option<Arc<OAuth>>,
+    shutdown_rx: watch::Receiver<bool>,
+) -> Result<Option<SocketAddr>, ServerError> {
+    let Some(admin_listen) = config.admin_listen else {
+        return Ok(None);
+    };
+    let (Some(accounts), Some(oauth)) = (accounts, oauth) else {
+        return Err(ServerError::Invalid(
+            "the admin listener needs accounts and OAuth".into(),
+        ));
+    };
+    let listener = tokio::net::TcpListener::bind(admin_listen).await?;
+    let addr = listener.local_addr()?;
+    let state = AdminState {
+        accounts,
+        oauth,
+        trusted_proxy: config.admin_trusted_proxy,
+        data_dir: config.data_dir.clone(),
+        version: env!("CARGO_PKG_VERSION"),
+    };
+    let router = admin::router(state);
+    let mut receiver = shutdown_rx;
+    tokio::spawn(async move {
+        let _ = axum::serve(
+            listener,
+            router.into_make_service_with_connect_info::<SocketAddr>(),
+        )
+        .with_graceful_shutdown(async move {
+            let _ = receiver.changed().await;
+        })
+        .await;
+    });
+    Ok(Some(addr))
+}
+
+/// Starts both the main and the admin listeners and blocks until the process
+/// receives Ctrl-C or SIGTERM, then shuts them down.
+pub fn serve_blocking(config: Config) -> Result<(), ServerError> {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(async {
+        let handle = Server::start(config).await?;
+        shutdown_signal().await;
+        handle.shutdown();
+        Ok(())
+    })
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        if let Ok(mut signal) =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+        {
+            let _ = signal.recv().await;
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+}
+
 pub struct Handle {
     local_addr: SocketAddr,
+    admin_addr: Option<SocketAddr>,
     shutdown: watch::Sender<bool>,
     oauth: Option<Arc<OAuth>>,
 }
@@ -126,6 +203,10 @@ pub struct Handle {
 impl Handle {
     pub fn local_addr(&self) -> SocketAddr {
         self.local_addr
+    }
+
+    pub fn admin_addr(&self) -> Option<SocketAddr> {
+        self.admin_addr
     }
 
     /// Issues a one-time OAuth code for an account already verified by a trusted caller.
