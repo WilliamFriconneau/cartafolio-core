@@ -70,12 +70,7 @@ impl Server {
                         bound.local_addr.port(),
                     )
                 );
-                OAuth::open(
-                    &config.data_dir,
-                    accounts,
-                    config.public_url.as_deref().unwrap_or(&fallback),
-                )
-                .map(Arc::new)
+                OAuth::open(config.clone(), accounts, fallback).map(Arc::new)
             })
             .transpose()?;
         if let Some(oauth) = &oauth {
@@ -85,7 +80,7 @@ impl Server {
             config: config.clone(),
             mcp,
             authenticators: Arc::new(authenticators),
-            oauth_issuer: oauth.as_ref().map(|oauth| oauth.issuer().to_owned()),
+            oauth: oauth.clone(),
         };
         let mut router = router(state);
         if let Some(oauth) = &oauth {
@@ -135,7 +130,7 @@ async fn serve_admin(
         trusted_proxy: config.admin_trusted_proxy,
         data_dir: config.data_dir.clone(),
         version: env!("CARGO_PKG_VERSION"),
-        public_url: config.public_url.clone(),
+        config: config.clone(),
     };
     let router = admin::router(state);
     let mut receiver = shutdown_rx;

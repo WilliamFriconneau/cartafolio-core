@@ -1,0 +1,29 @@
+name: Pensine
+version: "0.1.0"
+slug: pensine
+description: Memory for assistants over MCP, with one account per Home Assistant user
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: services
+boot: auto
+backup: cold
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:brain
+panel_title: Pensine
+panel_admin: false
+ports:
+  8791/tcp: null
+ports_description:
+  8791/tcp: MCP and OAuth (tokens travel in clear on this port; put a TLS proxy in front)
+options:
+  tailscale: true
+  tailscale_hostname: pensine
+  public_url: ''
+schema:
+  tailscale: bool
+  tailscale_hostname: str
+  tailscale_authkey: password?
+  public_url: str?

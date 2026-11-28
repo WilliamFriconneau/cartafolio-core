@@ -1,0 +1,13 @@
+configuration:
+  tailscale:
+    name: Own Tailscale node
+    description: Join your tailnet and publish MCP and OAuth over Funnel.
+  tailscale_hostname:
+    name: Node name
+    description: The name of this node in your tailnet.
+  tailscale_authkey:
+    name: Tailscale auth key
+    description: Optional. Without a key, open the approval URL in the add-on log.
+  public_url:
+    name: Public address
+    description: The HTTPS origin of your proxy when Tailscale is off.

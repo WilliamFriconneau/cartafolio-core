@@ -4,7 +4,8 @@ mod token;
 
 pub(crate) use routes::routes;
 
-use crate::{Authenticator, ServerError};
+use crate::config::parse_public_origin;
+use crate::{Authenticator, Config, ServerError};
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -17,10 +18,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
-use std::path::Path;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::Duration;
-use url::{Host, Url};
 
 const INVITE_SELECTOR_LEN: usize = 12;
 const INVITE_ATTEMPT_LIMIT: u32 = 5;
@@ -35,24 +34,26 @@ type Result<T> = std::result::Result<T, OAuthError>;
 pub(crate) struct OAuth {
     accounts: Arc<Accounts>,
     db: Mutex<Database>,
-    issuer: String,
-    origin: String,
-    resource: String,
+    config: Config,
+    fallback_issuer: String,
 }
 
 impl OAuth {
     pub(crate) fn open(
-        root: &Path,
+        config: Config,
         accounts: Arc<Accounts>,
-        issuer: &str,
+        fallback_issuer: String,
     ) -> std::result::Result<Self, ServerError> {
-        let issuer = issuer.trim_end_matches('/');
-        let url = parse_web_url(issuer)
-            .filter(|url| url.path() == "/" && url.query().is_none())
-            .ok_or_else(|| {
-                ServerError::Invalid("public_url must be an HTTPS or loopback origin".into())
-            })?;
-        let mut db = Database::open(root.join("oauth.db")).map_err(db_error)?;
+        if config
+            .public_url
+            .as_deref()
+            .is_some_and(|url| parse_public_origin(url).is_none())
+        {
+            return Err(ServerError::Invalid(
+                "public_url must be an HTTPS or loopback origin".into(),
+            ));
+        }
+        let mut db = Database::open(config.data_dir.join("oauth.db")).map_err(db_error)?;
         db.busy_timeout(Duration::from_secs(5)).map_err(db_error)?;
         let tx = db
             .transaction_with_behavior(TransactionBehavior::Immediate)
@@ -103,14 +104,16 @@ impl OAuth {
         Ok(Self {
             accounts,
             db: Mutex::new(db),
-            issuer: issuer.into(),
-            origin: url.origin().ascii_serialization(),
-            resource: format!("{issuer}/mcp"),
+            config,
+            fallback_issuer,
         })
     }
 
-    pub(crate) fn issuer(&self) -> &str {
-        &self.issuer
+    pub(crate) fn issuer(&self) -> String {
+        self.config.public_url().map_or_else(
+            || self.fallback_issuer.clone(),
+            |url| url.trim_end_matches('/').to_owned(),
+        )
     }
 
     fn db(&self) -> std::result::Result<MutexGuard<'_, Database>, ServerError> {
@@ -287,9 +290,10 @@ pub(crate) struct SessionInfo {
 
 fn resource_matches(oauth: &OAuth, fields: &Fields) -> Result<()> {
     if fields.get("resource").is_some_and(|resource| {
-        resource != &oauth.resource
+        let base = format!("{}/mcp", oauth.issuer());
+        resource != &base
             && !resource
-                .strip_prefix(&oauth.resource)
+                .strip_prefix(&base)
                 .and_then(|suffix| suffix.strip_prefix('/'))
                 .is_some_and(|alias| validate_alias(alias).is_ok())
     }) {
@@ -300,20 +304,6 @@ fn resource_matches(oauth: &OAuth, fields: &Fields) -> Result<()> {
 
 fn field<'a>(fields: &'a Fields, key: &str) -> &'a str {
     fields.get(key).map_or("", String::as_str)
-}
-
-fn parse_web_url(value: &str) -> Option<Url> {
-    let url = Url::parse(value).ok()?;
-    let loopback = match url.host()? {
-        Host::Ipv4(ip) => ip.is_loopback(),
-        Host::Ipv6(ip) => ip.is_loopback(),
-        Host::Domain(domain) => domain == "localhost",
-    };
-    ((url.scheme() == "https" || url.scheme() == "http" && loopback)
-        && url.fragment().is_none()
-        && url.username().is_empty()
-        && url.password().is_none())
-    .then_some(url)
 }
 
 fn random_secret() -> std::io::Result<String> {

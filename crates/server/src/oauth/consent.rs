@@ -2,6 +2,7 @@ use super::{
     field, hash, invite_selector, random_secret, resource_matches, Fields, OAuth, OAuthError,
     Result, Scope, CODE_TTL, INVITE_ATTEMPT_LIMIT, INVITE_TTL,
 };
+use crate::config::parse_public_origin;
 use crate::html::escape_html;
 use crate::ServerError;
 use axum::extract::{Form, Query, State};
@@ -72,7 +73,7 @@ impl Authorization {
         let mut query = url.query_pairs_mut();
         query
             .append_pair(key, value)
-            .append_pair("iss", &oauth.issuer);
+            .append_pair("iss", &oauth.issuer());
         if let Some(state) = &self.state {
             query.append_pair("state", state);
         }
@@ -118,9 +119,11 @@ pub(super) async fn consent(
     if headers
         .get("sec-fetch-site")
         .is_some_and(|site| site == "cross-site")
-        || headers
-            .get(header::ORIGIN)
-            .is_some_and(|origin| origin.as_bytes() != oauth.origin.as_bytes())
+        || headers.get(header::ORIGIN).is_some_and(|origin| {
+            parse_public_origin(&oauth.issuer()).is_none_or(|url| {
+                origin.as_bytes() != url.origin().ascii_serialization().as_bytes()
+            })
+        })
     {
         return Err(OAuthError::Forbidden);
     }

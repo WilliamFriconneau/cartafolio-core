@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use url::{Host, Url};
 
 pub const DEFAULT_MAX_BODY: usize = 64 * 1024 * 1024;
 pub const DEFAULT_REQUEST_TIMEOUT: Duration = Duration::from_secs(60);
@@ -13,6 +14,7 @@ pub struct Config {
     pub listen: SocketAddr,
     pub allow_remote: bool,
     pub public_url: Option<String>,
+    pub public_url_file: Option<PathBuf>,
     pub data_dir: PathBuf,
     pub max_body: usize,
     pub request_timeout: Duration,
@@ -26,6 +28,7 @@ impl Default for Config {
             listen: SocketAddr::new(IpAddr::V4(Ipv4Addr::LOCALHOST), 8791),
             allow_remote: false,
             public_url: None,
+            public_url_file: None,
             data_dir: PathBuf::from("data"),
             max_body: DEFAULT_MAX_BODY,
             request_timeout: DEFAULT_REQUEST_TIMEOUT,
@@ -44,6 +47,7 @@ struct FileConfig {
     allow_remote: bool,
     #[serde(default)]
     public_url: Option<String>,
+    public_url_file: Option<PathBuf>,
     #[serde(default)]
     data_dir: Option<PathBuf>,
     #[serde(default)]
@@ -57,6 +61,28 @@ struct FileConfig {
 }
 
 impl Config {
+    pub fn public_url(&self) -> Option<String> {
+        if let Some(url) = &self.public_url {
+            return Some(url.clone());
+        }
+        let value = std::fs::read_to_string(self.public_url_file.as_ref()?).ok()?;
+        let value = value.trim();
+        let (scheme, authority) = value.split_once("://")?;
+        if !scheme.eq_ignore_ascii_case("https")
+            || authority.trim_end_matches('/').is_empty()
+            || authority
+                .strip_suffix('/')
+                .unwrap_or(authority)
+                .contains('/')
+            || authority.contains(['\\', '"'])
+            || authority
+                .contains(|character: char| character.is_whitespace() || character.is_control())
+        {
+            return None;
+        }
+        parse_public_origin(value).map(|_| value.to_owned())
+    }
+
     pub fn from_file(path: &Path) -> Result<Self, ServerError> {
         let text = std::fs::read_to_string(path).map_err(|error| {
             ServerError::Invalid(format!("could not read config file {path:?}: {error}"))
@@ -91,7 +117,8 @@ impl Config {
         Ok(Config {
             listen,
             allow_remote: file.allow_remote,
-            public_url: file.public_url.or(defaults.public_url),
+            public_url: file.public_url,
+            public_url_file: file.public_url_file,
             data_dir: file.data_dir.unwrap_or(defaults.data_dir),
             max_body: file.max_body.unwrap_or(defaults.max_body),
             request_timeout: file
@@ -102,6 +129,25 @@ impl Config {
             admin_trusted_proxy,
         })
     }
+}
+
+pub(crate) fn parse_public_origin(value: &str) -> Option<Url> {
+    parse_web_url(value.trim_end_matches('/'))
+        .filter(|url| url.path() == "/" && url.query().is_none())
+}
+
+pub(crate) fn parse_web_url(value: &str) -> Option<Url> {
+    let url = Url::parse(value).ok()?;
+    let loopback = match url.host()? {
+        Host::Ipv4(ip) => ip.is_loopback(),
+        Host::Ipv6(ip) => ip.is_loopback(),
+        Host::Domain(domain) => domain == "localhost",
+    };
+    ((url.scheme() == "https" || url.scheme() == "http" && loopback)
+        && url.fragment().is_none()
+        && url.username().is_empty()
+        && url.password().is_none())
+    .then_some(url)
 }
 
 #[cfg(test)]

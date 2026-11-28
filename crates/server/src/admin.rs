@@ -2,6 +2,7 @@ use crate::admin_html::{
     csrf_matches, disk_used, grants_from_form, new_csrf, page, render_alias, render_connections,
     render_oauth, space_depth,
 };
+use crate::config::Config;
 use crate::error::ServerError;
 use crate::html::escape_html;
 use crate::oauth::OAuth;
@@ -23,12 +24,13 @@ pub(crate) struct AdminState {
     pub oauth: Arc<OAuth>,
     pub trusted_proxy: IpAddr,
     pub data_dir: PathBuf,
-    pub public_url: Option<String>,
+    pub config: Config,
     pub version: &'static str,
 }
 
 pub(crate) fn router(state: AdminState) -> Router {
     Router::new()
+        .route("/", get(connections_page))
         .route(
             "/connections",
             get(connections_page).post(connections_create),
@@ -254,7 +256,12 @@ fn render_connections_page(
     let connections = state.accounts.connections(&account.id)?;
     let spaces = account.store.spaces()?;
     let alias = state.accounts.alias_of(&account.id)?;
-    let alias_form = render_alias(state.public_url.as_deref(), &alias, alias_error, &csrf);
+    let alias_form = render_alias(
+        state.config.public_url().as_deref(),
+        &alias,
+        alias_error,
+        &csrf,
+    );
     page(
         "Connections",
         &render_connections(&account.id, &alias_form, &connections, &spaces, &csrf),

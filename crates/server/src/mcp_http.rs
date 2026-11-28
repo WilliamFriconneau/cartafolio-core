@@ -1,3 +1,4 @@
+use crate::oauth::OAuth;
 use crate::{Authenticator, Config};
 use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, FromRequest, MatchedPath, Path, Request, State};
@@ -17,7 +18,7 @@ pub(super) struct AppState {
     pub config: Config,
     pub mcp: Arc<Mcp>,
     pub authenticators: Arc<Vec<Arc<dyn Authenticator>>>,
-    pub oauth_issuer: Option<String>,
+    pub oauth: Option<Arc<OAuth>>,
 }
 
 pub(super) fn router(state: AppState) -> Router {
@@ -53,7 +54,7 @@ async fn mcp_not_allowed() -> Response {
 
 async fn mcp_handler(State(state): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     let Some(principal) = authenticate(&state, &headers) else {
-        return unauthorized(state.config.public_url.as_deref(), "");
+        return unauthorized(state.config.public_url().as_deref(), "");
     };
     dispatch(&state, principal, body).await
 }
@@ -67,7 +68,8 @@ async fn alias_handler(
         return StatusCode::NOT_FOUND.into_response();
     }
     let Some(principal) = authenticate(&state, request.headers()) else {
-        return unauthorized(state.oauth_issuer.as_deref(), &format!("/mcp/{alias}"));
+        let issuer = state.oauth.as_ref().map(|oauth| oauth.issuer());
+        return unauthorized(issuer.as_deref(), &format!("/mcp/{alias}"));
     };
     match state.mcp.accounts().alias_of(&principal.account) {
         Ok(current) if current == alias => {}

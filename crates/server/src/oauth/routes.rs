@@ -1,6 +1,7 @@
 use super::consent::{authorize, consent};
 use super::token::token;
-use super::{parse_web_url, random_secret, OAuth, OAuthError, Result};
+use super::{random_secret, OAuth, OAuthError, Result};
+use crate::config::parse_web_url;
 use axum::extract::{DefaultBodyLimit, Path, Request, State};
 use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::{self, Next};
@@ -35,31 +36,32 @@ pub(crate) fn routes(oauth: Arc<OAuth>) -> Router {
 }
 
 async fn protected_resource(State(oauth): State<Arc<OAuth>>) -> Json<Value> {
-    resource_document(&oauth, &oauth.resource)
+    resource_document(&oauth.issuer(), "/mcp")
 }
 
 async fn alias_resource(State(oauth): State<Arc<OAuth>>, Path(alias): Path<String>) -> Response {
     if validate_alias(&alias).is_err() {
         return StatusCode::NOT_FOUND.into_response();
     }
-    resource_document(&oauth, &format!("{}/{alias}", oauth.resource)).into_response()
+    resource_document(&oauth.issuer(), &format!("/mcp/{alias}")).into_response()
 }
 
-fn resource_document(oauth: &OAuth, resource: &str) -> Json<Value> {
+fn resource_document(issuer: &str, path: &str) -> Json<Value> {
     Json(json!({
-        "resource": resource,
-        "authorization_servers": [oauth.issuer],
+        "resource": format!("{issuer}{path}"),
+        "authorization_servers": [issuer],
         "bearer_methods_supported": ["header"],
         "scopes_supported": ["memory"],
     }))
 }
 
 async fn authorization_server(State(oauth): State<Arc<OAuth>>) -> Json<Value> {
+    let issuer = oauth.issuer();
     Json(json!({
-        "issuer": oauth.issuer,
-        "authorization_endpoint": format!("{}/authorize", oauth.issuer),
-        "token_endpoint": format!("{}/token", oauth.issuer),
-        "registration_endpoint": format!("{}/register", oauth.issuer),
+        "issuer": issuer,
+        "authorization_endpoint": format!("{issuer}/authorize"),
+        "token_endpoint": format!("{issuer}/token"),
+        "registration_endpoint": format!("{issuer}/register"),
         "response_types_supported": ["code"],
         "grant_types_supported": ["authorization_code", "refresh_token"],
         "code_challenge_methods_supported": ["S256"],

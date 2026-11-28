@@ -1,0 +1,13 @@
+configuration:
+  tailscale:
+    name: Nœud Tailscale dédié
+    description: Rejoint votre tailnet et publie MCP et OAuth via Funnel.
+  tailscale_hostname:
+    name: Nom du nœud
+    description: Le nom de ce nœud dans votre tailnet.
+  tailscale_authkey:
+    name: Clé d’authentification Tailscale
+    description: Facultatif. Sans clé, ouvrez l’adresse d’approbation affichée dans le journal.
+  public_url:
+    name: Adresse publique
+    description: L’origine HTTPS de votre proxy lorsque Tailscale est désactivé.
