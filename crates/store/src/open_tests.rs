@@ -4,11 +4,11 @@ use std::sync::Barrier;
 use std::thread;
 
 #[test]
-fn opens_an_empty_folder_and_is_at_version_1() {
+fn opens_an_empty_folder_and_is_at_version_2() {
     let dir = tempfile::tempdir().unwrap();
     let path = dir.path().join("new");
     let store = Store::open(&path).unwrap();
-    assert_eq!(store.schema_version(), 1);
+    assert_eq!(store.schema_version(), 2);
     assert!(path.join("store.db").is_file());
     assert!(path.join("blobs").is_dir());
     for conn in std::iter::once(&store.writer).chain(store.readers.iter()) {
@@ -45,7 +45,7 @@ fn reopens_without_changing_anything() {
     let database = dir.path().join("store.db");
     let before = fs::read(&database).unwrap();
     let reopened = Store::open(dir.path()).unwrap();
-    assert_eq!(reopened.schema_version(), 1);
+    assert_eq!(reopened.schema_version(), 2);
     let label: String = reopened.readers[0]
         .lock()
         .unwrap()
@@ -97,4 +97,35 @@ fn refuses_a_folder_it_cannot_write() {
     // A file at the required blobs path prevents setup even when tests run as root.
     fs::write(dir.path().join("blobs"), []).unwrap();
     assert!(matches!(Store::open(dir.path()), Err(StoreError::Io(_))));
+}
+
+#[test]
+fn upgrades_a_version_1_store_without_losing_spaces() {
+    let dir = tempfile::tempdir().unwrap();
+    let conn = rusqlite::Connection::open(dir.path().join("store.db")).unwrap();
+    let (version, migration) = crate::schema::MIGRATIONS[0];
+    assert_eq!(version, 1);
+    conn.execute_batch(migration).unwrap();
+    conn.pragma_update(None, "user_version", version).unwrap();
+    conn.execute(
+        "INSERT INTO spaces (name, label, position) VALUES ('notes', 'Notes', 1)",
+        [],
+    )
+    .unwrap();
+    drop(conn);
+
+    let store = Store::open(dir.path()).unwrap();
+    assert_eq!(store.schema_version(), 2);
+    let saved = store
+        .remember(crate::NewFact {
+            space: "notes".into(),
+            text: "Saved after the upgrade".into(),
+            tags: vec![],
+            author: "writer".into(),
+            source: "capture".into(),
+            at: None,
+            origin: None,
+        })
+        .unwrap();
+    assert_eq!(saved.outcome, crate::Outcome::Created);
 }

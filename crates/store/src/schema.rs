@@ -1,9 +1,10 @@
 use crate::StoreError;
 use rusqlite::{Connection, TransactionBehavior};
 
-const MIGRATIONS: &[(u32, &str)] = &[(
-    1,
-    "
+pub(super) const MIGRATIONS: &[(u32, &str)] = &[
+    (
+        1,
+        "
     CREATE TABLE spaces (
         name TEXT PRIMARY KEY NOT NULL,
         label TEXT NOT NULL,
@@ -50,7 +51,22 @@ const MIGRATIONS: &[(u32, &str)] = &[(
 
     CREATE VIRTUAL TABLE fts USING fts5(fact_id UNINDEXED, text);
     ",
-)];
+    ),
+    (
+        2,
+        "
+    CREATE UNIQUE INDEX facts_successor ON facts(replaces) WHERE replaces IS NOT NULL;
+    CREATE INDEX facts_active_space ON facts(space) WHERE status = 'active';
+
+    CREATE TABLE duplicate_origins (
+        origin_app TEXT NOT NULL,
+        origin_id TEXT NOT NULL,
+        fact_id TEXT NOT NULL REFERENCES facts(id),
+        PRIMARY KEY (origin_app, origin_id)
+    );
+    ",
+    ),
+];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
     let latest = MIGRATIONS.last().map_or(0, |(version, _)| *version);

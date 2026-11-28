@@ -11,20 +11,24 @@
 mod open_tests;
 
 mod error;
+mod fact;
+mod list;
 mod schema;
+mod tags;
 
 pub use error::StoreError;
+pub use fact::{Fact, FactStatus, NewFact, Outcome, Remembered};
+pub use list::{ListQuery, Page};
+pub use tags::normalize_tag;
 
 use rusqlite::{Connection, OpenFlags};
 use std::fs;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::{Mutex, MutexGuard, TryLockError};
 use std::time::Duration;
 
 pub struct Store {
-    #[allow(dead_code, reason = "Store write operations arrive in T3")]
     writer: Mutex<Connection>,
-    #[allow(dead_code, reason = "Store read operations arrive in T3")]
     readers: [Mutex<Connection>; 2],
     schema_version: u32,
 }
@@ -55,6 +59,17 @@ impl Store {
             readers: [open_reader()?, open_reader()?],
             schema_version,
         })
+    }
+
+    fn reader(&self) -> Result<MutexGuard<'_, Connection>, StoreError> {
+        for reader in &self.readers {
+            match reader.try_lock() {
+                Ok(connection) => return Ok(connection),
+                Err(TryLockError::WouldBlock) => {}
+                Err(TryLockError::Poisoned(_)) => return Err(StoreError::Conflict),
+            }
+        }
+        self.readers[0].lock().map_err(|_| StoreError::Conflict)
     }
 
     pub fn schema_version(&self) -> u32 {
