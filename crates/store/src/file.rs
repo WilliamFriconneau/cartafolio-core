@@ -1,5 +1,6 @@
+use crate::cursor::{Cursor, CursorCodec};
 use crate::fact::validate_time;
-use crate::list::{json_array, Cursor};
+use crate::list::json_array;
 use crate::space::require_space;
 use crate::{FactStatus, ListQuery, Page, Store, StoreError};
 use rusqlite::{named_params, params, OptionalExtension, Row};
@@ -185,28 +186,38 @@ impl Store {
         if !query.tags_any.is_empty() || !query.tags_all.is_empty() {
             return Err(StoreError::Invalid("Files do not have tags".into()));
         }
-        let cursor = query.cursor.as_deref().map(Cursor::parse).transpose()?;
+        let codec = CursorCodec::new(&self.cursor_key, "files", &query)?;
+        let cursor = query
+            .cursor
+            .as_deref()
+            .map(|value| codec.decode(value))
+            .transpose()?;
         let spaces = json_array(&query.spaces)?;
         let status = query.status.unwrap_or(FactStatus::Active).as_str();
         let conn = self.reader()?;
-        let mut stmt = conn.prepare(&format!(
-            "WITH boundary(snapshot) AS (
-                SELECT coalesce(:snapshot, (SELECT coalesce(max(rowid), 0) FROM files))
-             )
-             SELECT {COLUMNS}, files.rowid, boundary.snapshot
-             FROM files CROSS JOIN boundary
-             WHERE status = :status AND files.rowid <= boundary.snapshot
-               AND (:rowid IS NULL OR (created_at, files.rowid) < (:at, :rowid))
+        let visible = "status = :status
                AND (:since IS NULL OR created_at >= :since)
                AND (:until IS NULL OR created_at <= :until)
-               AND (:spaces = '[]' OR space IN (SELECT value FROM json_each(:spaces)))
+               AND (:spaces = '[]' OR space IN (SELECT value FROM json_each(:spaces)))";
+        let mut stmt = conn.prepare_cached(&format!(
+            "WITH boundary(snapshot) AS MATERIALIZED (
+                SELECT CASE WHEN :snapshot IS NULL
+                            THEN (SELECT max(rowid) FROM files WHERE {visible})
+                            ELSE (SELECT rowid FROM files WHERE id = :snapshot) END
+             )
+             SELECT {COLUMNS}, (SELECT id FROM files WHERE rowid = (SELECT snapshot FROM boundary))
+             FROM files
+             WHERE {visible}
+               AND files.rowid <= (SELECT snapshot FROM boundary)
+               AND (:last IS NULL OR (created_at, files.rowid) <
+                   (:at, (SELECT rowid FROM files WHERE id = :last)))
              ORDER BY created_at DESC, files.rowid DESC
              LIMIT :limit"
         ))?;
         let mut rows = stmt.query(named_params! {
-            ":snapshot": cursor.as_ref().map(|c| c.snapshot),
-            ":at": cursor.as_ref().map(|c| c.created_at),
-            ":rowid": cursor.as_ref().map(|c| c.rowid),
+            ":snapshot": cursor.as_ref().map(|c| c.snapshot.as_str()),
+            ":at": cursor.as_ref().map(|c| c.at),
+            ":last": cursor.as_ref().map(|c| c.last.as_str()),
             ":status": status,
             ":since": query.since,
             ":until": query.until,
@@ -219,14 +230,17 @@ impl Store {
             if items.len() == query.limit {
                 return Ok(Page {
                     items,
-                    next_cursor: last.as_ref().map(Cursor::encode),
+                    next_cursor: last
+                        .as_ref()
+                        .map(|cursor| codec.encode(cursor))
+                        .transpose()?,
                 });
             }
             let file = file_from_row(row)?;
             last = Some(Cursor {
-                snapshot: row.get(11)?,
-                created_at: file.created_at,
-                rowid: row.get(10)?,
+                snapshot: row.get(10)?,
+                at: file.created_at,
+                last: file.id.clone(),
             });
             items.push(file);
         }

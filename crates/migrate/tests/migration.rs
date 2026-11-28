@@ -209,7 +209,7 @@ async fn a_duplicate_origin_is_verified_against_the_existing_text() {
         .remember(NewFact {
             space: "root".into(),
             text: "Fictional root entry 0".into(),
-            tags: vec![],
+            tags: vec!["sample".into(), "été".into()],
             author: "Fixture author".into(),
             source: "fixture".into(),
             at: None,

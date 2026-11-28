@@ -243,11 +243,12 @@ async fn the_protected_resource_document_is_path_specific() {
             challenge.header("WWW-Authenticate").unwrap(),
             format!("Bearer resource_metadata=\"{issuer}{path}\"")
         );
-        let body = ureq::get(&format!("http://{}{path}", handle.local_addr()))
-            .call()
-            .unwrap()
-            .into_string()
-            .unwrap();
+        let response = ureq::get(&format!("http://{}{path}", handle.local_addr())).call();
+        if alias == "unknown-user" {
+            status_response(response, 404);
+            continue;
+        }
+        let body = response.unwrap().into_string().unwrap();
         let metadata: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert_eq!(metadata["resource"], format!("{issuer}/mcp/{alias}"));
         assert_eq!(
@@ -278,7 +279,7 @@ async fn the_legacy_mcp_path_still_works_with_a_key() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn an_oauth_token_routes_by_account_after_an_alias_change() {
+async fn the_oauth_token_follows_the_account_across_an_alias_rename() {
     use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
     use serde_json::{json, Value};
     use sha2::{Digest, Sha256};
@@ -373,5 +374,16 @@ async fn an_oauth_token_routes_by_account_after_an_alias_change() {
         call("/mcp/new-demo").send_string(PING).unwrap().status(),
         200
     );
+    assert_eq!(call("/mcp").send_string(PING).unwrap().status(), 200);
+    let metadata = format!(
+        "http://{}/.well-known/oauth-protected-resource",
+        handle.local_addr()
+    );
+    status_response(agent.get(&format!("{metadata}/mcp/demo")).call(), 404);
+    for address in [metadata.clone(), format!("{metadata}/mcp/new-demo")] {
+        let response = agent.get(&address).call().unwrap().into_string().unwrap();
+        let body: Value = serde_json::from_str(&response).unwrap();
+        assert_eq!(body["resource"], format!("{issuer}/mcp/new-demo"));
+    }
     handle.shutdown();
 }

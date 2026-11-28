@@ -20,7 +20,7 @@ fn upgrading_from_version_2_indexes_existing_versions_once() {
     drop(conn);
     for _ in 0..2 {
         let store = Store::open(dir.path()).unwrap();
-        assert_eq!(store.schema_version(), 5);
+        assert_eq!(store.schema_version(), 6);
         let mut hits = store
             .recall(RecallQuery {
                 text: "cheval".into(),
@@ -41,7 +41,7 @@ fn upgrading_from_version_2_indexes_existing_versions_once() {
             .unwrap()
             .query_row("SELECT count(*) FROM fts", [], |row| row.get(0))
             .unwrap();
-        // The two notes, and the todo note that the upgrade adds to the space.
-        assert_eq!(count, 3);
+        // The active note and the todo note that the upgrade adds to the space.
+        assert_eq!(count, 2);
     }
 }

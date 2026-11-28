@@ -78,7 +78,7 @@ async fn the_protected_resource_and_server_metadata_agree_on_the_issuer() {
         resource["authorization_servers"],
         json!([metadata["issuer"]])
     );
-    assert_eq!(resource["resource"], format!("{ISSUER}/mcp"));
+    assert_eq!(resource["resource"], format!("{ISSUER}/mcp/demo"));
     for (key, path) in [
         ("authorization_endpoint", "/authorize"),
         ("token_endpoint", "/token"),

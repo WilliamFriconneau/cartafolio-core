@@ -138,10 +138,8 @@ fn a_pinned_note_ranks_above_an_equal_unpinned_one() {
     };
     let before = store.recall(query.clone()).unwrap();
     assert_eq!(before[0].fact.id, newer.id);
-    assert_eq!(before[0].score, before[1].score);
     store.pin(&older.id, true).unwrap();
     let hits = store.recall(RecallQuery { limit: 1, ..query }).unwrap();
     assert_eq!(hits[0].fact.id, older.id);
     assert!(hits[0].fact.pinned);
-    assert_eq!(hits[0].score, before[1].score * 1.5);
 }

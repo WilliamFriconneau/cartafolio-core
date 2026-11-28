@@ -59,7 +59,7 @@ impl Scope<'_> {
                 space.parent = None;
             }
         }
-        Ok(visible)
+        Ok(visible_tree(visible))
     }
 
     pub fn spaces_view(&self) -> Result<Vec<Value>> {
@@ -348,4 +348,26 @@ fn require_write(allowed: bool) -> Result<()> {
     } else {
         Err(ToolError::Message(texts::WRITE_REQUIRED.into()))
     }
+}
+
+// Sort siblings using their relative creation order after removing hidden parents.
+fn visible_tree(mut spaces: Vec<SpaceInfo>) -> Vec<SpaceInfo> {
+    spaces.sort_unstable_by_key(|space| space.position);
+    let mut children = std::collections::HashMap::<_, Vec<_>>::new();
+    for space in spaces.into_iter().rev() {
+        children
+            .entry(space.parent.clone())
+            .or_default()
+            .push(space);
+    }
+    let mut pending = children.remove(&None).unwrap_or_default();
+    let mut ordered = Vec::new();
+    while let Some(mut space) = pending.pop() {
+        if let Some(descendants) = children.remove(&Some(space.name.clone())) {
+            pending.extend(descendants);
+        }
+        space.position = ordered.len() as i64 + 1;
+        ordered.push(space);
+    }
+    ordered
 }

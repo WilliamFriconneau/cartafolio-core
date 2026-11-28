@@ -16,3 +16,5 @@ unicode-normalization.workspace = true
 
 sha2.workspace = true
 tempfile.workspace = true
+base64 = "0.22"
+hmac = "0.12"

@@ -31,8 +31,6 @@ impl Default for RecallQuery {
 #[derive(Clone, Debug, PartialEq, serde::Serialize)]
 pub struct Hit {
     pub fact: Fact,
-    /// FTS5 bm25 score, multiplied by 1.5 for pinned facts. Lower scores rank first.
-    pub score: f64,
     pub snippet: String,
 }
 
@@ -60,40 +58,35 @@ impl Store {
         }
 
         let conn = self.reader()?;
+        // Ranking statistics are per account. The residual effect of other spaces
+        // on ordering is accepted, and numeric scores stay internal.
+        let active = ranked_matches("fts", "search_facts");
+        let retired = ranked_matches("retired_fts", "retired_search_facts");
+        let matches = if query.include_retired {
+            format!("SELECT * FROM ({active}) UNION ALL SELECT * FROM ({retired})")
+        } else {
+            active
+        };
         let mut stmt = conn.prepare_cached(&format!(
-            "WITH ranked AS MATERIALIZED (
-                SELECT facts.rowid AS fact_rowid, facts.created_at AS fact_created_at,
-                       bm25(fts) * CASE WHEN facts.pinned THEN 1.5 ELSE 1.0 END AS score
-                FROM fts
-                CROSS JOIN search_facts ON search_facts.rowid = fts.rowid
-                CROSS JOIN facts ON facts.id = search_facts.fact_id
-                WHERE fts MATCH :expression
-                  AND (:include_retired OR facts.status = 'active')
-                  AND (:pinned IS NULL OR facts.pinned = :pinned)
-                  AND (:since IS NULL OR facts.created_at >= :since)
-                  AND (:spaces = '[]' OR facts.space IN (SELECT value FROM json_each(:spaces)))
-                  AND (:tags_any = '[]' OR EXISTS (
-                      SELECT 1 FROM fact_tags
-                      WHERE fact_id = facts.id AND tag IN (SELECT value FROM json_each(:tags_any))
-                  ))
-                ORDER BY score, fact_created_at DESC, fact_rowid DESC
+            "WITH matches AS MATERIALIZED ({matches}),
+             ranked AS MATERIALIZED (
+                SELECT * FROM matches ORDER BY rank, fact_created_at DESC, fact_rowid DESC
                 LIMIT :limit
              )
-             SELECT {COLUMNS}, ranked.score
+             SELECT {COLUMNS}
              FROM ranked CROSS JOIN facts ON facts.rowid = ranked.fact_rowid
-             ORDER BY ranked.score, ranked.fact_created_at DESC, ranked.fact_rowid DESC"
+             ORDER BY ranked.rank, ranked.fact_created_at DESC, ranked.fact_rowid DESC"
         ))?;
         let rows = stmt.query_map(
             named_params! {
                 ":expression": expression,
-                ":include_retired": query.include_retired,
                 ":since": query.since,
                 ":pinned": pinned,
                 ":spaces": json_array(&query.spaces)?,
                 ":tags_any": tag_filter(&query.tags_any)?,
                 ":limit": query.limit,
             },
-            |row| Ok((fact_from_row(row)?, row.get(13)?)),
+            fact_from_row,
         )?;
         let matches = rows.collect::<Result<Vec<_>, _>>()?;
         drop(stmt);
@@ -101,13 +94,32 @@ impl Store {
 
         Ok(matches
             .into_iter()
-            .map(|(fact, score)| Hit {
+            .map(|fact| Hit {
                 snippet: snippet(&fact.text, &terms),
                 fact,
-                score,
             })
             .collect())
     }
+}
+
+fn ranked_matches(index: &str, mapping: &str) -> String {
+    format!(
+        "SELECT facts.rowid AS fact_rowid, facts.created_at AS fact_created_at,
+                bm25({index}) * CASE WHEN facts.pinned THEN 1.5 ELSE 1.0 END AS rank
+         FROM {index}
+         CROSS JOIN {mapping} ON {mapping}.rowid = {index}.rowid
+         CROSS JOIN facts ON facts.id = {mapping}.fact_id
+         WHERE {index} MATCH :expression
+           AND (:pinned IS NULL OR facts.pinned = :pinned)
+           AND (:since IS NULL OR facts.created_at >= :since)
+           AND (:spaces = '[]' OR facts.space IN (SELECT value FROM json_each(:spaces)))
+           AND (:tags_any = '[]' OR EXISTS (
+               SELECT 1 FROM fact_tags
+               WHERE fact_id = facts.id AND tag IN (SELECT value FROM json_each(:tags_any))
+           ))
+         ORDER BY rank, fact_created_at DESC, fact_rowid DESC
+         LIMIT :limit"
+    )
 }
 
 pub(crate) fn index(
@@ -116,17 +128,75 @@ pub(crate) fn index(
     text: &str,
     tags: &[String],
 ) -> Result<(), StoreError> {
-    let folded = std::iter::once(text)
-        .chain(tags.iter().map(String::as_str))
-        .flat_map(words)
-        .map(|(_, word)| word)
-        .collect::<Vec<_>>()
-        .join(" ");
     let rowid: i64 = conn
         .prepare_cached("INSERT INTO search_facts (fact_id) VALUES (?1) RETURNING rowid")?
         .query_row([id], |row| row.get(0))?;
     conn.prepare_cached("INSERT INTO fts (rowid, fact_id, text) VALUES (?1, ?2, ?3)")?
-        .execute((rowid, id, folded))?;
+        .execute((rowid, id, folded(text, tags)))?;
+    Ok(())
+}
+
+fn folded(text: &str, tags: &[String]) -> String {
+    std::iter::once(text)
+        .chain(tags.iter().map(String::as_str))
+        .flat_map(words)
+        .map(|(_, word)| word)
+        .collect::<Vec<_>>()
+        .join(" ")
+}
+
+pub(crate) fn remove(conn: &Connection, id: &str) -> Result<(), StoreError> {
+    conn.prepare_cached(
+        "DELETE FROM fts WHERE rowid = (SELECT rowid FROM search_facts WHERE fact_id = ?1)",
+    )?
+    .execute([id])?;
+    conn.prepare_cached("DELETE FROM search_facts WHERE fact_id = ?1")?
+        .execute([id])?;
+    Ok(())
+}
+
+pub(crate) fn index_retired(
+    conn: &Connection,
+    id: &str,
+    text: &str,
+    tags: &[String],
+) -> Result<(), StoreError> {
+    let rowid: i64 = conn
+        .prepare_cached("INSERT INTO retired_search_facts (fact_id) VALUES (?1) RETURNING rowid")?
+        .query_row([id], |row| row.get(0))?;
+    conn.prepare_cached("INSERT INTO retired_fts (rowid, text) VALUES (?1, ?2)")?
+        .execute((rowid, folded(text, tags)))?;
+    Ok(())
+}
+
+pub(crate) fn remove_retired(conn: &Connection, id: &str) -> Result<(), StoreError> {
+    conn.prepare_cached("DELETE FROM retired_fts WHERE rowid = (SELECT rowid FROM retired_search_facts WHERE fact_id = ?1)")?
+        .execute([id])?;
+    conn.prepare_cached("DELETE FROM retired_search_facts WHERE fact_id = ?1")?
+        .execute([id])?;
+    Ok(())
+}
+
+pub(crate) fn rebuild(conn: &Connection) -> Result<(), StoreError> {
+    let mut scan = conn.prepare(
+        "SELECT id, text, tags_json, status FROM facts
+         WHERE status = 'active' OR (status = 'retired' AND
+             NOT EXISTS (SELECT 1 FROM facts successor WHERE successor.replaces = facts.id))",
+    )?;
+    let mut rows = scan.query([])?;
+    while let Some(row) = rows.next()? {
+        let tags_json: String = row.get(2)?;
+        let tags: Vec<String> = serde_json::from_str(&tags_json)
+            .map_err(|error| StoreError::Invalid(error.to_string()))?;
+        let status: String = row.get(3)?;
+        let id: String = row.get(0)?;
+        let text: String = row.get(1)?;
+        if status == "active" {
+            index(conn, &id, &text, &tags)?;
+        } else {
+            index_retired(conn, &id, &text, &tags)?;
+        }
+    }
     Ok(())
 }
 

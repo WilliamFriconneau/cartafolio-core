@@ -212,7 +212,7 @@ async fn the_full_oauth_flow_calls_mcp_with_the_selected_grants() {
             .call()
             .unwrap(),
     );
-    assert_eq!(protected["resource"], format!("{ISSUER}/mcp"));
+    assert_eq!(protected["resource"], format!("{ISSUER}/mcp/demo"));
     assert_eq!(protected["authorization_servers"], json!([ISSUER]));
     let metadata = body(
         env.agent

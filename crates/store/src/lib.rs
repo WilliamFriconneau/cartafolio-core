@@ -12,8 +12,12 @@ mod durability_tests;
 #[cfg(test)]
 mod open_tests;
 #[cfg(test)]
+mod review_tests;
+#[cfg(test)]
 mod search_tests;
 
+mod capture;
+mod cursor;
 mod error;
 mod export;
 mod fact;
@@ -21,6 +25,7 @@ mod file;
 mod list;
 mod pin;
 mod quota;
+mod review_migration;
 mod schema;
 mod search;
 mod space;
@@ -65,6 +70,7 @@ pub struct Store {
     writer: Mutex<Connection>,
     readers: [Mutex<Connection>; 2],
     schema_version: u32,
+    cursor_key: Vec<u8>,
     #[cfg(test)]
     durability_events: Mutex<Vec<&'static str>>,
 }
@@ -98,6 +104,9 @@ impl Store {
         }
         let schema_version = schema::migrate(&mut writer)?;
 
+        let cursor_key =
+            writer.query_row("SELECT secret FROM cursor_secret", [], |row| row.get(0))?;
+
         let open_reader = || {
             let reader = Connection::open_with_flags(&database, OpenFlags::SQLITE_OPEN_READ_ONLY)?;
             configure(&reader)?;
@@ -112,6 +121,7 @@ impl Store {
             writer: Mutex::new(writer),
             readers: [open_reader()?, open_reader()?],
             schema_version,
+            cursor_key,
             #[cfg(test)]
             durability_events: Mutex::default(),
         })

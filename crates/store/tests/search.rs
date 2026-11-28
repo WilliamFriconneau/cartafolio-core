@@ -107,7 +107,7 @@ fn retired_notes_are_not_found() {
     assert!(recall(&store, "orchard").is_empty());
     store.retire(&next.id, "Archived").unwrap();
     assert!(recall(&store, "meadow").is_empty());
-    for (text, id) in [("orchard", &first.id), ("meadow", &next.id)] {
+    for (text, expected) in [("orchard", None), ("meadow", Some(&next.id))] {
         let hits = store
             .recall(RecallQuery {
                 text: text.into(),
@@ -115,8 +115,8 @@ fn retired_notes_are_not_found() {
                 ..RecallQuery::default()
             })
             .unwrap();
-        assert_eq!(hits.len(), 1);
-        assert_eq!(&hits[0].fact.id, id);
+        let ids = hits.iter().map(|hit| &hit.fact.id).collect::<Vec<_>>();
+        assert_eq!(ids, expected.into_iter().collect::<Vec<_>>());
     }
     let restored = store.restore(&next.id).unwrap();
     assert_eq!(recall(&store, "meadow")[0].fact.id, restored.id);

@@ -1,3 +1,4 @@
+use crate::capture::{origin_fact_id, remember, text_hash};
 use crate::tags::{fold_tag, normalize_tags};
 use crate::{Store, StoreError};
 use rusqlite::{params, Connection, OptionalExtension, Row, Transaction, TransactionBehavior};
@@ -147,7 +148,8 @@ impl Store {
             if crate::todo::is_todo(&fact) {
                 return Err(crate::todo::permanent_error());
             }
-            set_status(tx, id, FactStatus::Retired, reason)
+            set_status(tx, id, FactStatus::Retired, reason)?;
+            crate::search::index_retired(tx, &fact.id, &fact.text, &fact.tags)
         })
     }
 
@@ -155,6 +157,7 @@ impl Store {
         self.write(|tx| {
             let previous = head(tx, id, FactStatus::Retired)?;
             let tags = previous.tags.clone();
+            crate::search::remove_retired(tx, id)?;
             insert(tx, revision(previous, tags), Some(id))
         })
     }
@@ -202,62 +205,7 @@ impl Store {
     }
 }
 
-fn remember(tx: &Transaction<'_>, new: NewFact) -> Result<Remembered, StoreError> {
-    if let Some(origin) = &new.origin {
-        if let Some(id) = origin_fact_id(tx, origin)? {
-            return Ok(Remembered {
-                fact: read(tx, &id)?,
-                outcome: Outcome::Replayed,
-            });
-        }
-    }
-
-    let duplicate = tx
-        .query_row(
-            &format!(
-                "SELECT {COLUMNS} FROM facts WHERE status = 'active' AND space = ?1 AND text = ?2
-                 ORDER BY rowid LIMIT 1"
-            ),
-            (&new.space, &new.text),
-            fact_from_row,
-        )
-        .optional()?;
-    if let Some(fact) = duplicate {
-        validate_time(new.at)?;
-        normalize_tags(&new.tags)?;
-        if let Some((app, entry)) = &new.origin {
-            tx.execute(
-                "INSERT INTO duplicate_origins (origin_app, origin_id, fact_id) VALUES (?1, ?2, ?3)",
-                (app, entry, &fact.id),
-            )?;
-        }
-        return Ok(Remembered {
-            fact,
-            outcome: Outcome::Duplicate,
-        });
-    }
-    Ok(Remembered {
-        fact: insert(tx, new, None)?,
-        outcome: Outcome::Created,
-    })
-}
-
-fn origin_fact_id(
-    conn: &Connection,
-    (app, entry): &(String, String),
-) -> Result<Option<String>, StoreError> {
-    Ok(conn
-        .query_row(
-            "SELECT id FROM facts WHERE origin_app = ?1 AND origin_id = ?2
-             UNION ALL
-             SELECT fact_id FROM duplicate_origins WHERE origin_app = ?1 AND origin_id = ?2",
-            (app, entry),
-            |row| row.get(0),
-        )
-        .optional()?)
-}
-
-fn read(conn: &Connection, id: &str) -> Result<Fact, StoreError> {
+pub(crate) fn read(conn: &Connection, id: &str) -> Result<Fact, StoreError> {
     conn.query_row(
         &format!("SELECT {COLUMNS} FROM facts WHERE id = ?1"),
         [id],
@@ -291,7 +239,7 @@ fn set_status(
         "UPDATE facts SET status = ?1, reason = ?2 WHERE id = ?3",
         (status.as_str(), reason, id),
     )?;
-    Ok(())
+    crate::search::remove(conn, id)
 }
 
 fn revision(previous: Fact, tags: Vec<String>) -> NewFact {
@@ -325,7 +273,7 @@ pub(crate) fn insert(
     let tags_json =
         serde_json::to_string(&tags).map_err(|error| StoreError::Invalid(error.to_string()))?;
     if let Some(origin) = &new.origin {
-        if replaces.is_some() && origin_fact_id(conn, origin)?.is_some() {
+        if replaces.is_some() && origin_fact_id(conn, &new.space, origin)?.is_some() {
             return Err(StoreError::Conflict);
         }
     }
@@ -335,14 +283,22 @@ pub(crate) fn insert(
         .map_or((None, None), |(app, entry)| (Some(app), Some(entry)));
     let (id, pinned): (String, bool) = conn.query_row(
         "INSERT INTO facts (id, space, text, tags_json, author, source, origin_app, origin_id,
-                            created_at, replaces, status, pinned, pinned_at)
+                            created_at, replaces, status, pinned, pinned_at, text_hash)
          VALUES (lower(hex(randomblob(16))), ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 'active',
                  coalesce((SELECT pinned FROM facts WHERE id = ?9), 0),
-                 (SELECT pinned_at FROM facts WHERE id = ?9))
+                 (SELECT pinned_at FROM facts WHERE id = ?9), ?10)
          RETURNING id, pinned",
         params![
-            new.space, new.text, tags_json, new.author, new.source, app, entry, created_at,
-            replaces
+            new.space,
+            new.text,
+            tags_json,
+            new.author,
+            new.source,
+            app,
+            entry,
+            created_at,
+            replaces,
+            text_hash(&new.text).as_slice()
         ],
         |row| Ok((row.get(0)?, row.get(1)?)),
     )?;

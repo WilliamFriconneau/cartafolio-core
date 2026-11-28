@@ -67,12 +67,13 @@ impl Accounts {
             .ok_or(AccessError::NotFound)
     }
 
+    pub fn account_id_for_alias(&self, alias: &str) -> Result<String, AccessError> {
+        let db = self.db()?;
+        alias_owner(&db, alias)?.ok_or(AccessError::NotFound)
+    }
+
     pub fn account_by_alias(&self, alias: &str) -> Result<Account, AccessError> {
-        let id = {
-            let db = self.db()?;
-            alias_owner(&db, alias)?.ok_or(AccessError::NotFound)?
-        };
-        self.account(&id)
+        self.account(&self.account_id_for_alias(alias)?)
     }
 }
 

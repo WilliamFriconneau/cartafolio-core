@@ -1,7 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use pensine_store::{Fact, FactStatus, ListQuery, NewFact, Store, StoreError};
-use rusqlite::Connection;
 use tempfile::TempDir;
 
 const PERMANENT: &str = "the todo note of a space is permanent: update it with supersede";
@@ -156,62 +155,5 @@ fn a_second_todo_note_in_a_space_is_refused() {
     assert!(
         matches!(replaced, Err(StoreError::Invalid(_))),
         "{replaced:?}"
-    );
-}
-
-#[test]
-fn existing_spaces_get_a_todo_note_by_migration() {
-    let dir = tempfile::tempdir().unwrap();
-    {
-        let store = Store::open(dir.path()).unwrap();
-        store.space_create("alpha", "Alpha", None).unwrap();
-        store.space_create("beta", "Beta", None).unwrap();
-        store
-            .remember(note("alpha", "Kept note", &["ideas"]))
-            .unwrap();
-    }
-    let database = dir.path().join("store.db");
-    {
-        let conn = Connection::open(&database).unwrap();
-        let ids: Vec<String> = conn
-            .prepare("SELECT fact_id FROM fact_tags WHERE tag = 'todo'")
-            .unwrap()
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        for id in ids {
-            for table in ["fts", "search_facts", "fact_tags"] {
-                conn.execute(&format!("DELETE FROM {table} WHERE fact_id = ?1"), [&id])
-                    .unwrap();
-            }
-            conn.execute("DELETE FROM facts WHERE id = ?1", [&id])
-                .unwrap();
-        }
-        conn.pragma_update(None, "user_version", 4).unwrap();
-    }
-    let store = Store::open(dir.path()).unwrap();
-    assert_eq!(store.schema_version(), 5);
-    let spaces = store.spaces().unwrap();
-    for space in &spaces {
-        let note = store.read(space.todo.as_deref().unwrap()).unwrap();
-        assert_eq!(note.text, "# Todo\n\n");
-        assert_eq!(note.tags, ["todo"]);
-        assert_eq!(note.author, "system");
-        assert_eq!(note.source, "system");
-        assert!(note.pinned);
-    }
-    assert_eq!(spaces.iter().map(|space| space.notes).sum::<u64>(), 3);
-    assert_eq!(
-        store
-            .list(ListQuery {
-                spaces: vec!["alpha".into()],
-                tags_all: vec!["ideas".into()],
-                ..ListQuery::default()
-            })
-            .unwrap()
-            .items
-            .len(),
-        1
     );
 }

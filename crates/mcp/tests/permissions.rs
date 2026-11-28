@@ -145,24 +145,25 @@ fn permission_matrix_matches_missing_resources() {
     assert_eq!(spaces[0]["name"], "aa");
     assert!(spaces[0]["parent"].is_null());
     assert_eq!(spaces[1]["parent"], "aa");
+    assert_eq!(spaces[0]["position"], 1);
+    assert_eq!(spaces[1]["position"], 2);
     let recall = answer(call(&mcp, &principal, "recall", json!({"query":"sample"})));
     assert_eq!(recall.as_array().unwrap().len(), 1);
     assert_eq!(recall[0]["fact"]["id"], public);
     let files = answer(call(&mcp, &principal, "file_list", json!({})));
     assert_eq!(files["items"], json!([]));
 
-    let replay = call(
+    let captured = answer(call(
         &mcp,
         &principal,
         "remember_many",
         json!({"space":"aa","notes":[
-            {"text":"Rolled back"}, {"text":"Retry","origin":["capture","hidden"]}
+            {"text":"Stored locally"}, {"text":"Retry","origin":["capture","hidden"]}
         ]}),
-    );
-    assert_eq!(replay["content"][0]["text"], "not found");
-    // The visible note and the space's permanent todo note; the rolled-back batch left nothing.
-    let notes = answer(call(&mcp, &principal, "list", json!({"space":"aa"})));
-    assert_eq!(notes["items"].as_array().unwrap().len(), 2);
+    ));
+    assert_eq!(captured.as_array().unwrap().len(), 2);
+    assert_eq!(captured[1]["outcome"], "created");
+    assert_eq!(captured[1]["fact"]["space"], "aa");
 
     let moved = store.move_facts(&[private], "aa").unwrap().remove(0);
     let history = answer(call(&mcp, &principal, "history", json!({"id":moved.id})));

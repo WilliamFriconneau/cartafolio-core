@@ -8,7 +8,7 @@ use axum::middleware::{self, Next};
 use axum::response::{IntoResponse, Response};
 use axum::routing::{get, post};
 use axum::{Json, Router};
-use pensine_access::validate_alias;
+use pensine_access::{validate_alias, AccessError};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::sync::Arc;
@@ -41,20 +41,32 @@ pub(crate) fn routes(oauth: Arc<OAuth>) -> Router {
         .with_state(oauth)
 }
 
-async fn protected_resource(State(oauth): State<Arc<OAuth>>) -> Json<Value> {
-    resource_document(&oauth.issuer(), "/mcp")
+async fn protected_resource(State(oauth): State<Arc<OAuth>>) -> Response {
+    // The legacy URL carries no account selector. It is unambiguous only
+    // on a single-account server.
+    match oauth.accounts.account_list() {
+        Ok(accounts) => match accounts.as_slice() {
+            [(_, alias)] => resource_document(&oauth.issuer(), alias).into_response(),
+            _ => StatusCode::NOT_FOUND.into_response(),
+        },
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
 async fn alias_resource(State(oauth): State<Arc<OAuth>>, Path(alias): Path<String>) -> Response {
     if validate_alias(&alias).is_err() {
         return StatusCode::NOT_FOUND.into_response();
     }
-    resource_document(&oauth.issuer(), &format!("/mcp/{alias}")).into_response()
+    match oauth.accounts.account_id_for_alias(&alias) {
+        Ok(_) => resource_document(&oauth.issuer(), &alias).into_response(),
+        Err(AccessError::NotFound) => StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
 }
 
-fn resource_document(issuer: &str, path: &str) -> Json<Value> {
+fn resource_document(issuer: &str, alias: &str) -> Json<Value> {
     Json(json!({
-        "resource": format!("{issuer}{path}"),
+        "resource": format!("{issuer}/mcp/{alias}"),
         "authorization_servers": [issuer],
         "bearer_methods_supported": ["header"],
         "scopes_supported": ["memory"],

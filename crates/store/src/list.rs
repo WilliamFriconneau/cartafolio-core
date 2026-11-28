@@ -1,3 +1,4 @@
+use crate::cursor::{Cursor, CursorCodec};
 use crate::fact::{fact_from_row, Fact, FactStatus, COLUMNS};
 use crate::tags::{fold_tag, normalize_tags};
 use crate::{Store, StoreError};
@@ -6,7 +7,7 @@ use std::collections::HashMap;
 
 pub type OriginAliases = HashMap<String, Vec<[String; 2]>>;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, serde::Serialize)]
 pub struct ListQuery {
     pub spaces: Vec<String>,
     pub tags_any: Vec<String>,
@@ -41,49 +42,6 @@ pub struct Page<T> {
     pub next_cursor: Option<String>,
 }
 
-pub(crate) struct Cursor {
-    pub(crate) snapshot: i64,
-    pub(crate) created_at: i64,
-    pub(crate) rowid: i64,
-}
-
-impl Cursor {
-    pub(crate) fn parse(value: &str) -> Result<Self, StoreError> {
-        Self::parse_version(value, "1")
-    }
-
-    fn parse_version(value: &str, expected: &str) -> Result<Self, StoreError> {
-        let invalid = || StoreError::Invalid("Invalid list cursor".into());
-        let parts: Vec<_> = value.split('.').collect();
-        let [version, snapshot, created_at, rowid] = parts.as_slice() else {
-            return Err(invalid());
-        };
-        if *version != expected {
-            return Err(invalid());
-        }
-        let cursor = Self {
-            snapshot: snapshot.parse().map_err(|_| invalid())?,
-            created_at: created_at.parse().map_err(|_| invalid())?,
-            rowid: rowid.parse().map_err(|_| invalid())?,
-        };
-        if cursor.rowid < 1 || cursor.rowid > cursor.snapshot {
-            return Err(invalid());
-        }
-        Ok(cursor)
-    }
-
-    pub(crate) fn encode(&self) -> String {
-        self.encode_version("1")
-    }
-
-    fn encode_version(&self, version: &str) -> String {
-        format!(
-            "{version}.{}.{}.{}",
-            self.snapshot, self.created_at, self.rowid
-        )
-    }
-}
-
 impl Store {
     /// Reads the additional origins assigned to deduplicated facts.
     pub fn origin_aliases(&self, ids: &[String]) -> Result<OriginAliases, StoreError> {
@@ -108,15 +66,16 @@ impl Store {
         if !(1..=200).contains(&query.limit) {
             return Err(StoreError::Invalid("List limit must be 1 to 200".into()));
         }
-        let (sort, version) = if query.pinned == Some(true) {
-            ("pinned_at", "2")
+        let sort = if query.pinned == Some(true) {
+            "pinned_at"
         } else {
-            ("created_at", "1")
+            "created_at"
         };
+        let codec = CursorCodec::new(&self.cursor_key, "facts", &query)?;
         let cursor = query
             .cursor
             .as_deref()
-            .map(|value| Cursor::parse_version(value, version))
+            .map(|value| codec.decode(value))
             .transpose()?;
         let spaces = json_array(&query.spaces)?;
         let tags_any = tag_filter(&query.tags_any)?;
@@ -125,15 +84,8 @@ impl Store {
         let conn = self.reader()?;
         // The rowid ceiling excludes later inserts, including offline captures
         // whose timestamps would otherwise put them on a subsequent page.
-        let mut stmt = conn.prepare(&format!(
-            "WITH boundary(snapshot) AS (
-                SELECT coalesce(:snapshot, (SELECT coalesce(max(rowid), 0) FROM facts))
-             )
-             SELECT {COLUMNS}, facts.rowid, boundary.snapshot, {sort}
-             FROM facts CROSS JOIN boundary
-             WHERE status = :status AND facts.rowid <= boundary.snapshot
-               AND (:pinned IS NULL OR pinned = :pinned)
-               AND (:rowid IS NULL OR ({sort}, facts.rowid) < (:at, :rowid))
+        let visible = "status = :status
+                  AND (:pinned IS NULL OR pinned = :pinned)
                AND (:since IS NULL OR created_at >= :since)
                AND (:until IS NULL OR created_at <= :until)
                AND (:spaces = '[]' OR space IN (SELECT value FROM json_each(:spaces)))
@@ -141,19 +93,31 @@ impl Store {
                    SELECT 1 FROM fact_tags
                    WHERE fact_id = facts.id AND tag IN (SELECT value FROM json_each(:tags_any))
                ))
-               AND NOT EXISTS (
+               AND (:tags_all = '[]' OR NOT EXISTS (
                    SELECT 1 FROM json_each(:tags_all) AS required
                    WHERE NOT EXISTS (
                        SELECT 1 FROM fact_tags WHERE fact_id = facts.id AND tag = required.value
                    )
-               )
+               ))";
+        let mut stmt = conn.prepare_cached(&format!(
+            "WITH boundary(snapshot) AS MATERIALIZED (
+                SELECT CASE WHEN :snapshot IS NULL
+                            THEN (SELECT max(rowid) FROM facts WHERE {visible})
+                            ELSE (SELECT rowid FROM facts WHERE id = :snapshot) END
+             )
+             SELECT {COLUMNS}, (SELECT id FROM facts WHERE rowid = (SELECT snapshot FROM boundary)), {sort}
+             FROM facts
+             WHERE {visible}
+               AND facts.rowid <= (SELECT snapshot FROM boundary)
+               AND (:last IS NULL OR ({sort}, facts.rowid) <
+                   (:at, (SELECT rowid FROM facts WHERE id = :last)))
              ORDER BY {sort} DESC, facts.rowid DESC
              LIMIT :limit"
         ))?;
         let mut rows = stmt.query(named_params! {
-            ":snapshot": cursor.as_ref().map(|c| c.snapshot),
-            ":at": cursor.as_ref().map(|c| c.created_at),
-            ":rowid": cursor.as_ref().map(|c| c.rowid),
+            ":snapshot": cursor.as_ref().map(|c| c.snapshot.as_str()),
+            ":at": cursor.as_ref().map(|c| c.at),
+            ":last": cursor.as_ref().map(|c| c.last.as_str()),
             ":status": status,
             ":pinned": query.pinned,
             ":since": query.since,
@@ -171,14 +135,15 @@ impl Store {
                     items,
                     next_cursor: last
                         .as_ref()
-                        .map(|cursor: &Cursor| cursor.encode_version(version)),
+                        .map(|cursor| codec.encode(cursor))
+                        .transpose()?,
                 });
             }
             let fact = fact_from_row(row)?;
             last = Some(Cursor {
-                snapshot: row.get(14)?,
-                created_at: row.get(15)?,
-                rowid: row.get(13)?,
+                snapshot: row.get(13)?,
+                at: row.get(14)?,
+                last: fact.id.clone(),
             });
             items.push(fact);
         }

@@ -63,10 +63,30 @@ pub(crate) fn backfill(conn: &Connection) -> Result<(), StoreError> {
         .collect::<Result<Vec<String>, _>>()?;
     for space in spaces {
         if !has_todo(conn, &space)? {
-            insert(conn, &space)?;
+            insert_v5(conn, &space)?;
         }
     }
     Ok(())
+}
+
+// Migration 5 runs before later fact columns exist.
+fn insert_v5(conn: &Connection, space: &str) -> Result<(), StoreError> {
+    let id: String = conn.query_row(
+        "INSERT INTO facts (id, space, text, tags_json, author, source, created_at, status)
+         VALUES (lower(hex(randomblob(16))), ?1, ?2, '[\"todo\"]', ?3, ?4, ?5, 'active')
+         RETURNING id",
+        params![
+            space,
+            TEXT,
+            AUTHOR,
+            SOURCE,
+            crate::fact::validate_time(None)?
+        ],
+        |row| row.get(0),
+    )?;
+    conn.execute("INSERT INTO fact_tags VALUES (?1, ?2)", (&id, TAG))?;
+    crate::search::index(conn, &id, TEXT, &[TAG.into()])?;
+    pin(conn, &id)
 }
 
 fn has_todo(conn: &Connection, space: &str) -> Result<bool, StoreError> {

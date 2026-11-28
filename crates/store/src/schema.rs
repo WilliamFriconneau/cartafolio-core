@@ -85,6 +85,7 @@ pub(super) const MIGRATIONS: &[(u32, &str)] = &[
     ",
     ),
     (5, "SELECT 1;"),
+    (6, crate::review_migration::SQL),
 ];
 
 pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
@@ -104,6 +105,9 @@ pub(crate) fn migrate(conn: &mut Connection) -> Result<u32, StoreError> {
             }
             if version == 5 {
                 crate::todo::backfill(&tx)?;
+            }
+            if version == 6 {
+                crate::review_migration::backfill(&tx)?;
             }
             tx.pragma_update(None, "user_version", version)?;
         }
